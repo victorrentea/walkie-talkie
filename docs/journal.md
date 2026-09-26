@@ -12250,3 +12250,39 @@ open questions. These rule every fix that follows; the later date wins over olde
   decizi exact cum și ce"*).
 - ToS of Wispr Flow §3.B (training on its output): *"îmi asum riscul"* — the teacher batch
   continues, on the Mac tonight and in a VM later.
+
+## Fixes to the test plan's findings, batch 1 (2026-09-26)
+
+The first and most harmful batch of what the test plan confirmed that afternoon
+(`evals/plan/report-2026-09-26.md`): the defects that **run** a sentence or **lose** one. Victor's
+decisions in the section above are the spec. The harness rows after the fix are in
+`evals/plan/report-fix1.md` (routes), `report-fix1b.md` and `report-fix1c.md` (gestures and real
+audio, under the hands-off locks).
+
+### 1. The shell guard refuses what hands the line to a shell, and a refusal leaves no receipt
+
+Victor, Q5: *"`ssh` / `sudo -s` / `script` / a pager in the bound terminal: **REFUSE**, like a shell
+at its prompt."*
+
+- **`TerminalBinding.shellCarriers`**: `ssh`, `mosh`, `mosh-client`, `telnet`, `sudo`, `su`, `doas`,
+  `script`, `docker`, `screen`, `tmux` (a client in the tab), `less`, `more`, `most`, `man`, `pager`.
+  `refusesDelivery` = a shell **or** a carrier, and it replaces `isShell` in all three guarded
+  cases of `deliver` (Terminal tab, tmux pane, IDE panel with a shell pid). `foregroundCommand`
+  names a carrier first when one is anywhere in the job: `git log` is `git` + `less`, so the
+  verdict is about `less`. `claude`, `node`, `codex`, `cat` (the evals' witness) are none of
+  these and still receive the words — it is still a *does this reach a shell* test, not an *is
+  this Claude Code* test. `docker` is refused whole: the only reason to dictate into a foreground
+  `docker` is `exec`/`run -it`/`attach`.
+- Measured before (`report-A.md`): TD15 — the guard read `script`, let it through, and the zsh one
+  pty down ran `touch`. TD16 — `less` took the sentence's `q` as *quit* and zsh ran the rest.
+  After: both `⛔️ … is in front — refused`, nothing ran.
+- **The outbox line and `lastDelivery` for a bound terminal are written after the keystrokes, on
+  `.delivered` only** (`commit` → `deliverToTerminal` → `writeOutbox`). Before, `commit` wrote the
+  row and then typed; a refused sentence left `delivered` behind (TR21 in both modules, three real
+  cases on 09-23/09-25). Picked over a `refused` row kind because it is the smaller change and
+  keeps *the outbox is what landed* true without every reader learning a new kind. A spawn,
+  `session_end` and a message with no terminal still write at `commit` — for them the outbox is
+  the delivery. The refusal says *is at the prompt* for a shell and *is in front* for a carrier.
+- `deliverToTerminal` now runs on one serial queue (`deliveryQueue`) instead of the concurrent
+  global one, so two sentences committed back to back are typed in order.
+

@@ -6002,22 +6002,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Type a message into the bound terminal, if there is one.
     ///
     /// Off the main thread for the same reason binding is: this is subprocesses
-    /// all the way down. It is fire-and-forget — the outbox line has already
-    /// been written by the time this runs, so a failure here costs the delivery
-    /// and nothing else, and the flash is how Victor learns which.
-    private func deliverToTerminal(_ m: Message) {
-        guard terminal.target != nil else { return }
-        let line = Self.terminalLine(m)
-        guard !line.isEmpty else { return }
+    /// all the way down. **The outbox line and `lastDelivery` are written here, on
+    /// `.delivered` only** (2026-09-26) — see `commit`. Everything else is said by
+    /// `report`.
+    ///
+    private func deliverToTerminal(_ m: Message, line: String) {
+        guard let target = terminal.target, !line.isEmpty else { return }
+        let to = "terminal:\(target.handle.tty ?? target.address)"
 
         // Counted so a restart waits for the keystrokes to finish (`restartBlockers`).
         deliveriesInFlight += 1
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        deliveryQueue.async { [weak self] in
             guard let self = self else { return }
             let outcome = self.terminal.deliver(line)
-            DispatchQueue.main.async { self.deliveriesInFlight -= 1; self.report(outcome) }
+            DispatchQueue.main.async {
+                self.deliveriesInFlight -= 1
+                switch outcome {
+                case .delivered:
+                    let delivery = m.kind == "dictation"
+                        ? self.recordDelivery(via: m.via, kind: m.deliveryKind, to: to) : nil
+                    self.writeOutbox(m, line: line, delivery: delivery)
+                default:
+                    break
+                }
+                self.report(outcome)
+            }
         }
     }
+
+    private let deliveryQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.deliver", qos: .userInitiated)
 
     /// **Silent on success.** A dictation that landed announces itself in the
     /// terminal it landed in, which is a whole window of evidence; a flash
@@ -6034,13 +6047,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.error("⌨️ \(what) — unbound")
             showBound(nil)
             overlay.flash("⚠️ \(what) — unbound", duration: 6)
-        case .wouldRunAsShell(let shell):
-            Log.error("⛔️ \(shell) is at the prompt — refused, nothing sent")
+        case .wouldRunAsShell(let command):
+            // A shell at its prompt, or since 2026-09-26 a program that hands the
+            // line to one (`TerminalBinding.shellCarriers`, Victor's Q5). Nothing
+            // was typed and nothing written to the outbox; ⌘⇧P still has it.
+            let where_ = TerminalBinding.isShell(command) ? "is at the prompt" : "is in front"
+            Log.error("⛔️ \(command) \(where_) — refused, nothing sent")
             // The one refusal in the whole app, and it is worth six seconds of
             // panel: what was stopped is a sentence about to be run as a
             // command. The binding is deliberately *kept* — he pressed Escape
             // or the agent exited, and starting it again is all this needs.
-            overlay.flash("⛔️ \(shell) is at the prompt — not sent", duration: 6)
+            overlay.flash("⛔️ \(command) \(where_) — not sent", duration: 6)
         case .failed(let why):
             Log.error("⌨️ delivery failed: \(why)")
             overlay.flash("⚠️ \(why)", duration: 5)
@@ -8462,11 +8479,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if spawnPickInFlight != nil { pickHeld = true }
             return holdForBind(m, quietly: spawnPickInFlight != nil)
         }
-        let delivery = m.kind == "dictation"
-            ? recordDelivery(via: m.via, kind: m.deliveryKind,
-                             to: destinationLabel(atCaret: false, spawn: m.spawn,
-                                                  directory: m.directory))
-            : nil
+        // **A bound terminal gets its outbox line after the words went in, never
+        // before** (2026-09-26, the test plan's §3.11: TR21, TD15, TD16). Written
+        // here, ahead of the keystrokes, a sentence the shell guard refused, one
+        // typed at a closed tab and one a pager swallowed all left a `delivered`
+        // receipt — three real cases on 09-23/09-25. `deliverToTerminal` writes
+        // both the line and `lastDelivery` on `.delivered` only, so each keeps
+        // saying what actually landed. A spawn, `session_end` and anything with
+        // no terminal to type into are written here as before: for those the
+        // outbox *is* the delivery (a watcher reads it).
+        if m.kind != "session_end", !m.spawn, terminal.target != nil {
+            deliverToTerminal(m, line: line)
+        } else {
+            let delivery = m.kind == "dictation"
+                ? recordDelivery(via: m.via, kind: m.deliveryKind,
+                                 to: destinationLabel(atCaret: false, spawn: m.spawn,
+                                                      directory: m.directory))
+                : nil
+            writeOutbox(m, line: line, delivery: delivery)
+            guard m.kind != "session_end" else { return }
+            if m.spawn { spawnClaude(m) }
+        }
+        // **Every sentence that leaves gets the `⌘⇧P` reminder** (2026-09-23) —
+        // a bound terminal, a new session, a sentence released by the bind it
+        // was held for, Wispr's own routed through here. Victor: *"indiferent
+        // prin ce mecanism am închis o dictare … uneori îl plasez greșit"*. A
+        // held sentence returned above and gets it when it is released, since
+        // until then it has landed nowhere to be wrong about. Hopped to main
+        // because this is reached from the quit path too.
+        if pastable {
+            DispatchQueue.main.async { [weak self] in
+                self?.pasteHint.pulse(reason: m.spawn ? "a sentence went to a new session"
+                                                      : "a sentence went to the bound terminal")
+            }
+        }
+    }
+
+    /// The outbox line for `m`, with the `delivery` record beside it — the one
+    /// spelling of the JSON, called at `commit` for a spawn or an unbound message
+    /// and from `deliverToTerminal` once the keystrokes went in.
+    private func writeOutbox(_ m: Message, line: String, delivery: [String: Any]?) {
         Outbox.send(kind: m.kind, text: m.text, selection: m.selection,
                     selectionAt: m.selectionAt, selectionIn: m.selectionSource,
                     selections: m.extraSelections.map { extra in
@@ -8493,21 +8545,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     },
                     app: m.app, elements: m.elements.map { $0.json(since: m.startedAt) },
                     line: line, delivery: delivery)
-        guard m.kind != "session_end" else { return }
-        if m.spawn { spawnClaude(m) } else { deliverToTerminal(m) }
-        // **Every sentence that leaves gets the `⌘⇧P` reminder** (2026-09-23) —
-        // a bound terminal, a new session, a sentence released by the bind it
-        // was held for, Wispr's own routed through here. Victor: *"indiferent
-        // prin ce mecanism am închis o dictare … uneori îl plasez greșit"*. A
-        // held sentence returned above and gets it when it is released, since
-        // until then it has landed nowhere to be wrong about. Hopped to main
-        // because this is reached from the quit path too.
-        if pastable {
-            DispatchQueue.main.async { [weak self] in
-                self?.pasteHint.pulse(reason: m.spawn ? "a sentence went to a new session"
-                                                      : "a sentence went to the bound terminal")
-            }
-        }
     }
 
     // MARK: - Said now, bound later

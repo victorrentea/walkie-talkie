@@ -178,8 +178,10 @@ final class TerminalBinding {
         /// that cannot be found again will not come back, and a stale one is
         /// worse than none — it makes every later dictation look delivered.
         case targetGone(String)
-        /// The foreground process is a shell, so the words would have been
-        /// **executed** rather than typed at an agent. Nothing is sent.
+        /// The foreground process is a shell, or a program that hands the line
+        /// to one (`shellCarriers`: `ssh`, `sudo`, `script`, a pager…), so the
+        /// words would have been **executed** rather than typed at an agent.
+        /// Nothing is sent, and nothing is written to the outbox.
         case wouldRunAsShell(String)
         case failed(String)
     }
@@ -544,7 +546,7 @@ final class TerminalBinding {
             case .none:
                 unbind()
                 return .targetGone("\(target.address) is gone")
-            case .some(let command) where Self.isShell(command):
+            case .some(let command) where Self.refusesDelivery(command):
                 return .wouldRunAsShell(command)
             case .some:
                 break
@@ -560,7 +562,7 @@ final class TerminalBinding {
             case .none:
                 unbind()
                 return .targetGone("tmux pane \(pane) is gone")
-            case .some(let command) where Self.isShell(command):
+            case .some(let command) where Self.refusesDelivery(command):
                 return .wouldRunAsShell(command)
             case .some:
                 break
@@ -594,7 +596,7 @@ final class TerminalBinding {
             case .none:
                 unbind()
                 return .targetGone("\(handle.name) is gone")
-            case .some(let command) where Self.isShell(command):
+            case .some(let command) where Self.refusesDelivery(command):
                 return .wouldRunAsShell(command)
             case .some:
                 break
@@ -1298,10 +1300,16 @@ final class TerminalBinding {
     /// helper**: `Code Helper (Plugin)` is the runtime the shim exec'd, not the
     /// thing running in the terminal, and a log line naming it answers nothing.
     /// Skipping it makes that same job report `copilot`.
+    ///
+    /// **A carrier anywhere in the job wins the name** (2026-09-26, Victor's Q5):
+    /// `git log` is `git` + `less`, `sudo -s` without a pty is `sudo` + `zsh`, and
+    /// the verdict must be about the process that would hand the words on — so the
+    /// job reports `less` / `sudo`, which `refusesDelivery` then refuses.
     private static func foregroundCommand(onTTY tty: String) -> String? {
         let job = foregroundJob(onTTY: tty)
         guard !job.isEmpty else { return nil }
         let name = { (path: String) in (path as NSString).lastPathComponent }
+        if let carrier = job.lazy.map(name).first(where: { shellCarriers.contains($0) }) { return carrier }
         let running = job.filter { !isShell(name($0)) }
         return name(running.first { !$0.contains("/Contents/MacOS/") } ?? running.first ?? job[0])
     }
@@ -1344,7 +1352,7 @@ final class TerminalBinding {
     /// Runs `osascript` and `ps` — call it off the main thread.
     static func frontClaudePromptTTY(bundleID: String?) -> String? {
         guard bundleID == "com.apple.Terminal", let tab = frontTerminalTab() else { return nil }
-        guard let command = foregroundCommand(onTTY: tab.tty), !isShell(command) else { return nil }
+        guard let command = foregroundCommand(onTTY: tab.tty), !refusesDelivery(command) else { return nil }
         let device = (tab.tty as NSString).lastPathComponent
         guard publishedDirectory(onTTY: device) != nil else { return nil }
         return tab.tty
@@ -1368,9 +1376,35 @@ final class TerminalBinding {
     /// receives text on stdin, which is the intended behaviour and is not the
     /// relay's business to police. Naming the agent instead would also have to
     /// guess how it appears in `ps`, and guess again on every release.
-    private static func isShell(_ command: String) -> Bool {
+    static func isShell(_ command: String) -> Bool {
         let shells: Set<String> = ["sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh", "-zsh", "-bash", "login"]
         return shells.contains(command) || shells.contains(command.replacingOccurrences(of: "-", with: ""))
+    }
+
+    /// **Programs that are not a shell at a prompt but hand the line to one**
+    /// (2026-09-26, Victor's Q5: *refuse* `ssh` / `sudo -s` / `script` / a pager,
+    /// like a shell at its prompt). The guard used to be a local snapshot: the
+    /// shell behind `ssh`, `sudo -s`, `script`, `docker exec`, `screen` or a tmux
+    /// client is on another host or another pty, so the tab's foreground job
+    /// never contained one and every sentence went through — measured TD15,
+    /// `touch` ran behind `script -q /dev/null zsh`. A **pager** is worse: `less`
+    /// takes the sentence's first `q` as *quit* and the zsh underneath runs the
+    /// rest (TD16, `quick check; touch …` ran). `docker` is refused whole — the
+    /// only reason to dictate into a foreground `docker` is `exec`/`run -it`/
+    /// `attach`, which are all a shell in a container.
+    ///
+    /// Still not an "is this Claude Code" list: `claude`, `node`, `codex`, `cat`
+    /// (the evals' witness), an editor or a REPL are none of these and receive
+    /// the words as before.
+    static let shellCarriers: Set<String> = [
+        "ssh", "mosh", "mosh-client", "telnet", "sudo", "su", "doas", "script",
+        "docker", "screen", "tmux", "less", "more", "most", "man", "pager",
+    ]
+
+    /// The whole refusal: a shell reading the line, or a program that passes
+    /// the line to one. `.wouldRunAsShell` carries the name either way.
+    static func refusesDelivery(_ command: String) -> Bool {
+        isShell(command) || shellCarriers.contains(command)
     }
 
     /// What the app is called **on screen**, which is not always what macOS calls
