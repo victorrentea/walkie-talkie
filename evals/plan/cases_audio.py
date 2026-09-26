@@ -10,7 +10,7 @@ touches Wispr."""
 import contextlib, os, re, threading, time
 from harness import *
 
-INJECT = "WT Inject"                  # mic_override substring of LOOPBACK ("🧪 WT Inject")
+INJECT = LOOPBACK.replace("🧪 ", "")  # the substring /test/mic matches; "WT Inject" on the host, "BlackHole 2ch" in the lab                  # mic_override substring of LOOPBACK ("🧪 WT Inject")
 EL = ("eleven", "eleven-live")
 LIVE = ("eleven-live",)
 END = (r"📦 delivery:|dictation abandoned|returned no words|No words detected|"

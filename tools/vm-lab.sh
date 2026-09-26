@@ -51,7 +51,7 @@ for v in json.load(sys.stdin):
 g() { tart exec "$VM" "$@"; }
 
 wait_agent() {
-  for _ in $(seq 1 120); do
+  for _ in $(seq 1 900); do   # the boot is off a USB spinning disk: ~580 s measured, 1146 s the first time
     g true 2>/dev/null && return 0
     sleep 1
   done
@@ -68,7 +68,13 @@ cmd_up() {
     tart set "$VM" --cpu 4 --memory 8192
   fi
   if [ "$(state "$VM")" != "running" ]; then
-    nohup tart run "$VM" --no-graphics >"$LOG" 2>&1 &
+    # A `tart stop` (the plug) leaves control.sock behind; the next `tart run` then fails to
+    # bind it ("Address already in use", only in the log) and `tart exec` never answers.
+    rm -f "$TART_HOME/vms/$VM/control.sock"
+    # --no-audio: Tart's default sound device passes the guest through to the HOST's speakers
+    # and microphone (a mic prompt for tart on Victor's screen, his room in the guest's input).
+    # --no-clipboard: the default shares the pasteboard both ways, and the app pastes with ⌘V.
+    nohup tart run "$VM" --no-graphics --no-audio --no-clipboard >"$LOG" 2>&1 &
     disown
   fi
   wait_agent
@@ -105,7 +111,7 @@ cmd_api() {
 }
 
 cmd_shot() {
-  local out="${1:-$HOME/.tart/$VM-screen.png}"
+  local out="${1:-$TART_HOME/$VM-screen.png}"
   g screencapture -x /tmp/vm-lab-shot.png
   g cat /tmp/vm-lab-shot.png >"$out"
   echo "$out"
@@ -113,7 +119,14 @@ cmd_shot() {
 
 cmd_look() { open "vnc://admin:admin@$(tart ip "$VM")"; }
 
-cmd_down() { tart stop "$VM" 2>/dev/null || true; }
+# `tart stop` alone is a pulled plug: SIGINT → `VZVirtualMachine.stop()`, no guest shutdown (Tart
+# 2.34 Run.swift/VM.swift, found 2026-09-26). Shut the guest down first, then reap the process.
+cmd_down() {
+  [ "$(state "$VM")" = "running" ] || return 0
+  g sudo shutdown -h now >/dev/null 2>&1 || true
+  for _ in $(seq 1 600); do [ "$(state "$VM")" = "running" ] || return 0; sleep 1; done   # 64 s to >300 s measured on the USB disk
+  tart stop "$VM" 2>/dev/null || true
+}
 
 cmd_reset() { cmd_down; tart delete "$VM" 2>/dev/null || true; echo "🗑  $VM gone; next \`up\` clones $BASE"; }
 

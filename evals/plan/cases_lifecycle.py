@@ -11,7 +11,7 @@ import os, re, subprocess, threading, time, wave, datetime, plistlib, glob
 from harness import *  # noqa: F401,F403 — get/post/state/engine/gesture/wait_for/log_* /case …
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-INJECT = "WT Inject"                       # substring of the harness's Loopback device
+INJECT = LOOPBACK.replace("🧪 ", "")  # the substring /test/mic matches; "WT Inject" on the host, "BlackHole 2ch" in the lab                       # substring of the harness's Loopback device
 SHOTS = os.path.expanduser("~/Library/Caches/ro.victorrentea.wispr-relay/shots")
 HANGS = os.path.expanduser("~/.walkie-talkie/hangs")
 APP = "/Applications/Walkie Talkie.app"
