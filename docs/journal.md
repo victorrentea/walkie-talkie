@@ -13048,3 +13048,12 @@ open and empty the whole sentence, `pending` 0 → 70 and on; the same with no k
 LC9 stamps each sample with its own time; B1 measures from the speech found in the recording; TL30
 passes only on a band that never opens. `./docs/shoot-overlay-states.sh` re-run (52 states; batch 4
 had changed a flash string without it).
+
+## Q8 decided (2026-09-26, 18:40, Victor): empty Scribe answer → local fallback only with real speech
+
+*"Q8 mijloc"* — the middle option: when ElevenLabs answers with no words, the recording falls back
+to the local model **only if the meter counted at least 2 s of voiced audio** (`MicRecorder.voicedSeconds`);
+below that it stays as batch 1 left it — the WAV kept, the banner *No words heard — recover it from
+the menu*, nothing delivered. Reason: on 3 s of silence the local model invented `www.clu.com.br`
+and typed it into the bound terminal; on real speech Scribe's empty answer is the failure the
+fallback exists for. To be implemented in the next fix batch (after the regression run).
