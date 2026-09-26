@@ -504,8 +504,9 @@ def tl18_gate_ignores_recover_staging():
 
 
 @case("TL21", tags=("gesture",),
-      expect="start+stop coalesced inside a 6 s main stall → 'under 0.35s' or a dwell refusal, and a banner; "
-             "today: no banner")
+      expect="start+stop both queued inside a 6 s main stall → neither acted on (the recorder never opens), a "
+             "`⏸ a start and its stop were both queued` line and the chip's `⏸ ignored — the Mac was frozen` "
+             "(batch 4 decision, 2026-09-26). Before: a silent sub-0.35 s discard")
 def tl21_stall_coalescing():
     """Two F10s inside /test/stall 6 (both before the 3 s fail-open), then read the log."""
     try:
@@ -525,13 +526,14 @@ def tl21_stall_coalescing():
         discarded = log_has(mark, r"discarded — under")
         dwell = log_has(mark, r"not stopping it")
         opened = log_has(mark, r"mic: recording through")
-        banner = [r for r in chip if re.search(r"0\.35|too short|nothing was recorded|under", str(r), re.I)]
-        note = (f"mic opened={opened}; 'discarded — under 0.35s'={discarded}; dwell refusal={dwell}; after the stall "
-                f"listening={s['listening']} isRecording={s['isRecording']}; banner rows={banner or 'none'}")
+        banner = [r for r in chip if re.search(r"the Mac was frozen|0\.35|too short|nothing was recorded|under", str(r), re.I)]
+        coalesced = log_has(mark, r"⏸ a start and its stop were both queued")
+        note = (f"mic opened={opened}; coalesced line={coalesced}; 'discarded — under 0.35s'={discarded}; dwell refusal="
+                f"{dwell}; after the stall listening={s['listening']} isRecording={s['isRecording']}; banner rows={banner or 'none'}")
+        if coalesced and not opened and banner and not (s["listening"] or s["isRecording"]):
+            return "PASS", note + " — neither toggle acted on, and the chip said why"
         if dwell and (s["listening"] or s["isRecording"]):
-            return "PASS", note + " — the second F10 was refused, the sentence stayed open"
-        if discarded and banner:
-            return "PASS", note
+            return "FAIL", note + " — the second F10 was refused and the sentence left open (batch 4 wants neither)"
         if discarded and not banner:
             return "BUG", note + " — the stall coalesced start+stop into a silent sub-0.35 s discard"
         return "FAIL", note
@@ -801,9 +803,14 @@ def tr4_fail_open():
         note = (f"nudge posted={nudged}; silent line={m_silent.group(1) + ' s' if m_silent else 'none'}; back line="
                 f"{m_back.group(1) + ' s' if m_back else 'none'}; new hangs files={len(new)}; sessionFlags={s.get('sessionFlags')}; "
                 f"buttons down={buttons}")
-        if m_silent and float(m_silent.group(1)) <= 3.5 and m_back and len(new) == 1 and not buttons \
+        # batch 4 (2026-09-26): the back line is the stall itself (first beat after − last beat
+        # before), not the time until the next event — a 6 s stall read `16.4 s`.
+        real = m_back is not None and 5.5 <= float(m_back.group(1)) <= 6.6
+        if m_silent and float(m_silent.group(1)) <= 3.5 and m_back and real and len(new) == 1 and not buttons \
                 and not s.get("sessionFlags"):
             return "PASS", note
+        if m_back and not real:
+            return "FAIL", note + " — the back line does not say the 6 s the stall lasted"
         return "FAIL", note + ("" if m_silent else " — no event reached the tap after 3 s, or the gate did not open")
     finally:
         _settle_down()

@@ -12856,3 +12856,35 @@ when it thawed: `mic: recording through …`, then `discarded — under 0.35s`, 
 - A start alone behind a stall still starts (TG25's +1.0 s F10 acted after the thaw, as the plan
   wants); a stop made after the thaw is an ordinary stop.
 - The flash is the `listening-flash` state with other words; no new shot on the states page.
+
+### Batch 4, measured
+
+| case | before (`report-2026-09-26.md`) | after (`report-fix4.md`, `report-fix4b.md`) |
+|---|---|---|
+| TG10 F11 under the held panel | BUG — outbox +1, the panel sent itself | PASS — outbox +0, `✕ cancelled … — Q6` |
+| TG11 🔽 → under the held panel | BUG — `SWALLOWED by the prompt panel's ⏎` on key 36 (ours) | PASS — `(ours) … — passed`; the panel sent by its own clock |
+| TG14 kamikaze re-fired at +300 ms | BUG — on, then taken back | PASS — on ×1, the row up |
+| TG15 film re-fired at +300 ms | BUG — started and stopped, 2 frames | PASS — one recording, still filming |
+| TG16 F9 on the held panel | BUG — `ignored` | PASS — the sent prompt carries `kamikaze` |
+| TG17 F8 on a caret sentence | BUG — silent | PASS — ignored (Q7), one line |
+| TG1 F7 in the key trace | BUG — `↓98×0` | PASS — `↓98×1`, swallowed |
+| TG28 all ten gestures in the trace | BUG — all ten blind | PASS — every one `↓1/1 swallowed` |
+| TG25 F10 during the fail-open | BUG — ⌃⌥⌘F10 in the sink | PASS — dropped (`🧊 … dropped — the main thread is frozen`), sink empty; the +1.0 s F10 acted after the thaw |
+| TG26 canary during the fail-open | FAIL — `alive:false` | PASS — `alive:true, tap:"open"` |
+| TR4 fail-open timing | FAIL — silent 3.7 s, no back line (16.4 s elsewhere) | PASS — silent 3.1 s, back after 6.1 s, one hangs file |
+| TL21 start+stop inside a 6 s stall | BUG — silent sub-0.35 s discard | PASS — neither acted on, the recorder never opened, `⏸ ignored — the Mac was frozen` |
+| TG29 stale-modifier guard | PASS | PASS — 13 steps bare within 300 ms |
+| TG2 F10 train and dwell | PASS | PASS |
+| TD20 5000 chars under a resting pointer | FAIL — autosend paused, relay busy until ⎋ by hand | completes on its own (`via autosend`); **BUG** — `^C` / `ESC[201~` reach the tty raw (R18, not this batch) |
+
+**Cases changed, and why:**
+
+- **TL21** passed on *`under 0.35s` and a banner*; the decision here is that the recorder does not
+  open at all, so it now needs the `⏸ … both queued` line, no microphone, and the chip's `⏸ ignored
+  — the Mac was frozen`. A second F10 refused by the dwell with the sentence left open is FAIL.
+- **TR4** also requires the `back after` line to say the stall (5.5–6.6 s for a 6 s stall).
+- **TG17**'s expectation said *refused visibly (a log line / flash)*; Q7 says no flash, so it reads
+  *ignored, one log line*. The verdict logic was already that.
+- **TD20** sends the held panel through `POST /test/prompt` if it is still held after 6 s, and says
+  which way it went; this run needed neither.
+- **TG25 / TG26** only report more (the dropped chord, the canary's `tap`).

@@ -769,7 +769,17 @@ def td20():
         text = "TD20-BEGIN " + body[:mid] + "\u0003 ctrl-c here \u001b[201~ paste-end here " + body[mid:] + " TD20-END"
         mark, prev = log_mark(), _delivery_at()
         post("/test/dictation", {"text": text})
-        d = _wait_new_delivery(prev, 20) or {}
+        # 2026-09-26 (batch 4): a panel that unfolds under a pointer that has not moved no longer
+        # pauses autosend; if it is held anyway (autosend off), `POST /test/prompt` sends it — this
+        # case used to end with the relay busy until ⎋ by hand.
+        d = _wait_new_delivery(prev, 6) or {}
+        how = "autosend"
+        if not d:
+            p = state().get("prompt") or {}
+            if p.get("held"):
+                post("/test/prompt", {"do": "send"})
+                how = "POST /test/prompt send (the panel was %s)" % ("paused" if p.get("paused") else "held")
+            d = _wait_new_delivery(prev, 20) or {}
         wait_for(lambda: log_has(mark, r"delivered to the bound terminal|⛔️|unbound|delivery failed"), 20, 0.2)
         time.sleep(2.0)
         data = _read(raw, "rb")
@@ -778,7 +788,7 @@ def td20():
         etx, esc = b"\x03" in data, b"\x1b[201~" in data
         literal = b"$(date)" in data and b"`whoami`" in data and b'"yes"' in data
         whole = b"TD20-BEGIN" in data and b"TD20-END" in data
-        facts = (f"sent {len(text)} chars; to={d.get('to')}; arrived {len(data)} bytes in {len(reads)} reads "
+        facts = (f"sent {len(text)} chars via {how}; to={d.get('to')}; arrived {len(data)} bytes in {len(reads)} reads "
                  f"({', '.join(l.split()[1] for l in reads[:8])}); CR={cr}; ^C raw={etx}; ESC[201~ raw={esc}; "
                  f"literals intact={literal}; begin+end={whole}")
         if not whole:

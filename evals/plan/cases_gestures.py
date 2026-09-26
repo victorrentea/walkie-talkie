@@ -863,8 +863,8 @@ def tg16():
 
 
 @case("TG17", tags=("gesture",),
-      expect="🔼↑ F8 on a caret sentence is refused visibly (a log line / flash), not converted. Predicted "
-             "defect: silent — `convertDictationToSpawn` returns false with no word")
+      expect="🔼↑ F8 on a caret sentence stays ignored (Q7: no conversion, no flash) and says so in one log line. "
+             "Predicted defect: silent — `convertDictationToSpawn` returns false with no word")
 def tg17():
     """F8 on a caret sentence is silent."""
     with G("TG17") as g:
@@ -1053,8 +1053,9 @@ def tg25():
         leaked_trace = re.search(r"⌨️trace ↓ key 109 pid [^\n]*failing open", L) is not None
         fk = fkeys_in(evs)
         queued = n(r"🎙️ recording started for", L) > 0 or bool(s.get("listening"))
+        dropped = "dropped — the main thread is frozen" in L
         msg = (f"stall line={stalled}, 🧊 opened={opened}, trace ↓F10 failing open={leaked_trace}, sink "
-               f"F-keys {brief(fk)}, the +1.0 s F10 acted after the stall={queued}")
+               f"F-keys {brief(fk)}, the +4.5 s F10 dropped while frozen={dropped}, the +1.0 s F10 acted after the stall={queued}")
         if not (stalled and opened):
             return g.done("FAIL", "the fail-open never opened — " + msg)
         if fk or leaked_trace:
@@ -1081,7 +1082,7 @@ def tg26():
         opened = "🧊 main thread silent" in L
         misdiag = "the tap did NOT see its own event" in L
         v_trace = re.search(r"⌨️trace ↑ key 9 pid [^\n]*failing open", L) is not None
-        msg = (f"POST /test/firewall at +4.5 s → {code} alive={r.get('alive')} canaryMs={r.get('canaryMs')}; "
+        msg = (f"POST /test/firewall at +4.5 s → {code} alive={r.get('alive')} tap={r.get('tap')} canaryMs={r.get('canaryMs')}; "
                f"🧊 opened={opened}; `did NOT see` line={misdiag}; trace ↑V failing open={v_trace} "
                "(the sink records keyDowns only, so the keyUp is read off the trace)")
         if not opened:
