@@ -13092,3 +13092,14 @@ n-am mouse-ul la mine."*
 - Sequencing: the Wispr config edit happens **after tonight's teacher batch** (it posts Wispr's
   current chord: check `helpers/wispr_loopback.py` for the keycodes and update them to 54+60 in the
   same change), then Walkie's side in fix batch 6.
+
+## Q12 decided (2026-09-26, 19:10, Victor): sentences queue, max 2 in flight, delivered in order
+
+*"Da. Max 2 in flight. În ordine."* A new sentence may start while the previous one is still
+transcribing; each sentence takes its own envelope at its stop (latched recipient, shots,
+selections, marker cues); deliveries go out strictly in the order the sentences were spoken, even
+when a later one transcribes faster; with Autosend off the prompt panels show one at a time, in
+order. **At most 2 sentences in flight** (recording + one transcribing, or two transcribing): a
+third start is refused with a flash and a log line until one lands. 🔼← cancels the sentence
+recording now, or, with none recording, the most recent one in flight. This is fix batch 6's
+largest item; it supersedes batch 3's "a start during the settle is refused" for the 2-deep case.
