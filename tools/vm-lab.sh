@@ -29,11 +29,19 @@
 # once they are there (see `bake`).
 set -euo pipefail
 
+# **Everything Tart stores lives on the external disk "Vic"** (2026-09-26, Victor: *"e important să
+# nu se stocheze pe discul meu mult … totul să fie cât de mult se poate pe acel hard extern"*): the
+# internal disk had 88 GiB free against a 25 GB base image plus clones. `TART_HOME` is the one knob
+# Tart offers (OCI cache, IPSW cache, VMs, tmp all live under it); the volume is APFS, which the
+# sparse disk images need. Refuse to run without it rather than silently fill the internal disk.
+export TART_HOME="${TART_HOME:-/Volumes/Vic/tart}"
+[ -d "$TART_HOME" ] || { echo "❌ $TART_HOME is not there — is the external disk Vic mounted?" >&2; exit 1; }
+
 VM="${WT_LAB_VM:-wt-lab}"
 BASE="${WT_LAB_BASE:-wt-base}"
 IMAGE="ghcr.io/cirruslabs/macos-sequoia-base:latest"
 APP="Walkie Talkie"
-LOG="$HOME/.tart/$VM.log"
+LOG="$TART_HOME/$VM.log"
 
 die() { echo "❌ $*" >&2; exit 1; }
 state() { tart list --format json | python3 -c "

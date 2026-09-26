@@ -7,10 +7,10 @@
 # matter and the witness's tail, then unbinds, clears the override and closes the tab.
 # Precondition: the 440 Hz pass-thru check on the Loopback device (see the plan).
 set -u
-B=http://127.0.0.1:8917; LOG=~/.walkie-talkie/relay.log; S=$1; CLIP=$2; DEV="🎓 TO Wispr"
+B=http://127.0.0.1:8917; LOG=~/.walkie-talkie/relay.log; S=$1; CLIP=$2; DEV="🧪 WT Inject"
 post(){ curl -s -m 20 -X POST "$B$1" -H 'content-type: application/json' -d "${2:-{\}}"; }
 MARK=$(wc -c < $LOG)
-post /test/mic "{\"device\":\"TO Wispr\"}" >/dev/null
+post /test/mic "{\"device\":\"WT Inject\"}" >/dev/null
 TTY=$(osascript -e 'tell application "Terminal" to set t to do script "printf \"\\\\e]0;wt-witness\\\\a\"; stty -echo; exec cat >> '"$S"'/witness.txt"' -e 'tell application "Terminal" to get tty of t')
 post /bind "{\"tty\":\"${TTY#/dev/}\"}" >/dev/null
 post /test/gesture '{"name":"forward-right"}' >/dev/null
