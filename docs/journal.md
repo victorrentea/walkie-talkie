@@ -12309,3 +12309,18 @@ is held: cancels the panel"* — cancel means the sentence goes, wherever it has
   After: no delivery, `of audio kept`, recoverable (TL11 in `report-fix1c.md`: the first run
   skipped it because the helper was down).
 
+### 3. Sentences are no longer lost
+
+Five ways a sentence he had said disappeared, each confirmed by a case.
+
+#### (a) A tty nothing hosts cannot be bound
+
+The test plan's §3.4: *"`bind(tty:)` never fails … dead ttys are bound, restore/pick failure paths
+are dead code, a sentence released into a dead tty ends `targetGone` with the outbox row already
+written."* `bind(tty:)` now asks `liveTitles()` (one `osascript`, the *Rebind to* list's liveness
+read, which also gives the title) and binds only a tty a Terminal.app tab shows or a tmux client is
+attached to; otherwise it logs `bind: no Terminal.app tab or tmux client on ttysNNN — not bound` and
+returns nil, which `POST /bind` answers with 409 and the restore, the menu rebind and the
+*Active Terminals* pick already handle. TD1 (`ttys999`) and TD14 (a pty an IDE-like process owns,
+no tab) were `200` + a lost sentence; both are `409` now.
+

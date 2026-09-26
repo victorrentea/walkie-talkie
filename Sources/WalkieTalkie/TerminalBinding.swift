@@ -293,9 +293,26 @@ final class TerminalBinding {
     /// and could never find its tab again: no title, no window frame, and a first
     /// delivery that came back `targetGone`. Normalising here rather than in each
     /// script keeps the fix at the one door a caller-supplied tty comes through.
+    ///
+    /// **It fails when nothing hosts the tty** (2026-09-26, the test plan's §3.4:
+    /// TD1, TD14). It used to always return a `Target`, so `POST /bind` bound
+    /// `ttys999`, a restore bound a pty no Terminal tab owns (an IDE's), every
+    /// failure path above it was dead code, and the first sentence released
+    /// into it ended `targetGone` — with the outbox row already written. Now a
+    /// tty is bindable only when a Terminal.app tab shows it (`liveTitles`, one
+    /// `osascript` — the same one the *Rebind to* list uses for liveness) or a
+    /// tmux client is attached to it; otherwise nil, which the route answers
+    /// with 409 and the restore with its own retry and flash.
     func bind(tty: String, spawned: Bool = false) -> Target? {
         let device = Self.devicePath(tty)
-        guard let bound = terminalTarget(tty: device, title: Self.title(forTTY: device),
+        let short = (device as NSString).lastPathComponent
+        let tabs = Self.liveTitles()
+        guard tabs[short] != nil || Self.tmuxPane(clientTTY: device) != nil else {
+            Log.error("bind: no Terminal.app tab or tmux client on \(short) — not bound")
+            return nil
+        }
+        let title = tabs[short].flatMap { $0.isEmpty ? nil : $0 }
+        guard let bound = terminalTarget(tty: device, title: title,
                                          fallbackName: "Terminal", bundleID: "com.apple.Terminal")
         else { return nil }
         adopt(bound, spawned: spawned)
