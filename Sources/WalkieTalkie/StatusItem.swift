@@ -1608,7 +1608,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         case "eleven-live":
             return (["Live caption: ElevenLabs \(ElevenLabsLive.model) — \(ElevenLabsLive.rate) (+20 % with keyterms), "
                         + "the words across the top of the screen while you talk; "
-                        + "after a 3 s pause \(ElevenLabsSource.model) corrects them",
+                        + "at every committed segment \(ElevenLabsSource.model) corrects them",
                     "Sent text: ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate), "
                         + "from the recording",
                     "Audio leaves this Mac", key].compactMap { $0 } + ["", "Spent so far:"] + ElevenLabsCost.summary().lines)

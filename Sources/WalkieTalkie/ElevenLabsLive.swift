@@ -40,16 +40,21 @@ final class ElevenLabsLive {
     var onText: ((_ committed: String, _ partial: String, _ gentle: Bool) -> Void)?
 
     /// **The batch model corrects the live words behind him** (2026-09-26,
-    /// Victor: *"implementează și 5, dar doar după o pauză de 3 sec în
-    /// transcriere … trimite doar bucata care mai apare pe ecran; la final de
-    /// tot oricum trimitem tot"*). After `correctAfter` seconds with nothing
-    /// new from the socket, the audio since the previous cut is uploaded to
-    /// `ElevenLabsSource.transcribe` and its text replaces the live segments
-    /// committed in that span; the cut moves to the end of the span, so every
-    /// second of the sentence is uploaded once here (and once more, whole, at
-    /// the stop — that one is the delivery). A failure leaves the cut where it
-    /// was: the next pause covers the longer span.
-    static let correctAfter: TimeInterval = 3.0
+    /// Victor: *"implementează și 5 … trimite doar bucata care mai apare pe
+    /// ecran; la final de tot oricum trimitem tot"*). **At every segment the
+    /// server commits** (its VAD closes one after 1.5 s of silence), the audio
+    /// since the previous cut is uploaded to `ElevenLabsSource.transcribe` and
+    /// its text replaces the live segments committed in that span; the cut
+    /// moves to the end of the span, so every second of the sentence is
+    /// uploaded once here (and once more, whole, at the stop — that one is the
+    /// delivery). A failure leaves the cut where it was: the next commit
+    /// covers the longer span. The first version waited for a 3 s pause
+    /// instead; by then the eraser had wiped the words the correction was for
+    /// (Victor, 07:20: *"the correction at pause finds no text on screen as it
+    /// fades out — drop the silence rule, this thing is too dynamic"*). The
+    /// 0.5 s timer stays only as the catch-up for a commit that arrived while
+    /// an upload was in flight.
+    static let minSpan: TimeInterval = 1.0
     private var pcm = Data()
     private var cutByte = 0
     private var correctedSegments = 0
@@ -131,7 +136,7 @@ final class ElevenLabsLive {
             self.lastTextAt = CACurrentMediaTime()
             let timer = DispatchSource.makeTimerSource(queue: self.queue)
             timer.schedule(deadline: .now() + 0.5, repeating: 0.5)
-            timer.setEventHandler { [weak self] in self?.correctIfPaused() }
+            timer.setEventHandler { [weak self] in self?.correctIfDue() }
             timer.resume()
             self.pauseTimer = timer
         }
@@ -213,6 +218,7 @@ final class ElevenLabsLive {
             if !segment.isEmpty { segments.append(segment); lastTextAt = CACurrentMediaTime() }
             partial = ""
             publish()
+            correctIfDue()
         default:
             // `error`, `auth_error`, `quota_exceeded`, `rate_limited`, … — the
             // caption stops, the sentence does not.
@@ -229,11 +235,12 @@ final class ElevenLabsLive {
         DispatchQueue.main.async { [weak self] in self?.onText?(committed, partial, gentle) }
     }
 
-    /// On `queue`, every 0.5 s: a pause of `correctAfter` with live segments
-    /// not yet corrected → upload the span since the cut.
-    private func correctIfPaused() {
-        guard !closed, !correcting, partial.isEmpty, segments.count > correctedSegments,
-              CACurrentMediaTime() - lastTextAt >= Self.correctAfter, pcm.count > cutByte + 32_000 else { return }
+    /// On `queue`: live segments not yet corrected and at least `minSpan` of
+    /// audio since the cut → upload the span. Called at every commit, and by
+    /// the 0.5 s timer for a commit that arrived while an upload was running.
+    private func correctIfDue() {
+        guard !closed, !correcting, segments.count > correctedSegments,
+              pcm.count > cutByte + Int(Self.minSpan * 32_000) else { return }
         let from = cutByte, to = pcm.count, upTo = segments.count
         let span = pcm[from..<to]
         let wav = Outbox.shotsDir.appendingPathComponent("live-correct-\(Int(Date().timeIntervalSince1970)).wav")

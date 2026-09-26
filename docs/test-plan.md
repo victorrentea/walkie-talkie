@@ -423,32 +423,32 @@ R3 (caret double paste): [TTY] make Terminal error after typing (quit Terminal m
 
 ### 7.4 LC — the subtitle band (`POST /test/live-caption` + `state.liveCaption`, 20 Hz sampling)
 
-Constants: band 80 pt, `marginRight` 48, `dropSlack` 40, 38 pt bold; `cruise` 40, `gain` 1.2,
-`vMax` 700, `ease` 0.45 s; `swap` 1.0 s (ghost 0.5), `correctionFade` 1.6, `reflow` 0.26;
-`provisionalFloor` 0.4; eraser after 2.0 s idle, 260 pt/s, edge 160; rest at `overhang ≤ −33`
-(`end ≈ bandWidth − 81`). Use `end = anchor + lineWidth` (`anchor` jumps right on a drop).
+Constants (07:50 layout): band 80 pt, `marginRight` 48, `dropSlack` 40, 38 pt bold; centred layout,
+`ease` 0.45 s, `vMax` 700; `swap` 1.0 s (ghost 0.5), `correctionFade` 1.6, `reflow` 0.26;
+`provisionalFloor` 0.4; eraser after 2.0 s idle, 260 pt/s, edge 160. `centre = anchor +
+(visibleStart + shownWidth)/2` where `visibleStart` = `eraseFront + 80` when erasing, else 0.
 
-1. Entry from the right: first sample `anchor ≥ bandWidth−5`; `anchor` strictly decreasing while `velocity>0`; at rest `velocity==0`, `bandWidth−141 ≤ end ≤ bandWidth−81`.
-2. Uniform velocity at 0.4 s/word for 20 s: CV(velocity) < 0.25 after 3 s; |Δv| per 50 ms < 40; |Δanchor| ≤ 700·Δt+2.
-3. 2 s pause → rest inside the band by ≤ 2.5 s, `reflowing < 0.5`.
-4. Burst of 15 words: every sample `velocity ≤ 700`, max ≥ 600 within 2 s, rise elastic (≤ (700−v)(1−e^(−Δt/0.45))+10), `dropped` grows once anchor < −40.
-5. Correction that shortens ("fix the build today" → "fix it today"): `corrections += 1`, `ghosts == ["the","build"]` within 0.3 s, `[]` after 0.6 s, `correcting` empty after 2.7 s, `reflowing` > 0 then < 0.5 within 1.6 s.
-6. Correction that lengthens ("500" → "five hundred"): `corrections += 2`, `ghosts == ["500"]`, no end jump > 700·Δt.
-7. Revision past the dropped words (new line): `dropped == 0`, `words == 3`, `anchor ≥ bandWidth−40`, `ghosts == []`. 7b: change only inside the dropped region → `corrections` unchanged, `anchor` continuous.
-8. Tail punctuation flicker (`test` → `test.` → `test,`) and mid-line case/punctuation commits (`world, how` → `world. How are`) → `corrections` unchanged, `ghosts` always `[]` (LCS on case-folded stems since 02:15).
-9. Append-only ×30 → `corrections == 0`.
-10. `{"on":false}` fade: `open==false` at once, `words>0` fading, after 0.6 s `words==0`; reopen within 0.15 s → after 0.6 s `open` true, `words==1`.
-11. Opens on the screen under the pointer (needs a second display; G7 `frame`).
-12. `RELAY_SHOOT` never shows it (loop `post` during `shoot-overlay-states.sh` → always `open==false`; no band in `docs/states/`).
-13. Live integration: `words>0` while `isRecording`; closes when `listening` goes false; no late partial reopens it.
-14. Empty text while open → `words==0`, still open.
-15. **Provisional tail**: `{"text":"a b c.","partial":"d e f"}` → `committed==3`, `opacity` ≈ [1,1,1,0.8,0.6,0.4] within 0.6 s; then `{"text":"a b c. d e f.","partial":""}` → all ≈ 1 within 0.8 s, `corrections == 0`.
-16. **Eraser**: feed, wait 2 s → `eraseFront` non-null and increasing at ≈ 260 pt/s (minus drop shifts); a new word → `eraseFront` stops increasing (only decreases by drop widths); wait until `eraseFront ≥ lineWidth`, then a new word → `dropped == old count`, `anchor ≥ bandWidth−40` (fresh line), `eraseFront == null`.
-17. **Gentle correction**: `{"text":"a b c.","gentle":true}` after "a b x." → `corrections += 1`, `lastWordsAt` untouched (eraser keeps sweeping: `eraseFront` still increasing), tint paler (visual: screenshot region of the band).
-18. Two-display and `RELAY_SHOOT` runs need G7's `frame`; timing precision needs G8's server-side script/trace.
+1. First word appears centred: right after `{"partial":"Hello"}`, `|centre − bandWidth/2| < 3`, `velocity == 0`, opacity rising from 0 to 0.4 (provisional) within 0.5 s. No sample with `anchor ≥ bandWidth − 5`.
+2. Growth to the right at 0.4 s/word for 20 s: centre stays within ±80 of the middle until the line is wider than `bandWidth − 96`; after that `anchor + shownWidth ≤ bandWidth − 48 + 2` on every sample; |Δanchor| ≤ 700·Δt + 2; no anchor increase except by a drop width.
+3. Pause: `velocity → 0` within 1.5 s of the last word; centre unchanged until the eraser starts at 2.0 s.
+4. Burst of 15 words at once: anchor eases (elastic, no step > 700·Δt), every sample `velocity ≤ 700`.
+5. Correction that shortens ("fix the build today" → "fix it today"): `corrections += 1`, `ghosts == ["the","build"]` within 0.3 s, `[]` after 0.6 s, `correcting` empty after 2.7 s, `reflowing` > 0 then < 0.5 within 1.6 s; the centre glides, never steps.
+6. Correction that lengthens ("500" → "five hundred"): `corrections += 2`, `ghosts == ["500"]`.
+7. Revision past the dropped words (new line): `dropped == 0`, `words == 3`, placed centred at once (`velocity == 0` on the first sample), `ghosts == []`. 7b: change only inside the dropped region → `corrections` unchanged, `anchor` continuous.
+8. Tail punctuation flicker and mid-line case/punctuation commits → `corrections` unchanged, `ghosts == []` (LCS on case-folded stems).
+9. Append-only ×30 → `corrections == 0`; every appended word's opacity starts < 0.1 and reaches its target within 0.6 s.
+10. `{"on":false}` fade and reopen within 0.15 s (see the previous version: `open` flips at once, `words == 0` after 0.6 s; reopen must not be reset by the completion handler).
+11. Second display (needs G7 `frame`).
+12. `RELAY_SHOOT` never shows it.
+13. Live integration: `words > 0` while `isRecording`; closes when `listening` goes false.
+14. Empty text while open → `words == 0`, still open.
+15. Provisional tail: `{"text":"a b c.","partial":"d e f"}` → `committed == 3`, opacity ≈ [1,1,1,0.8,0.6,0.4] within 0.6 s; commit all → ≈ 1 within 0.8 s, `corrections == 0`.
+16. Eraser + re-centring: feed, wait 2 s → `eraseFront` increasing ≈ 260 pt/s; centre of the *visible* text stays within ±80 of the middle while `dropped` grows; a new word freezes the front (no increase; decreases by drop widths only); after `eraseFront ≥ lineWidth` the next word is a fresh centred line, `eraseFront == null`.
+17. Gentle correction (`"gentle":true`): `corrections += 1`, the eraser keeps sweeping (`eraseFront` still increasing), paler tint.
+18. Timing precision and the two-display case need G8's server-side script/trace and G7's `frame`.
 
-Live-socket cases (real audio, after G1/G2): **B1** partials arrive ≤ 1.5 s after speech; **B2** 3 s
-pause → "💬 live correction: … → scribe_v2" line, `state.eleven.cost` grows, a `gentle` update on
+Live-socket cases (real audio, after G1/G2): **B1** partials arrive ≤ 1.5 s after speech; **B2** every VAD
+commit → "💬 live correction: … → scribe_v2" line, `state.eleven.cost` grows, a `gentle` update on
 the band with `corrections` ≥ 0 and the committed text replaced; **B3** stop during a correction
 in flight → no update after `closed` (log shows the result discarded, no crash); **B4** correction
 failure (G3 `fail:500`) → "next pause covers the span again", cut unchanged, next pause uploads the

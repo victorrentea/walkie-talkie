@@ -15,14 +15,16 @@ import AppKit
 /// **The motion, not the words, is the design.** The recogniser hands over the
 /// whole sentence as it has it now, about once a second, and the tail keeps
 /// being revised. Anchoring the line at its *first* word and moving that anchor
-/// left at a smooth velocity means a revision only redraws the glyphs at the
-/// right end: everything already on screen keeps sliding without a jump. The
-/// velocity is a controller, not a constant — it chases the amount of text
-/// hanging past the right margin (`overhang`), so speaking faster slides
-/// faster, a pause lets the line coast to rest with its end inside the band,
-/// and every change of speed is rate-limited (`accel`) so the eye never sees a
-/// step. Words that have fully left on the left are dropped by advancing the
-/// anchor by exactly their width — invisible by construction.
+/// means a revision only redraws the glyphs at the right end: everything
+/// already on screen keeps its place. **The visible text stays centred**
+/// (Victor, 2026-09-26 07:50: *"the visible text remains ~centered at all
+/// times"*): the first words appear in the middle of the band, fading in; new
+/// words are added on the right, fading in; when the eraser stings words out
+/// on the left the rest re-centres. The anchor eases toward the centred
+/// position elastically (`ease`, capped at `vMax`), so nothing ever steps.
+/// A line wider than the band keeps its newest words inside the right margin
+/// and lets the oldest leave on the left. Words fully gone — erased or off the
+/// left edge — are dropped by advancing the anchor by exactly their width.
 final class LiveCaptionBand {
 
     static let bandHeight: CGFloat = 80
@@ -34,11 +36,6 @@ final class LiveCaptionBand {
     private static let dropSlack: CGFloat = 40
     private static let fontSize: CGFloat = 38
 
-    /// px/s the line moves at with nothing hanging past the margin: a floor,
-    /// not a target — the controller adds to it per pixel of overhang.
-    private static let cruise: CGFloat = 40
-    /// px/s per px of overhang. 200 px of new words → +240 px/s.
-    private static let gain: CGFloat = 1.2
     private static let vMax: CGFloat = 700
     /// **Elastic, not a ramp** (Victor, 2026-09-26: *"o mișcare elastică
     /// blândă"*): the speed approaches its target exponentially with this time
@@ -172,7 +169,7 @@ final class LiveCaptionBand {
         // A frame after a stall (a hidden Space, a debugger) is clamped so the
         // line does not leap; it merely catches up at `accel`.
         let dt = CGFloat(min(now - lastTick, 1.0 / 20))
-        view.advance(dt: dt, now: now, cruise: Self.cruise, gain: Self.gain, vMax: Self.vMax, ease: Self.ease,
+        view.advance(dt: dt, now: now, vMax: Self.vMax, ease: Self.ease,
                      marginRight: Self.marginRight, dropSlack: Self.dropSlack)
     }
 
@@ -293,13 +290,12 @@ final class LiveCaptionBand {
             // (nothing visible moves — they were already gone).
             if let front = eraseFront, front >= lineWidth, !old.isEmpty {
                 dropped = old.count
-                anchor = bounds.width
                 shown = []; opacity = []
                 bornAt = [:]; ghosts = []
             }
             // A revision that reaches back past what has already left: a new
-            // line, entering from the right like the first one did.
-            if new.count <= dropped { dropped = 0; anchor = bounds.width; bornAt = [:]; ghosts = []; shown = []; opacity = []; eraseFront = nil }
+            // line, placed in the centre like the first one was.
+            if new.count <= dropped { dropped = 0; bornAt = [:]; ghosts = []; shown = []; opacity = []; eraseFront = nil }
             // **Aligned, not compared by index**: a recogniser that turns
             // "cinci sute" into "500" shifts every later word one place, and
             // an index diff would paint the whole rest of the line yellow. The
@@ -339,7 +335,6 @@ final class LiveCaptionBand {
             bornAt = carried
             gentleBorn = carriedGentle
             words = new
-            if wasEmpty { anchor = bounds.width }
             // The new layout; each word starts where its old self was drawn,
             // or in place if it is new.
             widths = newVisible.map { Self.width(of: $0) }
@@ -347,10 +342,25 @@ final class LiveCaptionBand {
             target = widths.map { w in defer { x += w }; return x }
             shown = target.indices.map { carriedX[$0] ?? target[$0] }
             retarget()
-            // A new word starts as faint as its place in the open segment says;
-            // a carried one keeps the opacity it had and eases from there.
-            opacity = target.indices.map { carriedOpacity[$0] ?? opacityTarget[$0] }
+            // A carried word keeps the opacity it had and eases from there; a
+            // new one fades in from nothing (a correction has its own swap).
+            opacity = target.indices.map { carriedOpacity[$0] ?? (carried[dropped + $0] == nil ? 0 : opacityTarget[$0]) }
+            // A fresh line (first words, or after a full wipe) is set in the
+            // centre at once — it fades in there, it does not travel.
+            if oldVisible.isEmpty || wasEmpty { eraseFront = nil; anchor = centredAnchor() }
             needsDisplay = true
+        }
+
+        /// Where the anchor belongs for the visible text to sit centred — or,
+        /// when the visible text is wider than the band, for its end to sit
+        /// inside the right margin.
+        private func centredAnchor(marginRight: CGFloat = LiveCaptionBand.marginRight) -> CGFloat {
+            guard !widths.isEmpty else { return anchor }
+            var start = shown[0]
+            if let front = eraseFront { start = max(start, front + LiveCaptionBand.eraseEdge / 2) }
+            let end = shownWidth
+            let centred = bounds.width / 2 - (start + end) / 2
+            return min(centred, bounds.width - marginRight - end)
         }
 
         /// Where each visible word's opacity is heading: solid once committed,
@@ -402,20 +412,18 @@ final class LiveCaptionBand {
             NSAttributedString(string: word + " ", attributes: fillAttributes).size().width
         }
 
-        func advance(dt: CGFloat, now: CFTimeInterval, cruise: CGFloat, gain: CGFloat, vMax: CGFloat,
+        func advance(dt: CGFloat, now: CFTimeInterval, vMax: CGFloat,
                      ease: CGFloat, marginRight: CGFloat, dropSlack: CGFloat) {
             self.now = now
             guard !words.isEmpty, !widths.isEmpty else { return }
-            let end = anchor + lineWidth
-            let overhang = end - (bounds.width - marginRight)
-            // Continuous in `overhang`: rest is reached `cruise / gain` px short
-            // of the margin, never with a step.
-            let goal = max(0, min(vMax, cruise + gain * overhang))
-            // Exponential approach: the same fraction of the gap closed per
-            // `ease` seconds, whatever the gap — the elastic feel.
-            velocity += (goal - velocity) * (1 - exp(-dt / ease))
-            if velocity < 0.5 { velocity = 0 }
-            if velocity > 0 { anchor -= velocity * dt }
+            // The anchor eases toward the centred position: the same fraction
+            // of the gap closed per `ease` seconds, never faster than `vMax`.
+            let goal = centredAnchor(marginRight: marginRight)
+            var step = (goal - anchor) * (1 - exp(-dt / ease))
+            step = max(-vMax * dt, min(vMax * dt, step))
+            if abs(goal - anchor) < 0.3 { step = goal - anchor }
+            velocity = abs(step) / max(dt, 0.0001)
+            anchor += step
             // The reflow: every word eases toward its place in the new layout,
             // and toward how solid it should be.
             let k = 1 - exp(-dt / LiveCaptionBand.reflow)
@@ -438,7 +446,8 @@ final class LiveCaptionBand {
             // every remaining glyph stays exactly where it was drawn.
             while widths.count > 1 {
                 let w = widths[0]
-                guard anchor + w < -dropSlack, abs(shown[1] - target[1]) < 0.5 else { break }
+                let gone = anchor + w < -dropSlack || (eraseFront.map { shown[0] + w < $0 } ?? false)
+                guard gone, abs(shown[1] - target[1]) < 0.5 else { break }
                 anchor += w
                 bornAt[dropped] = nil
                 dropped += 1

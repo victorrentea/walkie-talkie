@@ -12144,3 +12144,29 @@ contorizezi costul acumulat în meniu la Engine în dreptul lui ElevenLabs"*.
   `$x.xx` on both ElevenLabs rows, the breakdown on the tooltip. The 02:19 probe counted
   12.1 s of live audio: the ledger works end to end for the socket; the batch half counts on a
   200 (it did, with an empty transcript).
+
+## The caption is centred, and the batch corrects at every commit (2026-09-26, 07:20–08:00)
+
+Victor, on the band after a night's sleep: *"the correction at pause finds no text on screen as it
+fades out. drop the 4s silence rule, this thing is too dynamic"* — then *"as words fade out to the
+left the remaining text should center itself. also, when appearing, the text should show up on the
+center, not float in from the left, with more words added to the right, fading in. so the visible
+text remains ~centered at all times"*.
+
+- **`ElevenLabsLive.correctIfDue`** runs at every `committed_transcript` (VAD closes a segment
+  after 1.5 s) with ≥ 1 s of audio since the cut; the 0.5 s timer only catches a commit that
+  arrived while an upload was running. The pause rule was gone by 07:45: the eraser (2 s idle)
+  had wiped the words before the correction (3 s + a round trip) reached them. **Seen live** in
+  Victor's own dictation this morning — the correction path works; it was only late.
+- **The band is centred, not a ticker.** `centredAnchor()`: the visible text (from the eraser's
+  half-faded point, or the first word, to the end) sits on the band's middle; when it is wider
+  than the band its end sits inside the right margin and the oldest words leave on the left. The
+  anchor eases toward that position (τ 0.45 s, ≤ 700 pt/s). First words, and the first words after
+  a full wipe, are placed in the centre at once and fade in; every appended word fades in from
+  0; corrections keep their swap. Fully erased words are dropped like off-screen ones, so the
+  re-centring follows the eraser. Measured over the route: centre 864 ± 70 pt through growth,
+  erase and regrowth on a 1728 pt band. The overhang/cruise controller and the entry from the
+  right edge are gone.
+- Seen at 07:06: the wake canary reported the tap dead; at 07:13 two `/test/gesture` F10 posts
+  started nothing; at 07:14 the canary found it alive without a restart. Incident #25 of the test
+  plan, reproduced by accident.

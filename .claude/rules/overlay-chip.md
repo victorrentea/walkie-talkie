@@ -137,8 +137,11 @@ yields to `--label`).
 
 - **The live caption is not on the chip since 2026-09-26** — it is `LiveCaptionBand`, a click-through
   80 pt band across the top of the screen under the pointer (below the menu bar), white bold 38 pt
-  with a black outline and shadow, like a film subtitle. Victor: *"îl scoți așadar din tooltip"* — a
-  line that has to be read while it moves needs a fixed place and a uniform glide. `RelayWindow`
+  with a black outline and shadow, like a film subtitle. Victor: *"îl scoți așadar din tooltip"*.
+  **The visible text stays centred** (since 07:50): first words fade in at the middle, new words
+  are appended on the right fading in, an eraser (2 s idle) stings the line from the left and the
+  rest re-centres; wider than the band → the end stays inside the right margin. No ticker, no entry
+  from the right edge. `RelayWindow`
   keeps only `setLiveCaptionOpen`/`setLiveCaption` as forwarders (so `AppDelegate` and
   `POST /test/live-caption` are unchanged) and `setListening(false)` closes the band. The ticker's
   numbers are `GET /test/state.liveCaption` (`anchor`, `velocity`, `reflowing`, `ghosts`,
