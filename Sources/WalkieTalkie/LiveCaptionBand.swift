@@ -57,6 +57,13 @@ final class LiveCaptionBand {
     /// opacity at the newest up to solid at the committed boundary, and each
     /// word brightens (τ `reflow`) as the boundary catches up with it.
     static let provisionalFloor: CGFloat = 0.4
+    /// **How fast a word's opacity eases toward its target** (batch 5, LC9):
+    /// 90 % in 0.51 s. It shared `reflow` (0.26, 90 % at 0.60 s) until the
+    /// plan's *"reaches its target within 0.6 s"* was measured at 0.60–0.66 s
+    /// for a word appended at 0.4 s/word — the design point sat on the limit.
+    /// How far an appended word counts for the centring (`appear`) keeps
+    /// `reflow`: that is layout, and it moves with the rest of the line.
+    static let fadeIn: CGFloat = 0.22
     /// **Words said are wiped after a pause** (Victor, 2026-09-26: *"cuvintele
     /// dictate trebuie să și dispară … un fade out ce vine din stânga când nu
     /// se mai transcrie nimic nou, până șterge tot textul; dacă reîncep să
@@ -216,6 +223,19 @@ final class LiveCaptionBand {
         /// (1 once committed, `provisionalFloor`…1 across the open segment).
         private var opacity: [CGFloat] = []
         private var opacityTarget: [CGFloat] = []
+        /// **How far each visible word has come in**, 0…1 — the share of its
+        /// width the centring counts (2026-09-26, batch 5, LC2). An appended
+        /// word starts at 0 and eases in with its own fade (τ `reflow`), so
+        /// the line makes room for it exactly as fast as it becomes visible;
+        /// every other word is 1. It counted whole from its first frame
+        /// before, while still invisible, and the ease (τ 0.45) lagged every
+        /// append: 109 pt off centre while narrow, 271 pt past the margin
+        /// once wide, at 0.4 s/word.
+        private var appear: [CGFloat] = []
+        /// The centring goal of the previous frame, in view points; its
+        /// motion is fed forward into the anchor (see `advance`). Nil until
+        /// the first frame after a layout change.
+        private var lastGoal: CGFloat?
         /// The eraser front in line coordinates (relative to `anchor`), once a
         /// pause has started it; `nil` while words keep coming.
         private var eraseFront: CGFloat?
@@ -260,11 +280,19 @@ final class LiveCaptionBand {
         private var lineWidth: CGFloat { (target.last ?? 0) + (widths.last ?? 0) }
         /// …and as drawn this frame.
         private var shownWidth: CGFloat { (shown.last ?? 0) + (widths.last ?? 0) }
+        /// The drawn end of the line with every appended word counted only as
+        /// far as it has come in — the text the eye actually sees.
+        private var visibleWidth: CGFloat {
+            var end = shownWidth
+            for k in appear.indices where k < widths.count { end -= (1 - appear[k]) * widths[k] }
+            return end
+        }
 
         /// What `GET /test/state` reports, for an assertion at a desk.
         func describe() -> [String: Any] {
             ["words": words.count, "dropped": dropped, "anchor": Double(anchor),
              "lineWidth": Double(lineWidth), "shownWidth": Double(shownWidth), "velocity": Double(velocity),
+             "visibleWidth": Double(visibleWidth), "appear": appear.map { Double(($0 * 100).rounded() / 100) },
              "bandWidth": Double(bounds.width), "reflowing": Double(zip(shown, target).map { abs($0 - $1) }.max() ?? 0),
              "corrections": correctionsShown, "correcting": bornAt.keys.sorted(), "ghosts": ghosts.map { $0.word },
              "committed": committed, "opacity": opacity.map { Double(($0 * 100).rounded() / 100) },
@@ -286,6 +314,7 @@ final class LiveCaptionBand {
             correctionsShown = 0
             committed = 0
             opacity = []; opacityTarget = []
+            appear = []; lastGoal = nil
             eraseFront = nil
             lastWordsAt = CACurrentMediaTime()
             glyphAlphas = []
@@ -304,32 +333,44 @@ final class LiveCaptionBand {
             // **The eraser has wiped the whole line**: what comes next is a new
             // line entering from the right; the old words are dropped for real
             // (nothing visible moves — they were already gone).
+            var freshLine = old.isEmpty
             if let front = eraseFront, front >= lineWidth, !old.isEmpty {
                 dropped = old.count
-                shown = []; opacity = []
+                shown = []; opacity = []; appear = []
                 bornAt = [:]; ghosts = []
+                freshLine = true
             }
             // A revision that reaches back past what has already left: a new
-            // line, placed in the centre like the first one was.
-            if new.count <= dropped { dropped = 0; bornAt = [:]; ghosts = []; shown = []; opacity = []; eraseFront = nil }
+            // line, placed in the centre like the first one was. **Nothing of
+            // the old line is carried into it** (2026-09-26, batch 5, LC7): the
+            // old words used to stay "visible" here — `dropped` had just been
+            // zeroed — so they were aligned against the new ones, the new words
+            // counted as three corrections, and the line glided in from the
+            // left at 700 pt/s instead of appearing in the centre.
+            if new.count <= dropped {
+                dropped = 0; bornAt = [:]; ghosts = []; shown = []; opacity = []; appear = []; eraseFront = nil
+                freshLine = true
+            }
             // **Aligned, not compared by index**: a recogniser that turns
             // "cinci sute" into "500" shifts every later word one place, and
             // an index diff would paint the whole rest of the line yellow. The
             // longest common subsequence keeps every unchanged word's identity:
             // its own fade if it was a correction a moment ago, and the x it is
             // drawn at, which is what makes the reflow a glide and not a jump.
-            let oldVisible = Array(old.dropFirst(min(dropped, old.count)))
+            let oldVisible = freshLine ? [] : Array(old.dropFirst(min(dropped, old.count)))
             let newVisible = Array(new.dropFirst(dropped))
             let pairs = Self.align(oldVisible, newVisible)
             var carried: [Int: CFTimeInterval] = [:]
             var carriedX: [Int: CGFloat] = [:]
             var carriedOpacity: [Int: CGFloat] = [:]
+            var carriedAppear: [Int: CGFloat] = [:]
             var carriedGentle = Set<Int>()
             for (o, n) in pairs {
                 if let at = bornAt[dropped + o] { carried[dropped + n] = at }
                 if gentleBorn.contains(dropped + o) { carriedGentle.insert(dropped + n) }
                 if o < shown.count { carriedX[n] = shown[o] }
                 if o < opacity.count { carriedOpacity[n] = opacity[o] }
+                if o < appear.count { carriedAppear[n] = appear[o] }
             }
             let matchedOld = Set(pairs.map { $0.0 })
             let matchedNew = Set(pairs.map { $0.1 })
@@ -342,8 +383,9 @@ final class LiveCaptionBand {
             // Past the last aligned pair: words are corrections only if they
             // *replaced* something — old words were there and are now gone.
             let tailReplaced = lastMatchedOld < oldVisible.count - 1
+            var appended = Set<Int>()
             for n in newVisible.indices where !matchedNew.contains(n) {
-                guard n < lastMatchedNew || tailReplaced else { continue }
+                guard n < lastMatchedNew || tailReplaced else { appended.insert(n); continue }
                 carried[dropped + n] = stamp
                 if gentle { carriedGentle.insert(dropped + n) }
                 correctionsShown += 1
@@ -361,9 +403,28 @@ final class LiveCaptionBand {
             // A carried word keeps the opacity it had and eases from there; a
             // new one fades in from nothing (a correction has its own swap).
             opacity = target.indices.map { carriedOpacity[$0] ?? (carried[dropped + $0] == nil ? 0 : opacityTarget[$0]) }
-            // A fresh line (first words, or after a full wipe) is set in the
-            // centre at once — it fades in there, it does not travel.
-            if oldVisible.isEmpty || wasEmpty { eraseFront = nil; anchor = centredAnchor() }
+            // An appended word comes in from 0; a correction takes its place in
+            // the layout at once (the reflow glides the rest), so it counts whole.
+            appear = target.indices.map { carriedAppear[$0] ?? (appended.contains($0) ? 0 : 1) }
+            // A fresh line (first words, after a full wipe, or a revision past
+            // the dropped words) is set in the centre at once, **at rest** — it
+            // fades in there, it does not travel. The velocity is zeroed here
+            // too: it was the previous frame's (the old line re-centring behind
+            // the eraser), and a fresh line reported 109 pt/s on its first
+            // frame while standing still (LC16).
+            if oldVisible.isEmpty || wasEmpty || freshLine {
+                eraseFront = nil
+                appear = target.map { _ in 1 }
+                anchor = centredAnchor()
+                velocity = 0
+            }
+            // A jump of the goal made here (a correction, a fresh line) is eased
+            // like it always was, not fed forward; only its motion from frame to
+            // frame (a word coming in, the eraser) is. So the goal is re-read
+            // here, in the new layout — nil would lose the first frame of every
+            // append's motion to the slow ease, ~6 % of a word each time, which
+            // added up to 20 pt past the margin at 0.4 s/word.
+            lastGoal = centredAnchor()
             needsDisplay = true
         }
 
@@ -374,7 +435,7 @@ final class LiveCaptionBand {
             guard !widths.isEmpty else { return anchor }
             var start = shown[0]
             if let front = eraseFront { start = max(start, front + LiveCaptionBand.eraseEdge / 2) }
-            let end = shownWidth
+            let end = visibleWidth
             let centred = bounds.width / 2 - (start + end) / 2
             return min(centred, bounds.width - marginRight - end)
         }
@@ -432,25 +493,44 @@ final class LiveCaptionBand {
                      ease: CGFloat, marginRight: CGFloat, dropSlack: CGFloat) {
             self.now = now
             guard !words.isEmpty, !widths.isEmpty else { return }
-            // The anchor eases toward the centred position: the same fraction
-            // of the gap closed per `ease` seconds, never faster than `vMax`.
-            let goal = centredAnchor(marginRight: marginRight)
-            var step = (goal - anchor) * (1 - exp(-dt / ease))
-            step = max(-vMax * dt, min(vMax * dt, step))
-            if abs(goal - anchor) < 0.3 { step = goal - anchor }
-            velocity = abs(step) / max(dt, 0.0001)
-            anchor += step
             // The reflow: every word eases toward its place in the new layout,
-            // and toward how solid it should be.
+            // toward how solid it should be, and an appended word toward being
+            // counted whole — all before the anchor moves, so the goal below is
+            // this frame's.
             let k = 1 - exp(-dt / LiveCaptionBand.reflow)
             for i in shown.indices {
                 let d = target[i] - shown[i]
                 shown[i] += abs(d) < 0.3 ? d : d * k
             }
+            let kf = 1 - exp(-dt / LiveCaptionBand.fadeIn)
             for i in opacity.indices where i < opacityTarget.count {
                 let d = opacityTarget[i] - opacity[i]
-                opacity[i] += abs(d) < 0.005 ? d : d * k
+                opacity[i] += abs(d) < 0.005 ? d : d * kf
             }
+            // A long word comes in a little slower, so the room it needs is
+            // made under `vMax` (its peak rate is width / τ, kept to 0.7 of it so the
+            // tail of the previous word still coming in fits too): a 200 pt word at
+            // τ 0.26 would ask 770 pt/s, be capped, and stand 4 pt past the
+            // margin for a frame or two.
+            for i in appear.indices {
+                let d = 1 - appear[i]
+                let tau = i < widths.count ? max(LiveCaptionBand.reflow, widths[i] / (0.7 * vMax)) : LiveCaptionBand.reflow
+                appear[i] += d < 0.005 ? d : d * (1 - exp(-dt / tau))
+            }
+            // **The anchor tracks the centred position** (batch 5, LC2): the
+            // goal's own motion since the last frame — a word coming in, the
+            // eraser's front — is fed forward, so a steady stream of words is
+            // followed without lag; what is left of the gap (a correction's
+            // jump) eases as before, the same fraction per `ease` seconds.
+            // Never faster than `vMax` either way.
+            let goal = centredAnchor(marginRight: marginRight)
+            let fed = lastGoal.map { goal - $0 } ?? 0
+            lastGoal = goal
+            var step = fed + (goal - anchor - fed) * (1 - exp(-dt / ease))
+            step = max(-vMax * dt, min(vMax * dt, step))
+            if abs(goal - anchor) < 0.3 { step = goal - anchor }
+            velocity = abs(step) / max(dt, 0.0001)
+            anchor += step
             // **The eraser**: nothing new for `eraseAfter` → a front starts left
             // of the screen and sweeps right; a new word froze it (it no longer
             // advances) and it rides the line from then on.
@@ -470,6 +550,9 @@ final class LiveCaptionBand {
                 widths.removeFirst(); target.removeFirst(); shown.removeFirst()
                 if !opacity.isEmpty { opacity.removeFirst() }
                 if !opacityTarget.isEmpty { opacityTarget.removeFirst() }
+                if !appear.isEmpty { appear.removeFirst() }
+                // The goal moves by the same width the anchor just did.
+                if let g = lastGoal { lastGoal = g + w }
                 for i in target.indices { target[i] -= w; shown[i] -= w }
                 for i in ghosts.indices { ghosts[i].x -= w }
                 if let front = eraseFront { eraseFront = front - w }

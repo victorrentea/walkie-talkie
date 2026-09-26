@@ -2,12 +2,16 @@
 `state.liveCaption` (docs/test-plan.md). No microphone, no network: the band's own motion.
 
 Constants (LiveCaptionBand.swift, 07:50 centred layout): marginRight 48, dropSlack 40, vMax 700,
-ease 0.45, swap 1.0 (ghost 0.5), correctionFade 1.6, reflow 0.26, provisionalFloor 0.4, eraser after
+ease 0.45, swap 1.0 (ghost 0.5), correctionFade 1.6, reflow 0.26, provisionalFloor 0.4, fadeIn 0.22 (opacity,
+batch 5), eraser after
 5.0 s idle (2.0 until 2026-09-26 14:20) at 260 pt/s with a 160 pt edge, letter by letter.
 
-Centre of the visible text = anchor + (visibleStart + shownWidth) / 2, visibleStart = max(0,
+Centre of the visible text = anchor + (visibleStart + visibleWidth) / 2, visibleStart = max(0,
 eraseFront + 80) while erasing (the band's `centredAnchor` takes max(shown[0], front + edge/2)),
-else 0. Tolerances beyond the plan's numbers are written next to each assertion and every note
+else 0. `visibleWidth` (batch 5, 2026-09-26) is `shownWidth` with each appended word counted only as
+far as it has faded in (`appear`, τ reflow): a word still invisible is not text on screen, and the
+plan's "centre" and "end" are of the visible text. It equals `shownWidth` for a fresh line and at
+rest; older builds without it fall back to `shownWidth`. Tolerances beyond the plan's numbers are written next to each assertion and every note
 carries what was measured."""
 import time
 from harness import *
@@ -22,10 +26,13 @@ WORDS = ("the quick brown fox jumps over a lazy dog while seven bright wizards q
 
 
 # ---------------------------------------------------------------- helpers
+def vwidth(s):
+    return s.get("visibleWidth", s["shownWidth"])
+
 def centre(s):
     front = s.get("eraseFront")
     start = max(0.0, front + EDGE_HALF) if front is not None else 0.0
-    return s["anchor"] + (start + s["shownWidth"]) / 2
+    return s["anchor"] + (start + vwidth(s)) / 2
 
 def mid(s):
     return s["bandWidth"] / 2
@@ -110,7 +117,7 @@ def lc1():
     if off >= 3: fails.append(f"off centre by {off:.1f}")
     if vmax > 0.5: fails.append(f"velocity {vmax:.1f}")
     if op0 >= 0.1: fails.append(f"first opacity {op0}")
-    # τ = reflow 0.26 → 85 % of 0.4 at 0.5 s; asked: ≥ 0.32 at 0.5 s, 0.4 ± 0.03 at the end
+    # τ = fadeIn 0.22 (reflow 0.26 before batch 5) → 90 % of 0.4 at 0.5 s; asked: ≥ 0.32 at 0.5 s, 0.4 ± 0.03 at the end
     if not at05 or at05[0] < 0.32: fails.append(f"opacity at +0.5 s {at05[:1]}")
     if abs(last - 0.4) > 0.03: fails.append(f"settled opacity {last}")
     if edge: fails.append(f"{len(edge)} sample(s) with anchor ≥ bandWidth − 5")
@@ -133,7 +140,7 @@ def lc2():
         if not wide:
             dev = max(dev, abs(centre(s) - bw / 2))
         else:
-            ex = s["anchor"] + s["shownWidth"] - (bw - MARGIN)
+            ex = s["anchor"] + vwidth(s) - (bw - MARGIN)
             if ex > 2:
                 over.append(ex)
     fast, up = motion_faults(S)
@@ -313,7 +320,7 @@ def lc9():
         t_add[k] = time.time()
         end = t_add[k] + 0.3
         while time.time() < end:
-            s = lc(); now = time.time()
+            t_req = time.time(); s = lc(); now = (t_req + time.time()) / 2   # the app answered in between
             for i in list(t_add):
                 vis = i - s["dropped"]
                 if s["words"] <= i or not 0 <= vis < len(s["opacity"]):
@@ -324,12 +331,17 @@ def lc9():
                 if i not in reach and op >= 0.9:        # 90 % of the committed target 1.0
                     reach[i] = now - t_add[i]
             time.sleep(0.03)
-    tail = sample(1.0)
-    for s in tail:  # the last words' fade-ins
+    tail, t_tail = [], time.time()
+    while time.time() - t_tail < 1.0:   # the last words' fade-ins, each sample stamped when it was read
+        t_req = time.time(); s = lc(); s["at"] = (t_req + time.time()) / 2
+        tail.append(s); time.sleep(0.03)
+    for s in tail:
         for i in t_add:
             vis = i - s["dropped"]
+            # 2026-09-26 (batch 5): this used `time.time()` *after* the whole second of sampling, so the
+            # last word always read ≈ 1.3 s (the "29: 1.39" of the first run) — the sample's own time now
             if i not in reach and s["words"] > i and 0 <= vis < len(s["opacity"]) and s["opacity"][vis] >= 0.9:
-                reach[i] = time.time() - t_add[i]
+                reach[i] = s["at"] - t_add[i]
     corr = tail[-1]["corrections"]
     hot = {i: v for i, v in starts.items() if v >= 0.1}
     slow = {i: round(v, 2) for i, v in reach.items() if v > 0.65}
@@ -338,7 +350,7 @@ def lc9():
     if corr: fails.append(f"corrections {corr}")
     # read straight after the POST: one 60 Hz frame of τ 0.26 is 0.06, so < 0.1 is measurable
     if hot: fails.append(f"{len(hot)} word(s) started at ≥ 0.1, e.g. {list(hot.items())[:3]}")
-    # τ 0.26 puts 90 % at 0.60 s; asked ≤ 0.65 s (one sample of slack)
+    # τ fadeIn 0.22 puts 90 % at 0.51 s (0.26 put it at 0.60, on the limit); asked ≤ 0.65 s
     if slow: fails.append(f"{len(slow)} word(s) slower than 0.65 s to 90 %: {list(slow.items())[:3]}")
     if missing: fails.append(f"{len(missing)} word(s) never reached 90 %")
     worst = max(reach.values()) if reach else float("nan")

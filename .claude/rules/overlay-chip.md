@@ -144,11 +144,19 @@ yields to `--label`).
   160 pt soft edge crosses gets one opacity per glyph, via a `destinationIn` mask inside the
   word's one transparency layer — never a layer per glyph: a glyph's outline reaches ~4.5 pt
   out and would bite its left neighbour's white) and the rest re-centres; wider than the band →
-  the end stays inside the right margin. No ticker, no entry from the right edge. `RelayWindow`
+  the end stays inside the right margin. **Since batch 5 (2026-09-26 evening) the anchor tracks
+  the centred position with no lag**: an appended word counts for the centring only as far as it
+  has come in (`appear`, τ `reflow`, slower for a word so long it would ask more than 0.7 `vMax`),
+  and the goal's motion frame to frame is fed forward — measured 0 pt off centre while narrow,
+  never past the margin once wide, at 0.4 s/word (it was 109 pt and 271 pt). A fresh line (first
+  words, after a full wipe, or a revision past the dropped words) is placed centred **at rest**
+  and carries nothing of the old one. Opacity eases at `fadeIn` 0.22 s. **The band opens only when
+  the sentence's live session is up** (`DictationSource.didOpenLive`/`liveOpen`) — never for a
+  sentence with no key or a socket that never opened. No ticker, no entry from the right edge. `RelayWindow`
   keeps only `setLiveCaptionOpen`/`setLiveCaption` as forwarders (so `AppDelegate` and
   `POST /test/live-caption` are unchanged) and `setListening(false)` closes the band. The ticker's
   numbers are `GET /test/state.liveCaption` (`anchor`, `velocity`, `reflowing`, `ghosts`,
-  `correcting`). The 2026-09-25 `💬` row (fixed 360 pt window, 7 words, 0.28 s slide) is gone with
+  `correcting`, `visibleWidth`, `appear`). The 2026-09-25 `💬` row (fixed 360 pt window, 7 words, 0.28 s slide) is gone with
   its `listening-live` shot. **Never put it back on the chip.**
   → journal: *The live caption is a subtitle band (2026-09-26)*
 

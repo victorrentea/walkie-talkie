@@ -427,8 +427,10 @@ R3 (caret double paste): [TTY] make Terminal error after typing (quit Terminal m
 
 Constants (07:50 layout): band 80 pt, `marginRight` 48, `dropSlack` 40, 38 pt bold; centred layout,
 `ease` 0.45 s, `vMax` 700; `swap` 1.0 s (ghost 0.5), `correctionFade` 1.6, `reflow` 0.26;
-`provisionalFloor` 0.4; eraser after 5.0 s idle (2.0 until 2026-09-26 14:20), 260 pt/s, edge 160, letter by letter across the edge. `centre = anchor +
-(visibleStart + shownWidth)/2` where `visibleStart` = `eraseFront + 80` when erasing, else 0.
+`provisionalFloor` 0.4; `fadeIn` 0.22 (opacity, since batch 5); eraser after 5.0 s idle (2.0 until 2026-09-26 14:20), 260 pt/s, edge 160, letter by letter across the edge. `centre = anchor +
+(visibleStart + visibleWidth)/2` where `visibleStart` = `eraseFront + 80` when erasing, else 0, and `visibleWidth`
+(batch 5) is `shownWidth` with each appended word counted by how far it has come in (`appear`) — the
+*visible* text; an invisible word just appended is not on screen. Case 2's end is `anchor + visibleWidth`.
 
 1. First word appears centred: right after `{"partial":"Hello"}`, `|centre − bandWidth/2| < 3`, `velocity == 0`, opacity rising from 0 to 0.4 (provisional) within 0.5 s. No sample with `anchor ≥ bandWidth − 5`.
 2. Growth to the right at 0.4 s/word for 20 s: centre stays within ±80 of the middle until the line is wider than `bandWidth − 96`; after that `anchor + shownWidth ≤ bandWidth − 48 + 2` on every sample; |Δanchor| ≤ 700·Δt + 2; no anchor increase except by a drop width.

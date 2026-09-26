@@ -12888,3 +12888,58 @@ when it thawed: `mic: recording through …`, then `discarded — under 0.35s`, 
 - **TD20** sends the held panel through `POST /test/prompt` if it is still held after 6 s, and says
   which way it went; this run needed neither.
 - **TG25 / TG26** only report more (the dropped chord, the canary's `tap`).
+
+## Fixes to the test plan's findings, batch 5 (2026-09-26)
+
+The fifth batch: the subtitle band's motion (`LiveCaptionBand.swift`), the live socket
+(`ElevenLabsLive.swift`) — its latency, its drop storm, a band opened for no stream — and the bytes
+the terminal is typed (`TerminalBinding.singleLine` / `writeToTerminalApp`). The test plan's own
+findings are the spec here (§7.4 LC2, LC7, LC9, LC16; B1; TL29, TL30; §4 R18 with TD19, TD20); no
+decision of Victor's speaks to them. Harness rows after the fix: `evals/plan/report-fix5.md` (the
+band, TD19, TD20) and `report-fix5b.md` (real audio through the Loopback, under the hands-off locks).
+
+### 1. The band tracks the centre without lag; a fresh line is placed at rest and carries nothing
+
+The plan's LC2 (*"centre ±80 while narrow, then the end inside the right margin on every sample"* —
+measured 109 pt off centre and 212/308 samples past the margin, up to 271 pt), LC7 (*"a revision
+past the dropped words is a fresh centred line"* — it came in from the left, 802 pt off centre, with
+3 corrections), LC9 (*"each appended word reaches its target within 0.6 s"* — up to 1.39 s), LC16
+(*"after a full wipe the next word is a fresh centred line"* — centred, but reporting 109 pt/s).
+
+- **LC7: the old line was still "visible".** The branch that recognises a revision reaching back
+  past the dropped words zeroed `dropped`, and the alignment then read *every* old word as on
+  screen — the three new words were aligned against thirty, counted as corrections, and the anchor
+  eased from where the old line stood. A fresh line (first words, after a full wipe, or this) now
+  takes nothing from the old one: no alignment, no ghosts, no corrections, placed at
+  `centredAnchor()` at once.
+- **LC16: the velocity was the previous frame's.** The fresh line was placed right (centre off
+  0.0) but `velocity` is written by the frame clock, and the last frame had been the old line
+  re-centring behind the eraser. Placing a fresh line zeroes it. `centredAnchor` itself did not
+  drift — the hypothesis of a stale `eraseFront`/`shown[0]` was checked and is not it (`eraseFront`
+  is cleared before the anchor is computed, `shown` is rebuilt from the new layout).
+- **LC2, decided here: the centring counts what is visible, and follows it without lag.** Two
+  causes. (a) An appended word counted whole in the centring from its first frame, while its
+  opacity was 0 — the goal stepped by half a word (a whole one once wide) at every append, and the
+  anchor (τ 0.45) lagged every step: 109 pt, and 271 pt accumulated past the margin at 0.4 s/word.
+  Computing the goal from the *target* layout would change nothing here — for an append the target
+  and the drawn layout are the same; the lag is the controller's. (b) So: each appended word has an
+  `appear` 0 → 1, eased with its fade-in (τ `reflow`, slower for a word so long it would ask more
+  than 0.7 × `vMax`), and counts for the centring by that share (`visibleWidth`); and the goal's
+  motion frame to frame is **fed forward** into the anchor, only the remaining gap eased at τ 0.45 —
+  so a stream of words is followed exactly, the line making room as fast as the word becomes
+  visible. A jump of the goal made by a layout change (a correction) is not fed forward: the goal is
+  re-read in the new layout and the gap eases, as before. Measured over the route: centre **0.0 pt**
+  off while narrow, **0** samples past the margin once wide (40 Hz sampling), max 700 pt/s only in
+  LC4's burst. First try without the re-read lost ~6 % of every append to the slow ease (20 pt past
+  the margin); then 0.9 × `vMax` let two overlapping words ask 700 pt/s and be capped (3 pt).
+- **The plan's LC2 criterion was unsatisfiable as written, so the case now measures the visible
+  text.** *"anchor + shownWidth ≤ bandWidth − 48 + 2 on every sample"* counts a word in the frame it
+  is appended, at opacity 0; no motion capped at `vMax` can absorb 100–200 pt in one frame. The case
+  (and `centre()` for every LC case) uses `visibleWidth`, which the band reports; it equals
+  `shownWidth` for a fresh line and at rest. `docs/test-plan.md` §7.4 says so.
+- **LC9: both — the case, and the easing.** The case stamped the last words' reach *after* its whole
+  one-second tail of sampling (`time.time()` in the loop that read the samples back), so word 29
+  always read ~1.3 s — that is the `1.39`; it now uses each sample's own time. What was left
+  (0.60–0.66 s) was the design sitting on the limit: τ 0.26 puts 90 % at exactly 0.60 s. Opacity now
+  eases at its own `fadeIn` 0.22 (90 % at 0.51 s); `appear` keeps `reflow`. Measured: slowest word
+  0.55–0.56 s over three runs.
