@@ -83,7 +83,25 @@ final class LocalWhisper {
     /// exists precisely so Victor can see *which* model is about to be believed.
     private(set) var modelName: String?
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.whisper")
-    private(set) var ready = false
+    /// **Under `pidLock`, and false the moment the process dies** (2026-09-26,
+    /// TL7). It was a plain `queue`-confined flag that only a failed request
+    /// could take down, so `/engine` said `ready` about a SIGKILLed helper until
+    /// something tripped over its pipe. The `Process.terminationHandler` now
+    /// clears it from whatever thread reaps the child, without waiting for the
+    /// queue — which may be blocked in a read for minutes.
+    private var _ready = false
+    var ready: Bool { pidLock.lock(); defer { pidLock.unlock() }; return _ready }
+    private func setReady(_ value: Bool) { pidLock.lock(); _ready = value; pidLock.unlock() }
+
+    /// **The budgets, and they are real now** (2026-09-26, TL5/TL31): a read
+    /// past them kills the helper, because a reply that arrives later would be
+    /// read as the answer to the *next* request.
+    static let helloBudget: TimeInterval = 180
+    static let decodeBudget: TimeInterval = 300
+
+    /// Why the last `transcribe` answered nil, for the sentence's banner. Set
+    /// on `queue` before `done(nil)`, read after the caller's hop to main.
+    private(set) var lastFailure: String?
 
     /// The helper's pid, from any thread (`nil` when none is running).
     var pid: pid_t? { pidLock.lock(); defer { pidLock.unlock() }; return helperPID }
@@ -106,7 +124,7 @@ final class LocalWhisper {
     /// process did not ignore).
     private func markDead(_ why: String) {
         Log.error("whisper helper \(why) — it died; the next request brings a new one up")
-        ready = false
+        setReady(false)
         modelName = nil
         toHelper = nil
         fromHelper = nil
@@ -247,8 +265,27 @@ final class LocalWhisper {
             // 64 KB pipe nobody reads blocks forever, and mlx is chatty.
             errPipe.fileHandleForReading.readabilityHandler = { h in
                 let d = h.availableData
-                if !d.isEmpty, let s = String(data: d, encoding: .utf8) {
+                // EOF (the helper is gone): an empty read, forever, unless the
+                // handler is taken down — a spin after every helper death.
+                if d.isEmpty { h.readabilityHandler = nil; return }
+                if let s = String(data: d, encoding: .utf8) {
                     Log.info("whisper helper: \(s.trimmingCharacters(in: .whitespacesAndNewlines))")
+                }
+            }
+            // **Dead is known the moment it happens** (2026-09-26, TL7): the
+            // reaper clears `ready` at once, then the queue forgets the process —
+            // only if it is still *this* one (`stop()` and a timeout have already
+            // let it go, and a new helper may be up by then).
+            p.terminationHandler = { [weak self] dead in
+                guard let self else { return }
+                self.pidLock.lock()
+                let current = self.helperPID == dead.processIdentifier
+                if current { self._ready = false }
+                self.pidLock.unlock()
+                guard current else { return }
+                self.queue.async {
+                    guard self.proc === dead else { return }
+                    self.markDead("exited (status \(dead.terminationStatus))")
                 }
             }
             do { try p.run() } catch {
@@ -260,11 +297,11 @@ final class LocalWhisper {
             self.fromHelper = outPipe.fileHandleForReading
 
             Log.info("whisper helper starting (\(python) \(helper)) — loading weights")
-            guard let hello = self.readLine(timeout: 180) else {
-                onReady("the model did not come up within 180s"); return
+            guard let hello = self.readLine(timeout: Self.helloBudget) else {
+                onReady("the model did not come up within \(Int(Self.helloBudget))s"); return
             }
             if let ok = hello["ready"] as? Bool, ok {
-                self.ready = true
+                self.setReady(true)
                 self.modelName = hello["model"] as? String
                 Log.info("whisper helper ready — \(hello["model"] as? String ?? "?")")
                 onReady(nil)
@@ -278,7 +315,7 @@ final class LocalWhisper {
     func stop() {
         queue.async { [weak self] in
             guard let self = self else { return }
-            self.ready = false
+            self.setReady(false)
             self.modelName = nil
             self.toHelper?.closeFile()
             self.proc?.terminate()
@@ -320,7 +357,12 @@ final class LocalWhisper {
     /// Transcribes a WAV already on disk. Answers on a background queue.
     func transcribe(wav: String, _ done: @escaping (Result?) -> Void) {
         queue.async { [weak self] in
-            guard let self = self, self.ready, let stdin = self.toHelper else { done(nil); return }
+            guard let self = self else { done(nil); return }
+            self.lastFailure = nil
+            guard self.ready, let stdin = self.toHelper else {
+                self.lastFailure = "the local model was not up"
+                done(nil); return
+            }
             guard let req = try? JSONSerialization.data(withJSONObject: ["wav": wav]) else {
                 done(nil); return
             }
@@ -328,13 +370,16 @@ final class LocalWhisper {
             line.append(0x0A)
             do { try stdin.write(contentsOf: line) } catch {
                 self.markDead("would not take a request (\(error))")
+                self.lastFailure = "the local helper had died"
                 done(nil); return
             }
             // Generous, because it scales with the dictation: a three-minute one
-            // is ~20s of work, and a timeout that fires mid-transcription would
-            // desynchronise the stream for every request after it.
-            guard let obj = self.readLine(timeout: 300) else {
+            // is ~20s of work. **Past it the helper is killed** (`readLine`): a
+            // reply that came later would desynchronise the stream for every
+            // request after it.
+            guard let obj = self.readLine(timeout: Self.decodeBudget) else {
                 Log.error("whisper helper gave no answer — see the read loop")
+                if self.lastFailure == nil { self.lastFailure = "the local model gave no answer" }
                 done(nil); return
             }
             guard (obj["ok"] as? Bool) == true, let text = obj["text"] as? String else {
@@ -353,6 +398,13 @@ final class LocalWhisper {
     /// Blocking read of one newline-terminated JSON object. Called only on
     /// `queue`, which serialises requests — so a reply always belongs to the
     /// request just written.
+    ///
+    /// **The deadline is enforced** (2026-09-26, the test plan's TL5): the
+    /// `read(2)` below blocks until the helper writes, so the `Date() <
+    /// deadline` check only ran between chunks — a SIGSTOPped helper held the
+    /// queue, the sentence and the restart gate forever. `poll(2)` waits for
+    /// the pipe with the time left, and a helper that overruns its budget is
+    /// **killed**: its late reply would be read as the next request's answer.
     private func readLine(timeout: TimeInterval) -> [String: Any]? {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
@@ -362,11 +414,23 @@ final class LocalWhisper {
                 if lineData.isEmpty { continue }
                 return (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any]
             }
-            guard Date() < deadline else {
-                Log.error("whisper helper timed out after \(Int(timeout))s")
+            guard let handle = fromHelper else { return nil }
+            let left = deadline.timeIntervalSinceNow
+            guard left > 0 else {
+                Log.error("whisper helper timed out after \(Int(timeout))s — killing it")
+                if let p = proc { Darwin.kill(p.processIdentifier, SIGKILL) }
+                markDead("did not answer within \(Int(timeout))s")
+                lastFailure = "the local model did not answer within \(Int(timeout)) s"
                 return nil
             }
-            guard let handle = fromHelper else { return nil }
+            var pfd = pollfd(fd: handle.fileDescriptor, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&pfd, 1, Int32(min(left, 3600) * 1000) + 1)
+            if ready == 0 { continue }                 // the deadline check above
+            if ready < 0 {
+                if errno == EINTR || errno == EAGAIN { continue }
+                Log.error("whisper helper poll failed: errno \(errno)")
+                return nil
+            }
 
             // **`read(2)` rather than `FileHandle.availableData`, and only a
             // literal 0 counts as EOF.**

@@ -12585,3 +12585,34 @@ open).
 - **`dictationStoppedListening` re-arms it** for a booked sentence, so its two minutes mean *no
   transcript since the stop*. The direct call from `abandonDictation` is unchanged — that path is
   a sentence that has ended without words and should release its shots now.
+
+### 3. The local helper: dead is known at once, its budgets are real, the fallback route waits aside
+
+The test plan's §3.7 / R5: *"Dead mlx helper: `ready` stays true … Hung helper: phase
+`transcribing` forever, `busy` forever, restart blocked 30 min."* Measured before: TL7 (`ready:
+true` on a SIGKILLed helper until a request tripped over it), TL5 (a SIGSTOPped helper: no `timed
+out after 300s` ever — only the route's 180 s semaphore answered, and `/up` was blocked behind it),
+TL31 (at 35 s `phase: transcribing`, `busy`, the restart gate shut until a hand sent SIGCONT).
+
+- **`LocalWhisper.ready` sits under `pidLock`**, and a **`Process.terminationHandler`** clears it
+  from the reaping thread the moment the helper dies, then asks the queue to `markDead` — only if
+  the process is still the current one (`stop()` and a timeout have already let it go, and a new
+  helper may be up). `/engine` can no longer say `ready` about a dead pid.
+- **The budgets are enforced.** `readLine` used a blocking `read(2)` and checked its deadline only
+  between chunks, so a helper that never wrote held the serial queue forever. It now `poll(2)`s
+  the pipe for the time left: **180 s** for the hello, **300 s** for a decode. Past it:
+  `whisper helper timed out after 300s — killing it`, SIGKILL, `markDead` — a late reply would be
+  read as the next request's answer. The sentence ends `.failed(why: "the local model did not
+  answer within 300 s", audio:)` for *Recover* (`LocalWhisper.lastFailure` carries the why), and
+  `LocalWhisperSource` brings a new helper up at once rather than at the next gesture. A hello
+  timeout used to leave `proc` set, so the next `start` answered *ready* about a helper that was
+  not; it is killed and forgotten the same way. The fallback's revival (batch 1, TR10) now also
+  covers a hung helper: killed, brought back, asked again.
+- **`POST /test/local-fallback` waits off the listener's queue.** `ElementPicker` serves every
+  route on one serial queue, and this handler blocks on a semaphore for up to 180 s. The route
+  still answers its own result (TL4 and TL6 read the text and the timing from it), but from a
+  global queue, so `/up`, `/test/state` and `/test/cancel` answer meanwhile. Picked over
+  answering `{started:true}` at once because four cases and `cold_whisper` read the synchronous
+  answer, and the listener was the only thing wrong.
+- The stderr drain takes its `readabilityHandler` down at EOF — at a dead helper's EOF it was
+  called with an empty read in a loop.

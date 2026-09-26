@@ -882,7 +882,14 @@ final class ElementPicker {
             guard let wav = body?["wav"] as? String else {
                 return respond(conn, 400, ["ok": false, "error": "wav required"])
             }
-            respond(conn, 200, onTestLocalFallback?(wav) ?? ["ok": false])
+            // **Off the listener's queue** (2026-09-26, TL5): the handler waits
+            // for a decode — up to its 180 s semaphore — and `queue` is serial, so
+            // every other route (`/up`, `/test/state`, `/test/cancel`) stood
+            // behind it. The answer is still this request's; only the wait moved.
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let answer = self?.onTestLocalFallback?(wav) ?? ["ok": false]
+                self?.respond(conn, 200, answer)
+            }
 
         case ("POST", "/test/live-caption"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]

@@ -57,6 +57,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `bringUpSource`, the `resumed:` start) is gone: it could not be cancelled (TG3, TL22), survived
   an engine switch (TG41) and lost the back click's `clean` (TG4). A load started by a bind still
   opens no microphone. → journal: *Fixes to the test plan's findings, batch 3*
+- **The helper's death and its budgets are real** (2026-09-26). `LocalWhisper.ready` sits under
+  `pidLock` and a `Process.terminationHandler` clears it the moment the helper dies, so `/engine`
+  never says `ready` about a dead pid (TL7). `readLine` waits with `poll(2)` for the time left:
+  **180 s** for the hello, **300 s** for a decode; past it the helper is SIGKILLed and `markDead`
+  (a late reply would answer the next request), the sentence ends `.failed(audio:)` for *Recover*
+  and a new helper is brought up (TL5, TL31). `POST /test/local-fallback` waits off the listener's
+  queue. → journal: *Fixes to the test plan's findings, batch 3*
 - **The load shows as ⏳ in the menu bar only** (`⏳🤖`, `<model> — loading…` in its menu); nothing
   on the chip. `AppDelegate.setEngineLoading` is a one-liner into `StatusItem`. → journal: *The recogniser*
 - **`GET /engine` reports which model is loaded and whether it is ready** — enough for a test to
