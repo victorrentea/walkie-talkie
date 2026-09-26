@@ -55,7 +55,7 @@ yields to `--label`).
 
 | state | label |
 |---|---|
-| idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound* |
+| idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound*. **The one exception: a sentence waiting for a bind** — `📨 N waiting — bind to send` (2026-09-26) |
 | idle, bound | the destination app's icon + `petclinic@main` — no state word: "standing by" is what he can already infer from nothing happening |
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
@@ -348,7 +348,12 @@ yields to `--label`).
   everything else instant.** → journal: *Two shapes: the chip and the panel*
 - **Unbound and idle, there is no overlay window at all.** `layoutContent` omits the title row when
   there is no destination, and `refreshPresence` counts any row as a reason to be on screen (not
-  `rowCount > 1`). The `🛞 bind` row was tried and reverted within the hour (*"mă încurcă, mă
+  `rowCount > 1`). **The documented exception (2026-09-26): `📨 N waiting — bind to send`**
+  (`heldRow`, `setHeldCount`, driven by `AppDelegate.awaitingBind`'s `didSet`) — up while a sentence
+  spoken unbound is held in memory (Victor's Q1: *"mi-ar trebui un cue vizual să știu că trebuie să
+  las mesajul din memorie"*), on the idle chip too, announced once by the flash `📨 held — bind a
+  terminal to send it`. It is something to say, not a chip at rest; it goes with the bind. Shots
+  `held-waiting`, `held-waiting-dictating`, `flash-held`. The `🛞 bind` row was tried and reverted within the hour (*"mă încurcă, mă
   enervează"*); as a login item the launch directory is `/`, so the old chip read `🤖 /` beside the
   pointer every waking hour. → journal: *The pointer is clean when nothing is bound*
 - **`orderOut`, not `alphaValue = 0`.** An invisible panel still sits 10 pt right and 22 pt below

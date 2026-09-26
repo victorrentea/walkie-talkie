@@ -12413,3 +12413,35 @@ that was bound while he spoke"* — *"vechi, ca poate vreau să deschid altă di
 - Left as it was: the chip and the panel's title show the binding **now**, so after a rebind under
   the panel the title names B while the words go to A. The fix is the delivery; the title is a
   separate change.
+
+### 2. Nothing bound when the microphone closes: held, never the caret — and a cue that says so
+
+Victor, Q1: *"nothing bound → the sentence is HELD (bind to send memory), never pasted at the
+caret. A visual cue must say a sentence is waiting in memory"* — *"mi-ar trebui un cue vizual să
+știu că trebuie să las mesajul din memorie"*.
+
+- **`latchedAtCaret = pasteMode`.** The clause `!isBound && !spawnPending && spawnPickInFlight ==
+  nil` latched the caret for every real unbound sentence while the chip said `bind to send`; only
+  `POST /test/dictation`, which never reaches the latch, was held — which is why TD31 passed and
+  TD3 / TG18 did not. Now the close latches no terminal (`latch` nil) and `commit` holds the
+  sentence, or delivers it to a bind that landed during the upload (TG18: *bound during its
+  upload → the terminal just bound*). The halo's `listening && !isBound` caret clause went with
+  it: the six heads promise a caret delivery that no longer happens.
+- **What still goes to the caret, explicitly:** the forward click / F7 (`pasteMode`), the back
+  click's clean sentence, and — decided here, not in Q1 — **a sentence Wispr's own chord opened
+  with nothing bound** (`noteHandStartedAtCaret` sets `pasteMode`). Q1 is about the relay's
+  gestures; Wispr's chord is a caret dictation by nature, and holding its words would take Wispr
+  away from every app for as long as the relay is unbound, which is most of the day. It reached
+  the caret through the very latch Q1 removed; as `pasteMode` a deliberate bind mid-sentence still
+  takes it to the terminal, as the wiring's comment promises.
+- **🔼 → over a clean sentence takes it to the terminal** (TG13). `aimAtBoundTerminal` cleared
+  `pasteMode`, but `deliver` sends a `cleanSentence` to the caret regardless — the flash said
+  `↪️ to …` and the words landed at the caret. `cleanRedirected` now tells `deliver` the sentence
+  is a terminal prompt; `cleanSentence` itself stays, because the back click is still its stop.
+- **The cue: `📨 N waiting — bind to send`**, a chip row (`RelayWindow.heldRow`, built like
+  `☠️ Kamikaze`) up while `awaitingBind` is non-empty — driven from its `didSet`, so a hold, a
+  release, an expiry and a failed pick's take-back all update it. **On the idle chip too**: it is
+  the one row that may put a chip beside an unbound pointer, and *The pointer is clean when nothing
+  is bound* now names it as the exception (`overlay-chip.md`). The hold's flash became
+  `📨 held — bind a terminal to send it`. Shots: `held-waiting`, `held-waiting-dictating`,
+  `flash-held`.

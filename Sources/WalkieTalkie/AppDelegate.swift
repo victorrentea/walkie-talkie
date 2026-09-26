@@ -2746,12 +2746,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.info("📍 right ⌘⌥ held — these words go to the caret")
             }
             self.noteCleanStart()
+            self.noteHandStartedAtCaret()
             self.dictationMaybeBeginning(why)
         }
         wisprSource.didBegin = { [weak self] in
             guard let self else { return }
             self.wisprMicSentence = !self.wisprSource.relayStarted
             self.noteCleanStart()
+            self.noteHandStartedAtCaret()
             self.dictationBegan()
         }
         wisprSource.didStopListening = { [weak self] in self?.dictationStoppedListening() }
@@ -2790,6 +2792,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// before the chord's announcement reaches the main queue, and which is
     /// retired at the stop click — so it is latched here, at the begin, and
     /// carried to `deliver` on the flag.
+    /// **A sentence Wispr's own chord opened, with nothing bound, is a caret
+    /// sentence** (2026-09-26). Q1 holds an unbound sentence for the next bind,
+    /// and that is about the relay's gestures: Wispr's chord is a caret
+    /// dictation by nature, and holding it would take Wispr away from every app
+    /// for as long as the relay is unbound — most of the day. It used to reach
+    /// the caret through the unbound caret latch Q1 removed; it is `pasteMode`
+    /// now, explicitly, so a deliberate bind mid-sentence still takes it to the
+    /// terminal (`showBound`), as the wiring above promises.
+    private func noteHandStartedAtCaret() {
+        guard !wisprSource.relayStarted, !isBound, !spawnPending, !pasteMode else { return }
+        pasteMode = true
+        Log.info("📍 Wispr's own chord with nothing bound — these words go to the caret")
+    }
+
     private func noteCleanStart() {
         guard !wisprSource.relayStarted, hotkeys.backStopsWispr else { return }
         if !cleanSentence { Log.info("🧼 a plain dictation (back click) — clean words at the caret, nothing added") }
@@ -2821,6 +2837,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// means.
     private func dictationBegan() {
         guard !listening else { return }
+        cleanRedirected = false
         // A 🔼 ↓ belongs to the sentence it was made in; one whose sentence
         // came back empty must not ride along on the next.
         kamikaze = false
@@ -2963,9 +2980,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Still `⚡ ring down:` in the log, for `RingDown` and every grep since
         // 09-13; what the ring does on screen now is coast (`CaretHalo`).
         Log.info("⚡ ring down: the microphone closed — the words are in flight (the ring coasts, fading)")
-        // An *Active Terminals* pick whose bind has not landed yet is a
-        // terminal destination already (`redirectSpawn`), not the caret.
-        latchedAtCaret = pasteMode || (!isBound && !spawnPending && spawnPickInFlight == nil)
+        // **Only an explicit caret sentence goes to the caret** (2026-09-26,
+        // Victor's Q1: *"bind to send memory"*). Nothing bound used to latch the
+        // caret here — `!isBound && !spawnPending && spawnPickInFlight == nil` —
+        // while the chip said `bind to send`, so real unbound speech was pasted
+        // wherever the focus was (TD3, TG18) and only the test route, which never
+        // reaches this line, was held (TD31). The chip was right: nothing bound
+        // is *held for the next bind* (`latch` nil, `commit` → `holdForBind`).
+        // The caret is the forward click, F7 (`pasteMode`) and the back click's
+        // clean sentence (`deliver`).
+        latchedAtCaret = pasteMode
         // **And which terminal — the whole recipient, not only *not the caret***
         // (2026-09-26, Victor's Q2). Until then the close latched the caret
         // question alone and `commit` asked `terminal.target` when the words
@@ -3017,6 +3041,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Where this sentence is going, decided at the close and read when the words
     /// arrive seconds later.
     private var latchedAtCaret = false
+
+    /// 🔼 → took this clean sentence off the caret — see `aimAtBoundTerminal`.
+    private var cleanRedirected = false
 
     /// **The terminal half of the same decision** — see `Message.target`. Set at
     /// the close, taken (and cleared) by `deliver`, which hands it to `send`; a
@@ -3197,12 +3224,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let spokenText = result.text
         // **A plain sentence is the words he said and nothing else** (2026-09-23)
         // — taken off the flags here, once, so nothing below can read them twice.
-        let clean = cleanSentence
-        let prompt = caretPrompt
+        let clean = cleanSentence && !cleanRedirected
+        let prompt = caretPrompt && !cleanRedirected
         let submitClean = clean && submitAfterClean
         cleanSentence = false
         caretPrompt = false
         submitAfterClean = false
+        cleanRedirected = false
         // No marker rewrite for it either: that is what splices a highlight
         // into the middle of the words.
         result.text = clean ? spokenText : resolvingMarkers(result.text, words: result.words)
@@ -3672,6 +3700,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// after he has redirected is the kind of lie this app takes seriously.
     private func aimAtBoundTerminal() {
         pasteMode = false
+        // **A clean sentence goes too** (2026-09-26, TG13): `deliver` sends a
+        // `cleanSentence` to the caret whatever `pasteMode` says, so the flash
+        // said `↪️` and the words landed at the caret. `cleanSentence` itself
+        // stays — the back click is still this sentence's stop — and `deliver`
+        // reads this instead.
+        if cleanSentence { cleanRedirected = true; submitAfterClean = false }
+        overlay.setSpawnDestination(nil)
         Log.info("↪️ redirected mid-sentence — these words go to the bound terminal, not the caret")
         syncBorrowedGestures()
         overlay.flash("↪️ to \(terminal.target?.label ?? "the terminal")", duration: 1.5)
@@ -5012,9 +5047,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // audio and only true of where the code looked: `wisprSource.meter` is
         // open for the whole of such a sentence, and it was `source.meter` — the
         // wired engine's, idle — that was being asked. See `liveMeter`.
+        // No `listening && !isBound` clause since 2026-09-26: an unbound
+        // sentence is held for a bind (Q1), and the heads promise a caret.
         let atCaret = !foreignMic && (pasteMode
             || (speculative && !listening)
-            || (listening && !isBound && !spawnPending)
             || (settling && settlingAtCaret))
         // **The heads stay up through the settle of a caret sentence**
         // (2026-09-15) — *"rămân săgețile care curg până când efectiv se inseră
@@ -8711,7 +8747,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var m: Message
         let expiry: DispatchWorkItem
     }
-    private var awaitingBind: [Held] = []
+    /// **The chip counts them** (`📨 N waiting — bind to send`, Q1's visual
+    /// cue) — every change, whoever made it, lands here.
+    private var awaitingBind: [Held] = [] {
+        didSet { overlay?.setHeldCount(awaitingBind.count) }
+    }
     private var heldSerial = 0
     private static let bindWait: TimeInterval = 5 * 60
 
@@ -8739,8 +8779,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                  + (n > 1 ? " (\(n) sentences held, delivered in order)" : ""))
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
         if !quietly {
-            overlay.flash(n > 1 ? "⏳ \(n) held — bind a terminal to send them"
-                                : "⏳ held — bind a terminal to send it", duration: 3)
+            overlay.flash(n > 1 ? "📨 \(n) held — bind a terminal to send them"
+                                : "📨 held — bind a terminal to send it", duration: 3)
         }
     }
 

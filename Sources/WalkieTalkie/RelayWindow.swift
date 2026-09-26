@@ -284,6 +284,16 @@ private let frontLabel = NSTextField(labelWithString: "")
     private let pasteRow = NSView()
     private let pasteGlyph = NSImageView()
     private let pasteInfo = NSTextField(labelWithString: "Re-paste  \(PasteHint.keys)")
+    /// **`📨 N waiting — bind to send`** (2026-09-26) — sentences spoken with
+    /// nothing bound, held in memory for the next bind (`AppDelegate.awaitingBind`).
+    /// Victor, Q1: *"mi-ar trebui un cue vizual să știu că trebuie să las mesajul
+    /// din memorie"*. Up for as long as one is held, **on the idle chip too** — the
+    /// one row that may put a chip beside the pointer with nothing bound (*The
+    /// pointer is clean when nothing is bound* names it as the exception). Built
+    /// like `kamikazeRow`.
+    private let heldRow = NSView()
+    private let heldGlyph = NSImageView()
+    private let heldInfo = NSTextField(labelWithString: "")
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
     ///
@@ -1403,6 +1413,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         root.addSubview(filmRow)
         installEmojiRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, emoji: "☠️")
         installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
+        installEmojiRow(heldRow, glyph: heldGlyph, label: heldInfo, emoji: "📨")
 
         // Same face as every other row (see `titleFont`): it carries a CSS
         // selector, which was the argument for monospace here, and that argument
@@ -1838,7 +1849,10 @@ private let frontLabel = NSTextField(labelWithString: "")
         // width like the recording row does. The paste row is often the only
         // row on the chip, and a chip measured without it is a chip 0 wide.
         var emojiRowsWidth: CGFloat = 0
-        for (on, label) in [(kamikaze, kamikazeInfo), (pasteHint, pasteInfo)] where on {
+        // Written before it is measured, for the selection row's reason below.
+        if heldCount > 0 { heldInfo.stringValue = Self.heldText(heldCount) }
+        for (on, label) in [(kamikaze, kamikazeInfo), (pasteHint, pasteInfo),
+                            (heldCount > 0, heldInfo)] where on {
             label.sizeToFit()
             emojiRowsWidth = max(emojiRowsWidth, glyphColumn + recordDotGap + ceil(label.frame.width))
         }
@@ -2020,6 +2034,18 @@ private let frontLabel = NSTextField(labelWithString: "")
             rows.append((titleRow, titleRowHeight))
         } else {
             titleRow.isHidden = true
+        }
+
+        // **What is waiting for a bind, under where the words go** — see
+        // `heldRow`. Often the only row on the chip: nothing bound, nothing said.
+        if heldCount > 0 {
+            heldInfo.stringValue = Self.heldText(heldCount)
+            heldInfo.sizeToFit()
+            layoutGlyphRow(heldRow, glyph: heldGlyph, label: heldInfo, width: innerWidth)
+            heldRow.isHidden = false
+            rows.append((heldRow, recordRowHeight))
+        } else {
+            heldRow.isHidden = true
         }
 
 
@@ -2919,6 +2945,8 @@ private let frontLabel = NSTextField(labelWithString: "")
         kamikazeGlyph.wantsLayer = true
         pasteInfo.wantsLayer = true
         pasteGlyph.wantsLayer = true
+        heldInfo.wantsLayer = true
+        heldGlyph.wantsLayer = true
         // The flash row joins them whenever it is drawn bare — with no blur under
         // it, `labelColor` is the same invisible dark grey the selection row was.
         hintLabel.wantsLayer = true
@@ -2944,6 +2972,9 @@ private let frontLabel = NSTextField(labelWithString: "")
             pasteInfo.shadow = Self.halo()
             pasteInfo.textColor = .white
             pasteGlyph.shadow = Self.halo()
+            heldInfo.shadow = Self.halo()
+            heldInfo.textColor = .white
+            heldGlyph.shadow = Self.halo()
             engineInfo.shadow = Self.halo()
             engineInfo.textColor = .white
             elapsedLabel.shadow = Self.halo()
@@ -2988,6 +3019,9 @@ private let frontLabel = NSTextField(labelWithString: "")
             pasteInfo.shadow = nil
             pasteInfo.textColor = .secondaryLabelColor
             pasteGlyph.shadow = nil
+            heldInfo.shadow = nil
+            heldInfo.textColor = .secondaryLabelColor
+            heldGlyph.shadow = nil
             engineInfo.shadow = nil
             engineInfo.textColor = .secondaryLabelColor
             elapsedLabel.shadow = nil
@@ -4105,6 +4139,17 @@ private let frontLabel = NSTextField(labelWithString: "")
         kamikaze = on
         layoutContent()
     }
+
+    /// How many sentences wait for a bind — see `heldRow`. Zero takes the row down.
+    private(set) var heldCount = 0
+
+    func setHeldCount(_ n: Int) {
+        guard heldCount != n else { return }
+        heldCount = n
+        layoutContent()
+    }
+
+    static func heldText(_ n: Int) -> String { "\(n) waiting — bind to send" }
 
     /// The `📋 Re-paste ⌘⇧P` row is up — see `pasteRow`; `PasteHint` times it.
     private(set) var pasteHint = false

@@ -64,7 +64,7 @@ enum OverlayStates {
             // ---- the chip -------------------------------------------------
             Shot(slug: "unbound-idle", group: "At rest", title: "Unbound, idle",
                  when: "Whenever nothing is bound — which is most of the day, since the app runs from login.",
-                 note: "There is no window on screen at all. Not a faded one: `orderOut`, because an invisible panel still swallows clicks on whatever it is over. This is the state the empty pointer was won back for.",
+                 note: "There is no window on screen at all — unless a sentence is waiting for a bind (`held-waiting`). Not a faded one: `orderOut`, because an invisible panel still swallows clicks on whatever it is over. This is the state the empty pointer was won back for.",
                  shape: "none", alpha: 0) { _ in },
 
             Shot(slug: "bound-idle", group: "At rest", title: "Bound, standing by",
@@ -134,11 +134,28 @@ enum OverlayStates {
 
             Shot(slug: "bind-to-send", group: "Dictating", title: "Nothing is bound, and he is talking anyway",
                  when: "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
-                 note: "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `⏳ held — bind a terminal to send it` once the words have left the dictation. **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
+                 note: "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `📨 held — bind a terminal to send it` once the words have left the dictation, and `📨 1 waiting — bind to send` until a bind sends it (next shot). **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
                 o.setListening(true)
                 o.setShotCount(1)
+            },
+
+            Shot(slug: "held-waiting", group: "At rest", title: "Unbound, with sentences waiting for a bind",
+                 when: "A sentence was spoken with nothing bound (Victor's Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.",
+                 note: "**The one chip an unbound pointer may carry.** *The pointer is clean when nothing is bound* still holds for a relay with nothing to say; this row is something to say — *\"mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie\"*. It counts what `awaitingBind` holds, so a second sentence says `2`, and it goes the instant a bind delivers them. Built like `☠️ Kamikaze`: an emoji in the icon column, words beside it. It is announced once with a flash, `📨 held — bind a terminal to send it`.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setHeldCount(2)
+            },
+
+            Shot(slug: "held-waiting-dictating", group: "Dictating", title: "Talking again, with one already waiting",
+                 when: "A new dictation while a held sentence waits — still nothing bound.",
+                 note: "The row stays under the destination while he talks: the new sentence will join the queue behind it, and both go, oldest first, on the next bind.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
+                o.setListening(true)
+                o.setShotCount(1)
+                o.setHeldCount(1)
             },
 
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
@@ -344,6 +361,14 @@ enum OverlayStates {
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.flash("🎙️ sent + 2 📸", duration: 60)
+            },
+
+            Shot(slug: "flash-held", group: "Flashes", title: "Flash — held for a bind",
+                 when: "Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The `📨 N waiting` row stays after it.",
+                 note: "Said once, when it happens; the row under it is what stays. A flash replaces the collapsed chip, so the row comes back when it has gone.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setHeldCount(1)
+                o.flash("📨 held — bind a terminal to send it", duration: 60)
             },
 
             Shot(slug: "flash-unguarded", group: "Flashes", title: "Flash — bound to an unguarded shell",
@@ -583,6 +608,7 @@ enum OverlayStates {
         o.setWisprHearing(false)
         o.setKamikaze(false)
         o.setPasteHint(false)
+        o.setHeldCount(0)
         o.setFilming(false)
         o.clearFilmsCarried()
         o.filmFrames = nil
