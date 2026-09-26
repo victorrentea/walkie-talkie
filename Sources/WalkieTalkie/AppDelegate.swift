@@ -5790,9 +5790,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// letting the binding go. Two spawns in a row still
     /// each get their own window; the relay ends up on the second, which is the
     /// one he is talking to.
-    private func spawnClaude(_ m: Message) {
-        let line = Self.terminalLine(m)
+    ///
+    /// **A restart blocker from the launch to the bind** (2026-09-26, TD25):
+    /// `spawnsInFlight` is up from here until the adoption's bind has been
+    /// shown, and the outbox row and `lastDelivery` are written there too — the
+    /// window exists by then, which is what the receipt claims (TR22). Main
+    /// thread: `commit` hops the quit path's call here.
+    private func spawnClaude(_ m: Message, line: String) {
+        guard Thread.isMainThread else {
+            return DispatchQueue.main.async { [weak self] in self?.spawnClaude(m, line: line) }
+        }
         guard !line.isEmpty else { return clearSpawn() }
+        spawnsInFlight += 1
 
         // Read on the main thread, before the hop: `NSEvent.mouseLocation` is
         // the fallback for a sentence that never closed a microphone, and
@@ -5809,15 +5818,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // screen of evidence, and a flash would be a panel thrown over
                 // his work to repeat what it already shows.
                 case .opened(let tty):
-                    self.adoptSpawnedWindow(tty: tty)
+                    self.adoptSpawnedWindow(tty: tty) { [weak self] _ in
+                        guard let self = self else { return }
+                        // The window is there (bound, or at least opened with the
+                        // prompt in its `argv`): now it is a delivery.
+                        let delivery = m.kind == "dictation"
+                            ? self.recordDelivery(via: m.via, kind: m.deliveryKind,
+                                                  to: self.destinationLabel(atCaret: false, spawn: true,
+                                                                            directory: m.directory))
+                            : nil
+                        self.writeOutbox(m, line: line, delivery: delivery)
+                        self.spawnsInFlight -= 1
+                    }
                 case .failed(let why):
+                    self.spawnsInFlight -= 1
                     // Nothing to fly to and nothing to wait for — the dialog goes
                     // now, and the warning below takes the chip.
                     self.overlay.promptFarewell = nil
                     self.overlay.releaseSpawnPanel(fadeOver: 0.2)
-                    // The outbox already has the line — `commit` wrote it before
-                    // this ran — so what is lost is the delivery, and this is the
-                    // only place he would learn that.
+                    // No outbox line: it is written when the window is bound, and
+                    // there is no window — this flash is the only place he would
+                    // learn the words went nowhere (⌘⇧P still has them).
                     Log.error("✨ spawn failed: \(why)")
                     self.overlay.flash("⚠️ \(why)", duration: 8)
                 }
@@ -5905,7 +5926,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// comes, which lands under the flight rather than ahead of it — and in this
     /// direction the chip is where the rectangle *leaves* from, so nothing is
     /// waiting on the label.
-    private func adoptSpawnedWindow(tty: String) {
+    /// `adopted` runs on main once the bind has been attempted and shown — the
+    /// spawn's receipt (`spawnClaude`).
+    private func adoptSpawnedWindow(tty: String,
+                                    adopted: ((TerminalBinding.Target?) -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             // Off the main thread: this is `osascript` and `ps` subprocesses all
@@ -6009,7 +6033,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // **Not deliberate** (TD6's twin): the window of the *last* spawn
             // arriving must not take `spawnPending` or `pasteMode` off the
             // sentence he has started since.
-            DispatchQueue.main.async { if let bound = bound { self.showBound(bound, deliberate: false) } }
+            DispatchQueue.main.async {
+                if let bound = bound { self.showBound(bound, deliberate: false) }
+                adopted?(bound)
+            }
         }
     }
 
@@ -8154,6 +8181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if overlay?.isHoldingPrompt ?? false { why.append("prompt on screen") }
         if !awaitingBind.isEmpty { why.append("held for a bind") }
         if deliveriesInFlight > 0 || caretHalo.delivering { why.append("delivering") }
+        if spawnsInFlight > 0 { why.append("spawning") }
         if film != nil { why.append("filming") }
         return why
     }
@@ -8161,6 +8189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Terminal deliveries between the hop off the main thread and their report.
     /// Main thread only.
     private var deliveriesInFlight = 0
+    /// Spawns between the launch and the adopted window's bind (TD25). Main only.
+    private var spawnsInFlight = 0
 
     /// Set when a deferred quit is finally let through; the one way past the gate.
     private var quitApproved = false
@@ -8685,6 +8715,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // outbox *is* the delivery (a watcher reads it).
         if m.kind != "session_end", !m.spawn, let target = m.target ?? terminal.target {
             deliverToTerminal(m, line: line, to: target)
+        } else if m.kind != "session_end", m.spawn {
+            // **A spawn's receipt is written when its window is bound** (2026-09-26,
+            // TR22) — `spawnClaude` → `adoptSpawnedWindow`. It was written here,
+            // a second or more before the window existed, and a spawn that
+            // failed kept its `spawn:` row.
+            spawnClaude(m, line: line)
         } else {
             let delivery = m.kind == "dictation"
                 ? recordDelivery(via: m.via, kind: m.deliveryKind,
@@ -8692,8 +8728,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                                       directory: m.directory))
                 : nil
             writeOutbox(m, line: line, delivery: delivery)
-            guard m.kind != "session_end" else { return }
-            if m.spawn { spawnClaude(m) }
         }
         // **Every sentence that leaves gets the `⌘⇧P` reminder** (2026-09-23) —
         // a bound terminal, a new session, a sentence released by the bind it

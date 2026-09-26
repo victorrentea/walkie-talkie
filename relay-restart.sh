@@ -30,7 +30,7 @@
 # 1. **Wait for the gate** — `tools/restart_gate.py wait`: `GET /test/state.busy`
 #    false (the app's own `restartBlockers`: every engine's microphone, the
 #    recogniser, a Wispr sentence behind the firewall, the prompt on screen, a
-#    sentence held for a bind, the words being typed), then ten quiet seconds after
+#    sentence held for a bind, the words being typed, a spawn until its window is bound), then ten quiet seconds after
 #    the last delivery, the countdown starting over on anything new. Polled every
 #    second; unit-tested by `evals/test_restart_gate.py`.
 # 2. **Read the binding** from `~/.walkie-talkie/bound-tty` — before the SIGTERM

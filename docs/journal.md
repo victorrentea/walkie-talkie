@@ -12474,3 +12474,20 @@ redirect a sentence in flight, take back `pasteMode`/`spawnPending`"*, and R15: 
   to the active one). Every reader of the file takes the first word, so the status line and
   `wispr_loop.py` are unchanged; a tmux client tty never matched the status line's own tty anyway.
   The case now posts the pane from the file, as the script does.
+
+### 4. A spawn is busy until its window is bound, and its receipt is written then
+
+The test plan's R14 for spawns and §3.11: *"`busy` false for one turn … restart can kill in it"*,
+*"outbox gives false receipts … failed spawn keeps a `delivered` row"*. Measured before (TD25,
+TR22 in `report-D02-spawn.md`): the first outbox row at +1.04 s, the window bound at +3.09 s, and 59
+samples of `busy == false` between them — a restart allowed while the new session was still being
+opened for the words.
+
+- **`spawnsInFlight`**, a restart blocker (`busyWhy` says `spawning`), up from `spawnClaude` to the
+  end of the adoption: `adoptSpawnedWindow(tty:adopted:)` calls back on main after it has shown the
+  bind (bound or not — the window exists and the prompt is in its `argv`), and a `.failed` launch
+  takes it down at once.
+- **The `spawn:` row is written in that callback** (batch 1's `writeOutbox`, with `lastDelivery`
+  beside it), no longer at `commit`. A failed spawn writes none; its flash says the words went
+  nowhere and ⌘⇧P still has them. The *re-offer* half of TR22 (hold a failed spawn's sentence) is
+  not done here: no route can fail a spawn, and it is not in this batch's decisions.
