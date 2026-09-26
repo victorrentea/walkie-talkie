@@ -12616,3 +12616,32 @@ TL31 (at 35 s `phase: transcribing`, `busy`, the restart gate shut until a hand 
   answer, and the listener was the only thing wrong.
 - The stderr drain takes its `readabilityHandler` down at EOF — at a dead helper's EOF it was
   called with an empty read in a loop.
+
+### 4. A flag that refuses a gesture says so, and a stuck `listening` is put down
+
+The test plan's §3.19 (*"`start()` guard returns silently (no log line) on a sticky flag"*) and
+TR18: a desk-open sentence (`listening`, no recorder behind it) swallowed a gesture without a line,
+and `listening` stood until the ten-minute ceiling.
+
+- **`startDictation`'s guard names what refused and how old it is** (`startBlocker`):
+  `🚫 start refused — \`listening\` (2.5 s old, no recorder behind it)`, `\`settling\` (33.1 s since
+  the microphone closed — the words are still in flight)`, `\`speculative\` (…)`, `\`isRecording\``,
+  or the words in flight (item 5). The ages come from `listeningSince` / `speculativeSince`, set by
+  `didSet` on the two flags, and `settlingFrom`.
+- **A `listening` with no recorder behind it for more than 30 s is put down by the gesture that
+  meets it** (`clearStuckListening`): `🧹 \`listening\` stuck 31 s with no recorder behind it — put
+  down (a start gesture)`, then the start goes on. *No recorder* is `source.isRecording ||
+  wisprSource.isRecording || speculative` all false — a Wispr sentence his own chord started under
+  another engine still has one. Younger than 30 s it is said (`🧷 stuck \`listening\`? a stop
+  gesture met it 2.5 s old …`) and a check is armed for the moment it turns 30, so the one gesture
+  that found it is enough; a real sentence has a microphone by then and the check leaves it alone.
+  30 s is Wispr's `captureTimeout`: past it nothing is listening for these words. The ten-minute
+  ceiling stays as the backstop for a flag no gesture meets.
+- **The stop path too**: 🔼 → / F10 on an open sentence is `endDictation`, not a start, so the same
+  check runs after `source.stop()` when nothing answered for `listening`. TR18 posts exactly that
+  gesture.
+- **Decided here:** the put-down is `cancelDictationInFlight(quiet:)` — the one path that already
+  takes a recogniser-less sentence down — and that path now ends the settle it opens on its way out
+  (`dictationStoppedListening` is the ordinary close and begins a settle for words that are not
+  coming). Without it the start that cleared the flag was refused by `settling` a line later, and a
+  desk cancel lingered 2 s (TL2 measured the same linger in phase A).

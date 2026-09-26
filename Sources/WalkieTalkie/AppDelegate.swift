@@ -574,7 +574,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **The gesture that opens a microphone has been seen and the microphone
     /// has not.** Only a source whose recorder lives in another process has a
     /// gap here worth drawing — see `DictationSource.didMaybeBegin`.
-    private var speculative = false
+    private var speculative = false {
+        didSet { if speculative, !oldValue { speculativeSince = CFAbsoluteTimeGetCurrent() } }
+    }
 
     /// What was in front when the dictation started, for the message's `app`
     /// field. Read at the press, not at the end: by the time the words come back
@@ -1081,7 +1083,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// not processed yet. This is *the relay has a sentence in flight*, which is
     /// what every gate below means — and it is what `localRecording` was called
     /// while the relay's own microphone was the only one that could be open.
-    private var listening = false
+    private var listening = false {
+        didSet { if listening, !oldValue { listeningSince = CFAbsoluteTimeGetCurrent() } }
+    }
 
     /// **The ten-minute ceiling on one dictation** — armed in `dictationBegan`,
     /// cancelled in `dictationStoppedListening`, and what it does when it fires
@@ -3744,7 +3748,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and a second one opened on top of it takes the first one's swallow
         // window with it. Every caller here is a gesture that means *start*, and
         // none of them means *start another one over the last*.
-        guard !listening, !source.isRecording, !speculative, !settling else { return }
+        //
+        // **And `phase.isWaitingForWords`, and never silently** (2026-09-26, the
+        // test plan's R1 and §3.19). A start while the last sentence's words
+        // were still in flight let the late reply take this one's flags,
+        // pictures and destination (TL8, TL15 — the side-button start already
+        // refused there, this one did not); and a refusal said nothing, so a
+        // flag left standing looked like a dead gesture (TR18). The line names
+        // the flag and its age; a `listening` with no recorder behind it for
+        // longer than `stuckListeningAfter` is put down here and the start goes
+        // on.
+        if let why = startBlocker() {
+            guard clearStuckListening(by: "a start gesture"), startBlocker() == nil else {
+                Log.info("🚫 start refused — \(why)")
+                return
+            }
+        }
         // **And not over a Wispr sentence this app is not running** (2026-09-18).
         //
         // The guard above is the relay asking itself; this one asks the other
@@ -3817,6 +3836,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func endDictation() {
         guard listening || source.isRecording else { return }
         source.stop()
+        // **A stop with nothing behind it says so** (2026-09-26, TR18): the
+        // relay's `listening` with no microphone under it used to swallow the
+        // gesture without a line until the ten-minute ceiling.
+        if listening, !recorderBehindListening { clearStuckListening(by: "a stop gesture") }
+    }
+
+    // MARK: - Flags that refuse a gesture, named (2026-09-26, TR18)
+
+    /// When `listening` last went up — the age a refusal reports.
+    private var listeningSince: CFAbsoluteTime = 0
+    /// When `speculative` last went up.
+    private var speculativeSince: CFAbsoluteTime = 0
+
+    /// A `listening` with no recorder behind it this long is put down by the
+    /// next gesture that meets it (or by the check that gesture arms). 30 s is
+    /// Wispr's `captureTimeout`: past it nothing is listening for these words.
+    /// The ten-minute ceiling stays as the backstop for a flag no gesture meets.
+    private static let stuckListeningAfter: CFAbsoluteTime = 30
+
+    /// A microphone that answers for `listening`: the source's, Wispr's (a
+    /// sentence his own chord started while another engine is picked), or a
+    /// chord still waiting for Wispr's microphone.
+    private var recorderBehindListening: Bool {
+        source.isRecording || wisprSource.isRecording || speculative
+    }
+
+    /// What stands in the way of a new sentence, with its age — nil when nothing does.
+    private func startBlocker() -> String? {
+        let now = CFAbsoluteTimeGetCurrent()
+        if listening {
+            return String(format: "`listening` (%.1f s old%@)", now - listeningSince,
+                          recorderBehindListening ? "" : ", no recorder behind it")
+        }
+        if source.isRecording { return "`isRecording` (\(source.name)'s microphone is open)" }
+        if speculative {
+            return String(format: "`speculative` (%.1f s old — waiting for a microphone)", now - speculativeSince)
+        }
+        if settling {
+            return String(format: "`settling` (%.1f s since the microphone closed — the words are still in flight)",
+                          now - settlingFrom)
+        }
+        if source.phase.isWaitingForWords {
+            let status = source.phase.status.isEmpty ? "transcribing" : source.phase.status
+            return "the last sentence's words are still in flight (\(source.name): \(status))"
+        }
+        return nil
+    }
+
+    private var stuckCheck: DispatchWorkItem?
+
+    /// **A `listening` no microphone answers for.** Older than
+    /// `stuckListeningAfter`: put down now, with a line — returns true. Younger:
+    /// said, and a check armed for the moment it turns that old, so the gesture
+    /// that found it is enough (a legitimate sentence has a recorder by then and
+    /// the check leaves it alone). Main queue.
+    @discardableResult
+    private func clearStuckListening(by gesture: String) -> Bool {
+        guard listening, !recorderBehindListening else { return false }
+        let since = listeningSince
+        let age = CFAbsoluteTimeGetCurrent() - since
+        guard age > Self.stuckListeningAfter else {
+            Log.error(String(format: "🧷 stuck `listening`? %@ met it %.1f s old with no recorder behind it — "
+                             + "it is put down at %.0f s unless a microphone opens", gesture, age,
+                             Self.stuckListeningAfter))
+            stuckCheck?.cancel()
+            let check = DispatchWorkItem { [weak self] in
+                guard let self, self.listening, self.listeningSince == since else { return }
+                self.clearStuckListening(by: "the check \(gesture) armed")
+            }
+            stuckCheck = check
+            DispatchQueue.main.asyncAfter(deadline: .now() + (Self.stuckListeningAfter - age) + 0.2, execute: check)
+            return false
+        }
+        Log.error(String(format: "🧹 `listening` stuck %.0f s with no recorder behind it — put down (%@)", age, gesture))
+        _ = cancelDictationInFlight(reason: String(format: "a stuck `listening` (%.0f s, no recorder)", age), quiet: true)
+        return !listening
     }
 
     /// **Ten minutes, and the sentence ends wherever it was going** — Victor,
@@ -4144,6 +4239,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // landed` and they did not — this is the wait being abandoned.
             if settling { endSettling(reason: "cancelled with no recogniser behind it", quiet: true) }
             dictationStoppedListening()
+            // …which opens a settle for words that are not coming (it is the
+            // ordinary close). Put down at once, not by its 8 s give-up: a
+            // gesture that cleared a stuck `listening` to start a sentence
+            // (`clearStuckListening`) must not then be refused by `settling`
+            // (2026-09-26; TL2 measured the same 2 s linger).
+            if settling { endSettling(reason: "cancelled with no recogniser behind it", quiet: true) }
             // **`clearCancelledDictationState`, never `abandonDictation`** (found
             // in review, 2026-09-14). The second one *releases* what the sentence
             // had gathered — `flushOrphaned` sends the pictures on to the bound
