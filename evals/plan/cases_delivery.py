@@ -448,7 +448,10 @@ def td11():
 @case("TD12", tags=("tty", "relaunch"),
       expect="a bind made while a quit is deferred survives the relaunch (restore binds B, not the A read before SIGTERM)")
 def td12():
-    """relay-restart.sh reads bound-tty before SIGTERM; a bind during the deferred quit is overwritten (R15)."""
+    """relay-restart.sh read bound-tty before SIGTERM; a bind during the deferred quit was overwritten (R15).
+    Since 2026-09-26 an app being replaced leaves the binding it had *at quit* in bound-tty and the script
+    reads it again once the process is gone — this case does what the script does (the file after the
+    exit, the pre-SIGTERM read only as the fallback)."""
     if not os.environ.get("WT_ALLOW_RELAUNCH"):
         return "SKIP", "quits and relaunches the app — set WT_ALLOW_RELAUNCH=1 with Victor idle"
     _fresh()
@@ -479,15 +482,17 @@ def td12():
                 return True
         if not wait_for(gone, 30, 0.5):
             return "FAIL", f"pid {pid} still alive 30 s after SIGTERM + cancel (deferred={bool(deferred)})"
+        at_quit = _read(HOME + "/bound-tty").split()[:1]   # relay-restart.sh reads it here, before the launch
         subprocess.run(["open", "-g", "/Applications/Walkie Talkie.app"])
         up = wait_for(lambda: get("/up", 2).get("ok"), 60, 0.5)
         if not up:
             return "FAIL", "relaunched app did not answer on the harness port within 60 s"
-        restore = read_before[0] if read_before else ""
+        restore = (at_quit or read_before or [""])[0]
         code, _ = bind_tty(restore) if restore else (None, None)
         time.sleep(0.5)
         now = _bound_tty()
-        facts = f"A={ta} B={tb}; bound-tty read before SIGTERM={restore}; quit deferred={bool(deferred)}; restore /bind {code}; bound after={now}"
+        facts = (f"A={ta} B={tb}; bound-tty before SIGTERM={read_before[:1]}, after the exit={at_quit}; "
+                 f"quit deferred={bool(deferred)}; restore {restore} /bind {code}; bound after={now}")
         if now == tb:
             return "PASS", facts
         if now == ta:
@@ -501,7 +506,8 @@ def td12():
 @case("TD13", tags=("tty", "tmux"),
       expect="restoring a tmux binding (POST /bind {client tty}) binds the pane that was bound, not the active one")
 def td13():
-    """bound-tty holds the tmux *client* tty; a restore re-resolves to whichever pane is active (R15)."""
+    """bound-tty held the tmux *client* tty; a restore re-resolved to whichever pane is active (R15).
+    Since 2026-09-26 the line is `ttysNNN %N` and relay-restart.sh posts both — as this case does."""
     tmux = shutil.which("tmux") or next((p for p in ("/opt/homebrew/bin/tmux", "/usr/local/bin/tmux")
                                          if os.path.exists(p)), None)
     if not tmux:
@@ -527,7 +533,9 @@ def td13():
         published = _read(HOME + "/bound-tty").strip()
         tm("select-pane", "-t", second)
         time.sleep(0.3)
-        c2, r2 = bind_tty(published.split()[0] if published else tty)
+        words = published.split()
+        c2, r2 = post("/bind", {"tty": words[0] if words else tty,
+                                "pane": words[1] if len(words) > 1 else ""})
         time.sleep(0.5)
         facts = (f"client {tty}; panes {panes}; bind with {first} active → {c1} {r1.get('address')}; "
                  f"bound-tty='{published}'; restore with {second} active → {c2} {r2.get('address')}")
@@ -1020,7 +1028,7 @@ def td31():
                  f"to={d2.get('to')} rows={[_row_to(x) for x in rows]} outbox agrees with lastDelivery={agree} "
                  f"awaitingBind={s2['awaitingBind']}")
         if d.get("to") == "held" and s["awaitingBind"] and held_rows == 0 and tok in witness_text() and agree:
-            return "PASS", facts + " (the route never reaches latchedAtCaret — real unbound speech is TD3)"
+            return "PASS", facts + " (real unbound speech is held the same way since 2026-09-26 — TG18)"
         return "FAIL", facts
     finally:
         _settle()

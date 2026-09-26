@@ -96,6 +96,19 @@ final class TerminalBinding {
         ///
         /// This is what `RebindHistory` stores, so a row can be handed straight
         /// back to `bind(tty:)`.
+        /// **What a restore needs to find this terminal again** — the published
+        /// `bound-tty` line and the Dock tile's handoff (2026-09-26, TD13). The
+        /// tty alone, except for tmux: `ttys006 %1`, the client's tty and **the
+        /// pane that was bound**. Given the tty alone, `bind(tty:)` re-resolves to
+        /// whichever pane is *active* at the restore, which is the pane he was
+        /// last in, not the one the relay was pointed at. The first word is still
+        /// the tty, so every reader that takes `$1` is unchanged.
+        var restoreKey: String? {
+            guard let tty = tty else { return nil }
+            if case .tmux(let pane, _) = self { return "\(tty) \(pane)" }
+            return tty
+        }
+
         var deviceTTY: String? {
             switch self {
             case .terminalApp(let tty):   return tty
@@ -303,7 +316,10 @@ final class TerminalBinding {
     /// `osascript` — the same one the *Rebind to* list uses for liveness) or a
     /// tmux client is attached to it; otherwise nil, which the route answers
     /// with 409 and the restore with its own retry and flash.
-    func bind(tty: String, spawned: Bool = false) -> Target? {
+    ///
+    /// `pane`: the tmux pane a restore names (`Handle.restoreKey`, TD13) — bound
+    /// when it still exists, instead of whichever pane is active now.
+    func bind(tty: String, pane: String? = nil, spawned: Bool = false) -> Target? {
         let device = Self.devicePath(tty)
         let short = (device as NSString).lastPathComponent
         let tabs = Self.liveTitles()
@@ -313,7 +329,8 @@ final class TerminalBinding {
         }
         let title = tabs[short].flatMap { $0.isEmpty ? nil : $0 }
         guard let bound = terminalTarget(tty: device, title: title,
-                                         fallbackName: "Terminal", bundleID: "com.apple.Terminal")
+                                         fallbackName: "Terminal", bundleID: "com.apple.Terminal",
+                                         pane: pane)
         else { return nil }
         adopt(bound, spawned: spawned)
         return bound
@@ -362,7 +379,8 @@ final class TerminalBinding {
     /// the two ways of arriving at one: the tab in front, and the session this
     /// app just spawned.
     private func terminalTarget(tty: String, title: String?,
-                                fallbackName: String, bundleID: String) -> Target? {
+                                fallbackName: String, bundleID: String,
+                                pane preferred: String? = nil) -> Target? {
         // tmux first: the tty is the *client's*, and everything typed at it goes
         // to whichever pane happens to be active. Pinning the pane at bind time
         // is the only way the binding means what Victor pointed at.
@@ -370,7 +388,15 @@ final class TerminalBinding {
         // the overlay flies from is found the same way for either.
         let frame = Self.terminalWindowFrame(tty: tty)
 
-        if let pane = Self.tmuxPane(clientTTY: tty) {
+        // A named pane wins over the active one only if the tty is a tmux client
+        // at all and the pane is still there — a stale id falls back to the
+        // active pane rather than to nothing.
+        let active = Self.tmuxPane(clientTTY: tty)
+        let named = preferred.flatMap { p -> String? in
+            guard active != nil, p.hasPrefix("%"), Self.tmuxPaneCommand(p) != nil else { return nil }
+            return p
+        }
+        if let pane = named ?? active {
             let folder = Self.tmuxPaneLabel(pane)
             return Target(handle: .tmux(pane: pane, tty: tty), label: folder ?? fallbackName,
                           address: pane, appName: Self.display(fallbackName), bundleID: bundleID,

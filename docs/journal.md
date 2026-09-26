@@ -12445,3 +12445,32 @@ caret. A visual cue must say a sentence is waiting in memory"* — *"mi-ar trebu
   is bound* now names it as the exception (`overlay-chip.md`). The hold's flash became
   `📨 held — bind a terminal to send it`. Shots: `held-waiting`, `held-waiting-dictating`,
   `flash-held`.
+
+### 3. Restores and spawn adoption are not deliberate binds; the restart restores the binding at quit
+
+The test plan's §3.5: *"Restores, spawn adoption and `onBindTTY` count as deliberate binds →
+redirect a sentence in flight, take back `pasteMode`/`spawnPending`"*, and R15: *"restart restores
+`bound-tty` read before a deferred quit; tmux client tty → active pane"*.
+
+- **`picker.onBindTTY` (`POST /bind {"tty"}`), `restoreBinding` (the Dock tile's) and
+  `adoptSpawnedWindow` call `showBound(_, deliberate: false)`.** The take-backs in `showBound` —
+  a spawn dropped, a caret sentence redirected — exist for *his* bind mid-sentence; a restore is
+  nobody pointing at anything, and a spawned window arriving is the previous sentence's. Measured
+  before: TD5 `caret dictation redirected`, TD6 `✨ spawn dropped`. The held sentences are still
+  released by these binds (`releaseAwaitingBind` runs on any bind), and since item 1 no bind moves
+  a sentence already latched.
+- **TD12: the binding at quit, not the one read before SIGTERM.** `relay-restart.sh` read
+  `bound-tty` first and then quit, and the app may defer the quit for a sentence — a bind made in
+  that wait was lost and the old one restored. `applicationWillTerminate` now leaves the binding it
+  has in `bound-tty` when `.replacing` is fresh (a restart), and the script reads the file again
+  once the process is gone, before the launch clears it; the pre-SIGTERM read is the fallback (an
+  older build, a crash). The status line's marker is right throughout: it names the binding until
+  the new instance clears and republishes it. The case did what the old script did (it bound the
+  pre-SIGTERM tty itself); it now does what the script does.
+- **TD13: the pane, not the active pane.** `bound-tty` held the tmux *client's* tty, and
+  `bind(tty:)` resolves a client tty to whichever pane is active — the one he was last in. The line
+  is now `ttys006 %1` (`Handle.restoreKey`), the Dock tile's handoff carries the same, `POST /bind`
+  takes `"pane"`, and `bind(tty:pane:)` binds the named pane while it exists (a stale id falls back
+  to the active one). Every reader of the file takes the first word, so the status line and
+  `wispr_loop.py` are unchanged; a tmux client tty never matched the status line's own tty anyway.
+  The case now posts the pane from the file, as the script does.

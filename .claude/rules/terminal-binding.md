@@ -145,8 +145,11 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 ## `bound-tty` (`Outbox.publishBound`)
 
 - **Publish the bare `ttysNNN`, never `/dev/ttysNNN`.** Publishing the path shipped once and matched nothing — no error, only a badge that never appeared. The handle keeps the device path (what AppleScript compares), `address` keeps the short form. IDE targets answer through `tty(ofPID:)` on the shell pid; a tmux pane answers the client's tty and fails to match rather than matching wrong; `.keystroke` has none. → journal: *The bound tty is published, so the status line can wear a microphone*
-- **Written from `showBound` alone, one line with one word, a file not a route** — the bar re-renders every second in every session. → journal: *The bound tty is published, so the status line can wear a microphone*
-- **Removed, never emptied; cleared at launch as well as at quit.** A marker outliving the process claims a binding that went with it. → journal: *The bound tty is published, so the status line can wear a microphone*
+- **Written from `showBound` alone, one line, a file not a route** — one word, or two for tmux:
+  `ttys006 %1`, the client's tty and the bound pane (`Handle.restoreKey`, 2026-09-26, TD13), so a
+  restore binds that pane rather than the active one. Every reader takes `$1`. — the bar re-renders every second in every session. → journal: *The bound tty is published, so the status line can wear a microphone*
+- **Removed, never emptied; cleared at launch as well as at quit** — except a quit that is a restart
+  (`.replacing` fresh), which leaves the binding at quit for `relay-restart.sh` (TD12). A marker outliving the process claims a binding that went with it. → journal: *The bound tty is published, so the status line can wear a microphone*
 
 ## Do not
 

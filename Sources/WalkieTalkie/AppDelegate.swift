@@ -2079,10 +2079,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // must not find it there and let it go), no bind flight and no flash (an
         // app that has just replaced itself is not announcing a gesture Victor
         // made), and no `wakePointer` — he is not necessarily at the machine.
-        picker.onBindTTY = { [weak self] tty in
-            guard let self = self, let bound = self.terminal.bind(tty: tty) else { return nil }
+        //
+        // **And not deliberate** (2026-09-26, the test plan's §3.5: TD5, TD6). It
+        // was `showBound(bound)`, so a restore landing while he dictated took a
+        // caret sentence off the caret (`pasteMode`) and a spawn off its new
+        // window (`spawnPending`) — the two take-backs that exist for *his*
+        // bind mid-sentence. A restore is nobody pointing at anything.
+        picker.onBindTTY = { [weak self] tty, pane in
+            guard let self = self, let bound = self.terminal.bind(tty: tty, pane: pane) else { return nil }
             Log.info("📍 re-bound to \(bound.address) by request")
-            DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+            DispatchQueue.main.async { [weak self] in self?.showBound(bound, deliberate: false) }
             return Self.describe(bound)
         }
         // The same call the loopback route makes, from the key Victor actually
@@ -5548,7 +5554,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// passes through, and which is therefore the only switch that owns the one
     /// fact in the file.
     private func publishBinding(_ target: TerminalBinding.Target?) {
-        Outbox.publishBound(tty: target?.handle.tty)
+        // `ttysNNN`, or `ttysNNN %N` for tmux — the pane a restore must bind
+        // (TD13). The first word stays the tty for every `$1` reader.
+        Outbox.publishBound(tty: target?.handle.restoreKey)
     }
 
     /// The destination app's icon, drawn down to the row height it has to sit in.
@@ -5998,7 +6006,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // ✨ — this window did not exist a second ago, and the *Rebind to*
             // menu marks the ones this app opened itself.
             let bound = self.terminal.bind(tty: tty, spawned: true)
-            DispatchQueue.main.async { if let bound = bound { self.showBound(bound) } }
+            // **Not deliberate** (TD6's twin): the window of the *last* spawn
+            // arriving must not take `spawnPending` or `pasteMode` off the
+            // sentence he has started since.
+            DispatchQueue.main.async { if let bound = bound { self.showBound(bound, deliberate: false) } }
         }
     }
 
@@ -8207,7 +8218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func restartNow() {
         // Read before anything stands this instance down: `bound-tty` is cleared
         // at quit *and* at launch, so the tty has to travel out of band.
-        let tty = terminal.target?.handle.tty
+        let tty = terminal.target?.handle.restoreKey
         Relaunch.stashBinding(tty: tty)
         Log.info(tty.map { "↻ restarting — the binding to \($0) travels with it" }
                  ?? "↻ restarting — nothing bound to put back")
@@ -8242,9 +8253,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func restoreBinding(tty: String, attempt: Int = 1) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            if let bound = self.terminal.bind(tty: tty) {
+            // `tty` is a `Handle.restoreKey`: `ttysNNN`, or `ttysNNN %N` for a
+            // tmux pane (TD13).
+            let parts = tty.split(separator: " ").map(String.init)
+            if let bound = self.terminal.bind(tty: parts.first ?? tty,
+                                              pane: parts.count > 1 ? parts[1] : nil) {
                 Log.info("📍 re-bound to \(bound.address) after the restart")
-                DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+                // Not deliberate — a restore is not a gesture (TD5, TD6).
+                DispatchQueue.main.async { [weak self] in self?.showBound(bound, deliberate: false) }
                 return
             }
             guard attempt < 3 else {
@@ -8275,7 +8291,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         music.stop()
         // A marker outliving the process would put a microphone on a status line
         // with nothing behind it — see `Outbox.publishBound`.
-        Outbox.publishBound(tty: nil)
+        //
+        // **Except when a restart is replacing this instance** (2026-09-26, TD12):
+        // then the file is the binding *at quit*, read by `relay-restart.sh` once
+        // this process is gone and cleared by the instance that comes up. It was
+        // read before the SIGTERM, so a bind made while the quit was deferred
+        // (a sentence finishing) was restored as the binding before it.
+        Outbox.publishBound(tty: SingleInstance.beingReplaced() ? terminal.target?.handle.restoreKey : nil)
         guard !SingleInstance.beingReplaced() else {
             Log.info("terminating to make way for a new instance — no session_end")
             return

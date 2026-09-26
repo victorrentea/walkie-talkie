@@ -225,6 +225,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - **Both facts come from `~/.walkie-talkie/bound-tty`, read before anything stands the app down**
   (launch clears it): absent unbound, `ttysNNN` bound, `ttysNNN listening` while the microphone is
   open. One `cat`, written from the two switches that own those facts.
+- **…and read again once the process is gone** (2026-09-26, TD12). An app quitting while
+  `.replacing` is fresh leaves the binding it had **at quit** in the file (every other quit still
+  removes it); `relay-restart.sh` prefers that to the pre-SIGTERM read, so a bind made while the quit
+  was deferred for a sentence is the one put back. For tmux the line is `ttysNNN %N` and the script
+  posts `{"tty","pane"}` (TD13) — `relay_bound_pane`.
+- **A restore is never a deliberate bind** (2026-09-26, TD5, TD6): `picker.onBindTTY`,
+  `restoreBinding` and `adoptSpawnedWindow` call `showBound(_, deliberate: false)`, so a restore or
+  a spawned window arriving mid-sentence never takes back `pasteMode` or `spawnPending`.
   → journal: *Restarting keeps the binding, and never interrupts a sentence (2026-09-09)*
 - **Wait for `busy == false` and then ten quiet seconds after the last delivery** (2026-09-23,
   superseding *six seconds after the row stops saying `listening`*). `GET /test/state.busy` is
