@@ -12374,3 +12374,42 @@ took the nil for *no words*. Now a nil answer with `ready` false afterwards is e
 load window started over, once. After: delivered 10.6 s after the stop via `local-fallback`
 (`report-fix1b.md`). The helper's `ready` staying true on a dead pid (TL7) is left to its own batch.
 
+
+## Fixes to the test plan's findings, batch 2 (2026-09-26)
+
+The second batch: where a sentence **goes** — the recipient, the unbound hold, the binds that are
+not gestures — and the two receipts that said *busy* or *delivered* too early. Victor's decisions
+(*Decisions on the test plan's findings*) are the spec. Harness rows after the fix:
+`evals/plan/report-fix2.md` (routes) and `report-fix2b.md` (gestures and real audio, under the
+hands-off locks).
+
+### 1. The recipient is latched whole: which terminal, at the microphone's close
+
+Victor, Q2: *"a bind during transcription/panel does NOT redirect: the recipient is the terminal
+that was bound while he spoke"* — *"vechi, ca poate vreau să deschid altă dictare deja"*.
+
+- The close used to latch one bit — caret or not (`latchedAtCaret`) — and `commit` asked
+  `terminal.target` when the words came back, one to seven seconds later. So a bind to B in the
+  settle (TR24: A 0 chars, B 229), under the panel (TD4, TG19: `to=terminal:<B>`) sent A's
+  sentence to B, and an unbind in the same seconds (TD29) held it for whatever was bound next.
+- **`dictationStoppedListening` latches the terminal** (`AppDelegate.latch`, beside
+  `latchedAtCaret`); `deliver` takes it before any early return (so a caret sentence cannot leave
+  one behind for the next), `send` puts it on `Message.target`, and `commit` hands it to
+  `deliverToTerminal(_:line:to:)` → `TerminalBinding.deliver(_:to:)`. A sentence with no close on
+  this side (`POST /test/dictation`, a screenshot) is addressed at `send`, which is still before
+  the panel's seconds.
+- **`target == nil` is *the next bind***: nothing bound at the close (item 2), a spawn, or an
+  *Active Terminals* pick still binding. `commit` then delivers to the binding if one has landed
+  since, else holds; a held sentence's target is cleared, so its release goes to the bind it
+  waited for.
+- **An unbind after the latch does not hold the sentence**: it goes to the latched terminal while
+  that lives, else to the caret (batch 1's Q4 rule). A latched target found gone lets the binding
+  go only if it *is* the binding (`TerminalBinding.unbind(ifAddress:)`, and `report` calls
+  `showBound(nil)` only when nothing is bound any more) — a dead A must not unbind the B bound
+  since.
+- `GET /test/state` gains `latchedTarget` (`{tty, address, label}` of the pending latch, else of
+  the prompt on the panel; null otherwise) and `latchedTargetPending`, true while a sentence is in
+  the air whose answer is *the next bind*.
+- Left as it was: the chip and the panel's title show the binding **now**, so after a rebind under
+  the panel the title names B while the words go to A. The fix is the delivery; the title is a
+  separate change.

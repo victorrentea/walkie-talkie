@@ -76,8 +76,9 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   bound terminal; 🔼 ← cancel; 🔼 ↑ new session; 🔼 ↓ kamikaze; ◀️-held + 🔼 bind; 🔽 = plain
   dictation (words only, follows the Engine); 🔽 → Return (mid plain dictation: stop, insert, Return).
 - **Unbound, everything still works:** the sentence is held 5 min for the next bind.
-- **The recipient is latched when the microphone closes.** A deliberate bind mid-sentence redirects;
-  the 10 s poll never may.
+- **The recipient is latched when the microphone closes — which terminal, not only *not the caret*.**
+  A deliberate bind mid-sentence redirects; the 10 s poll never may; a bind or unbind after the close
+  changes nothing (Q2, 2026-09-26).
 
 ## Never reintroduce
 

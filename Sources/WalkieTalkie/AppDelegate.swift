@@ -1207,6 +1207,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var engine: String = ""
         /// …and what the source said about who had already inserted it.
         var deliveryKind: DictationDelivery = .route
+        /// **The terminal these words are for, latched when the microphone
+        /// closed** (2026-09-26, Victor's Q2: *"vechi, ca poate vreau să deschid
+        /// altă dictare deja"* — the recipient is the terminal bound while he
+        /// spoke). `commit` delivers here whatever was bound, rebound or unbound
+        /// in the seconds since — the settle, the panel. Nil is *the next bind*:
+        /// nothing was bound at the close (Q1), a spawn, or an *Active
+        /// Terminals* pick still on its way. → `latch`, `deliverToTerminal`
+        var target: TerminalBinding.Target?
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -2958,6 +2966,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // An *Active Terminals* pick whose bind has not landed yet is a
         // terminal destination already (`redirectSpawn`), not the caret.
         latchedAtCaret = pasteMode || (!isBound && !spawnPending && spawnPickInFlight == nil)
+        // **And which terminal — the whole recipient, not only *not the caret***
+        // (2026-09-26, Victor's Q2). Until then the close latched the caret
+        // question alone and `commit` asked `terminal.target` when the words
+        // came back, 1–7 s later: a bind to B in the settle or under the panel
+        // sent A's sentence to B (TD4, TR24, TG19), an unbind held it for
+        // whatever came next (TD29). Nil for a spawn, and for an *Active
+        // Terminals* pick whose bind has not landed: the pick is the recipient.
+        latch = Latch(target: latchedAtCaret || spawnPending || spawnPickInFlight != nil
+                              ? nil : terminal.target)
         settleTake = latchedAtCaret ? lastTake() : []
         // **And where he was looking when he stopped talking** — the screen a
         // spawned window opens on (`SpawnTerminal.board(preferring:)`). Latched
@@ -3000,6 +3017,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Where this sentence is going, decided at the close and read when the words
     /// arrive seconds later.
     private var latchedAtCaret = false
+
+    /// **The terminal half of the same decision** — see `Message.target`. Set at
+    /// the close, taken (and cleared) by `deliver`, which hands it to `send`; a
+    /// sentence that never had a close on this side (`POST /test/dictation`, a
+    /// Wispr row) has none, and is addressed to the binding as it is at `send`.
+    private struct Latch { let target: TerminalBinding.Target? }
+    private var latch: Latch?
 
     /// The pointer at the close, in Cocoa screen coordinates — which display a
     /// spawn prefers. Nil until a microphone has closed, and the spawn reads the
@@ -3143,6 +3167,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliver(_ result: DictationResult) {
+        // Taken here, before any early return, so a caret sentence or one the
+        // source inserted itself cannot leave its latch for the next sentence.
+        let latched = latch
+        latch = nil
         guard !transcriptDisowned else {
             transcriptDisowned = false
             Log.info("🗑️ a transcript arrived for the sentence cancelled in flight — dropped, nothing delivered")
@@ -3259,7 +3287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the words through the prompt panel instead. `⚡ ring down: routed to
         // …` is the one line in the file that says the wrap worked.
         endSettling(reason: atCaret ? "pasting at the caret"
-                                    : "routed to \(terminal.target?.label ?? "the bound session")")
+                                    : "routed to \((latched.map { $0.target } ?? terminal.target)?.label ?? "the next bind")")
         guard !atCaret else {
             // **The caret's envelope**: the words, plus whatever he attached
             // while speaking. No outbox line, no terminal, no prompt panel and no
@@ -3298,7 +3326,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pasteHint.pulse(reason: "a caret sentence has just landed")
             return
         }
-        send(kind: "dictation", text: result.text, app: app)
+        send(kind: "dictation", text: result.text, app: app, latched: latched)
     }
 
     /// The session is over, whichever way it ended.
@@ -5631,6 +5659,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             out["bound"] = NSNull()
         }
+        // **The recipient the close latched** (Q2) — while the words are on
+        // their way (`latch`), then while the panel holds them (`held`). Null
+        // when there is none, or when it is *the next bind* (nothing bound at
+        // the close, a spawn); `latchedTargetPending` says a sentence is in the
+        // air with that answer.
+        let latchedTarget: TerminalBinding.Target?? = latch.map { $0.target } ?? held.map { $0.target }
+        if let t = latchedTarget ?? nil {
+            out["latchedTarget"] = ["tty": t.handle.tty ?? "", "address": t.address, "label": t.label]
+        } else {
+            out["latchedTarget"] = NSNull()
+        }
+        out["latchedTargetPending"] = latchedTarget != nil
         out["historyRow"] = wisprSource.historyRow.map { NSNumber(value: $0) } ?? NSNull()
         out["firewall"] = hotkeys.wisprFirewallOn
         out["tapAlive"] = hotkeys.lastCanary.map { $0.alive } ?? NSNull()
@@ -6072,15 +6112,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `report`, and a terminal that turned out to be gone gets the words at the
     /// caret instead (Victor's Q4).
     ///
-    private func deliverToTerminal(_ m: Message, line: String) {
-        guard let target = terminal.target, !line.isEmpty else { return }
+    /// **`to` is the recipient latched at the close** (Q2), which need not be
+    /// the terminal bound now: a bind since then does not redirect the sentence,
+    /// an unbind does not hold it.
+    private func deliverToTerminal(_ m: Message, line: String, to target: TerminalBinding.Target) {
+        guard !line.isEmpty else { return }
         let to = "terminal:\(target.handle.tty ?? target.address)"
 
         // Counted so a restart waits for the keystrokes to finish (`restartBlockers`).
         deliveriesInFlight += 1
         deliveryQueue.async { [weak self] in
             guard let self = self else { return }
-            let outcome = self.terminal.deliver(line)
+            let outcome = self.terminal.deliver(line, to: target)
             DispatchQueue.main.async {
                 self.deliveriesInFlight -= 1
                 switch outcome {
@@ -6123,7 +6166,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             break
         case .targetGone(let what):
             Log.error("⌨️ \(what) — unbound" + (pastedAtCaret ? "; the sentence was pasted at the caret instead" : ""))
-            showBound(nil)
+            // Only when it was the binding: a latched A found dead leaves the B
+            // bound since where it is (`TerminalBinding.deliver(_:to:)`).
+            if terminal.target == nil { showBound(nil) }
             overlay.flash(pastedAtCaret ? "⚠️ \(what) — pasted at the caret instead"
                                         : "⚠️ \(what) — unbound", duration: 6)
         case .wouldRunAsShell(let command):
@@ -8202,7 +8247,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         announceEnd("app terminate")
     }
 
-    private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil) {
+    private func send(kind: String, text: String? = nil, paths: [String] = [], app: String? = nil,
+                      latched: Latch? = nil) {
         // **The outbox is not written either.** It used to be, on the grounds
         // that an agent might be watching the queue without a binding — the
         // `/relay` skill's original mode. Victor settled it on 2026-08-27: with
@@ -8231,6 +8277,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let via = pendingVia ?? "test"
         let engine = pendingEngine ?? ""
         let deliveryKind = pendingDeliveryKind ?? .route
+        // **The recipient: the one latched at the close, else the binding now**
+        // — see `Message.target`. A sentence with no close behind it (the test
+        // route, a screenshot) is addressed here, before the panel's seconds.
+        let target = latched.map { $0.target } ?? terminal.target
         if kind == "dictation" { spawnPending = false; spawnFolder = nil
                                  pendingVia = nil; pendingEngine = nil
                                  pendingDeliveryKind = nil }
@@ -8334,7 +8384,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory, via: via, engine: engine,
-                              deliveryKind: deliveryKind)
+                              deliveryKind: deliveryKind, target: spawn ? nil : target)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -8549,13 +8599,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Held too while an *Active Terminals* pick is still binding**
         // (`spawnPickInFlight`): the terminal bound right now is the one he
         // just turned away from, and the pick's `showBound` releases this.
-        if m.kind == "dictation", !m.spawn, !isBound || spawnPickInFlight != nil {
+        // **A latched terminal is not held**, even if it has been unbound since
+        // (Q2, TD29): the words go to it while it lives, else to the caret. Nil
+        // is *the next bind* — now, if one has landed since the close (TG18),
+        // else held for it (Q1).
+        if m.kind == "dictation", !m.spawn, (m.target == nil && !isBound) || spawnPickInFlight != nil {
             // **Recorded even though nothing is written** — that is the point of
             // the record. A held sentence lives in memory and nowhere else
             // (*When the outbox is written*), so `held` is the one destination
             // the file could never name.
             recordDelivery(via: m.via, kind: m.deliveryKind, to: "held")
             if spawnPickInFlight != nil { pickHeld = true }
+            // Whatever it was addressed to, it now waits for the bind — the
+            // pick's, or the next one.
+            var m = m
+            m.target = nil
             return holdForBind(m, quietly: spawnPickInFlight != nil)
         }
         // **A bound terminal gets its outbox line after the words went in, never
@@ -8567,8 +8625,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // saying what actually landed. A spawn, `session_end` and anything with
         // no terminal to type into are written here as before: for those the
         // outbox *is* the delivery (a watcher reads it).
-        if m.kind != "session_end", !m.spawn, terminal.target != nil {
-            deliverToTerminal(m, line: line)
+        if m.kind != "session_end", !m.spawn, let target = m.target ?? terminal.target {
+            deliverToTerminal(m, line: line, to: target)
         } else {
             let delivery = m.kind == "dictation"
                 ? recordDelivery(via: m.via, kind: m.deliveryKind,

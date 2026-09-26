@@ -524,6 +524,14 @@ final class TerminalBinding {
             .contains { !$0.isTerminated }
     }
 
+    /// Let go only if the binding is still `address` — see `deliver(_:to:)`.
+    func unbind(ifAddress address: String) {
+        lock.lock()
+        let same = current?.address == address
+        lock.unlock()
+        if same { unbind() }
+    }
+
     func unbind() {
         lock.lock()
         let had = current
@@ -550,8 +558,16 @@ final class TerminalBinding {
     /// the session crashes, and the tab goes back to being a prompt with the
     /// binding still pointing at it. It fails **closed** — a target we cannot
     /// interrogate is treated as a shell.
-    func deliver(_ text: String) -> Outcome {
-        guard let target = target else { return .noTarget }
+    ///
+    /// **`to`: the target latched when the microphone closed** (2026-09-26,
+    /// Victor's Q2: *the recipient is the terminal that was bound while he
+    /// spoke*). A bind, rebind or unbind since then does not move the sentence;
+    /// it goes to the terminal named here, which need not be the one bound now.
+    /// A target found gone lets go of the binding only when it **is** the
+    /// binding — a latched A that died must not unbind the B bound since.
+    func deliver(_ text: String, to latched: Target? = nil) -> Outcome {
+        guard let target = latched ?? target else { return .noTarget }
+        let unbind: () -> Void = { [weak self] in self?.unbind(ifAddress: target.address) }
         let line = Self.singleLine(text)
         guard !line.isEmpty else { return .failed("nothing to send") }
 
