@@ -12,8 +12,8 @@ Tonight's queue (`--all --min-seconds 3`, max 120 s): 1529 clips, 765 min of aud
 
 | check | result |
 |---|---|
-| Wispr Flow running | **NO** — no process at all (`/bin/ps -ax`). Start it with `open "/Applications/Wispr Flow.app"`, **never `open -a "Wispr Flow"`** (the nested helper quits in ~100 ms) |
-| Wispr's microphone (`config.json` → `overrideAudioDeviceId`) | **`DJI Mic Mini-B83BBE (Bluetooth)`**, not `🎓 TO Wispr`. Only Victor can change it: Wispr → Settings → Microphone → `🎓 TO Wispr`, then **close the Settings window** (it holds the mic open; the preflight refuses while it is up) |
+| Wispr Flow running | **yes since 12:49** (pid 87959, launched by path). At 12:40 it was **NO** — no process at all (`/bin/ps -ax`). Start it with `open "/Applications/Wispr Flow.app"`, **never `open -a "Wispr Flow"`** (the nested helper quits in ~100 ms) |
+| Wispr's microphone (`config.json` → `overrideAudioDeviceId`) | was **`DJI Mic Mini-B83BBE (Bluetooth)`** (`5114008e…`). **Fixed 12:49** without the GUI: Wispr down, `overrideAudioDeviceId` set to `90960c04…` (`🎓 TO Wispr (Virtual)`, already listed in `rankedAudioDevices`), relaunched by path; Wispr rewrote the file and kept it. Its main window opened at launch and was closed (the preflight refuses while one is up). Preflight then exit 0, `✓ Wispr microphone: 🎓 TO Wispr (Virtual)`. Undo: §6 step 3 |
 | Loopback device present | yes, `🎓 TO Wispr` in `SwitchAudioSource -a -t input` and output, index 14 |
 | pass-thru alive (440 Hz played into the device, recorded from it) | alive — 440 Hz share 100 %, RMS 0.212 |
 | extra sources on the device (`teacher_label.extra_sources()`) | none — Pass-Thru only, no microphone mixed in |
@@ -197,8 +197,19 @@ Percent of audio DURATION, not of clips — the clip share (53.8 % today) is the
 
 1. `--stop-after` ends it at 07:00 by itself; else §5.
 2. Final report (§5), plus `tonight` from the corpus query.
-3. **Victor: Wispr → Settings → Microphone → back to his microphone** — `🎓 TO Wispr` is Pass-Thru
-   only, so his next Wispr dictation would record silence.
+3. **Put Wispr's microphone back on Victor's `DJI Mic Mini-B83BBE (Bluetooth)`** — `🎓 TO Wispr` is
+   Pass-Thru only, so his next Wispr dictation would record silence. One line (Wispr must be down
+   while `config.json` is edited: it ignores SIGTERM/`quit` and rewrites the file on its own schedule;
+   `5114008e…` is the DJI's id in Wispr's `rankedAudioDevices`, the value it had until 2026-09-26):
+
+   ```
+   pkill -9 -f "^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"; sleep 2; sed -i '' 's/"overrideAudioDeviceId": "[0-9a-f]*"/"overrideAudioDeviceId": "5114008e73b883f5298c46c0112709c40242efde8cce85c18708a2dca2b34a36"/' ~/Library/Application\ Support/Wispr\ Flow/config.json; open "/Applications/Wispr Flow.app"
+   ```
+
+   Wispr opens its main window at launch; close it. Backup from before the pin:
+   `config.json.bak-20260926-1350` next to `config.json`. For the next night the same line with
+   `90960c04e150483754397ecc46f7cba6f1c426245a2fa3ce6b1a8f498d3e5faf` (`🎓 TO Wispr (Virtual)`) pins
+   it again; the id is stable across relaunches, so no GUI click is needed.
 4. `rm -f ~/.walkie-talkie/wispr-loop.lock` if it still names the dead pid.
 
 ## 7. The runner lock
