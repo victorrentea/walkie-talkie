@@ -2972,6 +2972,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // left to end, and a deadline left standing would fire into whatever
         // sentence is open ten minutes from now.
         disarmDictationCeiling()
+        // **The orphan clock starts again here** (2026-09-26, TL1/TD8): its two
+        // minutes are *no transcript since the stop* — see `orphanTimerFired`.
+        stateLock.lock()
+        let booked = dictationInFlight
+        stateLock.unlock()
+        if booked { armOrphanFlush() }
         // **One last look at what is highlighted**, before `syncBorrowedGestures`
         // takes the watcher down — a highlight made in the last seconds of a
         // sentence never gets its three settling reads, and that is exactly when
@@ -4600,10 +4606,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             self.orphanFlush?.cancel()
-            let work = DispatchWorkItem { [weak self] in self?.flushOrphaned() }
+            let work = DispatchWorkItem { [weak self] in self?.orphanTimerFired() }
             self.orphanFlush = work
             DispatchQueue.main.asyncAfter(deadline: .now() + self.orphanTimeout, execute: work)
         }
+    }
+
+    /// **The two minutes are counted from the stop, not from the start**
+    /// (2026-09-26, the test plan's §3.6 / R6: TL1, TD8). The timer is armed
+    /// when a sentence is booked, and a sentence still open at 120 s — a long
+    /// one, or one held open from a desk — had its envelope wiped under it:
+    /// context, selection, markers, `dictationStartedAt`, and its shots sent to
+    /// the terminal on their own while he was still talking. Now a sentence in
+    /// flight (open, settling, or its words on their way) is left alone and the
+    /// timer re-armed; `dictationStoppedListening` re-arms it from the stop.
+    /// Main queue.
+    private func orphanTimerFired() {
+        if listening || settling || fallingBack || source.phase.isWaitingForWords {
+            Log.info("orphan timer: the sentence is still in flight — its envelope stays; re-armed")
+            return armOrphanFlush()
+        }
+        flushOrphaned()
     }
 
     /// No transcript came. Release deliberate shots so they are never lost; the

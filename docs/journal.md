@@ -12570,3 +12570,18 @@ for the model, not the other way round. This replaces the banked gesture (`recor
   sentences: F11 cancels, the switch is refused while it records, the back click stays clean.
 - `onCleanHold`'s press guard, which read the bank, now reads `phase.isWaitingForWords` instead
   (item 5's rule, one line early).
+
+### 2. The 120 s orphan flush waits for the sentence in flight
+
+The test plan's §3.6 / R6: *"The 120 s orphan flush fires mid-sentence (no `listening` check) —
+context, selection, markers, `dictationStartedAt` gone; shots go out alone."* Measured before:
+TL1 (a desk sentence open 121 s: `dictationStartedAt` null, `releasing 1 shot(s)` while
+listening) and TD8 (a wheel shot sent to the bound terminal alone at +120 s, the sentence still
+open).
+
+- The timer, armed when a sentence is booked, now fires into **`orphanTimerFired`**, which does
+  nothing while `listening || settling || fallingBack || phase.isWaitingForWords` and re-arms
+  itself (`orphan timer: the sentence is still in flight — its envelope stays; re-armed`).
+- **`dictationStoppedListening` re-arms it** for a booked sentence, so its two minutes mean *no
+  transcript since the stop*. The direct call from `abandonDictation` is unchanged — that path is
+  a sentence that has ended without words and should release its shots now.
