@@ -939,10 +939,11 @@ def tg19():
 
 
 @case("TG20", tags=("gesture", "audio"),
-      expect="positive control: 🔽↓ F12 in the settle → `lastDelivery.to == held`, `awaitingBind`; the next bind "
-             "delivers it to the terminal and clears `awaitingBind`")
+      expect="🔽↓ F12 (unbind) in the settle → the words still land in the terminal latched at the close "
+             "(Victor's Q2, 2026-09-26: an unbind after the latch does not hold the sentence); nothing held")
 def tg20():
-    """F12 during the settle → held for a bind, then the bind delivers."""
+    """F12 during the settle. Until 2026-09-26 the expectation was *held for the next bind*; Q2 latches the
+    whole recipient at the close, so the case now asserts the sentence reaches the unbound witness."""
     with G("TG20") as g:
         why = need_el() or need_audio()
         if why:
@@ -958,22 +959,20 @@ def tg20():
             return g.done("FAIL", "the F10 stop did not land")
         early = "📦 delivery:" in log_since(m)
         g.step("back-down")
+        unbound = wait_for(lambda: st().get("bound") is None, 3, 0.05)
         wait_delivery(m, 40)
         time.sleep(0.8)
         s1 = st()
         to1, held1 = (s1.get("lastDelivery") or {}).get("to", ""), s1.get("awaitingBind")
-        m2 = log_mark()
-        bind_witness()
-        released = wait_for(lambda: not st().get("awaitingBind", True), 10, 0.2)
-        wait_for(lambda: "📦 delivery:" in log_since(m2), 8, 0.2)
-        time.sleep(1.0)
-        to2 = (st().get("lastDelivery") or {}).get("to", "")
-        msg = (f"after F12: to={to1!r}, awaitingBind={held1}; after the bind: released={bool(released)}, "
-               f"to={to2!r}; witness {len(witness_text())} chars")
+        chars = len(witness_text())
+        msg = (f"unbound by F12={bool(unbound)}; after it: to={to1!r}, awaitingBind={held1}, "
+               f"bound={s1.get('bound')}; witness {chars} chars")
         if early:
             return g.done("FAIL", "delivered before the unbind landed — inconclusive · " + msg)
-        if to1 == "held" and held1 and released and to2.endswith(tty):
+        if unbound and to1.endswith(tty) and not held1 and chars > 0:
             return g.done("PASS", msg)
+        if to1 == "held" and held1:
+            return g.done("BUG", "held by an unbind after the close (Q2 says: the latched terminal) · " + msg)
         return g.done("FAIL", msg)
 
 
