@@ -12170,3 +12170,26 @@ text remains ~centered at all times"*.
 - Seen at 07:06: the wake canary reported the tap dead; at 07:13 two `/test/gesture` F10 posts
   started nothing; at 07:14 the canary found it alive without a restart. Incident #25 of the test
   plan, reproduced by accident.
+
+## Harness gaps G1, G3, G4, G7 closed (2026-09-26, 11:00–11:20)
+
+- **G1** `POST /test/mic {"device"}`: a process-local override in `InputDevice.resolve()`. The
+  first real-audio desk test ever: a corpus WAV played with `sounddevice` into Loopback's
+  `🎓 TO Wispr` (48 kHz, 2 ch, pass-thru checked with a 440 Hz tone — 100 %), F10 over
+  `/test/gesture`, the caption heard 24 words, the batch correction ran (identical text), the
+  delivery landed in a witness Terminal tab running `cat`. No speaker.
+- **G3** `POST /test/eleven`: a fault consumed per attempt inside `ElevenLabsSource.transcribe`,
+  which now settles fake answers through the same `settle()` as the real ones. **The first
+  injected 401 was eaten by the caption's rolling correction**, and the delivery went through
+  real — so faults have a `scope` (`final` by default). The same run showed the correction
+  retrying 0.3 s after its failure (the 0.5 s timer); a failed correction now holds 5 s.
+  **T-L12 passed**: 401 on the final upload → `↪️ … on this Mac instead` → cold model up in
+  6 s → `local-fallback` delivered 7.3 s after the mic closed. The plan's "never run live" is over.
+- **G4** `POST /test/whisper`: SIGKILL/SIGSTOP/SIGCONT/restart. Verified the finding: with
+  `SIGPIPE` at its default the next write into the dead helper would have killed the app;
+  now `signal(SIGPIPE, SIG_IGN)` at launch, the write throws, `markDead` clears `ready`, `proc`
+  and the pid, and `restart` brings a new helper up in 3 s (weights cached). The app's pid did
+  not change across kill → request → restart.
+- **G7** `/test/state`: `fallingBack`, `autosend`, `lastFailure`, `recoverable`, `live` (the
+  socket's counters), `elevenFault`, `elevenCost`, `micOpened`, `whisper`. Not yet:
+  `lastCorpus`, the band's `frame`/`screen`.

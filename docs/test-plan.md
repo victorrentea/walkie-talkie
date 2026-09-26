@@ -297,11 +297,11 @@ prompts in the harness report (`scratchpad`, to be moved under `evals/codex/`).
 |---|---|---|
 | G1 | `POST /test/mic {"device"}` override | `InputDevice.testOverride` in `resolve()`; `picker.onTestMic` AD:1616 |
 | G2 | `POST /test/feed {"wav"}` | `MicRecorder.feed(url)` beside `insert(_:)` MR:507 |
-| G3 | `POST /test/eleven {"fail":"429|429x2|500|401|422|timeout|transport|unreadable|empty","delayMs","lang":{code,p},"live":"drop|never-open|error:<type>","once"}` / `{"clear"}` | static `ElevenLabsSource.fault` at the top of `transcribe(attempt:)` ELS:509; `ElevenLabsLive.receive/handle` |
-| G4 | `POST /test/whisper {"kill"|"stop"|"cont"|"restart"}`; `/engine.whisper.alive,pid` | `LocalWhisper.helperPID` TR:227; **add `signal(SIGPIPE, SIG_IGN)` + clear `ready` on EOF** |
+| G3 ✅ 2026-09-26 | `POST /test/eleven {"fail":…,"delayMs","scope":"final|correction|any","lang":{code,p},"live":"drop|never-open|error:<type>","once"}` / `{"clear":true}` — T-L12 passed at 11:17 (401 → local fallback delivered in 7.3 s, cold model). Lesson: the first fault was eaten by the caption's rolling correction, hence `scope` (default `final`); a failed correction now holds 5 s before retrying (the 0.5 s timer re-uploaded 0.3 s after the failure) | `ElevenLabsSource.fault`, `settle()` in `transcribe`; `ElevenLabsLive.fault` |
+| G4 ✅ 2026-09-26 | `POST /test/whisper {"kill"|"stop"|"cont"|"restart"}`; `/engine.whisper.alive,pid`; `SIGPIPE` ignored, `ready` cleared on EOF/EPIPE — verified 11:18: SIGKILL → the next request fails in 0.1 s with the app alive (pid unchanged), restart brings a new helper up in 3 s | `LocalWhisper.signalHelper`, `markDead` |
 | G5 | `POST /test/prompt {"do":"send|cancel|edit","text"}`; state `prompt{held,verb,deadline,text}` | RW:5023/5031 |
 | G6 | `POST /test/autosend {"on"}`; state `autosend` | AD:1316 |
-| G7 | state: `fallingBack`, `lastFailure`, `recoverable{path,expiresAt}`, `live{socket,chunksSent,pending,lastType,committedChars,cutSeconds,corrections}`, `lastCorpus`, `mic{opened,rate,ch}`, `liveCaption.frame,screen`, `eleven.cost` | `stateSnapshot` AD:5390 |
+| G7 ✅ 2026-09-26 (partly) | state: `fallingBack`, `autosend`, `lastFailure`, `recoverable`, `live{…}`, `elevenFault`, `elevenCost`, `micOpened`, `whisper` — done; `lastCorpus` and `liveCaption.frame/screen` still to add | `stateSnapshot` |
 | G8 | `POST /test/live-caption {"script":[{at,text,partial,gentle}]}`, `{"trace":{"seconds"}}` → per-tick `[t,anchor,velocity,dropped,lineWidth,reflowing,eraseFront]` | `LiveCaptionBand.tick` |
 | G9 | `POST /test/ceiling {"seconds"}` | `armDictationCeiling` |
 | G10 | `POST /test/run {"id"}` → `"harness":id` on corpus rows and outbox lines | `VoiceCorpus`, `Outbox.send` |
@@ -498,9 +498,9 @@ longer span; **B5** menu row shows `$x.xx` growing by (live s × 0.39 × 1.2 + b
 
 ## 8. Order of work
 
-1. **Close G1 + G3 + G4 + G7** (one afternoon): the mic override, the fault switch, the helper
-   kill/hang route + `SIGPIPE`, the missing state fields. These four turn most [AUDIO]/[NET] cases
-   into desk tests and make the batch correction observable.
+1. ~~Close G1 + G3 + G4 + G7~~ — done 2026-09-26 morning (G7 minus two fields). Real audio goes
+   through `POST /test/mic {"device":"TO Wispr"}` + a `sounddevice` player into the Loopback
+   (`scratchpad/looprun.sh` is the working prototype; move it under `evals/plan/`).
 2. Run **T-L 1–7, 22–24, 26–27**, **T-D 1, 2, 5, 6, 10, 11, 29, 31**, **T-G 1–4, 6–7, 10–11, 14–17, 19, 25–26, 28–30, 36, 41**, **LC 1–17** — all pure
    HTTP, today, in one script (`evals/plan/run-http.sh`, to write), each case leaving the relay as
    it found it.
