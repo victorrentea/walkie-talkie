@@ -6049,7 +6049,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Off the main thread for the same reason binding is: this is subprocesses
     /// all the way down. **The outbox line and `lastDelivery` are written here, on
     /// `.delivered` only** (2026-09-26) — see `commit`. Everything else is said by
-    /// `report`.
+    /// `report`, and a terminal that turned out to be gone gets the words at the
+    /// caret instead (Victor's Q4).
     ///
     private func deliverToTerminal(_ m: Message, line: String) {
         guard let target = terminal.target, !line.isEmpty else { return }
@@ -6067,10 +6068,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let delivery = m.kind == "dictation"
                         ? self.recordDelivery(via: m.via, kind: m.deliveryKind, to: to) : nil
                     self.writeOutbox(m, line: line, delivery: delivery)
+                case .targetGone:
+                    // **Q4 — a dead terminal at delivery: paste at the caret**
+                    // (Victor, 2026-09-26), not held. The binding goes
+                    // (`report`); the sentence does not go with it. The whole
+                    // envelope, since it was addressed to an agent. No outbox
+                    // line, as for every caret sentence; `lastDelivery` says
+                    // `caret`. Measured before: TR20, the tab closed while he
+                    // spoke → `targetGone` and a `delivered` row for a dead tty.
+                    if m.kind == "dictation" {
+                        self.recordDelivery(via: m.via, kind: m.deliveryKind, to: "caret")
+                        self.pasteText(line)
+                    }
                 default:
                     break
                 }
-                self.report(outcome)
+                self.report(outcome, pastedAtCaret: m.kind == "dictation")
             }
         }
     }
@@ -6082,16 +6095,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// saying the same thing would be a panel thrown across Victor's work to
     /// repeat what the target already shows. Every other outcome is a message
     /// that goes nowhere unless this says so.
-    private func report(_ outcome: TerminalBinding.Outcome) {
+    private func report(_ outcome: TerminalBinding.Outcome, pastedAtCaret: Bool = false) {
         switch outcome {
         case .delivered:
             Log.info("⌨️ delivered to the bound terminal")
         case .noTarget:
             break
         case .targetGone(let what):
-            Log.error("⌨️ \(what) — unbound")
+            Log.error("⌨️ \(what) — unbound" + (pastedAtCaret ? "; the sentence was pasted at the caret instead" : ""))
             showBound(nil)
-            overlay.flash("⚠️ \(what) — unbound", duration: 6)
+            overlay.flash(pastedAtCaret ? "⚠️ \(what) — pasted at the caret instead"
+                                        : "⚠️ \(what) — unbound", duration: 6)
         case .wouldRunAsShell(let command):
             // A shell at its prompt, or since 2026-09-26 a program that hands the
             // line to one (`TerminalBinding.shellCarriers`, Victor's Q5). Nothing

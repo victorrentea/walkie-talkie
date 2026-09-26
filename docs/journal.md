@@ -12324,3 +12324,14 @@ returns nil, which `POST /bind` answers with 409 and the restore, the menu rebin
 *Active Terminals* pick already handle. TD1 (`ttys999`) and TD14 (a pty an IDE-like process owns,
 no tab) were `200` + a lost sentence; both are `409` now.
 
+#### (b) A terminal gone at delivery: the words go to the caret
+
+Victor, Q4: *"a dead terminal at delivery: **paste at the caret** (not held)."* `deliverToTerminal`
+on `.targetGone` records `lastDelivery` as `caret` and `pasteText`s the whole envelope (it was
+addressed to an agent); `report` unbinds as before and the flash says `⚠️ ttysNNN is gone — pasted
+at the caret instead`. No outbox line, as for every caret sentence. TR20 (tab closed while he
+spoke) used to end with a `delivered` row for the dead tty and the words nowhere. **The case was
+changed, not the decision:** it accepted *held or pasted*; it now asserts `to=caret` and the words
+in the relay's own sink window made key first — which takes the front, so TR20 is tagged
+`gesture` and runs only under the hands-off locks.
+

@@ -1028,13 +1028,18 @@ def td31():
 
 # ================================================================ T-R 20-22
 
-@case("TR20", tags=("http", "tty"),
-      expect="terminal closed mid-sentence → the sentence is held (or pasted), no 'delivered' row for the dead tty")
+@case("TR20", tags=("http", "tty", "gesture"),
+      expect="terminal closed mid-sentence → the sentence is pasted at the caret (Victor's Q4, 2026-09-26), "
+             "no 'delivered' row for the dead tty")
 def tr20():
-    """Tab closed while the dictation is open; the words arrive for a dead binding (§3.11)."""
+    """Tab closed while the dictation is open; the words arrive for a dead binding (§3.11).
+    Since Q4 they are pasted at the caret — caught by the relay's own sink window, made key first,
+    which is why this case needs hands-off (the sink takes the front)."""
     _fresh()
     tb = None
     try:
+        post("/test/sink", {"on": True})
+        time.sleep(0.3)
         tb = open_b()
         bind_tty(tb)
         if _bound_tty() != tb:
@@ -1044,6 +1049,9 @@ def tr20():
             return "FAIL", "the test dictation never opened"
         close_b(tb)
         time.sleep(0.8)
+        post("/test/sink", {"key": True})
+        time.sleep(0.3)
+        post("/test/sink/clear")
         tok, mark, n0, prev = _tok("TR20"), log_mark(), outbox_count(), _delivery_at()
         post("/test/dictation", {"text": f"{tok} words for a tab that was closed"})
         d = _wait_new_delivery(prev, 20) or {}
@@ -1052,15 +1060,19 @@ def tr20():
         s = state()
         rows = [x for x in _new_rows(n0) if tok in (x.get("text") or "")]
         gone = log_has(mark, r"is gone|no Terminal\.app tab")
+        in_sink = tok in (get("/test/sink").get("text") or "")
         facts = (f"B={tb} closed while listening; to={d.get('to')}; rows={[_row_to(x) for x in rows]}; gone logged={gone}; "
-                 f"bound after={s.get('bound')}; awaitingBind={s['awaitingBind']}")
-        if (s["awaitingBind"] or d.get("to") in ("held", "caret")) and not any(_row_to(x) == "terminal:" + tb for x in rows):
+                 f"bound after={s.get('bound')}; awaitingBind={s['awaitingBind']}; pasted into the sink={in_sink}")
+        if d.get("to") == "caret" and in_sink and not any(_row_to(x) == "terminal:" + tb for x in rows):
             return "PASS", facts
         if gone and any(_row_to(x) == "terminal:" + tb for x in rows) and not s["awaitingBind"]:
             return "BUG", "delivered-row for a dead tty, sentence lost — " + facts
         return "FAIL", facts + " | " + _log_excerpt(mark)
     finally:
         close_b(tb)
+        post("/test/sink", {"restore": True})
+        time.sleep(0.2)
+        post("/test/sink", {"on": False})
         _settle()
 
 
