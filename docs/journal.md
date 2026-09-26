@@ -13072,3 +13072,23 @@ and closed at the stop, as before batch 5; no keep-alive chunks, no 15-minute wa
 64-buffer cap, the band opening only on `session_started`). The first caption word will again
 take the handshake (0.3–4 s measured); if the in-app handshake variance is found (the script gets
 0.3–0.45 s), that is the fix, not a warm socket. Next fix batch.
+
+## Q9 decided (2026-09-26, 19:05, Victor): Wispr gets its own chord and is left alone; Walkie keeps right ⌘⌥ held
+
+*"Modifică chordul lui Wispr din setări la ⌘ (dreapta) + Shift, care să funcționeze ca un fel de
+backup, în cazul în care Walkie dă rateu — să rămână întotdeauna neinfluențat de nimic. Walkie rămâne
+cu ⌘ + ⌥ dreapta ținute apăsate să facă dictare la caret, live. De exemplu, dacă sunt în avion și
+n-am mouse-ul la mine."*
+
+- **Wispr Flow's push-to-talk moves to right ⌘ + right ⇧** (`prefs.user.shortcuts` `"54+61": "ptt"` →
+  `"54+60": "ptt"`, edited with Wispr quit, like the microphone pin). A dictation started that way is
+  **Wispr's alone**: Walkie does not adopt it, does not firewall its ⌘V, does not deliver its words —
+  Wispr pastes where the caret is, whatever Walkie's state, even if Walkie is dead. This retires the
+  2026-09-22 adoption of hand-started Wispr sentences and the "Wispr's chord with nothing bound → caret"
+  question (there is nothing for Walkie to route).
+- **Right ⌘ + right ⌥ held = Walkie's clean dictation on the Engine, at the caret, live** (already the
+  behaviour since `c3411de`; the tap's Wispr push-to-talk branch on the same pair goes away, so the
+  pair belongs to Walkie only).
+- Sequencing: the Wispr config edit happens **after tonight's teacher batch** (it posts Wispr's
+  current chord: check `helpers/wispr_loopback.py` for the keycodes and update them to 54+60 in the
+  same change), then Walkie's side in fix batch 6.
