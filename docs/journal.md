@@ -12812,3 +12812,27 @@ panel`), nothing was delivered, and the relay stayed busy until ⎋ by hand."*
 - TD20 now completes with no route and no hand: `sent 4826 chars via autosend; to=terminal:ttys024;
   … begin+end=True; CR=2; literals intact`. Its verdict is **BUG** for another reason — `^C` and
   `ESC[201~` reach the tty raw (R18, control bytes not stripped), which is not this batch's.
+
+### 4. Cancel while the panel is held cancels the panel; 🔼 ↓ marks it; 🔼 ↑ at the caret says it is ignored
+
+Victor, Q6: *"cancel (🔼←, ✕, menu) while the prompt panel is held: **cancels the panel**."* Q7:
+*"F8 on a caret sentence: **stays ignored** (no conversion, no flash)."* And TG16 from the plan: F9
+during the panel was *"ignored though uncommitted"*.
+
+- **🔼 ←, 🔽 ← (its relay-cancel half) and the menu's Cancel Dictation go through
+  `cancelSentenceOrPanel`**: with a prompt held and no microphone open they take the ✕'s own path
+  (`RelayWindow.cancelHeldPrompt` → `releaseHeld(send: false)`), so the Recover semantics are the ✕'s
+  exactly — nothing written to the outbox, the words still `lastDictation` for ⌘⇧P, the picks back in
+  the queue, the paste hint pulsed. One line: `✕ cancelled — N chars never left the overlay (⬅️ a
+  cancel flick (🔼 ← / 🔽 ←) while the panel was held — Q6)`. The menu row is enabled while a prompt
+  is held. TG10: outbox +0 where it used to send at the end of its hold.
+- **Decided here: a microphone open on a newer sentence outranks the panel** — for the cancel and
+  for 🔼 ↓. The flick is made during that sentence; the panel keeps counting, as it did, and has
+  ⎋ and the ✕ of its own. 🔽 ←'s Wispr half (a foreign Wispr sentence) is unchanged.
+- **🔼 ↓ on the held panel marks that prompt** (`toggleHeldKamikaze`): `kamikaze` on its own line, the
+  place `deliver` puts it, and the panel's words are replaced too (`replacePromptWords`) — the
+  release hands the panel's words back and would otherwise take the mark off again. Again = off.
+  TG16: the sent prompt carries it.
+- **🔼 ↑ on a caret sentence** still converts nothing and flashes nothing (Q7), and now says so:
+  `✨ 🔼 ↑ on a caret sentence — ignored (Q7: it stays at the caret)` (TG17; a sentence already a
+  spawn gets its own line).

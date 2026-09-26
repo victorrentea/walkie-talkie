@@ -1297,6 +1297,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onGestureKamikaze = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                // **The prompt on the panel is not committed yet** (2026-09-26,
+                // TG16): it may still be marked, and unmarked. A sentence
+                // still being spoken or transcribed outranks it — it is the
+                // newer one, and the one the flick is made during.
+                if !(self.listening || self.settling), self.held != nil {
+                    self.toggleHeldKamikaze()
+                    return
+                }
                 guard self.listening || self.settling else {
                     Log.info("☠️ kamikaze gesture with no sentence in flight — ignored")
                     return
@@ -1446,11 +1454,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Cancel Dictation means whichever microphone is open**, not only the
         // relay's — same reason the ✕ does, and the same one call.
         status.onCancelDictation = { [weak self] in
-            _ = self?.cancelDictationInFlight(reason: "menu bar Cancel Dictation")
+            self?.cancelSentenceOrPanel(reason: "menu bar Cancel Dictation")
         }
         status.isDictationCancellable = { [weak self] in
             guard let self else { return false }
-            return self.listening || self.source.isRecording || self.speculative
+            return self.listening || self.source.isRecording || self.speculative || self.held != nil
         }
         status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
         // Wispr Flow's microphone, faked — the only way the ⚡ ring, the
@@ -1824,7 +1832,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is untouched — `cancelDictationInFlight` tries `localRecording` first.
         hotkeys.onLocalCancel = { [weak self] in
             DispatchQueue.main.async {
-                _ = self?.cancelDictationInFlight(reason: "⬅️ forward button flicked left")
+                self?.cancelSentenceOrPanel(reason: "⬅️ a cancel flick (🔼 ← / 🔽 ←)")
             }
         }
         // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
@@ -2017,7 +2025,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // (2026-09-22) — see `convertDictationToSpawn`. At rest it opens a
                 // spawn dictation as it always has.
                 if self.listening {
-                    self.convertDictationToSpawn()
+                    // **Q7 (2026-09-26): a caret sentence stays at the caret** —
+                    // ignored, but not in silence (TG17).
+                    if !self.convertDictationToSpawn() {
+                        Log.info(self.pasteMode
+                                 ? "✨ 🔼 ↑ on a caret sentence — ignored (Q7: it stays at the caret)"
+                                 : "✨ 🔼 ↑ on a sentence already headed for a new session — ignored")
+                    }
                     return
                 }
                 self.startDictation(spawn: true)
@@ -4288,6 +4302,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if !quiet { overlay.flash("🗑️ Cancelled", duration: 1.5) }
         return true
+    }
+
+    /// **Cancel while the prompt panel is held cancels the panel** (Victor, Q6,
+    /// 2026-09-26: *"cancel (🔼←, ✕, menu) while the prompt panel is held:
+    /// cancels the panel"*). 🔼 ←, 🔽 ← and the menu's Cancel Dictation used to
+    /// reach only `cancelDictationInFlight`, which found nothing in flight and
+    /// did nothing — the panel then sent itself (TG10). Now they take the ✕'s
+    /// own path (`RelayWindow.cancelHeldPrompt` → `releaseHeld(send: false)`),
+    /// so a cancelled panel is exactly what ✕ / ⎋ leave: nothing written, the
+    /// words still `lastDictation` for ⌘⇧P, the picks back in the queue.
+    ///
+    /// **Decided here:** a microphone open on a newer sentence outranks the
+    /// panel — the flick is made during that sentence, and the panel keeps
+    /// counting as it always has (the panel has ⎋ and ✕ of its own).
+    private func cancelSentenceOrPanel(reason: String) {
+        let micOpen = listening || source.isRecording || speculative
+        if held != nil, !micOpen, overlay.isHoldingPrompt {
+            heldCancelReason = reason
+            overlay.cancelHeldPrompt()
+            return
+        }
+        _ = cancelDictationInFlight(reason: reason)
+    }
+    /// Named in `releaseHeld`'s one `✕ cancelled` line; nil for ✕ / ⎋.
+    private var heldCancelReason: String?
+
+    /// **🔼 ↓ on the held panel marks that prompt** (2026-09-26, TG16): it is
+    /// not committed yet, so the word can still go on — or come off. Same word
+    /// and place as `deliver` puts it, and the panel's words are replaced too,
+    /// or its (unedited) text would be handed back without it at the release.
+    private func toggleHeldKamikaze() {
+        guard var m = held else { return }
+        let marker = "\n\nkamikaze"
+        let text = m.text ?? ""
+        let on = !text.hasSuffix(marker)
+        m.text = on ? text + marker : String(text.dropLast(marker.count))
+        held = m
+        overlay.replacePromptWords(m.text ?? "")
+        Log.info(on ? "☠️ kamikaze — the prompt on the panel closes its agent when done"
+                    : "☠️ kamikaze taken back off the prompt on the panel")
     }
 
     /// **A bind is a dictation coming**, so whatever the source needs time for
@@ -9069,8 +9123,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("✎ transcript edited before sending — \(m.text?.count ?? 0) → \(edited.count) chars")
             m.text = edited
         }
+        let cancelledBy = heldCancelReason
+        heldCancelReason = nil
         guard send else {
-            Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay")
+            Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay\(cancelledBy.map { " (\($0) while the panel was held — Q6)" } ?? "")")
             // The picked elements go back in the queue. Cancel means the sentence
             // was wrong, not that he pointed at the wrong things — and re-taking a
             // pick means finding the element in the page again, which is the
