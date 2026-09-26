@@ -42,6 +42,8 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   `dictationEnded` before anything is torn down, so `deliver` sends it where the sentence was
   going; the result says `via: local-fallback` and warns *X was unavailable*. Only if the local
   model fails too (90 s to come up, or no words) does the old path run (WAV staged for *Recover*).
+  A helper found dead by the fallback's own request (nil answer, `ready` false after it) is brought
+  back up and asked once more (2026-09-26, TR10: it used to give up in 35 ms).
   **No key records anyway** (the start gate is `isReady || recordsOwnAudio`). The settle waits up
   to `fallbackCeiling` 180 s while `fallingBack`. ElevenLabs' `requestTimeout` is 20 s (was 45)
   and a timeout is not retried. Measured: cold model + 3.5 s clip = 6.0 s

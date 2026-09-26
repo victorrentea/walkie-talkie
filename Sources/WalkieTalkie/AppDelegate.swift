@@ -3362,7 +3362,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func transcribeLocally(wav: URL, duration: TimeInterval, standingInFor failed: String,
                                    _ done: @escaping (DictationResult?) -> Void) {
         whisperSource.bringUpModel()
-        let asked = Date()
+        var asked = Date()
+        var revived = false
         func decode() {
             guard whisperSource.isReady else {
                 guard Date().timeIntervalSince(asked) < 90 else {
@@ -3375,6 +3376,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let started = Date()
             whisperSource.transcribe(wav: wav.path) { r in
                 DispatchQueue.main.async {
+                    // **A helper found dead by this very request is brought back
+                    // and asked again** (2026-09-26, the test plan's TR10). A
+                    // SIGKILLed helper still read `ready`, so the write hit a
+                    // closed pipe, `markDead` fired, and the fallback gave up
+                    // 35 ms after it started — the sentence staged for Recover
+                    // while a model was ten seconds from answering. `ready` false
+                    // after a nil answer is exactly that case; once, with the
+                    // 90 s load window started over.
+                    if r == nil, !revived, !self.whisperSource.isReady {
+                        revived = true
+                        asked = Date()
+                        Log.error("↪️ the local helper was dead — bringing it back up and asking again")
+                        self.whisperSource.bringUpModel()
+                        return decode()
+                    }
                     guard let r, !r.text.isEmpty else {
                         Log.error("↪️ the local model heard no words in it")
                         return done(nil)

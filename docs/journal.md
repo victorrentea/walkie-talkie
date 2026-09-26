@@ -12364,3 +12364,13 @@ audio, made by him with the banner in front of him. A local helper that answered
 audio gone); both PASS now (`report-fix1c.md`, TR13 recovered through the local model). TL16's
 expectation was rewritten to the fix (WAV kept, nothing delivered) — it used to *document* the loss.
 
+#### (e) A dead local helper at fallback time is brought back, not given up on
+
+TR10: the helper SIGKILLed, ElevenLabs failing (401) — the fallback ended **35 ms** after it began,
+the sentence staged for Recover while a model was ten seconds from answering. A killed helper
+still read `ready`; the request hit the closed pipe, `markDead` fired, and `transcribeLocally`
+took the nil for *no words*. Now a nil answer with `ready` false afterwards is exactly that case:
+`↪️ the local helper was dead — bringing it back up and asking again`, `bringUpModel()`, the 90 s
+load window started over, once. After: delivered 10.6 s after the stop via `local-fallback`
+(`report-fix1b.md`). The helper's `ready` staying true on a dead pid (TL7) is left to its own batch.
+
