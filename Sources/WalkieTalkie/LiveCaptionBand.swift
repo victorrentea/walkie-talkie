@@ -64,7 +64,15 @@ final class LiveCaptionBand {
     /// After `eraseAfter` seconds without a new word, an eraser front starts
     /// left of the screen and advances right at `eraseSpeed`, a soft edge
     /// `eraseEdge` wide; a new word freezes it where it stands on the line.
-    static let eraseAfter: CFTimeInterval = 2.0
+    /// **Five seconds, not two** (Victor, 2026-09-26 14:20: *"sus, în
+    /// subtitrare, să nu dispară atât de repede textul; fade out-ul din stânga
+    /// să înceapă la vreo cinci secunde"*): two seconds wiped a sentence while
+    /// he was still reading it.
+    /// **Letter by letter, not word by word** (same request: *"fade out-ul să
+    /// se facă literă cu literă în cuvântul din stânga, nu cuvânt cu
+    /// cuvânt"*): a word the soft edge crosses gets one opacity per glyph —
+    /// see `drawWord(_:at:fill:alpha:glyphAlpha:)`.
+    static let eraseAfter: CFTimeInterval = 5.0
     static let eraseSpeed: CGFloat = 260
     static let eraseEdge: CGFloat = 160
 
@@ -212,6 +220,10 @@ final class LiveCaptionBand {
         /// pause has started it; `nil` while words keep coming.
         private var eraseFront: CGFloat?
         private var lastWordsAt: CFTimeInterval = CACurrentMediaTime()
+        /// Per word drawn letter by letter in the last frame (the ones the
+        /// eraser's soft edge crosses): each glyph's eraser opacity. For
+        /// `GET /test/state` only.
+        private var glyphAlphas: [[CGFloat]] = []
 
         override var isFlipped: Bool { false }
         override var wantsUpdateLayer: Bool { false }
@@ -256,7 +268,10 @@ final class LiveCaptionBand {
              "bandWidth": Double(bounds.width), "reflowing": Double(zip(shown, target).map { abs($0 - $1) }.max() ?? 0),
              "corrections": correctionsShown, "correcting": bornAt.keys.sorted(), "ghosts": ghosts.map { $0.word },
              "committed": committed, "opacity": opacity.map { Double(($0 * 100).rounded() / 100) },
-             "eraseFront": eraseFront.map { Double($0) } ?? NSNull()]
+             "eraseFront": eraseFront.map { Double($0) } ?? NSNull(),
+             "eraseAfter": LiveCaptionBand.eraseAfter,
+             "idleFor": Double(now - lastWordsAt),
+             "glyphAlphas": glyphAlphas.map { $0.map { Double(($0 * 100).rounded() / 100) } }]
         }
 
         func reset() {
@@ -273,6 +288,7 @@ final class LiveCaptionBand {
             opacity = []; opacityTarget = []
             eraseFront = nil
             lastWordsAt = CACurrentMediaTime()
+            glyphAlphas = []
             needsDisplay = true
         }
 
@@ -465,10 +481,10 @@ final class LiveCaptionBand {
         }
 
         /// The fill colour and the opacity of visible word `k`: its swap fade-in
-        /// if it is a correction, times how solid it is, times the eraser.
+        /// if it is a correction, times how solid it is. The eraser is not in
+        /// it: `draw` applies that per word or per glyph (`erasure(_:)`).
         private func look(_ k: Int) -> (NSColor, CGFloat) {
             var alpha = k < opacity.count ? opacity[k] : 1
-            alpha *= erased(at: shown[k] + widths[k] / 2)
             var colour = NSColor.white
             if let at = bornAt[dropped + k] {
                 let t = now - at
@@ -487,15 +503,83 @@ final class LiveCaptionBand {
             return min(1, max(0, (x - front) / LiveCaptionBand.eraseEdge))
         }
 
-        private func drawWord(_ word: String, at: NSPoint, fill: NSColor, alpha: CGFloat) {
+        /// How the eraser treats visible word `k`: `whole(a)` — one opacity
+        /// for the word (1 past the soft edge, 0 behind the front, or no eraser
+        /// running); `glyphs` — the soft edge crosses the word's span, so each
+        /// letter gets its own.
+        private enum Erasure { case whole(CGFloat), glyphs }
+        private func erasure(_ k: Int) -> Erasure {
+            guard let front = eraseFront else { return .whole(1) }
+            let start = shown[k], end = shown[k] + widths[k]
+            if start >= front + LiveCaptionBand.eraseEdge { return .whole(1) }
+            if end <= front { return .whole(0) }
+            return .glyphs
+        }
+
+        /// Each letter's x inside `word` (from its left edge), and one past the
+        /// last: the typesetter's own caret offsets, so a word drawn whole and
+        /// the same word's letters land on the same pixels, kerning included.
+        private static func glyphEdges(of word: String) -> [CGFloat] {
+            let line = CTLineCreateWithAttributedString(NSAttributedString(string: word, attributes: fillAttributes))
+            let ns = word as NSString
+            var edges: [CGFloat] = []
+            var i = word.startIndex
+            while i < word.endIndex {
+                let u = i.utf16Offset(in: word)
+                edges.append(CTLineGetOffsetForStringIndex(line, u, nil))
+                i = word.index(after: i)
+            }
+            edges.append(CTLineGetOffsetForStringIndex(line, ns.length, nil))
+            return edges
+        }
+
+        /// A word drawn as one translucent group: the three passes inside a
+        /// transparency layer at `alpha`. With `glyphAlpha`, **the eraser
+        /// fades it letter by letter** (2026-09-26 14:20): once the three
+        /// passes are in the layer, each letter's column is multiplied by its
+        /// own opacity (`destinationIn`), so letter *n* is dimmer than *n+1*.
+        /// One layer for the word rather than one per letter, because a
+        /// letter's black outline reaches ~4.5 pt past its edge and, drawn
+        /// after its left neighbour, would bite into that neighbour's white —
+        /// the muddy fill the three passes exist to avoid.
+        private func drawWord(_ word: String, at: NSPoint, fill: NSColor, alpha: CGFloat,
+                              glyphAlpha: ((CGFloat) -> CGFloat)? = nil) {
             guard alpha > 0.01, let ctx = NSGraphicsContext.current?.cgContext else { return }
-            let faded = alpha < 0.999
+            var columns: [(x0: CGFloat, x1: CGFloat, a: CGFloat)] = []
+            if let glyphAlpha {
+                let edges = Self.glyphEdges(of: word)
+                guard edges.count > 1 else { return }
+                // The first and last columns reach out to cover the shadow and
+                // outline beyond the letters; anything the columns miss would
+                // stay at full opacity.
+                let reach: CGFloat = 40
+                var alphas: [CGFloat] = []
+                for j in 0..<(edges.count - 1) {
+                    let a = glyphAlpha((edges[j] + edges[j + 1]) / 2)
+                    alphas.append(a)
+                    let x0 = j == 0 ? edges[j] - reach : edges[j]
+                    let x1 = j == edges.count - 2 ? edges[j + 1] + reach : edges[j + 1]
+                    columns.append((at.x + x0, at.x + x1, a))
+                }
+                glyphAlphas.append(alphas)
+                guard alphas.contains(where: { $0 * alpha > 0.01 }) else { return }
+            }
+            let faded = alpha < 0.999 || !columns.isEmpty
             if faded { ctx.saveGState(); ctx.setAlpha(alpha); ctx.beginTransparencyLayer(auxiliaryInfo: nil) }
             NSAttributedString(string: word, attributes: Self.shadowAttributes).draw(at: at)
             NSAttributedString(string: word, attributes: Self.strokeAttributes).draw(at: at)
             var attrs = Self.fillAttributes
             attrs[.foregroundColor] = fill
             NSAttributedString(string: word, attributes: attrs).draw(at: at)
+            if !columns.isEmpty {
+                ctx.saveGState()
+                ctx.setBlendMode(.destinationIn)
+                for c in columns {
+                    ctx.setFillColor(NSColor.black.withAlphaComponent(c.a).cgColor)
+                    ctx.fill(CGRect(x: c.x0, y: bounds.minY, width: c.x1 - c.x0, height: bounds.height))
+                }
+                ctx.restoreGState()
+            }
             if faded { ctx.endTransparencyLayer(); ctx.restoreGState() }
         }
 
@@ -506,11 +590,22 @@ final class LiveCaptionBand {
             // The settled words first, in three passes over the whole line so
             // a word's fill never sits under its neighbour's shadow; then the
             // ghosts and the words fading in, each as its own translucent group.
+            // A word the eraser's soft edge crosses is drawn letter by letter
+            // (at most two per frame: the edge is 160 pt, a word ~100–250);
+            // one wholly behind the front is not drawn at all.
             var fading: [(String, NSPoint, NSColor, CGFloat)] = []
+            var lettered: [(String, NSPoint, NSColor, CGFloat, CGFloat)] = []
+            glyphAlphas = []
             for pass in 0..<3 {
                 for (k, word) in visible.enumerated() where k < shown.count {
                     let at = NSPoint(x: anchor + shown[k], y: y)
-                    let (fill, alpha) = look(k)
+                    var (fill, alpha) = look(k)
+                    switch erasure(k) {
+                    case .whole(let a): alpha *= a
+                    case .glyphs:
+                        if pass == 0 { lettered.append((word, at, fill, alpha, shown[k])) }
+                        continue
+                    }
                     if alpha < 0.999 { if pass == 0 { fading.append((word, at, fill, alpha)) }; continue }
                     switch pass {
                     case 0: NSAttributedString(string: word, attributes: Self.shadowAttributes).draw(at: at)
@@ -528,6 +623,9 @@ final class LiveCaptionBand {
                 drawWord(g.word, at: NSPoint(x: anchor + g.x, y: y), fill: .white, alpha: alpha)
             }
             for (word, at, fill, alpha) in fading { drawWord(word, at: at, fill: fill, alpha: alpha) }
+            for (word, at, fill, alpha, lineX) in lettered {
+                drawWord(word, at: at, fill: fill, alpha: alpha) { [unowned self] x in self.erased(at: lineX + x) }
+            }
         }
     }
 }

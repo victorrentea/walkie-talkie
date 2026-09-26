@@ -3,7 +3,7 @@
 
 Constants (LiveCaptionBand.swift, 07:50 centred layout): marginRight 48, dropSlack 40, vMax 700,
 ease 0.45, swap 1.0 (ghost 0.5), correctionFade 1.6, reflow 0.26, provisionalFloor 0.4, eraser after
-2.0 s idle at 260 pt/s with a 160 pt edge.
+5.0 s idle (2.0 until 2026-09-26 14:20) at 260 pt/s with a 160 pt edge, letter by letter.
 
 Centre of the visible text = anchor + (visibleStart + shownWidth) / 2, visibleStart = max(0,
 eraseFront + 80) while erasing (the band's `centredAnchor` takes max(shown[0], front + edge/2)),
@@ -13,6 +13,7 @@ import time
 from harness import *
 
 V_MAX, MARGIN, EDGE_HALF = 700.0, 48.0, 80.0
+ERASE_AFTER = 5.0     # s: LiveCaptionBand.eraseAfter (also in state.liveCaption.eraseAfter)
 JITTER = 0.03          # s: an HTTP read of /test/state is not the app's frame clock
 WORDS = ("the quick brown fox jumps over a lazy dog while seven bright wizards quietly juggle heavy "
          "boxes of frozen pizza near an old harbour and nobody seems to notice anything unusual "
@@ -145,12 +146,12 @@ def lc2():
                           f"dropped {S[-1]['dropped']}, max velocity {max(s['velocity'] for s in S):.0f}")
 
 
-@case("LC3", ("lc",), expect="pause: velocity → 0 within 1.5 s of the last word, centre unchanged until the eraser starts at 2.0 s")
+@case("LC3", ("lc",), expect="pause: velocity → 0 within 1.5 s of the last word, centre unchanged until the eraser starts at 5.0 s")
 def lc3():
     """A pause: the line comes to rest, then the eraser starts on time."""
     fresh()
     ev = [(0.4 * k, (lambda k=k: caption(" ".join(WORDS[:k + 1])))) for k in range(8)]
-    S, fired = drive(ev, 0.4 * 7 + 3.0)
+    S, fired = drive(ev, 0.4 * 7 + ERASE_AFTER + 1.0)
     t_last = fired[-1]
     er = [s for s in S if s["eraseFront"] is not None]
     t_er = er[0]["t"] if er else None
@@ -158,7 +159,7 @@ def lc3():
     fails = []
     if t_er is None:
         fails.append("the eraser never started")
-    elif not 1.9 <= t_er - t_last <= 2.3:
+    elif not ERASE_AFTER - 0.1 <= t_er - t_last <= ERASE_AFTER + 0.3:
         fails.append(f"eraser started {t_er - t_last:.2f} s after the last word")
     # "→ 0": the ease is exponential (τ 0.45) and snaps only under 0.3 pt, so exactly 0 comes ~2.5 s
     # after the last word; asked: ≤ 10 pt/s (under 0.2 pt per 60 Hz frame) from +1.5 s.
@@ -423,13 +424,13 @@ def lc15():
                           f"corrections {S2[-1]['corrections']}")
 
 
-@case("LC16", ("lc",), expect="eraser after 2 s at ≈260 pt/s; visible centre ±80 while dropped grows; a new word freezes the front; after a full wipe the next word is a fresh centred line with eraseFront null")
+@case("LC16", ("lc",), expect="eraser after 5 s at ≈260 pt/s; visible centre ±80 while dropped grows; a new word freezes the front; after a full wipe the next word is a fresh centred line with eraseFront null")
 def lc16():
     """The eraser, the re-centring behind it, the freeze, and the fresh line after a full wipe."""
     fresh()
     w = WORDS[:6]
     ev = [(0.3 * k, (lambda k=k: caption(" ".join(w[:k + 1])))) for k in range(6)]
-    S, fired = drive(ev, 0.3 * 5 + 2.0 + 2.5)
+    S, fired = drive(ev, 0.3 * 5 + ERASE_AFTER + 2.5)
     fails, notes = [], []
     er = [s for s in S if s["eraseFront"] is not None]
     if not er:
@@ -437,7 +438,7 @@ def lc16():
     t_er = er[0]["t"] - fired[-1]
     v = slope(er)
     notes.append(f"eraser at +{t_er:.2f} s, {v and round(v)} pt/s")
-    if not 1.9 <= t_er <= 2.3: fails.append(f"eraser at +{t_er:.2f} s")
+    if not ERASE_AFTER - 0.1 <= t_er <= ERASE_AFTER + 0.3: fails.append(f"eraser at +{t_er:.2f} s")
     if v is None or abs(v - 260) > 0.15 * 260: fails.append(f"front speed {v}")
     # the re-centring while words drop out on the left
     S2 = sample_until(lambda s: s["dropped"] >= 2, 8.0)
@@ -475,7 +476,7 @@ def lc17():
     """A batch correction behind him does not count as him speaking again."""
     fresh()
     show("we deploy on friday")
-    if not wait_for(lambda: lc()["eraseFront"] is not None, 3.5, 0.05):
+    if not wait_for(lambda: lc()["eraseFront"] is not None, ERASE_AFTER + 1.5, 0.05):
         return "FAIL", "the eraser never started"
     time.sleep(0.3)
     c0 = lc()["corrections"]

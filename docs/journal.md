@@ -12193,3 +12193,30 @@ text remains ~centered at all times"*.
 - **G7** `/test/state`: `fallingBack`, `autosend`, `lastFailure`, `recoverable`, `live` (the
   socket's counters), `elevenFault`, `elevenCost`, `micOpened`, `whisper`. Not yet:
   `lastCorpus`, the band's `frame`/`screen`.
+
+## The eraser waits 5 s and fades letter by letter (2026-09-26, 14:20)
+
+Victor: *"sus, în subtitrare, să nu dispară atât de repede textul; fade out-ul din stânga să
+înceapă la vreo cinci secunde; și fade out-ul să se facă literă cu literă în cuvântul din stânga,
+nu cuvânt cu cuvânt."* Then: *"fă-mi un video să-mi arăți cum se vede acum când dictez"*.
+
+- **`eraseAfter` 2.0 → 5.0 s.** Speed (260 pt/s) and soft edge (160 pt) unchanged. Measured over
+  the route: `eraseFront` null until **+5.06 s** after the last word, then advancing.
+- **Letter by letter.** A word whose span `[shown, shown + width]` meets the soft edge
+  `[front, front + 160]` is drawn with one opacity per glyph, `erased(at:)` of the glyph's centre;
+  glyph edges are `CTLineGetOffsetForStringIndex` of the word's own line, so a word switching from
+  whole to lettered does not move a pixel. Words wholly past the edge stay whole at alpha 1,
+  words wholly behind the front are not drawn; ghosts and the swap fade-in are unchanged.
+- **One transparency layer per word, then a per-letter mask** (`destinationIn` columns), not a
+  layer per letter as first specified: a glyph's 9 pt outline reaches ~4.5 pt past its edge and,
+  drawn after its left neighbour, would bite into that neighbour's white — the very muddiness
+  the three passes exist to avoid. Cost: only the one or two straddling words, one extra
+  `CTLine` each per frame.
+- `GET /test/state.liveCaption` gains `eraseAfter`, `idleFor` and `glyphAlphas` (per lettered
+  word, each glyph's eraser opacity). Seen mid-sweep: `[0, 0.17, 0.26, 0.36, 0.5]` on
+  "mâine" and `[0, 0, 0.12, 0.26, 0.36, 0.49, 0.63, 0.73, 0.84]` on "dimineață" — and the
+  screenshot shows the same gradient across the letters.
+- The harness cases LC3, LC16, LC17 (`evals/plan/cases_lc.py`) asserted the 2 s start; they now
+  read `ERASE_AFTER = 5.0`. `docs/test-plan.md` §LC says 5.0.
+- The demo video Victor asked for: `/tmp/wt-caption-demo.mp4` (20 s of the top strip, fed
+  through `POST /test/live-caption` at 0.4 s/word, last 3 words partial).

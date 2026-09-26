@@ -139,9 +139,12 @@ yields to `--label`).
   80 pt band across the top of the screen under the pointer (below the menu bar), white bold 38 pt
   with a black outline and shadow, like a film subtitle. Victor: *"îl scoți așadar din tooltip"*.
   **The visible text stays centred** (since 07:50): first words fade in at the middle, new words
-  are appended on the right fading in, an eraser (2 s idle) stings the line from the left and the
-  rest re-centres; wider than the band → the end stays inside the right margin. No ticker, no entry
-  from the right edge. `RelayWindow`
+  are appended on the right fading in, an eraser (**5 s idle** since 14:20 — *"să nu dispară
+  atât de repede"*; 2 s before) stings the line from the left **letter by letter** (a word the
+  160 pt soft edge crosses gets one opacity per glyph, via a `destinationIn` mask inside the
+  word's one transparency layer — never a layer per glyph: a glyph's outline reaches ~4.5 pt
+  out and would bite its left neighbour's white) and the rest re-centres; wider than the band →
+  the end stays inside the right margin. No ticker, no entry from the right edge. `RelayWindow`
   keeps only `setLiveCaptionOpen`/`setLiveCaption` as forwarders (so `AppDelegate` and
   `POST /test/live-caption` are unchanged) and `setListening(false)` closes the band. The ticker's
   numbers are `GET /test/state.liveCaption` (`anchor`, `velocity`, `reflowing`, `ghosts`,
