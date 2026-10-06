@@ -410,6 +410,11 @@ yields to `--label`).
   (`promptPointerAtShow`); until it has moved more than `promptPointerSlack` (2 pt) being inside is not
   a hover. **The held panel's words can be replaced from outside** (`replacePromptWords`: 🔼 ↓ marking
   it kamikaze, `POST /test/prompt {"do":"edit"}`), and `promptState` is `GET /test/state.prompt`.
+- **Every dictated prompt panel ends with `Mic: <glyph> <device>  ·  Engine: <name>`** (2026-10-06,
+  Victor: *"clearly mention the engine that was used and the microphone that was used"*), right above
+  the buttons. `AppDelegate.heardLine` builds it from the sentence's `via` (a local fallback, ⌘⌃X or
+  the auto countdown says so) and the device actually opened (`MicRecorder.lastOpened`) or Wispr's own
+  (`InputDevice.label(wisprName:)`); the panel only renders it. `GET /test/state.prompt.heard`.
 - **Dictating is not a panel state.** The panel is for what the model heard while Cancel can still
   stop it; the shot receipt is a number in the recording row, not a `flash(_:)`, because a flash
   takes the chip over for 1.5 s and the count has to keep climbing.

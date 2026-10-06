@@ -391,6 +391,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setRecordDevice(device)
     }
 
+    /// **The prompt panel's last line: which microphone heard this sentence and
+    /// which engine wrote it** (2026-10-06, Victor: *"be sure to clearly mention
+    /// the engine that was used and the microphone that was used"*). Built from
+    /// the route the words actually came by, never from the Engine setting — a
+    /// local fallback, ⌘⌃X or the auto countdown says so. A Wispr route names
+    /// Wispr's own microphone (`pushMicMark`'s rule); every other one the device
+    /// the recorder opened (`MicRecorder.lastOpened`).
+    private func heardLine(via: String, engineLabel: String) -> String {
+        let wispr = via.hasPrefix("wispr") || via == "pasteboard"
+        let mic = wispr ? InputDevice.label(wisprName: wisprMicName)
+                        : InputDevice.label(opened: MicRecorder.lastOpened?.device)
+        let local = "Local Whisper" + (engineLabel.isEmpty ? "" : " (\(engineLabel))")
+        let engine: String
+        switch via {
+        case "elevenlabs-scribe": engine = "ElevenLabs " + (engineLabel.isEmpty ? "Scribe" : engineLabel)
+        case "local-whisper": engine = local
+        case "local-fallback": engine = local + " — fallback"
+        case "local-forced": engine = local + " — ⌘⌃X"
+        case "local-auto": engine = local + " — auto fallback"
+        case _ where wispr: engine = WisprFlowSource.engineLabel
+        default: engine = engineLabel.isEmpty ? via : engineLabel
+        }
+        return "Mic: \(mic)  ·  Engine: \(engine)"
+    }
+
     private var wisprHearsThis: Bool { wisprSource.isRecording || wisprHearing || source === wisprSource }
 
     /// Wispr's name for its microphone — the adopted row's once Wispr fills it
@@ -2600,6 +2625,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.finalSelectionRead {
                 // As `deliver` sets it for a real sentence; `send` takes it.
                 if let engine = engine { self.pendingEngine = engine }
+                self.pendingHeard = self.heardLine(via: "test", engineLabel: engine ?? "")
                 self.send(kind: "dictation", text: text, app: "test")
             }
         }
@@ -3954,6 +3980,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the `Message` and `commit` writes it beside the words.
         pendingVia = result.via
         pendingEngine = result.engineLabel
+        pendingHeard = heardLine(via: result.via, engineLabel: result.engineLabel)
         pendingDeliveryKind = result.delivery
 
         // **The ring goes down when the words land**, and for a bound sentence
@@ -3984,6 +4011,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // watcher. The record is the only trace it leaves.
             recordDelivery(via: result.via, kind: result.delivery, to: "caret")
             pendingVia = nil
+            pendingHeard = nil
             pendingDeliveryKind = nil
             if !answeringInBackground {
                 overlay.setSpawnDestination(nil)
@@ -10413,6 +10441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // holds it for seconds.
         let via = pendingVia ?? "test"
         let engine = pendingEngine ?? ""
+        let heard = pendingHeard
         let deliveryKind = pendingDeliveryKind ?? .route
         let affect = kind == "dictation" ? pendingAffect : nil
         // **The recipient: the one latched at the close, else the binding now**
@@ -10420,7 +10449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // route, a screenshot) is addressed here, before the panel's seconds.
         let target = latched.map { $0.target } ?? terminal.target
         if kind == "dictation" { spawnPending = false; spawnFolder = nil
-                                 pendingVia = nil; pendingEngine = nil
+                                 pendingVia = nil; pendingEngine = nil; pendingHeard = nil
                                  pendingDeliveryKind = nil; pendingAffect = nil }
         // **A dictation is never dropped for want of a binding any more**
         // (`holdsForBind`): it is built, shown and read exactly as a bound one
@@ -10584,6 +10613,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            // preview adds to it — the panel needs
                                            // the seam to know what is editable.
                                            words: text, warning: warning,
+                                           heard: kind == "dictation" ? heard : nil,
                                            buttons: !self.autosend,
                                            // Consumed above, so the panel is told
                                            // rather than left to re-derive it.
@@ -10720,6 +10750,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingVia: String?
     /// The engine behind this sentence, taken and cleared with `pendingVia`.
     private var pendingEngine: String?
+    /// The prompt panel's `Mic: … · Engine: …` line for this sentence
+    /// (`heardLine`), taken and cleared with `pendingVia`.
+    private var pendingHeard: String?
     private var pendingDeliveryKind: DictationDelivery?
     /// The sentence's `VoiceAffect` verdict, set in `deliver` (or the test
     /// route) and moved onto the `Message` in `send` / `caretLine`.
@@ -11271,7 +11304,7 @@ extension AppDelegate {
         var latch: Latch?
         var latchedMouse: CGPoint?
         var pendingPromptWarning: String?
-        var pendingVia: String?, pendingEngine: String?
+        var pendingVia: String?, pendingEngine: String?, pendingHeard: String?
         var pendingDeliveryKind: DictationDelivery?
         var pendingAffect: VoiceAffect.Report?
         var pendingFilms: [ScreenFilm.Result] = []
@@ -11311,7 +11344,7 @@ extension AppDelegate {
         e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
-        e.pendingVia = pendingVia; e.pendingEngine = pendingEngine; e.pendingDeliveryKind = pendingDeliveryKind
+        e.pendingVia = pendingVia; e.pendingEngine = pendingEngine; e.pendingHeard = pendingHeard; e.pendingDeliveryKind = pendingDeliveryKind
         e.pendingAffect = pendingAffect
         e.pendingFilms = pendingFilms
         settling = false; settlingAtCaret = false; settlingFrom = 0; settleEstimate = 0; settleTake = []
@@ -11323,7 +11356,7 @@ extension AppDelegate {
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
         latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
-        pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingDeliveryKind = nil
+        pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
         pendingAffect = nil
         pendingFilms = []
         stateLock.lock()
@@ -11368,7 +11401,7 @@ extension AppDelegate {
         latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning
-        pendingVia = e.pendingVia; pendingEngine = e.pendingEngine; pendingDeliveryKind = e.pendingDeliveryKind
+        pendingVia = e.pendingVia; pendingEngine = e.pendingEngine; pendingHeard = e.pendingHeard; pendingDeliveryKind = e.pendingDeliveryKind
         pendingAffect = e.pendingAffect
         pendingFilms = e.pendingFilms
         stateLock.lock()

@@ -29,6 +29,7 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
 private let quoteLabel = NSTextField(labelWithString: "")
 /// What was in front of him when he started talking.
 private let frontLabel = NSTextField(labelWithString: "")
+private let heardLabel = NSTextField(labelWithString: "")
     private let promptLabel = PromptField(wrappingLabelWithString: "")
     /// The pictures this message is carrying, drawn under the words it is
     /// carrying them with.
@@ -417,6 +418,13 @@ private let frontLabel = NSTextField(labelWithString: "")
     /// Shown above the words rather than folded into them — see `layoutContent`.
     private var promptSelection: String?
     private var promptFront: String?
+    /// **Which microphone heard it and which engine wrote it** (2026-10-06,
+    /// Victor: *"In the presenting window, the [panel] left top, be sure to
+    /// clearly mention the engine that was used and the microphone that was
+    /// used"*) — on every prompt panel. `AppDelegate` hands the line in, built
+    /// from what this sentence actually went through (`via`, the device the
+    /// recorder opened or Wispr's own); the panel cannot ask, see `engineMark`.
+    private var promptHeard: String?
     /// A note about the transcript on screen — currently only the confidence
     /// score, and only when it came out below the floor.
     private var promptWarning: String?
@@ -1506,6 +1514,13 @@ private let frontLabel = NSTextField(labelWithString: "")
         frontLabel.cell?.truncatesLastVisibleLine = true
         frontLabel.isHidden = true
         root.addSubview(frontLabel)
+        heardLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        heardLabel.textColor = .labelColor
+        heardLabel.lineBreakMode = .byTruncatingTail
+        heardLabel.maximumNumberOfLines = 1
+        heardLabel.cell?.truncatesLastVisibleLine = true
+        heardLabel.isHidden = true
+        root.addSubview(heardLabel)
 
         promptLabel.font = promptFont
         promptLabel.textColor = .labelColor
@@ -2029,6 +2044,11 @@ private let frontLabel = NSTextField(labelWithString: "")
             if let warning = promptWarning {
                 contextWidth = max(contextWidth, measure(warning, font: warningLabel.font ?? hintFont) + pad * 2)
             }
+            if let heard = promptHeard {
+                // +12, the prompt row's slack and the emoji's: measured bare it
+                // came out a few points short and cut the engine's name.
+                contextWidth = max(contextWidth, measure(heard, font: heardLabel.font ?? hintFont) + pad * 2 + 12)
+            }
         }
         let width = sentPrompt != nil
             ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 3)
@@ -2247,6 +2267,7 @@ private let frontLabel = NSTextField(labelWithString: "")
             let below = (promptWarning != nil ? 16 + rowGap : 0)
                 + (promptShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
                 + (promptFront != nil ? 19 + rowGap : 0)
+                + (promptHeard != nil ? 19 + rowGap : 0)
                 + cancelButton.frame.height + rowGap
                 + (hintText != nil ? 22 + rowGap : 0)
             let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800)
@@ -2316,6 +2337,18 @@ private let frontLabel = NSTextField(labelWithString: "")
             rows.append((frontLabel, 19))
         } else {
             frontLabel.isHidden = true
+        }
+
+        // The last line of the manifest, right above the buttons: how the words
+        // were heard. Full names, not the chip's logos — this is read once, at
+        // leisure, and it has to say it to someone who does not know the glyphs.
+        if let heard = promptHeard, sentPrompt != nil {
+            heardLabel.stringValue = heard
+            heardLabel.frame.size = NSSize(width: innerWidth, height: 19)
+            heardLabel.isHidden = false
+            rows.append((heardLabel, 19))
+        } else {
+            heardLabel.isHidden = true
         }
 
         // Its own row rather than an overlay in a corner: the prompt can be many
@@ -4585,6 +4618,7 @@ private let frontLabel = NSTextField(labelWithString: "")
                         stamps: [String] = [],
                         selection: String? = nil, front: String? = nil,
                         words: String? = nil, warning: String? = nil,
+                        heard: String? = nil,
                         buttons: Bool = true, spawning: Bool = false) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -4642,6 +4676,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         // clears this — so a warning set before the panel opened would be wiped
         // by the panel opening.
         promptWarning = warning
+        promptHeard = heard?.nilIfEmpty
         // The narrow overlay's own truncated `↪ …` receipt goes: this panel shows
         // the same selection, quoted and at the top, and two of them is one too
         // many.
@@ -4978,6 +5013,7 @@ private let frontLabel = NSTextField(labelWithString: "")
         promptSelection = nil
         promptFront = nil
         promptWarning = nil
+        promptHeard = nil
         if holdForSpawn {
             spawnPanelHeld = true
             // **Inactive while held** (2026-10-04, Victor: *"să rămână dialogul
@@ -5300,6 +5336,7 @@ private let frontLabel = NSTextField(labelWithString: "")
                                   "buttons": promptButtons, "editing": editingPrompt,
                                   "paused": promptHoverPaused]
         out["deadline"] = promptDeadline.map { max(0, $0.timeIntervalSinceNow) } ?? NSNull()
+        out["heard"] = promptHeard ?? NSNull()
         return out
     }
 

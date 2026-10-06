@@ -259,16 +259,49 @@ enum InputDevice {
     /// is none of the six and says nothing, which the chip renders as a plain
     /// `Listening...`.
     static func glyph(wisprName name: String) -> String {
+        switch wisprDevice(name) {
+        case .bridged: return currentGlyph()
+        case .known(let k): return k.glyph
+        case .other: return ""
+        }
+    }
+
+    /// **The same mapping said in full**, for the prompt panel's `Mic:` line
+    /// (2026-10-06): the bridge is the relay's own recorder (`label(opened:)`),
+    /// a device none of `known` names keeps Wispr's own name for it.
+    static func label(wisprName name: String) -> String {
+        switch wisprDevice(name) {
+        case .bridged: return label(opened: MicRecorder.lastOpened?.device)
+        case .known(let k): return "\(k.glyph) \(k.label)"
+        case .other: return name.isEmpty ? "unknown" : "🎙️ \(name)"
+        }
+    }
+
+    private enum WisprDevice { case bridged, known(Known), other }
+
+    private static func wisprDevice(_ name: String) -> WisprDevice {
         var n = name.lowercased()
-        if n.contains("to wispr") || n.contains("from walkie") { return currentGlyph() }
+        if n.contains("to wispr") || n.contains("from walkie") { return .bridged }
         if n.hasPrefix("auto-detect (") {
             n = String(n.dropFirst("auto-detect (".count))
             if n.hasSuffix(")") { n.removeLast() }
         }
         if n.hasPrefix("built-in") || n == "macbook pro" {
-            return known.first { $0.id == "mac" }?.glyph ?? ""
+            return known.first { $0.id == "mac" }.map { .known($0) } ?? .other
         }
-        return known.first { k in k.needles.contains { n.contains($0) } }?.glyph ?? ""
+        return known.first { k in k.needles.contains { n.contains($0) } }.map { .known($0) } ?? .other
+    }
+
+    /// **The device a recording actually opened, said in full** — the CoreAudio
+    /// name `MicRecorder` kept (`lastOpened`), read onto the roster. Nil, or the
+    /// `select` placeholder, falls back to what would record now.
+    static func label(opened name: String?) -> String {
+        guard let name, !name.isEmpty, name != "the system input" else { return currentLabel() }
+        let n = name.lowercased()
+        if let k = known.first(where: { k in k.needles.contains { n.contains($0) } }) {
+            return "\(k.glyph) \(k.label)"
+        }
+        return "🎙️ \(name)"
     }
 
     /// What the menu's **top row** says: the glyph and the short name of the

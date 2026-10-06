@@ -56,6 +56,8 @@ enum OverlayStates {
         let code = icon("com.microsoft.VSCode")
         let selection = "public Order placeOrder(Cart cart) {"
         let transcript = "adaugă un test pentru cazul în care coșul e gol"
+        // Every dictated panel names its microphone and engine (2026-10-06).
+        let heard = "Mic: 🎤 DJI  ·  Engine: ElevenLabs Scribe (scribe_v2)"
         let long = "verifică de ce endpointul de checkout întoarce 500 când "
                  + "coșul are un singur produs fără preț, și dacă e din cauza "
                  + "conversiei de monedă adaugă un test care prinde exact cazul ăsta"
@@ -501,10 +503,10 @@ enum OverlayStates {
             // ---- the panel: the held prompt --------------------------------
             Shot(slug: "prompt", group: "The held prompt", title: "The held prompt",
                  when: "The seconds between the model answering and the words reaching the agent.",
-                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work.",
+                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last line names the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, words: transcript)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)
             },
 
             Shot(slug: "prompt-autosend", group: "The held prompt", title: "The prompt, under Autosend",
@@ -512,7 +514,7 @@ enum OverlayStates {
                  note: "No Send and no Cancel, and the row they sat on goes with them: two buttons up for one second are two buttons nobody can reach, an invitation to press something that will not be there when the hand arrives. What is left is the receipt — a dictation that vanished into a terminal with nothing shown is the one state where a delivery cannot be told from a drop.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, words: transcript, buttons: false)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard, buttons: false)
             },
 
             Shot(slug: "prompt-autosend-paused", group: "The held prompt", title: "Under Autosend, with the pointer on it",
@@ -520,7 +522,7 @@ enum OverlayStates {
                  note: "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, words: transcript, buttons: false)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard, buttons: false)
                 o.pinHoverPause()
             },
 
@@ -530,7 +532,7 @@ enum OverlayStates {
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
-                                 stamps: ["", "0:38"], words: transcript)
+                                 stamps: ["", "0:38"], words: transcript, heard: heard)
             },
 
             Shot(slug: "prompt-selection", group: "The held prompt", title: "The prompt, with a quoted highlight",
@@ -538,7 +540,7 @@ enum OverlayStates {
                  note: "Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, selection: selection, words: transcript)
+                o.showSentPrompt(transcript, hold: 6, selection: selection, words: transcript, heard: heard)
             },
 
             Shot(slug: "prompt-front", group: "The held prompt", title: "The prompt, naming the window he was in",
@@ -546,7 +548,7 @@ enum OverlayStates {
                  note: "Under the strip and *named*. Above the words it read as a heading — as if the sentence were about that window; it is one more thing the envelope carries, so it belongs at the end of the manifest with the frames.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, front: "OrderService.java — petclinic", words: transcript)
+                o.showSentPrompt(transcript, hold: 6, front: "OrderService.java — petclinic", words: transcript, heard: heard)
             },
 
             Shot(slug: "prompt-warning", group: "The held prompt", title: "The prompt, flagged by the confidence gate",
@@ -555,18 +557,18 @@ enum OverlayStates {
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, words: transcript,
-                                 warning: "⚠️ low confidence (0.42) — check the words before it goes")
+                                 warning: "⚠️ low confidence (0.42) — check the words before it goes", heard: heard)
             },
 
             Shot(slug: "prompt-everything", group: "The held prompt", title: "The prompt, everything at once",
                  when: "A pointed dictation: highlight, several frames, a named window, a shaky transcript.",
-                 note: "The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was — then the two buttons.",
+                 note: "The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was, which microphone and engine heard it — then the two buttons.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(3),
                                  stamps: ["", "0:38", "1:52"], selection: selection,
                                  front: "OrderService.java — petclinic", words: transcript,
-                                 warning: "⚠️ low confidence (0.42) — check the words before it goes")
+                                 warning: "⚠️ low confidence (0.42) — check the words before it goes", heard: heard)
             },
 
             Shot(slug: "prompt-long", group: "The held prompt", title: "A long transcript",
@@ -574,7 +576,7 @@ enum OverlayStates {
                  note: "Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(long, hold: 6, words: long)
+                o.showSentPrompt(long, hold: 6, words: long, heard: heard)
             },
 
             Shot(slug: "prompt-selection-only", group: "The held prompt", title: "A highlight with nothing said",
@@ -582,7 +584,7 @@ enum OverlayStates {
                  note: "There is no transcript row — and the panel is still held, because a highlight sent by accident deserves the same Cancel the words get. It stopped being part of the text when it moved above it, so without this it would have gone straight out.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt("", hold: 6, selection: selection)
+                o.showSentPrompt("", hold: 6, selection: selection, heard: heard)
             },
 
             Shot(slug: "prompt-hover", group: "The held prompt", title: "The prompt, cursor over it",
@@ -591,7 +593,7 @@ enum OverlayStates {
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
-                                 stamps: ["", "0:38"], words: transcript)
+                                 stamps: ["", "0:38"], words: transcript, heard: heard)
                 o.setHovering(true)
             },
 
@@ -600,7 +602,7 @@ enum OverlayStates {
                  note: "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, words: transcript)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)
                 o.beginPromptEdit()
             },
         ]
