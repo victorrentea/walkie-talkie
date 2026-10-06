@@ -8482,8 +8482,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// session file on that tty — and the delivery is the bound terminal's own
     /// (`writeToTerminalApp`: text, bare Return, the review Return). Everything
     /// else is the ⌘V it always was, with no Enter: a browser field, a document,
-    /// an IDE (whose terminal pane cannot be told from its editor). There is no
-    /// cancel window here, as there never was at the caret.
+    /// an IDE's editor. There is no cancel window here, as there never was at
+    /// the caret.
+    ///
+    /// **A VS Code terminal running Claude Code is a prompt too** (2026-10-06,
+    /// `frontVSCodeClaudePromptTTY`): the ⌘V it always got, then one Return
+    /// `vscodeReturnDelay` later — asked again first, so a caret that moved to
+    /// the editor in between gets no Enter. Pasted, not typed: xterm.js wraps a
+    /// paste in bracketed-paste markers, so the Return after it is a keypress
+    /// and not a newline folded into the paste — the failure the Terminal.app
+    /// path needs its read-back for. VS Code's terminal cannot be read back, so
+    /// there is one Return and never a blind second.
     ///
     /// Off the main thread for the `osascript` and the `ps`; a sentence whose
     /// source remembered a *different* app than the one in front (`focusPid`)
@@ -8492,11 +8501,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let front = NSWorkspace.shared.frontmostApplication
         let frontIsTarget = pid == nil || pid == front?.processIdentifier
         let bundle = frontIsTarget ? front?.bundleIdentifier : nil
+        let frontPid = frontIsTarget ? front?.processIdentifier : nil
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let tty = TerminalBinding.frontClaudePromptTTY(bundleID: bundle)
             let submitted = tty.map { TerminalBinding.submitPrompt(line, toTTY: $0) } ?? false
+            let vscodeTTY = submitted ? nil
+                : TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: frontPid)
             DispatchQueue.main.async {
                 guard let self else { return }
+                if let vscodeTTY, let frontPid {
+                    self.pasteText(line, to: pid, settles: false)
+                    self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: line.count)
+                    return
+                }
                 // `deliver` ended this sentence's settle before the hop; a
                 // settle standing now is the next sentence's (Q12) — not ours to end.
                 guard submitted, let tty else {
@@ -8506,6 +8523,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
                 self.lastDictation = line
             }
+        }
+    }
+
+    /// Long enough for the ⌘V to have landed and Wispr's clipboard restore not
+    /// to matter; the paste is bracketed, so no fold window has to be outwaited.
+    private static let vscodeReturnDelay: TimeInterval = 0.5
+
+    private func returnAfterVSCodePaste(tty: String, pid: pid_t, chars: Int) {
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + Self.vscodeReturnDelay) {
+            guard NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+                  TerminalBinding.caretInVSCodeTerminal(pid: pid)
+            else {
+                Log.info("⏎ not sent — the caret left VS Code's terminal before the Return (\(tty))")
+                return
+            }
+            HotkeyTap.postReturn()
+            Log.info("⏎ caret prompt pasted into Claude Code in VS Code on \(tty) and Return pressed — \(chars) chars")
         }
     }
 

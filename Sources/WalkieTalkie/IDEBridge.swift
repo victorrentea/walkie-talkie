@@ -199,6 +199,14 @@ enum IDEBridge {
         return (obj["ok"] as? Bool) == true
     }
 
+    /// The shell pid behind the focused window's active terminal, asked and let
+    /// go: a bind released at once, so nothing stays pointed at it.
+    static func focusedTerminalShellPID(bundleID: String) -> pid_t? {
+        guard case .bound(let handle) = bind(bundleID: bundleID) else { return nil }
+        release(handle)
+        return handle.shellPID
+    }
+
     static func release(_ handle: Handle) {
         _ = request("POST", "/unbind?id=\(handle.id)", on: handle.endpoint)
     }

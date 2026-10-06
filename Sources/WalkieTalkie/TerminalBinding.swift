@@ -1869,7 +1869,8 @@ final class TerminalBinding {
     ///    unambiguous: the selected tab of the front window (`frontTerminalTab`).
     ///    An editor cannot say whether the caret is in its terminal pane or in a
     ///    source file (see `deliver`'s `.keystroke` case), and an Enter in a
-    ///    source file is an edit, so IDEs are deliberately not covered.
+    ///    source file is an edit — except VS Code, which Accessibility can ask:
+    ///    `frontVSCodeClaudePromptTTY`.
     /// 2. **What runs in front on that tty is not a shell** — the shell guard's
     ///    own verdict (`foregroundCommand`, `isShell`).
     /// 3. **A process on that tty owns a fresh `~/.claude/cwd/.last-<pid>`** —
@@ -1885,6 +1886,51 @@ final class TerminalBinding {
         let device = (tab.tty as NSString).lastPathComponent
         guard publishedDirectory(onTTY: device) != nil else { return nil }
         return tab.tty
+    }
+
+    /// **The same question, asked of a VS Code window** (2026-10-06) — the tty
+    /// of the terminal holding the caret when it is a Claude Code prompt, nil
+    /// otherwise.
+    ///
+    /// Victor: *"walkie-talkie doesn't seem to fire Enter after the prompt that
+    /// I've given in the terminal … it will only fill the text but not hit the
+    /// enter."* Question 1 above ruled every IDE out, so a forward-click sentence
+    /// in VS Code's terminal was ⌘V'd and left in the box. VS Code is the one
+    /// editor whose caret *can* be located from outside: xterm.js reads keys
+    /// through a hidden `<textarea class="xterm-helper-textarea">`, Electron
+    /// publishes the DOM class list as `AXDOMClassList` on the focused element,
+    /// and Monaco's own textarea is `inputarea` — so an editor caret is never
+    /// mistaken for a terminal one. The terminal holding focus is its window's
+    /// `activeTerminal`, whose shell pid victor-vsc hands over on `/bind`; from
+    /// there questions 2 and 3 are asked exactly as for Terminal.app.
+    ///
+    /// Runs `ps` and a loopback request — call it off the main thread.
+    static func frontVSCodeClaudePromptTTY(bundleID: String?, pid: pid_t?) -> String? {
+        guard let bundleID, IDEBridge.kind(bundleID: bundleID) == "vscode",
+              let pid, caretInVSCodeTerminal(pid: pid),
+              let shell = IDEBridge.focusedTerminalShellPID(bundleID: bundleID),
+              let tty = tty(ofPID: shell),
+              let command = foregroundCommand(onTTY: tty), !refusesDelivery(command),
+              publishedDirectory(onTTY: (tty as NSString).lastPathComponent) != nil
+        else { return nil }
+        return tty
+    }
+
+    /// Whether VS Code's keyboard focus is a terminal's input (see above).
+    static func caretInVSCodeTerminal(pid: pid_t) -> Bool {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.5)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString,
+                                            &focused) == .success,
+              let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID()
+        else { return false }
+        var classes: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element as! AXUIElement, "AXDOMClassList" as CFString,
+                                            &classes) == .success,
+              let list = classes as? [String]
+        else { return false }
+        return list.contains("xterm-helper-textarea")
     }
 
     /// **The Terminal tab in front is at a shell prompt** (Q18, 2026-09-28) —
