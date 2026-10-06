@@ -57,7 +57,7 @@ enum OverlayStates {
         let selection = "public Order placeOrder(Cart cart) {"
         let transcript = "adaugă un test pentru cazul în care coșul e gol"
         // Every dictated panel names its microphone and engine (2026-10-06).
-        let heard = "Mic: 🎤 DJI  ·  Engine: ElevenLabs Scribe (scribe_v2)"
+        let heard = "Mic: 🎤 DJI\nEngine: ElevenLabs Scribe (scribe_v2)"
         let long = "verifică de ce endpointul de checkout întoarce 500 când "
                  + "coșul are un singur produs fără preț, și dacă e din cauza "
                  + "conversiei de monedă adaugă un test care prinde exact cazul ăsta"
@@ -503,7 +503,7 @@ enum OverlayStates {
             // ---- the panel: the held prompt --------------------------------
             Shot(slug: "prompt", group: "The held prompt", title: "The held prompt",
                  when: "The seconds between the model answering and the words reaching the agent.",
-                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last line names the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so.",
+                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)

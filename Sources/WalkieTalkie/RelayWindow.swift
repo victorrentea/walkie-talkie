@@ -638,6 +638,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             attributes: [.font: hintFont, .foregroundColor: ink])
     }
 
+    /// The `Mic:` / `Engine:` pair, one row each.
+    private static let heardHeight: CGFloat = 38
+
     private func measure(_ s: String, font: NSFont) -> CGFloat {
         (s as NSString).size(withAttributes: [.font: font]).width
     }
@@ -1517,7 +1520,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         heardLabel.font = .systemFont(ofSize: 14, weight: .medium)
         heardLabel.textColor = .labelColor
         heardLabel.lineBreakMode = .byTruncatingTail
-        heardLabel.maximumNumberOfLines = 1
+        // Two rows, Mic over Engine (2026-10-06, Victor: *"should be one below
+        // the other, not on the same line"*).
+        heardLabel.maximumNumberOfLines = 2
         heardLabel.cell?.truncatesLastVisibleLine = true
         heardLabel.isHidden = true
         root.addSubview(heardLabel)
@@ -2047,7 +2052,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             if let heard = promptHeard {
                 // +12, the prompt row's slack and the emoji's: measured bare it
                 // came out a few points short and cut the engine's name.
-                contextWidth = max(contextWidth, measure(heard, font: heardLabel.font ?? hintFont) + pad * 2 + 12)
+                let font = heardLabel.font ?? hintFont
+                let widest = heard.split(separator: "\n").map { measure(String($0), font: font) }.max() ?? 0
+                contextWidth = max(contextWidth, widest + pad * 2 + 12)
             }
         }
         let width = sentPrompt != nil
@@ -2267,7 +2274,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             let below = (promptWarning != nil ? 16 + rowGap : 0)
                 + (promptShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
                 + (promptFront != nil ? 19 + rowGap : 0)
-                + (promptHeard != nil ? 19 + rowGap : 0)
+                + (promptHeard != nil ? Self.heardHeight + rowGap : 0)
                 + cancelButton.frame.height + rowGap
                 + (hintText != nil ? 22 + rowGap : 0)
             let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800)
@@ -2344,9 +2351,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         // leisure, and it has to say it to someone who does not know the glyphs.
         if let heard = promptHeard, sentPrompt != nil {
             heardLabel.stringValue = heard
-            heardLabel.frame.size = NSSize(width: innerWidth, height: 19)
+            heardLabel.frame.size = NSSize(width: innerWidth, height: Self.heardHeight)
             heardLabel.isHidden = false
-            rows.append((heardLabel, 19))
+            rows.append((heardLabel, Self.heardHeight))
         } else {
             heardLabel.isHidden = true
         }

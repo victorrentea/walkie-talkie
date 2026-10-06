@@ -413,7 +413,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case _ where wispr: engine = WisprFlowSource.engineLabel
         default: engine = engineLabel.isEmpty ? via : engineLabel
         }
-        return "Mic: \(mic)  ·  Engine: \(engine)"
+        return "Mic: \(mic)\nEngine: \(engine)"
     }
 
     private var wisprHearsThis: Bool { wisprSource.isRecording || wisprHearing || source === wisprSource }
@@ -10750,7 +10750,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingVia: String?
     /// The engine behind this sentence, taken and cleared with `pendingVia`.
     private var pendingEngine: String?
-    /// The prompt panel's `Mic: … · Engine: …` line for this sentence
+    /// The prompt panel's `Mic: …` / `Engine: …` rows for this sentence
     /// (`heardLine`), taken and cleared with `pendingVia`.
     private var pendingHeard: String?
     private var pendingDeliveryKind: DictationDelivery?
