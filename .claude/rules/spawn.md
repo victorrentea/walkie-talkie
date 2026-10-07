@@ -108,11 +108,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   may have started. Moving a folder under words already in flight silently is worse than ignoring
   a late click.
   → journal: *The folder menu (2026-09-04)*
-- **A picked folder gets a row of its own on the chip, behind Terminal's icon** — the shape a
-  binding has (*"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am
+- **A picked folder gets a row of its own on the chip, behind the ✨** (Terminal's icon until
+  2026-10-07: *"the new [✨] should be there instead of that console icon"*;
+  `RelayWindow.sparkleGlyph`) — the shape a binding has (*"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am
   setat ce trebuie"*, 2026-09-07). `RelayWindow.spawnCollapsed` split into `spawnMarked` (the ✨
   rides in front of `Listening...`) and `spawnCollapsed` (destination row dropped — only when no
-  folder was picked). Passing the icon turns the row on, so the default `~/workspace` is untouched.
+  folder was picked). **Since 2026-10-07 the ✨ rides in front of `Listening...` only while
+  collapsed** — with a picked folder it is that row's icon, said once. Passing the icon turns the row on, so the default `~/workspace` is untouched.
   `docs/overlay-states.html` has the `spawn-folder` Shot for it.
   → journal: *The folder menu (2026-09-04)*
 - **A folder not on disk is dropped, never offered, by both halves.** The launcher falls back to
@@ -151,6 +153,34 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
   (`hoveredMain || hoveredSub`); another row entered closes it after `submenuGrace` = 0.3 s unless
   the hand reaches it. It fades and hides with the menu.
 - **`WT_SHOOT_MENU` draws it open** with the real sessions; `WT_SHOOT_BOUND=ttysNNN` ticks one.
+
+## Sessions under their folders (2026-10-07)
+
+Victor: *"to have the active session grouped under [the projects] … only if you've never sent
+Kamikaze to that session yet … Clicking the parent, not just hovering, but clicking should start a
+new one, even if it has children … the remaining terminals … should stay in the first"*, then *"an
+emoji with the three yellow stars just in front of [each] project … [children] should have in front
+of them an icon of the terminal"*, and *"a hourglass in front of them if you detect that Claude
+session to be active right now"*.
+
+- **A folder row with live sessions grows a chevron (between name and star) and a submenu on
+  hover; its click still opens a new session** — deliberately unlike an `NSMenu` parent. The
+  chevron column is reserved on every folder row, so sessions landing late move no name.
+- **`ActiveTerminals.grouped`**: a session belongs to the deepest row whose path is its directory
+  or contains it; what no row claims stays under *Active Terminals* (`— none` when nothing is left).
+  `regroup()` runs when the sessions land and after a star. Folder submenus name the task from the
+  tab title, else the subfolder, else the folder, `· tty` on a tie (`folderItems`).
+- **Folder rows wear ✨ in front of the name (*opens a new session*); session rows wear Terminal's
+  icon (*a running session*) after the ✓ column, and ⏳ when busy.**
+- **Busy and kamikaze come from Claude Code's own `~/.claude/sessions/<pid>.json`** (`status`,
+  `sessionId`, `cwd`; `TerminalBinding.agentState`) — the pid is the one owning `.last-<pid>`.
+  **A session any of whose user prompts has `kamikaze` on a line of its own is offered nowhere**
+  (`ActiveTerminals.isKamikaze`; the transcript is byte-scanned, only user lines with the word are
+  parsed, tool results ignored). A missing file answers *idle, not kamikazed*.
+- **Switching between two submenus waits `submenuGrace`** and happens only if the hand is still on
+  the new row (`entered`) — the diagonal into the open one crosses other rows.
+- `WT_SHOOT_SUB=<folder name>` picks which submenu `WT_SHOOT_MENU` draws open (default: the first
+  folder with sessions, else *Active Terminals*).
 
 ## Pinned + recent (`ProjectList`, `helpers/recent_projects.py`)
 
@@ -360,3 +390,5 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
 - Do not cache or offset-read in `recent_projects.py`, and do not trim its output file to five.
 - Do not hide *Active Terminals* when nothing is running, move it off the first row, or let a
   pick's words out before its bind lands.
+- Do not make a folder row's click open its submenu — the click starts a new session, always.
+- Do not offer a session that was sent `kamikaze`.

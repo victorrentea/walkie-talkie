@@ -85,12 +85,12 @@
     "group" : "Dictating",
     "height" : 93,
     "image" : "spawn-folder.png",
-    "note" : "**The chosen folder gets the row a binding would have taken**, behind Terminal's own icon — Victor's ask, 2026-09-07: *\"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie\"*. The argument that removed this row was that the folder is *always* `~\/workspace`, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. The ✨ stays one row up, in front of `Listening...`: it is the fact this destination does not share with a binding — the session does not exist yet.",
+    "note" : "**The chosen folder gets the row a binding would have taken**, behind the ✨ (Terminal's icon until 2026-10-07, *\"the new [✨] should be there instead of that console icon\"*) — Victor's ask, 2026-09-07: *\"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie\"*. The argument that removed this row was that the folder is *always* `~\/workspace`, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. Since 2026-10-07 the ✨ is that row's icon and leaves `Listening...`: *not yet running* is said once, beside the folder it will run in.",
     "shape" : "chip",
     "slug" : "spawn-folder",
     "title" : "…and he picked which folder",
     "when" : "After clicking a row in the folder menu, for the rest of that dictation.",
-    "width" : 235
+    "width" : 215
   },
   {
     "alpha" : 0.80000000000000004,
@@ -356,7 +356,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "transcribing-local-now.png",
     "note" : "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land.",
     "shape" : "chip",
@@ -368,7 +368,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "transcribing-local-now-loading.png",
     "note" : "`(loading)` says the key will not answer at once — not that it will not work. Pressed now, the WAV waits for the weights (up to 90 s, the fallback's own window) and the words go where the sentence was going.",
     "shape" : "chip",
@@ -380,7 +380,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "transcribing-fallback-countdown.png",
     "note" : "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
     "shape" : "chip",
@@ -392,7 +392,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "transcribing-fallback-now.png",
     "note" : "`auto now...`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
     "shape" : "chip",
@@ -596,14 +596,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 635,
+    "height" : 667,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
@@ -644,14 +644,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 191,
+    "height" : 167,
     "image" : "prompt-long.png",
     "note" : "Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.",
     "shape" : "panel",
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,

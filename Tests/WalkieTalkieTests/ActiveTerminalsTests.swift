@@ -73,4 +73,45 @@ final class ActiveTerminalsTests: XCTestCase {
         XCTAssertNil(ActiveTerminals.task(fromTitle: nil, folder: "x"))
         XCTAssertNil(ActiveTerminals.task(fromTitle: "  ", folder: "x"))
     }
+
+    // MARK: - Under the folder rows (2026-10-07)
+
+    func testSessionsGoUnderTheDeepestFolderRowTheRestStay() {
+        let sessions = [
+            session("ttys001", "/w/petclinic/petclinic-backend"),
+            session("ttys002", "/w/petclinic"),
+            session("ttys003", "/w/petclinic-main"),          // not inside /w/petclinic
+            session("ttys004", "/w/walkie-talkie"),
+            session("ttys005", "/w"),
+        ]
+        let split = ActiveTerminals.grouped(sessions, under: ["/w/petclinic", "/w/petclinic-main/", "/w"])
+        XCTAssertEqual(split.byFolder["/w/petclinic"]?.map(\.tty), ["ttys001", "ttys002"])
+        XCTAssertEqual(split.byFolder["/w/petclinic-main/"]?.map(\.tty), ["ttys003"])
+        XCTAssertEqual(split.byFolder["/w"]?.map(\.tty), ["ttys004", "ttys005"])
+        XCTAssertEqual(ActiveTerminals.grouped(sessions, under: ["/w/petclinic"]).rest.map(\.tty),
+                       ["ttys003", "ttys004", "ttys005"])
+    }
+
+    func testAFolderSubmenuNamesTheTaskThenTheSubfolderThenTheFolder() {
+        var busy = session("ttys002", "/w/petclinic", "◑ Owners grid paging")
+        busy.busy = true
+        let items = ActiveTerminals.folderItems([
+            session("ttys001", "/w/petclinic/petclinic-backend"),
+            busy,
+            session("ttys003", "/w/petclinic", "✳ petclinic"),
+            session("ttys004", "/w/petclinic"),
+        ], folder: "/w/petclinic", boundTTY: "/dev/ttys004")
+        XCTAssertEqual(items.map(\.name), ["Owners grid paging", "petclinic · ttys003", "petclinic · ttys004",
+                                           "petclinic-backend"])
+        XCTAssertEqual(items.filter(\.busy).map(\.tty), ["ttys002"])
+        XCTAssertEqual(items.filter(\.bound).map(\.tty), ["ttys004"])
+    }
+
+    func testKamikazeIsTheWordOnALineOfItsOwn() {
+        XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "kamikaze"))
+        XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "Fix it.\n\nkamikaze\n\n[Dictated in RO or EN]"))
+        XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "Fix it.\n\n Kamikaze "))
+        XCTAssertFalse(ActiveTerminals.isKamikaze(prompt: "E2E test of the kamikaze gesture."))
+        XCTAssertFalse(ActiveTerminals.isKamikaze(prompt: "kamikaze it"))
+    }
 }

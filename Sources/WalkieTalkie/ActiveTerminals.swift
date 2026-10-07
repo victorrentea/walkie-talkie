@@ -43,6 +43,11 @@ enum ActiveTerminals {
         let directory: String
         /// The tab's title as the agent last set it, if any.
         let title: String?
+        /// **Working right now** — Claude Code's own `status: "busy"` in
+        /// `~/.claude/sessions/<pid>.json`; drawn as a ⏳ in front of the row
+        /// (2026-10-07, Victor: *"to have a hourglass in front of them if you
+        /// detect that Claude session to be active right now"*).
+        var busy: Bool = false
     }
 
     /// One submenu row, already decided.
@@ -53,6 +58,7 @@ enum ActiveTerminals {
         /// clickable: during a spawn, picking it takes the sentence back from the
         /// new session to the terminal it was already going to.
         let bound: Bool
+        var busy: Bool = false
     }
 
     /// **Sessions → rows.** The folder name alone when it is unique; when two
@@ -81,12 +87,74 @@ enum ActiveTerminals {
             names[i] += " · \(short(sessions[i].tty))"
         }
 
-        return sessions.indices
-            .map { Item(tty: short(sessions[$0].tty), name: names[$0], bound: short(sessions[$0].tty) == bound) }
+        return rows(sessions, names: names, bound: bound)
+    }
+
+    private static func rows(_ sessions: [Session], names: [String], bound: String?) -> [Item] {
+        sessions.indices
+            .map { Item(tty: short(sessions[$0].tty), name: names[$0],
+                        bound: short(sessions[$0].tty) == bound, busy: sessions[$0].busy) }
             .sorted {
                 let order = $0.name.localizedStandardCompare($1.name)
                 return order == .orderedSame ? $0.tty < $1.tty : order == .orderedAscending
             }
+    }
+
+    // MARK: - Under the folder rows (2026-10-07)
+
+    /// **Each session goes under the folder row it is working in; the rest stay
+    /// under *Active Terminals*.** Victor, 2026-10-07: *"to have the active
+    /// session grouped under [the projects] … And the remaining terminals that
+    /// are not bound to any, should stay in the first, other active
+    /// terminals."* A session belongs to a row when its directory is the row's
+    /// folder or inside it (`petclinic/petclinic-backend` → `petclinic`, the
+    /// rollup `recent_projects.py` makes); with two rows nested, the deeper one
+    /// wins. Keys are the rows' paths as given.
+    static func grouped(_ sessions: [Session], under folders: [String])
+        -> (byFolder: [String: [Session]], rest: [Session]) {
+        var byFolder: [String: [Session]] = [:], rest: [Session] = []
+        for s in sessions {
+            let dir = trimmed(s.directory)
+            let owner = folders
+                .filter { let f = trimmed($0); return dir == f || dir.hasPrefix(f + "/") }
+                .max { trimmed($0).count < trimmed($1).count }
+            if let owner { byFolder[owner, default: []].append(s) } else { rest.append(s) }
+        }
+        return (byFolder, rest)
+    }
+
+    /// **The rows of one folder's submenu.** The folder is already the parent
+    /// row, so what is left to say is the task the agent wrote into its tab
+    /// title — else the subfolder it works in, else the folder itself — and a
+    /// tty on top when two rows would still read the same.
+    static func folderItems(_ sessions: [Session], folder: String, boundTTY: String?) -> [Item] {
+        let root = trimmed(folder)
+        var names = sessions.map { s -> String in
+            let dir = trimmed(s.directory)
+            if let t = task(fromTitle: s.title, folder: self.folder(of: dir)) { return t }
+            if dir.hasPrefix(root + "/") { return String(dir.dropFirst(root.count + 1)) }
+            return self.folder(of: root)
+        }
+        var seen: [String: Int] = [:]
+        for n in names { seen[n, default: 0] += 1 }
+        for i in names.indices where seen[names[i], default: 0] > 1 { names[i] += " · \(short(sessions[i].tty))" }
+        return rows(sessions, names: names, bound: boundTTY.map(short))
+    }
+
+    private static func trimmed(_ path: String) -> String {
+        path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+    }
+
+    /// **A prompt that told its session to close when done** — the line
+    /// `kamikaze` on its own, which is how 🔼 ↓ ends a prompt (`\n\nkamikaze`)
+    /// and how the word goes alone after one (`AppDelegate.sendKamikaze`). Such
+    /// a session is on its way out and is not offered (2026-10-07, *"only if
+    /// you've never sent Kamikaze to that session yet"*). The word inside a
+    /// sentence is not the gesture.
+    static func isKamikaze(prompt: String) -> Bool {
+        prompt.split(whereSeparator: \.isNewline).contains {
+            $0.trimmingCharacters(in: .whitespaces).lowercased() == "kamikaze"
+        }
     }
 
     /// **The task out of a Claude Code tab title**, or nil when it carries none.

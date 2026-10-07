@@ -127,10 +127,10 @@ enum OverlayStates {
 
             Shot(slug: "spawn-folder", group: "Dictating", title: "…and he picked which folder",
                  when: "After clicking a row in the folder menu, for the rest of that dictation.",
-                 note: "**The chosen folder gets the row a binding would have taken**, behind Terminal's own icon — Victor's ask, 2026-09-07: *\"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie\"*. The argument that removed this row was that the folder is *always* `~/workspace`, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. The ✨ stays one row up, in front of `Listening...`: it is the fact this destination does not share with a binding — the session does not exist yet.",
+                 note: "**The chosen folder gets the row a binding would have taken**, behind the ✨ (Terminal's icon until 2026-10-07, *\"the new [✨] should be there instead of that console icon\"*) — Victor's ask, 2026-09-07: *\"ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie\"*. The argument that removed this row was that the folder is *always* `~/workspace`, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. Since 2026-10-07 the ✨ is that row's icon and leaves `Listening...`: *not yet running* is said once, beside the folder it will run in.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.setSpawnDestination("training-assistant", mark: "✨", icon: terminal)
+                o.setSpawnDestination("training-assistant", mark: "✨", icon: RelayWindow.sparkleGlyph)
                 o.setListening(true)
                 o.setShotCount(1)
             },

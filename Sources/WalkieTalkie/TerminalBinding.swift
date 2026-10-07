@@ -1064,11 +1064,59 @@ final class TerminalBinding {
             pids[tty, default: []].append(pid)
         }
         return titles.keys.sorted().compactMap { tty in
-            guard let dir = pids[tty]?.lazy.compactMap({ publishedDirectory(ownedBy: $0) }).first
+            guard let (pid, dir) = pids[tty]?.lazy
+                    .compactMap({ pid in publishedDirectory(ownedBy: pid).map { (pid, $0) } }).first
             else { return nil }
+            let state = agentState(pid: pid)
+            // **Told to close when done: not offered** (2026-10-07) — see
+            // `ActiveTerminals.isKamikaze`.
+            if state.kamikazed { return nil }
             let title = titles[tty].flatMap { $0.isEmpty ? nil : $0 }
-            return ActiveTerminals.Session(tty: tty, directory: dir, title: title)
+            return ActiveTerminals.Session(tty: tty, directory: dir, title: title, busy: state.busy)
         }
+    }
+
+    /// **What Claude Code itself says about the session on `pid`** — from
+    /// `~/.claude/sessions/<pid>.json`, which it keeps for every interactive
+    /// session (`sessionId`, `cwd`, `status` of `busy` / `idle` / …): whether it
+    /// is working right now, and whether any of its prompts was a kamikaze (its
+    /// transcript, `~/.claude/projects/<cwd>/<sessionId>.jsonl`). A file that is
+    /// missing or unreadable answers *idle, never kamikazed* — the session is
+    /// still offered, as it was before either question was asked.
+    static func agentState(pid: Int32) -> (busy: Bool, kamikazed: Bool) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let file = home.appendingPathComponent(".claude/sessions/\(pid).json")
+        guard let data = try? Data(contentsOf: file),
+              let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return (false, false) }
+        let busy = (json["status"] as? String) == "busy"
+        guard let id = json["sessionId"] as? String, let cwd = json["cwd"] as? String else { return (busy, false) }
+        let folder = String((cwd as NSString).standardizingPath.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+        let transcript = home.appendingPathComponent(".claude/projects")
+            .appendingPathComponent(folder).appendingPathComponent("\(id).jsonl")
+        return (busy, sentKamikaze(transcript: transcript))
+    }
+
+    /// **Whether a transcript holds a user prompt with `kamikaze` on a line of
+    /// its own.** A raw byte scan first — most transcripts never say the word —
+    /// and only the lines carrying both it and a user record reach the JSON
+    /// parser; a tool result is a user record too, so only `text` is read
+    /// (a string `content`, or the `text` blocks of an array).
+    private static func sentKamikaze(transcript: URL) -> Bool {
+        guard let data = try? Data(contentsOf: transcript, options: .mappedIfSafe) else { return false }
+        let word = Data("kamikaze".utf8), user = Data(#""type":"user""#.utf8)
+        guard data.range(of: word) != nil else { return false }
+        for line in data.split(separator: UInt8(ascii: "\n"))
+        where line.range(of: word) != nil && line.range(of: user) != nil {
+            guard let record = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
+                  let message = record["message"] as? [String: Any] else { continue }
+            let texts: [String]
+            if let s = message["content"] as? String { texts = [s] }
+            else if let blocks = message["content"] as? [[String: Any]] {
+                texts = blocks.compactMap { $0["type"] as? String == "text" ? $0["text"] as? String : nil }
+            } else { texts = [] }
+            if texts.contains(where: ActiveTerminals.isKamikaze(prompt:)) { return true }
+        }
+        return false
     }
 
     /// The title of whichever tab is showing this tty — the refresh counterpart
