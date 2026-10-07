@@ -264,8 +264,24 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === MUSIC_RETRY_ALARM) ensureMusic();
 });
 
+// **A reload reaches the tabs already open (2026-10-07).** Chrome injects the
+// manifest's content scripts only into pages loaded afterwards, so after a
+// reload every open tab kept the old `inspect.js` — orphaned, its old badge
+// still up — until he reloaded the page by hand: "I still don't see the
+// change". The fresh copy retires the orphan itself (see the top of
+// `inspect.js`); tabs we may not script (chrome://, the Web Store) are skipped.
+async function injectIntoOpenTabs() {
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.map((tab) =>
+    chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['inspect.js'] })
+      .catch(() => {})));
+}
+
 chrome.runtime.onStartup.addListener(ensureMusic);
 chrome.runtime.onInstalled.addListener(ensureMusic);
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install' || reason === 'update') injectIntoOpenTabs();
+});
 ensureMusic();
 
 chrome.runtime.onMessage.addListener((msg, _sender, respond) => {

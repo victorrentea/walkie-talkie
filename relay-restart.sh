@@ -2,11 +2,14 @@
 #
 # **The one way to restart the installed app.** `safe-restart.sh` is an alias.
 #
-#   ./relay-restart.sh [--build] [--dry-run] [--max-wait SECONDS] [--quiet SECONDS] [--force]
+#   ./relay-restart.sh [--build | --extension] [--dry-run] [--max-wait SECONDS] [--quiet SECONDS] [--force]
 #
 #   --build      build and sign into the staging folder first (ungated — a build may
 #                happen while he dictates); the bundle is swapped into /Applications
 #                only after the gate and the quit, right before the relaunch
+#   --extension  deploy only the Chrome extension: wait for the same gate, then reload
+#                it in Chrome — the app is not restarted. Every restart does this too
+#                whenever `chrome-extension/` changed since the last reload
 #   --dry-run    wait for the gate and say it would restart; touch nothing
 #   --max-wait   give up after this long (default 1800 s = 30 min), exit 3
 #   --quiet      seconds since the last ended dictation (default 5, never below 5)
@@ -70,6 +73,10 @@
 #    so the relay he gets back is not in front of the terminal he is typing in.
 # 5. **Re-bind** the same tty with `POST /bind {"tty", "pane"}` — no toggle, no
 #    flight, and not a deliberate bind (it never takes a sentence's caret or spawn).
+#
+# 6. **Reload the Chrome extension** when `chrome-extension/` differs from what was
+#    last reloaded (2026-10-07: the ⌘⇧ badge was committed at 13:25 and Chrome
+#    still showed the old one at 13:35 — nothing in the deploy touched Chrome).
 #
 # Sourced by docs/shoot-overlay-states.sh for `relay_wait_idle`, `relay_bound_tty`
 # and `relay_rebind`; run directly to restart.
@@ -186,6 +193,33 @@ relay_swap_staged() {
   echo "⚠️ could not install the staged build — relaunching the bundle already in /Applications"
 }
 
+# The extension's fingerprint: every file in `chrome-extension/`, by content.
+relay_extension_sha() {
+  (cd "$RELAY_DIR/chrome-extension" && find . -type f ! -name '.*' | LC_ALL=C sort | xargs shasum) | shasum | awk '{print $1}'
+}
+
+# Reload the unpacked extension in Chrome through the app (`POST /chrome/reload` →
+# the 8920 socket → `chrome.runtime.reload()`), when its files changed since the
+# last reload, or always with `force`. Retried for 40 s: a freshly relaunched app
+# waits for the extension's 30 s alarm before the socket is back. The worker then
+# re-injects `inspect.js` into every open tab, so no page needs reloading.
+relay_reload_extension() {
+  local force="${1:-}" sha stamp="$RELAY_HOME/chrome-extension.sha" port
+  sha="$(relay_extension_sha)"
+  if [ -z "$force" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$sha" ]; then return 0; fi
+  for _ in $(seq 1 40); do
+    for port in 8917 8918 8919; do
+      if curl -fsS -m 3 -X POST "127.0.0.1:$port/chrome/reload" >/dev/null 2>&1; then
+        echo "$sha" > "$stamp"
+        echo "→ Chrome extension reloaded (v$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$RELAY_DIR/chrome-extension/manifest.json"))"
+        return 0
+      fi
+    done
+    sleep 1
+  done
+  echo "⚠️ the Chrome extension did not answer for 40 s — reload it in chrome://extensions"
+}
+
 relay_launch() {
   open -g "$RELAY_APP"
   local waited=0
@@ -200,15 +234,16 @@ relay_launch() {
 }
 
 relay_restart() {
-  local build=0 dry=0
+  local build=0 dry=0 extension=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --build) build=1 ;;
+      --extension) extension=1 ;;
       --dry-run) dry=1 ;;
       --max-wait) RELAY_MAX_WAIT="$2"; shift ;;
       --quiet) RELAY_QUIET="$2"; shift ;;
       --force) RELAY_FORCE=1 ;;
-      -h|--help) sed -n '2,15p' "$RELAY_DIR/relay-restart.sh"; return 0 ;;
+      -h|--help) sed -n '2,18p' "$RELAY_DIR/relay-restart.sh"; return 0 ;;
       *) echo "unknown argument: $1" >&2; return 2 ;;
     esac
     shift
@@ -220,11 +255,20 @@ relay_restart() {
   fi
 
   local pid; pid="$(relay_pid)"
+  if [ "$extension" = 1 ]; then
+    [ -n "$pid" ] || { echo "⛔️ the app is not running — the extension reloads through it"; return 4; }
+    echo "🔍 waiting until Walkie Talkie (pid $pid) is idle before reloading the Chrome extension…"
+    relay_wait_idle || return $?
+    if [ "$dry" = 1 ]; then echo "🧪 dry run: the gate is open — would reload the Chrome extension"; return 0; fi
+    relay_reload_extension force
+    return 0
+  fi
   if [ -z "$pid" ]; then
     if [ "$dry" = 1 ]; then echo "🧪 dry run: the app is not running — would$([ "$build" = 1 ] && echo " install the staged build and") launch it"; return 0; fi
     [ "$build" = 1 ] && relay_swap_staged
     echo "the app is not running — launching it"
     relay_launch
+    relay_reload_extension
     return 0
   fi
 
@@ -251,6 +295,7 @@ relay_restart() {
   [ "$build" = 1 ] && relay_swap_staged
   relay_launch
   relay_rebind "$tty" "$pane" "$owner"
+  relay_reload_extension
 }
 
 # Sourced for the functions, run for the restart.

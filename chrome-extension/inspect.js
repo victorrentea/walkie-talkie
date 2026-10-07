@@ -15,8 +15,30 @@
 
 (() => {
   'use strict';
-  if (window.__walkieTalkieInspector) return;
-  window.__walkieTalkieInspector = true;
+
+  // **Each copy retires the one before it (2026-10-07).** A reload of the
+  // extension (`POST /chrome/reload`, `relay-restart.sh`) leaves the copy in an
+  // already-open tab orphaned: its listeners still swallow ⌘⇧-clicks, its badge
+  // stays drawn, and it can no longer reach the worker. The worker re-injects
+  // this file into every open tab on `onInstalled`, so the new copy tells the
+  // old one to stand down through a DOM event — the one channel two copies share
+  // whether or not Chrome gave them the same isolated world. That is also why
+  // the old `window.__walkieTalkieInspector` guard is gone: in a shared world it
+  // made the new copy return and kept the orphan. A second copy within one
+  // lifetime (re-injected into a page that was loading) retires the first, so
+  // there is still exactly one.
+  const RETIRE = 'walkie-talkie-inspector-retire';
+  document.dispatchEvent(new Event(RETIRE));
+  const life = new AbortController();
+  const live = { signal: life.signal };
+  const captured = { capture: true, signal: life.signal };
+  document.addEventListener(RETIRE, () => {
+    life.abort();
+    disarm();
+    hideBadge();
+    ui?.host.remove();
+    ui = null;
+  }, live);
 
   // The chord has to be *held*, not merely pressed.
   //
@@ -657,7 +679,10 @@
   }
 
   if (window.top === window) {
+    // A runtime listener takes no abort signal, so a copy retired within one
+    // lifetime checks for itself.
     chrome.runtime.onMessage.addListener((msg) => {
+      if (life.signal.aborted) return;
       if (msg?.type === 'pickable') msg.on ? showBadge() : hideBadge();
     });
     chrome.runtime.sendMessage({ type: 'pickable?' })
@@ -681,17 +706,17 @@
       heldSince = 0;
       if (armed) { armed = false; ui?.cursor.remove(); hide(); }
     }
-  }, true);
+  }, captured);
 
   // Releasing **either** half ends it: the gesture is the pair, not the ⌘.
-  addEventListener('keyup', (e) => { if (CHORD.includes(e.key)) disarm(); }, true);
+  addEventListener('keyup', (e) => { if (CHORD.includes(e.key)) disarm(); }, captured);
 
   // ⌘⇥ away, or focus leaving for the address bar: the keyup never arrives, and
   // an outline left behind is an outline that outlives the key holding it up.
   // On the window and *not* in the capture phase — captured, this would also
   // catch every field in the page losing focus, which is not the same event.
-  window.addEventListener('blur', disarm);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) disarm(); });
+  window.addEventListener('blur', disarm, live);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) disarm(); }, live);
 
   addEventListener('mousemove', (e) => {
     mouse = { x: e.clientX, y: e.clientY };
@@ -725,11 +750,11 @@
     } else if (heldSince) {
       disarm();
     }
-  }, true);
+  }, captured);
 
   // Not while dragging: the box is no longer registered with the element under
   // it, and repainting would snap it back to where the element still is.
-  addEventListener('scroll', () => { if (armed && current && !drag) paint(current); }, true);
+  addEventListener('scroll', () => { if (armed && current && !drag) paint(current); }, captured);
 
   // While armed the page gets none of it. ⌘⇧-click would open a new tab and jump
   // to it, ⇧-drag would extend a selection, and the point of the gesture is that
@@ -748,6 +773,6 @@
         pick();
       }
       if (type === 'mouseup' && e.button === 0) endDrag(e);
-    }, true);
+    }, captured);
   }
 })();

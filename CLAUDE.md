@@ -50,6 +50,7 @@ menus, About, the Chrome extension. Logs, comments and commits are unaffected. S
   after the last insert/dictation edge; an app that does not answer is refused (exit 4), never
   restarted blind.
   `--dry-run` checks the gate; `--force` is a human's only. If it refuses, WAIT — never override.
+- **An edit to `chrome-extension/` is deployed with `./relay-restart.sh --extension`** (any restart also reloads it when it changed) — committing it reaches no browser.
 - **Never launch by the executable path** — `open "/Applications/Walkie Talkie.app"`; a path launch
   is a second app to TCC.
 - **A fix "did not take"? Read the bundle, not the repo** (`find "/Applications/Walkie Talkie.app"
