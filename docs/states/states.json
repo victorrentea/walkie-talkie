@@ -374,7 +374,7 @@
     "shape" : "chip",
     "slug" : "transcribing-local-now",
     "title" : "⌘⌃X — the local model, now",
-    "when" : "From one second into the wait for ElevenLabs (or Wispr Flow) with *Backup Local Pre-Transcribe* off — never while the microphone is open. With it on, the row is the `⌘⌃X - 💻 fallback, auto in 3s...` countdown.",
+    "when" : "From one second into the wait for ElevenLabs (or Wispr Flow) with *Backup Local Pre-Transcribe* off — never while the microphone is open. With it on, the row is the `💻 local in 3s \/ ⌘⌃X ...` countdown.",
     "width" : 308
   },
   {
@@ -394,7 +394,7 @@
     "group" : "Dictating",
     "height" : 117,
     "image" : "transcribing-fallback-countdown.png",
-    "note" : "**The countdown is on the row with the keys, the keys first** (2026-10-06; `⌘⌃X - 💻 fallback, auto in 3s...` is Victor's own wording, the emoji inline and the glyph column empty). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
+    "note" : "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
     "shape" : "chip",
     "slug" : "transcribing-fallback-countdown",
     "title" : "Fallback to local — counting down to the budget",

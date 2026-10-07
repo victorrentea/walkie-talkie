@@ -463,7 +463,7 @@
           <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
         </header>
         <div class="shot"><img src="states/transcribing-local-now.png" width="308" height="117" style="opacity:0.8" alt="⌘⌃X — the local model, now"></div>
-        <p class="when">From one second into the wait for ElevenLabs (or Wispr Flow) with <em>Backup Local Pre-Transcribe</em> off — never while the microphone is open. With it on, the row is the <code>⌘⌃X - 💻 fallback, auto in 3s...</code> countdown.</p>
+        <p class="when">From one second into the wait for ElevenLabs (or Wispr Flow) with <em>Backup Local Pre-Transcribe</em> off — never while the microphone is open. With it on, the row is the <code>💻 local in 3s / ⌘⌃X ...</code> countdown.</p>
         <p class="note"><strong>The quick exit, written where he is looking</strong> (2026-09-28). Victor: <em>&quot;I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip&quot;</em>. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like <code>📋 Re-paste ⌘V</code>: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (<em>&quot;only displayed after 1 s after starting the transcribing&quot;</em>), so a fast engine never shows it. It goes when the words land.</p>
         <code class="slug">transcribing-local-now</code>
       </section>
@@ -484,7 +484,7 @@
         </header>
         <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
         <p class="when">From one second into the wait for ElevenLabs or Wispr Flow with <em>Backup Local Pre-Transcribe</em> on (the default), until the engine&#x27;s p95 for that length runs out.</p>
-        <p class="note"><strong>The countdown is on the row with the keys, the keys first</strong> (2026-10-06; <code>⌘⌃X - 💻 fallback, auto in 3s...</code> is Victor&#x27;s own wording, the emoji inline and the glyph column empty). Victor: <em>&quot;put a countdown timer … when the timer expires, the local dictation is automatically injected&quot;</em>, then <em>&quot;put it like fallback to local in countdown timer and then show the key shortcuts&quot;</em>. At the close the relay reads the engine&#x27;s p95 (<code>DecodeRate.budget</code>) and starts the local model <code>budget − localEta</code> into the wait, so its words are ready about when the count reaches zero — and then they go in (<code>via: local-auto</code>). ⌘⌃X puts them in sooner (<code>via: local-forced</code>); the engine&#x27;s words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; <strong>no engine&#x27;s name</strong> (<em>&quot;don&#x27;t leak the name of any tool, only the icon&quot;</em> — the logo on the first row says which). It replaces the <code>🤔⏱️</code> the first row grew past 150 % of the estimate, and 09-29&#x27;s <em>offered, never inserted</em> <code>Use local</code>.</p>
+        <p class="note"><strong>The countdown is on the row with the keys</strong> (2026-10-07; <code>💻 local in 3s / ⌘⌃X ...</code> is Victor&#x27;s own wording, the 💻 in the glyph column — replacing 10-06&#x27;s <code>⌘⌃X - 💻 fallback, auto in 3s...</code>). Victor: <em>&quot;put a countdown timer … when the timer expires, the local dictation is automatically injected&quot;</em>, then <em>&quot;put it like fallback to local in countdown timer and then show the key shortcuts&quot;</em>. At the close the relay reads the engine&#x27;s p95 (<code>DecodeRate.budget</code>) and starts the local model <code>budget − localEta</code> into the wait, so its words are ready about when the count reaches zero — and then they go in (<code>via: local-auto</code>). ⌘⌃X puts them in sooner (<code>via: local-forced</code>); the engine&#x27;s words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; <strong>no engine&#x27;s name</strong> (<em>&quot;don&#x27;t leak the name of any tool, only the icon&quot;</em> — the logo on the first row says which). It replaces the <code>🤔⏱️</code> the first row grew past 150 % of the estimate, and 09-29&#x27;s <em>offered, never inserted</em> <code>Use local</code>.</p>
         <code class="slug">transcribing-fallback-countdown</code>
       </section>
       <section class="card" id="transcribing-fallback-now">
@@ -735,7 +735,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at aaf1a2f · 07 Oct 2026 · built 07 Oct 2026, 08:56
+  Generated from <code>OverlayStates.swift</code> · repo at 0ad5c99 · 07 Oct 2026 · built 07 Oct 2026, 09:25
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>
