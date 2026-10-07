@@ -15,9 +15,8 @@ final class WhisperModelsTests: XCTestCase {
     func testTitleIsReadFromTheCard() throws {
         let c = try XCTUnwrap(WhisperModels.Card.parse(Data(card.utf8)))
         let option = WhisperModels.Option(id: "/x/whisper-turbo-victor", card: c)
-        XCTAssertEqual(StatusItem.localRowTitle(option, loading: false),
-                       "Large V3-turbo Victor LoRA 💻")
-        XCTAssertEqual(option.shortTitle, "Turbo LoRA Victor")
+        // The card's old `label` / `short` no longer name it (2026-10-07).
+        XCTAssertEqual(StatusItem.localRowTitle(option, loading: false), "v3-turbo-victor 💻")
         XCTAssertTrue(option.details.hasPrefix(
             "whisper-turbo-victor · trained 3 Oct 2026 · $3.6 · WER 20.4→15.3%\n"))
         XCTAssertTrue(option.details.contains("Base: openai/whisper-large-v3-turbo"))
@@ -27,8 +26,8 @@ final class WhisperModelsTests: XCTestCase {
     func testOriginalIsNamedAsSuch() {
         XCTAssertEqual(StatusItem.localRowTitle(WhisperModels.Option(id: WhisperModels.original, card: nil),
                                                 loading: false),
-                       "Large V3-turbo 💻")
-        XCTAssertEqual(WhisperModels.Option(id: WhisperModels.original, card: nil).shortTitle, "Turbo")
+                       "v3-turbo 💻")
+        XCTAssertEqual(WhisperModels.displayName(WhisperModels.original), "v3-turbo")
         let noLabel = WhisperModels.Card(name: "x-model")
         XCTAssertEqual(WhisperModels.Option(id: "/m/x", card: noLabel).title, "x-model")
     }
@@ -59,8 +58,33 @@ final class WhisperModelsTests: XCTestCase {
         XCTAssertEqual(WhisperModels.options(in: dir).last?.card?.name, "whisper-turbo-victor")
     }
 
+    func testOneNameEverywhere() {
+        XCTAssertEqual(WhisperModels.name("whisper-large-v3-turbo"), "v3-turbo")
+        XCTAssertEqual(WhisperModels.name("whisper-turbo-victor"), "v3-turbo-victor")
+        XCTAssertEqual(WhisperModels.name("whisper-large-victor"), "v3-victor")
+        XCTAssertEqual(WhisperModels.name("whisper-large-v3"), "v3")
+        XCTAssertEqual(WhisperModels.name("Whisper-Turbo-Victor-LoRA"), "v3-turbo-victor")
+        XCTAssertEqual(WhisperModels.name("some-model"), "some-model")
+    }
+
     func testABadCardFallsBackToTheFolderName() {
         XCTAssertNil(WhisperModels.Card.parse(Data("{\"base\": \"x\"}".utf8)))
         XCTAssertEqual(WhisperModels.Option(id: "/m/some-model", card: nil).title, "some-model")
+    }
+}
+
+/// The DJI battery on the `Mic:` row, worded as Victor Addons words it (2026-10-07).
+final class DjiBatteryTests: XCTestCase {
+    private func suffix(_ json: String) -> String? { DjiBattery.menuSuffix(json: Data(json.utf8)) }
+
+    func testLinkedTransmittersShowTheirPercent() {
+        XCTAssertEqual(suffix(#"{"present":true,"live":true,"linked_mask":2,"transmitters":[{"unit":2,"level":2,"percent":80}]}"#), "≈80 %")
+        XCTAssertEqual(suffix(#"{"live":true,"linked_mask":3,"transmitters":[{"percent":100},{"percent":20}]}"#), "≈100 % / ≈20 %")
+    }
+
+    func testNoTransmitterAndNotLive() {
+        XCTAssertEqual(suffix(#"{"live":true,"linked_mask":0,"transmitters":[]}"#), "— no TX")
+        XCTAssertNil(suffix(#"{"live":false,"linked_mask":2,"transmitters":[{"percent":80}]}"#))
+        XCTAssertNil(suffix("not json"))
     }
 }

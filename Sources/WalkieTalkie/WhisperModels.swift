@@ -32,12 +32,6 @@ enum WhisperModels {
 
     struct Card: Equatable {
         var name: String
-        /// The label on the Engine row (`Large V3-turbo Victor LoRA`);
-        /// the name when the card has none.
-        var label: String?
-        /// The one word the top-level `Engine:` row wears (`Victor`); the label
-        /// when the card has none.
-        var short: String? = nil
         var base: String?
         var method: String?
         var data: String?
@@ -54,8 +48,6 @@ enum WhisperModels {
                   let name = j["name"] as? String, !name.isEmpty else { return nil }
             let wer = j["wer"] as? [String: Any]
             return Card(name: name,
-                        label: j["label"] as? String,
-                        short: j["short"] as? String,
                         base: j["base"] as? String,
                         method: j["method"] as? String,
                         data: j["data"] as? String,
@@ -90,21 +82,18 @@ enum WhisperModels {
 
         var isOriginal: Bool { id == WhisperModels.original }
 
-        /// The row's name in the Engine list, before its 💻 — the details are
-        /// the tooltip's. **The model's own name, not `Local`** (2026-10-03,
-        /// Victor: *"în loc să fie local, scrie Large V3 Turbo"*).
+        /// **The model's one name, wherever it is shown** — the Engine list,
+        /// the top-level `Engine:` row, the menu bar's launch tab, About and the
+        /// prompt panel's `Local Whisper (…)` line: `v3-turbo`, `v3-victor`,
+        /// `v3-turbo-victor` (2026-10-07, Victor: *"I want to unify them all …
+        /// V3 Turbo Victor. No LoRA, it just takes space … small caps with kebab
+        /// case … everywhere the same name"*). Until then the row said `Large
+        /// V3-turbo Victor LoRA`, the top-level row `Turbo LoRA Victor` and the
+        /// panel `whisper-turbo-victor` — three names for one set of weights.
+        /// Derived from the card's `name` (else the folder or repo id), so the
+        /// card's old `label` / `short` no longer say anything.
         var title: String {
-            if let card { return card.label ?? card.name }
-            return isOriginal ? "Large V3-turbo" : (id as NSString).lastPathComponent
-        }
-
-        /// What the top-level `Engine:` row calls it — `Turbo`, `Turbo LoRA
-        /// Victor`, `Large LoRA Victor` (2026-10-05, Victor: *"V3t-victor -> rename
-        /// to "Turbo LoRA Victor💻". si celelalte similar"*; `V3t` / `V3t-victor` /
-        /// `V3-victor` since 2026-10-04). A card's `short` says it for a folder.
-        var shortTitle: String {
-            if let card { return card.short ?? title }
-            return isOriginal ? "Turbo" : title
+            WhisperModels.name(card?.name ?? (id as NSString).lastPathComponent)
         }
 
         /// Turbo after the full-size V3; within a base, the published weights
@@ -189,12 +178,22 @@ enum WhisperModels {
     /// The option for an id (what the helper reports it loaded), for its name.
     static func option(for id: String) -> Option? { options().first { $0.id == id } }
 
-    /// How a model id is shown on the Local row: the repo id in full (Victor
-    /// says it with the `mlx-community/` prefix), a folder as its card's name.
+    /// How a model id is shown anywhere — `Option.title`, for an id the
+    /// helper reports or the one configured.
     static func displayName(_ id: String) -> String {
-        guard id.hasPrefix("/") else { return id }
-        if let name = option(for: id)?.card?.name { return name }
-        return (id as NSString).lastPathComponent
+        if id.hasPrefix("/"), let option = option(for: id) { return option.title }
+        return name((id as NSString).lastPathComponent)
+    }
+
+    /// `whisper-large-v3-turbo` → `v3-turbo`, `whisper-turbo-victor` →
+    /// `v3-turbo-victor`, `whisper-large-victor` → `v3-victor`: lower case,
+    /// kebab, `whisper` / `large` / `lora` dropped and `v3` in front — for a
+    /// name that is a Whisper V3 at all; anything else is left as it is.
+    static func name(_ raw: String) -> String {
+        let tokens = raw.lowercased().split(separator: "-").map(String.init)
+        guard tokens.contains(where: { ["whisper", "large", "v3", "turbo"].contains($0) }) else { return raw }
+        let rest = tokens.filter { !["whisper", "large", "v3", "lora"].contains($0) }
+        return (["v3"] + rest).joined(separator: "-")
     }
 
     static func abbreviated(_ path: String) -> String {

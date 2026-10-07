@@ -373,6 +373,19 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   `<model> — loading…` in the menu. `AppDelegate.setEngineLoading` is a one-liner into
   `StatusItem`; ⏳ is the only badge that claims the glyph.
   → journal: *The recogniser*
+- **The DJI transmitter's battery rides after `Mic: 🎤 DJI`, as in Victor Addons' menu** (2026-10-07:
+  *"display also the battery … of my DJI the same way macOS add-ons does it"*): `≈80 %`, `— no TX`,
+  nothing when not live. **Asked of Addons (`GET 127.0.0.1:55123/test/dji/state`), never read off the
+  receiver** — its vendor USB interface is exclusive and Addons holds it for its low-battery banner.
+  `DjiBattery.refresh` at `menuWillOpen`; the row shows the last reading, then repaints in the open menu.
+- **One name per model, everywhere, since 2026-10-07: `v3-turbo`, `v3-victor`, `v3-turbo-victor`**
+  (Victor: *"I want to unify them all … V3 Turbo Victor. No LoRA, it just takes space … small caps
+  with kebab case … in the menu, in the submenu, when it starts … in the prompt preview panel
+  everywhere the same name"*). `WhisperModels.Option.title` / `displayName` / `name(_:)` derive it
+  from the card's `name` (else the folder or repo id); the cards' `label` / `short` are no longer
+  read. The Engine list, `Engine: v3-turbo-victor💻 1.5 GB`, the launch tab, the engine tooltip and
+  the panel's `Local Whisper (v3-turbo-victor)` all go through it. **This supersedes every model
+  name in the bullet below.**
 - **The local model's name reads `mlx-community/whisper-large-v3-turbo — 2.6 GB RAM`, in full,
   read when the menu opens — in the *submenu*.** It was a disabled row of its own at the bottom of
   the menu until 2026-09-14, then the Engine row's own title; since the same day the top-level row

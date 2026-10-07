@@ -481,6 +481,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyMicRow()
     }
 
+    /// The row's title alone — what `DjiBattery`'s answer repaints. The DJI's
+    /// transmitter battery rides after its name, as in Victor Addons' menu
+    /// (2026-10-07): `Mic: 🎤 DJI ≈80 %`.
+    private func applyMicTitle() {
+        var title = "Mic: \(micCurrentLabel?() ?? "—")"
+        if InputDevice.resolve().known?.id == "rx", let battery = DjiBattery.suffix { title += " \(battery)" }
+        micItem.title = title
+    }
+
     /// `Microphone: 🎙️ Elgato Wave XLR` — **the device that would record right
     /// now**, which is not always the one ticked: a pick whose device has been
     /// unplugged falls back to automatic (`InputDevice.resolve`), and the row
@@ -489,7 +498,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// *you asked for the receiver, you are on the built-in* — which is the
     /// sentence he needs when a cable has come out.
     private func applyMicRow() {
-        micItem.title = "Mic: \(micCurrentLabel?() ?? "—")"
+        applyMicTitle()
         micSubmenu.removeAllItems()
         let available = micAvailable?() ?? []
 
@@ -1642,7 +1651,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     /// **The local engine, one row per model** (2026-10-03, flattened the same
     /// day). Victor: every engine/model a sibling in one list, one tick, short
-    /// titles — `Large V3 Victor 💻`, `Large V3-turbo 💻`, `Large V3-turbo Victor LoRA 💻`; the date, the cost, the WER, the data and the method are on the
+    /// titles — `v3-victor 💻`, `v3-turbo 💻`, `v3-turbo-victor 💻`; the date, the cost, the WER, the data and the method are on the
     /// tooltip, read from the folder's `model-card.json` (`WhisperModels.Option`),
     /// never written twice. The tick needs both: the local engine live **and**
     /// this model picked.
@@ -1660,7 +1669,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         }
     }
 
-    /// `<model name> 💻` — `Large V3-turbo 💻`, `Large V3-turbo Victor LoRA 💻`
+    /// `<model name> 💻` — `v3-turbo 💻`, `v3-turbo-victor 💻`
     /// (2026-10-03, Victor: the model's name, the laptop after it; no `Local`),
     /// with the ⏳ while the picked model loads.
     static func localRowTitle(_ option: WhisperModels.Option, loading: Bool) -> String {
@@ -1956,11 +1965,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
             return elevenReady?() == true ? "ElevenLabs + Live" : "ElevenLabs + Live ⚠️"
         }
         if id == "wispr" { return "Wispr Flow" }
-        // **The picked model's short name, the 💻 against it, then the RAM** —
-        // `Turbo💻 1.5 GB`, `Turbo LoRA Victor💻 1.5 GB`, `Large LoRA Victor💻 2.9 GB`
-        // (2026-10-05; `V3t…` / `V3-victor…` 2026-10-04, *"fara ( ) in jurul GB"*;
-        // it read `Turbo 💻 (2.2 GB)` from 2026-10-03).
-        let name = (WhisperModels.option(for: WhisperModels.selected)?.shortTitle ?? "Local") + "💻"
+        // **The picked model's name, the 💻 against it, then the RAM** —
+        // `v3-turbo💻 1.5 GB`, `v3-turbo-victor💻 1.5 GB`, `v3-victor💻 2.9 GB`:
+        // the same name as everywhere else since 2026-10-07 (`Turbo LoRA Victor`
+        // 2026-10-05, `V3t…` 2026-10-04, *"fara ( ) in jurul GB"*).
+        let name = WhisperModels.displayName(WhisperModels.selected) + "💻"
         if engineLoading { return name + " loading…" }
         guard let bytes = whisperFootprint?() else { return name }
         return name + String(format: " %.1f GB", Double(bytes) / 1_073_741_824)
@@ -2268,6 +2277,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // 🧾 cached for 5 min; a stale one refreshes in the background and the
         // row repaints while the menu is still open.
         ElevenLabsQuota.shared.refreshIfStale()
+        // 🎤 the DJI's battery, asked of Victor Addons; the row repaints in the open menu.
+        DjiBattery.refresh { [weak self] _ in self?.applyMicTitle() }
         applyEngineRow()
         // Devices come and go while the app runs, and the only moment this list
         // has to be right is the moment he is looking at it.

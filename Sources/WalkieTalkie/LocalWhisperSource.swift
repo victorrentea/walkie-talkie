@@ -109,17 +109,14 @@ final class LocalWhisperSource: DictationSource {
     /// is the other question, *what is about to be believed*, and it has to have
     /// an answer before the model is up. **Keep it in step with
     /// `whisper_helper.py`'s `MODEL`.**
-    /// The weights without the account in front — `mlx-community/` is who
-    /// published them, not what they are.
-    static var modelLabel: String {
-        configuredModel.contains("/")
-            ? String(configuredModel.split(separator: "/").last!) : configuredModel
-    }
+    /// The model's one name (`WhisperModels.Option.title`, 2026-10-07) — what
+    /// the prompt panel's `Local Whisper (…)` line says.
+    static var modelLabel: String { WhisperModels.displayName(configuredModel) }
 
     /// Since 2026-10-03 the pick from the Engine list (`WhisperModels.selected`),
     /// which falls back to `RELAY_WHISPER_MODEL` and then the published turbo.
     static var configuredModel: String { WhisperModels.selected }
-    /// A folder shows as its card's name (`whisper-turbo-victor`), a repo id in full.
+    /// The model's one name — `WhisperModels.Option.title`.
     var displayModelName: String { WhisperModels.displayName(whisper.modelName ?? Self.configuredModel) }
     /// The id the running helper reported — nil while it is down.
     var loadedModel: String? { whisper.modelName }
