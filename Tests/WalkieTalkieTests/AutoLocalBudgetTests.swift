@@ -82,10 +82,10 @@ final class AutoLocalBudgetTests: XCTestCase {
     }
 
     func testTheChipRowCountsDownWithNoEngineName() {
-        XCTAssertEqual(AutoLocal.rowText(countdown: 2.4, loading: false, keys: "⌘⌃X"), "⌘⌃X - 💻 fallback, auto in 3s...")
-        XCTAssertEqual(AutoLocal.rowText(countdown: 3.0, loading: true, keys: "⌘⌃X"), "⌘⌃X - 💻 fallback, auto in 3s...")
-        XCTAssertEqual(AutoLocal.rowText(countdown: 0.01, loading: false, keys: "⌘⌃X"), "⌘⌃X - 💻 fallback, auto in 1s...")
-        XCTAssertEqual(AutoLocal.rowText(countdown: 0, loading: false, keys: "⌘⌃X"), "⌘⌃X - 💻 fallback, auto now...")
+        XCTAssertEqual(AutoLocal.rowText(countdown: 2.4, loading: false, keys: "⌘⌃X"), "local in 3s / ⌘⌃X ...")
+        XCTAssertEqual(AutoLocal.rowText(countdown: 3.0, loading: true, keys: "⌘⌃X"), "local in 3s / ⌘⌃X ...")
+        XCTAssertEqual(AutoLocal.rowText(countdown: 0.01, loading: false, keys: "⌘⌃X"), "local in 1s / ⌘⌃X ...")
+        XCTAssertEqual(AutoLocal.rowText(countdown: 0, loading: false, keys: "⌘⌃X"), "local now / ⌘⌃X ...")
         XCTAssertEqual(AutoLocal.rowText(loading: false, keys: "⌘⌃X"), "Local now  ⌘⌃X")
         XCTAssertEqual(AutoLocal.rowText(loading: true, keys: "⌘⌃X"), "Local now (loading)  ⌘⌃X")
         XCTAssertEqual(AutoLocal.menuTitle, "Backup Local Pre-Transcribe")

@@ -1932,7 +1932,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         for (on, label) in [(kamikaze, kamikazeInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
                             (heldCount > 0, heldInfo)] where on {
             label.sizeToFit()
-            let lead = label === localNowInfo && localNowLeadsWithKeys ? 0 : glyphColumn + recordDotGap
+            let lead = glyphColumn + recordDotGap
             emojiRowsWidth = max(emojiRowsWidth, lead + ceil(label.frame.width))
         }
         // **Written here, not with the rows below.** The row is measured into the
@@ -2189,10 +2189,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         if localNow != nil {
             localNowInfo.sizeToFit()
             layoutGlyphRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, width: innerWidth)
-            localNowGlyph.isHidden = localNowLeadsWithKeys
-            if localNowLeadsWithKeys {
-                centre(localNowInfo, x: 0, width: innerWidth, inRowOfHeight: recordRowHeight)
-            }
             localNowRow.isHidden = false
             rows.append((localNowRow, recordRowHeight))
         } else {
@@ -4231,12 +4227,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `(loading)`; see `localNowRow`.
     private(set) var localNow: Bool?
     /// The row's words as drawn — `Local now  ⌘⌃X`, or, with a decode ahead
-    /// armed, the countdown `⌘⌃X - 💻 fallback, auto in 3s...` (2026-10-06,
-    /// `AutoLocal.rowText`; `Use local … — <engine> over budget` until then).
+    /// armed, the countdown `💻 local in 3s / ⌘⌃X ...` (2026-10-07,
+    /// `AutoLocal.rowText`; 10-06's `⌘⌃X - 💻 fallback, auto in 3s...` before).
     private var localNowShown: String?
-    /// The countdown carries its own `💻` after the keys, so the glyph column
-    /// stays empty and the words start where the glyphs do.
-    private var localNowLeadsWithKeys = false
 
     /// - Parameters:
     ///   - countdown: seconds to the budget, when the local words go in on their own.
@@ -4248,7 +4241,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard next != localNow || text != localNowShown else { return }
         localNow = next
         localNowShown = text
-        localNowLeadsWithKeys = on && countdown != nil
         layoutContent()
         refreshOpacity()
     }

@@ -83,7 +83,7 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   local model runs on the relay's own closed WAV (`DictationSource.closedTakeAudio(take:)`: ElevenLabs'
   upload in flight, Wispr's kept meter take) from **`max(0, budget − localEta)`** (`AutoLocal.shouldStart`,
   the 0.1 s tick in `syncLocalNow`). Under the 1.5 s voiced floor nothing runs. From
-  `localNowRowDelay` (1 s) into the wait the chip counts down — `⌘⌃X - 💻 fallback, auto in 3s...`
+  `localNowRowDelay` (1 s) into the wait the chip counts down — `💻 local in 3s / ⌘⌃X ...`
   (`AutoLocal.row` / `rowText`, whole seconds up, `now` at zero, **no engine name**). **At zero the
   local words go in** (`AutoLocal.shouldHandOver`: expired + `.ready`, once → `handOverAtBudget` →
   `transcribeLocallyNow`, `via: local-auto`, log `⏱ <engine> over budget … they go in now`); a decode

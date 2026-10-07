@@ -15334,3 +15334,10 @@ kamikaze"* as *"comic art"*.) `AppDelegate.offerKamikaze` arms a 3 s window and 
 submitted in Terminal.app or VS Code. `onGestureKamikaze` takes it only with no sentence open or
 settling. The word travels the prompt's own route, so the shell guard and the Return logic are
 the ones already measured. Shot `flash-kamikaze-offer`.
+
+## The countdown row reworded: `💻 local in 3s / ⌘⌃X ...` (2026-10-07)
+
+Victor: *"the message during transcribing should be: 💻 local in 3s / <shortcut> ..."* — replacing
+10-06's `⌘⌃X - 💻 fallback, auto in 3s...`. The words lead again, so the `💻` goes back to the
+row's glyph column (`localNowLeadsWithKeys` and its centred-label branch removed); `local now / ⌘⌃X ...`
+at zero. `AutoLocal.rowText`, tested in `AutoLocalBudgetTests`.

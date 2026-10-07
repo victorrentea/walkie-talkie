@@ -26,8 +26,8 @@ import Foundation
 /// the budget is read (`DecodeRate.budget`, the engine's p95 for that length,
 /// clamped), the local model decodes the take **speculatively** from
 /// `budget − localEta` (`specStart`) and holds the words. From one second into
-/// the wait the chip counts down to the budget — `⌘⌃X - 💻 fallback, auto in
-/// 3s...`; **at zero the local words go in** (`via: local-auto`; a decode still
+/// the wait the chip counts down to the budget — `💻 local in 3s / ⌘⌃X ...`;
+/// **at zero the local words go in** (`via: local-auto`; a decode still
 /// running is waited for), unless the engine's words landed first (the local
 /// ones are then discarded, logged `wasted`) or he pressed ⌘⌃X (inserted at
 /// once, `via: local-forced`). The local weights are kept warm while another
@@ -55,17 +55,17 @@ enum AutoLocal {
     static let menuTitle = "Backup Local Pre-Transcribe"
 
     /// **The chip's ⌘⌃X row.** With a decode ahead armed for this sentence it
-    /// counts down to the budget — `⌘⌃X - 💻 fallback, auto in 3s...`, the keys
-    /// first and the emoji inline (2026-10-06, Victor's own wording, replacing
-    /// the same morning's `Fallback to local in 3s  ⌘⌃X`), whole seconds rounded
-    /// up, `auto now...` at zero while the local words are still being decoded. **No engine's name** (same day:
+    /// counts down to the budget — `💻 local in 3s / ⌘⌃X ...` (2026-10-07,
+    /// Victor's wording, replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`;
+    /// the 💻 is the row's glyph column, not in the text), whole seconds rounded
+    /// up, `local now` at zero while the local words are still being decoded. **No engine's name** (same day:
     /// *"don't leak the name of any tool, only the icon"* — the logo on the
     /// `Transcribing via` row says which). Otherwise ⌘⌃X's own `Local now`,
     /// `(loading)` while the weights are down.
     static func rowText(countdown: TimeInterval? = nil, loading: Bool, keys: String) -> String {
         if let c = countdown {
             let s = Int(c.rounded(.up))
-            return keys + " - 💻 fallback, auto " + (s > 0 ? "in \(s)s..." : "now...")
+            return "local " + (s > 0 ? "in \(s)s" : "now") + " / " + keys + " ..."
         }
         return "Local now" + (loading ? " (loading)" : "") + "  " + keys
     }

@@ -143,10 +143,10 @@ yields to `--label`).
   `layoutGlyphRow`, both halo branches), placed after `☠️ Kamikaze` and before the paste row. A
   0.25 s tick runs while a take is available, to keep the second and `(loading)` honest. States
   page: `transcribing-local-now`, `transcribing-local-now-loading`. → `mouse-gestures.md`, *⌘⌃X*
-  **With *Backup Local Pre-Transcribe* ON the row is the countdown `⌘⌃X - 💻 fallback, auto in
-  3s...`** (2026-10-06 — Victor's own wording, replacing the same morning's `💻 Fallback to local in
-  3s  ⌘⌃X`: the keys first, the `💻` inline, the glyph column left empty — `localNowLeadsWithKeys`; a plain `stringValue`, not an attributed one, and the states page shows it lit on the halo label; `AutoLocal.rowText` / `AutoLocal.row`, `setLocalNow(_:loading:countdown:)`): from
-  one second into the wait to the budget, whole seconds rounded up, `auto now...` at zero while the decode
+  **With *Backup Local Pre-Transcribe* ON the row is the countdown `💻 local in 3s / ⌘⌃X ...`**
+  (2026-10-07 — Victor's wording, replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`: the `💻` back
+  in the glyph column, the words after it; a plain `stringValue`, not an attributed one, and the states page shows it lit on the halo label; `AutoLocal.rowText` / `AutoLocal.row`, `setLocalNow(_:loading:countdown:)`): from
+  one second into the wait to the budget, whole seconds rounded up, `local now / ⌘⌃X ...` at zero while the decode
   ahead finishes; at zero the local words go in (`dictation-source.md`). **No engine's name on it**
   (*"don't leak the name of any tool, only the icon"* — the logo on `Transcribing via` says which).
   No row when the local model gave nothing. It goes when the engine's words land or the local ones

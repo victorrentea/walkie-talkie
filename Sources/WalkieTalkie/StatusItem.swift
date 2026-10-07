@@ -1566,7 +1566,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let ram = whisperFootprint?().map { String(format: "%.1f GB", Double($0) / 1_073_741_824) }
         auto.toolTip = "While ElevenLabs or Wispr Flow transcribes, this Mac decodes the sentence too, "
             + "timed to be ready by the engine's p95 for that length (at least 1.5 s, at most 0.3 × the audio + 1 s).\n"
-            + "The chip counts down to that moment — ⌘⌃X - 💻 fallback, auto in 3s... — and at zero the local words go in; "
+            + "The chip counts down to that moment — 💻 local in 3s / ⌘⌃X ... — and at zero the local words go in; "
             + "⌘⌃X puts them in sooner, and the engine's words landing first discard them.\n"
             + "Uses \(WhisperModels.option(for: WhisperModels.selected).map { Self.localRowTitle($0, loading: false) } ?? "Local 💻").\n"
             + "Keeps the local model loaded while another engine is picked"
