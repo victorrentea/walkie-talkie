@@ -187,7 +187,7 @@ me to dismiss it explicitly"*.
   `~/.walkie-talkie/reply-token` (0600, made at launch): the port answers any web page (CORS `*`) and
   no page can know it — a wrong token is a 403 and `⚠️ 💬 POST /reply refused`.
 - **The panel**: below-right of where the pointer was when the answer arrived, does not follow,
-  `sharingType = .none`, ≤ 400 chars, header `💬 <from>`. **It stays until the ✕** (drawn,
+  `sharingType = .none`, ≤ 400 chars, header: the walkie icon, then `<folder> — <task from the tab title>` (else `<folder> · <tty>`; `walkie-reply` sends the tty of its first ancestor that has one). **The name is a link**: hand cursor + underline on hover, a click binds that terminal (`rebindFromMenu`, from "the answer panel" — bound and brought forward like the menu's rebind); the panel stays. **It stays until the ✕** (drawn,
   first-mouse) **or a newer answer — no clock, no bar** (Victor: *"NO PROGRESSBAR. i have to manually
   dismiss it"*; a countdown that started when the pointer moved lived for one build). Log `💬 answer
   from <from> — N chars; up until the ✕`, `💬 answer dismissed (✕)`.

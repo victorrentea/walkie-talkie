@@ -1431,9 +1431,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("🎚️ microphone ← the other app: \(id == "auto" ? "automatic" : id)")
         }
         micId = InputDevice.chosenId
-        micAnnouncer.onMic = { [weak self] glyph in self?.status.setMicGlyph(glyph) }
         // `walkie-reply` reads it; made now, not at the first answer.
         _ = Self.replyToken
+        ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the answer panel") }
         micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for
@@ -1957,8 +1957,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let text = body["text"] as? String,
                   !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             else { return (400, ["ok": false, "error": "text"]) }
-            ReplyPanel.show(text, from: body["from"] as? String)
-            return (200, ["ok": true, "chars": text.count])
+            // **Which terminal asked** (Victor: *"do show what terminal asked
+            // instead of 'walkie talkie'"*): the folder, then the task its tab
+            // title carries — the spawn menu's own wording — else the tty.
+            let folder = body["from"] as? String
+            var label = folder
+            if let tty = body["tty"] as? String, !tty.isEmpty {
+                let title = TerminalBinding.liveTitles()[tty]
+                let base = folder ?? tty
+                if let task = ActiveTerminals.task(fromTitle: title, folder: base) {
+                    label = "\(base) — \(task)"
+                } else {
+                    label = "\(base) · \(tty)"
+                }
+            }
+            ReplyPanel.show(text, from: label, tty: (body["tty"] as? String).flatMap { $0.isEmpty ? nil : $0 })
+            return (200, ["ok": true, "chars": text.count, "from": label ?? NSNull()])
         }
         // **The 🔽 ↓ typing box from a desk**: opens it at the pointer as the
         // gesture would; `text` types into it, `submit: true` presses Return.

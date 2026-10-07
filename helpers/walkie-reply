@@ -24,7 +24,28 @@ try:
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=2).stdout.strip()
 except Exception:
     top = ""
-body = json.dumps({"token": token, "text": text, "from": os.path.basename(top or os.getcwd())}).encode()
+def session_tty():
+    """The terminal of the agent asking: walk up from this process to the first
+    ancestor with a tty (the Bash tool's shell has none; `claude` does)."""
+    pid = os.getppid()
+    for _ in range(12):
+        try:
+            out = subprocess.run(["ps", "-o", "tty=,ppid=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=2).stdout.split()
+        except Exception:
+            return None
+        if len(out) < 2:
+            return None
+        if out[0].startswith("ttys"):
+            return out[0]
+        pid = int(out[1])
+        if pid <= 1:
+            return None
+    return None
+
+
+body = json.dumps({"token": token, "text": text, "from": os.path.basename(top or os.getcwd()),
+                   "tty": session_tty()}).encode()
 for port in (8917, 8918, 8919):
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/reply", data=body,

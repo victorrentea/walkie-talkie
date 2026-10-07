@@ -53,10 +53,6 @@ final class MicAnnouncer {
     /// CoreAudio name for a device none of `known` names. Queue only.
     private var last = ""
     private let tab = BottomTab(icon: MicAnnouncer.icon)
-    /// The resolved microphone's glyph (`🎤`), on the main thread, at the
-    /// baseline and after every settled change — the menu-bar icon's mic disc
-    /// (2026-10-07). nil when nothing can record.
-    var onMic: ((String?) -> Void)?
 
     /// `walkie-bound.png` — the device inside its orange ring, the Dock tile's
     /// artwork. nil (no file) leaves the tab with the text alone.
@@ -68,7 +64,6 @@ final class MicAnnouncer {
             guard let self else { return }
             self.last = Self.current().key
             Log.info("🎤 mic announcer: baseline \(self.last.isEmpty ? "none" : self.last)")
-            self.tellGlyph()
             var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
                                                   mScope: kAudioObjectPropertyScopeGlobal,
                                                   mElement: kAudioObjectPropertyElementMain)
@@ -115,14 +110,7 @@ final class MicAnnouncer {
         guard !now.key.isEmpty, now.key != last else { return }
         last = now.key
         Log.info("🎤 mic → \(now.text)")
-        tellGlyph()
         DispatchQueue.main.async { [tab] in tab.show(now.text, tint: Self.tint, hold: Self.hold) }
-    }
-
-    private func tellGlyph() {
-        let r = InputDevice.resolve()
-        let glyph = r.known?.glyph ?? (r.device == nil ? nil : "🎙️")
-        DispatchQueue.main.async { [weak self] in self?.onMic?(glyph) }
     }
 
     /// The resolved device as a comparable key and the tab's copy.

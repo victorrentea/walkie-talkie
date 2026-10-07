@@ -28,12 +28,19 @@ enum ReplyPanel {
     private static let width: CGFloat = 380
     private static let font = NSFont.systemFont(ofSize: 15)
 
+    private static let walkie: NSImage? = RelayWindow.walkieURL("walkie-bound").flatMap { NSImage(contentsOf: $0) }
+
     /// What is on screen — `GET /test/state`.
     static var shown: String?
 
-    static func show(_ raw: String, from label: String?) {
+    /// **A click on the terminal's name binds it** (Victor: *"if I click on it,
+    /// I will rebind my Walkie to that terminal … underlined if I hover it, in
+    /// the hand of the mouse"*) — `AppDelegate.rebindFromMenu`.
+    static var onBind: ((String) -> Void)?
+
+    static func show(_ raw: String, from label: String?, tty: String? = nil) {
         guard Thread.isMainThread else {
-            DispatchQueue.main.async { show(raw, from: label) }
+            DispatchQueue.main.async { show(raw, from: label, tty: tty) }
             return
         }
         close()
@@ -45,9 +52,18 @@ enum ReplyPanel {
 
         let pad: CGFloat = 12
         let inner = width - 2 * pad
-        let header = NSTextField(labelWithString: "💬 " + (label ?? "agent"))
+        // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
+        // walkie"*) — `walkie-bound.png`, the menu bar's own picture.
+        let header = LinkLabel(labelWithString: label ?? "agent")
+        header.lineBreakMode = .byTruncatingTail
         header.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
         header.textColor = NSColor.white.withAlphaComponent(0.55)
+        if let tty = tty {
+            header.onClick = {
+                Log.info("💬 the answer's terminal clicked — binding \(tty)")
+                onBind?(tty)
+            }
+        }
         let body = NSTextField(wrappingLabelWithString: text)
         body.font = font
         body.textColor = .white
@@ -60,7 +76,11 @@ enum ReplyPanel {
         root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
         root.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.95).cgColor
-        header.frame = NSRect(x: pad, y: height - pad - 16, width: inner - 24, height: 16)
+        let icon = NSImageView(frame: NSRect(x: pad, y: height - pad - 16, width: 16, height: 16))
+        icon.image = Self.walkie
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        root.addSubview(icon)
+        header.frame = NSRect(x: pad + 21, y: height - pad - 16, width: inner - 24 - 21, height: 16)
         body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
         root.addSubview(body)
@@ -131,6 +151,35 @@ private final class ReplyCloseButton: NSView {
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick?() }
+}
+
+/// The header: plain text, or — when it names a terminal — a link: the hand
+/// cursor and an underline while the pointer is on it, a click binds it.
+private final class LinkLabel: NSTextField {
+    var onClick: (() -> Void)? { didSet { window?.invalidateCursorRects(for: self) } }
+
+    private func underline(_ on: Bool) {
+        guard onClick != nil else { return }
+        let s = NSMutableAttributedString(string: stringValue,
+                                          attributes: [.font: font as Any, .foregroundColor: textColor as Any])
+        if on { s.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue,
+                               range: NSRange(location: 0, length: s.length)) }
+        attributedStringValue = s
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for a in trackingAreas { removeTrackingArea(a) }
+        guard onClick != nil else { return }
+        let fit = NSRect(x: 0, y: 0, width: min(bounds.width, intrinsicContentSize.width), height: bounds.height)
+        addTrackingArea(NSTrackingArea(rect: fit, options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways],
+                                       owner: self))
+    }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseEntered(with event: NSEvent) { underline(true) }
+    override func mouseExited(with event: NSEvent) { underline(false); NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }

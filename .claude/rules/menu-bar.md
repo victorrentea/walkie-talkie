@@ -506,13 +506,9 @@ Tendrils at the caret, Tunnel bound, Sparks into a new claude, **Mosaic for Wisp
 whoever routes the words** (`AppDelegate.wisprMicSentence`; behind the firewall `foreignMic`
 alone read a 🔽 → sentence as bound).
 
-- **The microphone rides beside it in a disc of the same orange** (2026-10-07, Victor: *"display
-  the microphone currently connected in a orange circle in the menu bar icon"*): `🎙️ 🎤 🏛️ 🎧 💻`,
-  the glyph `InputDevice.resolve()` names (`🎙️` for a device none of `known` names, nothing when no
-  input resolves), drawn 12 pt in an 18 pt disc 3 pt right of the walkie (`StatusItem.withMic`,
-  cached per glyph; the disc colour is sampled off `walkie-bound.png`). Fed by
-  `MicAnnouncer.onMic` at its baseline and after every settled change — the same 0.6 s settle as the
-  green tab, so a replug or either app's pick updates it. The mirror on other displays gets it too.
+- **No microphone disc beside it** — added 2026-10-07 (*"display the microphone currently connected
+  in a orange circle in the menu bar icon"*) and taken off the same evening (*"remove from the menu
+  bar icon the emoji of the mic from the right of the walkie main icon"*). The walkie alone.
 - **The menu bar icon is always the device in its orange-yellow disc** (2026-09-28, Victor:
   *"change the menu icon so the icon is always the walkie-talkie with a yellow circle around
   it"*) — `StatusItem.boundIcon` at every state; the bare `walkie-idle` no longer means unbound
