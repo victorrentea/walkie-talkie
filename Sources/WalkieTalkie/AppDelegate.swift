@@ -2314,6 +2314,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CropSelectionOverlay.onAwaitingDestination = { [weak self] parked in
             self?.hotkeys.areaAwaitingDestination = parked
         }
+        // The corner bar draws the mouse while a crop is up (2026-10-07).
+        CropSelectionOverlay.onPhase = { [weak self] phase in
+            let hint: GestureHintBar.CropPhase?
+            switch phase {
+            case .selecting: hint = .selecting
+            case .locked: hint = .locked
+            case .parked: hint = .parked
+            case .drawing: hint = .drawing
+            case .done: hint = nil
+            }
+            self?.overlay.setCropPhase(hint)
+        }
         // ⌘⌃X — the local model, now (2026-09-28). The tap hands it over on main.
         hotkeys.onLocalNow = { [weak self] in self?.transcribeLocallyNow(from: "⌘⌃X") }
         hotkeys.onLocalToggle = { [weak self] in
@@ -9882,7 +9894,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **⇧ mid-drag locks the box and draws where its content should go**
         // (2026-09-24) — see `CropSelectionOverlay.Selection.movedTo`.
         allowsMove: true,
-        moveToSuffix: "⇧ move to")
+        // ⇧ or one right click (2026-10-07) — both lock the box.
+        moveToSuffix: "⇧ / right-click move to")
 
     /// **The wheel, dragged while he is talking: a region of the screen instead
     /// of the whole display.**

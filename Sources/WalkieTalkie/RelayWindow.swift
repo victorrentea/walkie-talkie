@@ -1812,10 +1812,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // Every stage change passes through here, so the corner bar follows the
         // chip without a wiring of its own (2026-09-29). Not while the states
         // page is being photographed: that app is a camera, not a dictation.
-        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil {
-            hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
-                                 kamikaze: kamikaze, spawn: spawnMarked, held: heldPair))
-        }
+        updateHintBar()
         // A held spawn dialog is the last frame of a state that has already been
         // cleared. Newer state wins the chip — see `releaseSpawnPanel` — but
         // **only state he would be looking for** (2026-10-04): the hold now lasts
@@ -4296,6 +4293,22 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// Right ⌘⌥ is held for the sentence — the corner gesture bar stays down.
     private(set) var heldPair = false
+
+    /// A wheel crop is up, and where it is — the corner bar draws the mouse
+    /// for it (2026-10-07). Nil when none is.
+    private(set) var cropPhase: GestureHintBar.CropPhase?
+
+    func setCropPhase(_ phase: GestureHintBar.CropPhase?) {
+        guard cropPhase != phase else { return }
+        cropPhase = phase
+        updateHintBar()
+    }
+
+    private func updateHintBar() {
+        guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
+        hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
+                             kamikaze: kamikaze, spawn: spawnMarked, held: heldPair, crop: cropPhase))
+    }
 
     func setHeldPair(_ on: Bool) {
         guard heldPair != on else { return }

@@ -37,6 +37,16 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, held: true)), [])
     }
 
+    /// A crop draws the mouse, and its right button says what one click does
+    /// right now (2026-10-07).
+    func testCropDrawsTheMouse() {
+        XCTAssertNil(GestureHintBar.mouse(for: .init(listening: true, prompting: true)))
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .selecting))?.right, "➡️ move to")
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .locked))?.right, "↩️ unlock")
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .parked))?.right, "🗑️ cancel")
+        XCTAssertNil(GestureHintBar.mouse(for: .init(listening: true, held: true, crop: .selecting)))
+    }
+
     /// `HINT_BAR_PNG=<dir> swift test --filter GestureHintBarTests` draws each
     /// stage over a dark and a light desktop, to look at.
     func testRenderForReview() throws {
@@ -45,13 +55,18 @@ final class GestureHintBarTests: XCTestCase {
             ("prompt", .init(listening: true, prompting: true)),
             ("prompt-filming", .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true)),
             ("plain", .init(listening: true, prompting: false)),
+            ("crop", .init(listening: true, prompting: true, crop: .selecting)),
+            ("crop-locked", .init(listening: true, prompting: true, crop: .locked)),
+            ("crop-parked", .init(listening: true, prompting: true, crop: .parked)),
         ]
         for (name, stage) in stages {
             for (bgName, bg) in [("dark", NSColor(white: 0.12, alpha: 1)), ("light", NSColor(white: 0.93, alpha: 1))] {
-                let crosses = GestureHintBar.crosses(for: stage)
-                let size = GestureHintBar.Board.size(for: crosses)
+                let mouse = GestureHintBar.mouse(for: stage)
+                let crosses = mouse == nil ? GestureHintBar.crosses(for: stage) : []
+                let size = GestureHintBar.Board.size(for: crosses, mouse: mouse)
                 let board = GestureHintBar.Board(frame: NSRect(x: 20, y: 20, width: size.width, height: size.height))
                 board.crosses = crosses
+                board.mouse = mouse
                 let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 40, height: size.height + 40))
                 host.wantsLayer = true
                 host.layer?.backgroundColor = bg.cgColor

@@ -1650,6 +1650,12 @@ final class HotkeyTap {
         set { stateLock.lock(); areaAwaitingFlag = newValue; stateLock.unlock() }
     }
     private var areaAwaitingFlag = false
+    /// This press is the locked box's **destination**, not its first box — a
+    /// right click in it cancels, as it always did, instead of locking.
+    private var areaDrawingDestination = false
+    /// A right press `areaRight` took: its release is swallowed too, whatever
+    /// the wheel did in between — the release matches the press.
+    private var areaRightTaken = false
 
     /// **How far the hand has to travel before a middle click stops being one.**
     ///
@@ -1744,8 +1750,10 @@ final class HotkeyTap {
             // are the gesture now, not a spawn's modifier). Swallowed with its
             // release: the overlay covers the screen, there is no tab under it
             // to close.
+            areaDrawingDestination = false
             if areaAwaitingDestination {
                 areaCropping = true
+                areaDrawingDestination = true
                 areaPressPassed = false
                 let at = event.location
                 Log.info("✂️ wheel down again — drawing where the locked box goes")
@@ -1803,6 +1811,7 @@ final class HotkeyTap {
             let cropping = areaCropping
             areaAnchor = nil
             areaCropping = false
+            areaDrawingDestination = false
             haloDialed = false
             // **The press's own bookkeeping is finished here, because this
             // release never reaches the branch that normally finishes it.** With
@@ -1830,6 +1839,38 @@ final class HotkeyTap {
             // was ours; out if the press went out, whatever happened in between.
             return cropping && !areaPressPassed
 
+        default:
+            return false
+        }
+    }
+
+    /// **A right click while the wheel drags a box locks it** (2026-10-07).
+    ///
+    /// Victor: *"să nu fie nevoie să apas Shift … dacă în timp ce trag de bilă
+    /// apas butonul din dreapta, click-ul să nu se întâmple în aplicația de
+    /// dedesubt, dar el să intre în modul de drag"*. ⇧ still works; this is the
+    /// same lock without taking a hand off the mouse. One click is enough —
+    /// `CropSelectionOverlay.toggleMoveLock` makes it sticky, and a second click
+    /// with the wheel still down hands the box back.
+    ///
+    /// Both halves are swallowed, in both gesture modes, so no context menu
+    /// opens underneath and the overlay's own *right button = cancel* (read from
+    /// session state, which a swallowed press never reaches) stays silent. Only
+    /// while the **first** box is under the wheel: parked, the click lands on
+    /// the overlay's panels and cancels as before; drawing the destination, it
+    /// is passed out to session state and cancels too.
+    private func areaRight(_ type: CGEventType) -> Bool {
+        switch type {
+        case .rightMouseDown:
+            guard areaCropping, !areaDrawingDestination else { return false }
+            areaRightTaken = true
+            Log.info("✂️ right click with the wheel down — locking/unlocking the box")
+            DispatchQueue.main.async { CropSelectionOverlay.toggleMoveLock() }
+            return true
+        case .rightMouseUp:
+            guard areaRightTaken else { return false }
+            areaRightTaken = false
+            return true
         default:
             return false
         }
@@ -2493,6 +2534,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                                 clicks: event.getIntegerValueField(.mouseEventClickState))
                 return Unmanaged.passUnretained(event)
             case .rightMouseDown, .rightMouseUp:
+                if areaRight(type) { return nil }
                 return Unmanaged.passUnretained(event)
             case .otherMouseDown, .otherMouseUp, .otherMouseDragged:
                 // A stale `leftDownAt` would read as a chord and refuse the
@@ -2529,6 +2571,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // other half of the unbind chord and nothing else here; every press and
             // release goes straight back out, because a swallowed right click is a
             // context menu that never opened.
+            if (type == .rightMouseDown || type == .rightMouseUp), areaRight(type) { return nil }
             if type == .rightMouseDown {
                 rightDownAt = CACurrentMediaTime()
                 return Unmanaged.passUnretained(event)

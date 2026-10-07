@@ -53,6 +53,39 @@ final class GestureHintBar {
         /// so there is nothing to show (2026-09-30, Victor: *"no need to display
         /// those shortcuts while cmd-opt pressed down dictation"*).
         var held = false
+        /// A wheel crop is on screen: the bar draws the mouse instead of the two
+        /// side buttons, because that is the hand the crop is in (2026-10-07).
+        var crop: CropPhase? = nil
+    }
+
+    /// Where the wheel crop is — `CropSelectionOverlay.Phase`, without `done`.
+    enum CropPhase: Equatable { case selecting, locked, parked, drawing }
+
+    /// **The mouse, drawn, for the length of a crop** (2026-10-07). Victor, on
+    /// the right click that now locks the box: *"aș vrea să poți să reprezinți
+    /// chestia asta cumva vizual … pe acele hint-uri"*. Same rules as a cross:
+    /// `""` is an empty gray box (the button does nothing right now).
+    struct MouseHint: Equatable {
+        var left = ""
+        var wheel = ""
+        var right = ""
+        /// Under the buttons, on the mouse's body: the keyboard's way out.
+        var body = ""
+    }
+
+    /// The mouse for a stage, or nil when no crop is up. Pure, like `crosses`.
+    static func mouse(for s: Stage) -> MouseHint? {
+        guard s.listening, !s.held, let crop = s.crop else { return nil }
+        switch crop {
+        case .selecting:
+            return MouseHint(wheel: "✂️ drag", right: "➡️ move to", body: "Esc cancel")
+        case .locked:
+            return MouseHint(wheel: "⬆️ let go", right: "↩️ unlock", body: "Esc cancel")
+        case .parked:
+            return MouseHint(wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
+        case .drawing:
+            return MouseHint(wheel: "🎯 drag there", body: "Esc cancel")
+        }
     }
 
     /// One button's gestures. `nil` = no box is drawn, `""` = an empty box.
@@ -121,17 +154,18 @@ final class GestureHintBar {
         guard stage != shown || (panel != nil) != visible else { return }
         shown = stage
         guard visible else { hide(); return }
-        show(Self.crosses(for: stage))
+        let mouse = Self.mouse(for: stage)
+        show(mouse == nil ? Self.crosses(for: stage) : [], mouse: mouse)
     }
 
     /// Every mouse move, from the chip's own monitors: the bar leaves the screen
     /// the pointer is on (2026-10-01).
     func pointerMoved(_ pointer: NSPoint) {
-        guard let board, !board.crosses.isEmpty else { return }
-        place(board.crosses, pointer: pointer)
+        guard let board, !board.crosses.isEmpty || board.mouse != nil else { return }
+        place(board.crosses, mouse: board.mouse, pointer: pointer)
     }
 
-    private func show(_ crosses: [Cross]) {
+    private func show(_ crosses: [Cross], mouse: MouseHint? = nil) {
         displays = NSScreen.screens.map { s -> Display in
             let id = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             return Display(frame: s.frame, visible: s.visibleFrame,
@@ -139,11 +173,12 @@ final class GestureHintBar {
         }
         if let board {
             board.crosses = crosses
+            board.mouse = mouse
             placed = nil
-            place(crosses, pointer: NSEvent.mouseLocation)
+            place(crosses, mouse: mouse, pointer: NSEvent.mouseLocation)
             return
         }
-        guard let spot = Self.spot(base: Board.size(for: crosses), on: displays,
+        guard let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays,
                                    pointer: NSEvent.mouseLocation) else { return }
         Log.info("⌨️ hint bar ×\(Int(spot.scale)) α\(spot.opacity): \(crosses.map(Self.describe).joined(separator: " / "))")
         let p = NSPanel(contentRect: spot.rect, styleMask: [.borderless, .nonactivatingPanel],
@@ -161,6 +196,7 @@ final class GestureHintBar {
         b.scale = spot.scale
         b.opacity = spot.opacity
         b.crosses = crosses
+        b.mouse = mouse
         b.autoresizingMask = [.width, .height]
         p.contentView = b
         p.alphaValue = 0
@@ -171,9 +207,9 @@ final class GestureHintBar {
         placed = spot
     }
 
-    private func place(_ crosses: [Cross], pointer: NSPoint) {
+    private func place(_ crosses: [Cross], mouse: MouseHint? = nil, pointer: NSPoint) {
         guard let panel, let board,
-              let spot = Self.spot(base: Board.size(for: crosses), on: displays, pointer: pointer),
+              let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays, pointer: pointer),
               spot != placed else { return }
         if placed == nil {
             Log.info("⌨️ hint bar ×\(Int(spot.scale)) α\(spot.opacity): \(crosses.map(Self.describe).joined(separator: " / "))")
@@ -312,6 +348,8 @@ final class GestureHintBar {
     /// does not change width when a label does.
     final class Board: NSView {
         var crosses: [Cross] = [] { didSet { needsDisplay = true } }
+        /// Set during a crop, in place of the crosses.
+        var mouse: MouseHint? { didSet { needsDisplay = true } }
         /// Drawn at `size(for:)` × this; the frame is already that big.
         var scale: CGFloat = 1 { didSet { needsDisplay = true } }
         /// The whole board's alpha; at 1 the boxes are solid too ("fully opaque").
@@ -324,6 +362,20 @@ final class GestureHintBar {
             let widest = labels.map { ($0 as NSString).size(withAttributes: [.font: GestureHintBar.font]).width }
                 .max() ?? 0
             return max(GestureHintBar.minBoxWidth, ceil(widest) + GestureHintBar.padding * 2)
+        }
+
+        static func mouseBoxWidth(for m: MouseHint) -> CGFloat {
+            let widest = [m.left, m.wheel, m.right]
+                .map { ($0 as NSString).size(withAttributes: [.font: GestureHintBar.font]).width }.max() ?? 0
+            return max(GestureHintBar.minBoxWidth, ceil(widest) + GestureHintBar.padding * 2)
+        }
+
+        /// The mouse: three buttons side by side, as tall as two boxes, over a
+        /// body as tall as two more.
+        static func size(for crosses: [Cross], mouse: MouseHint?) -> NSSize {
+            guard let mouse else { return size(for: crosses) }
+            let h = GestureHintBar.boxHeight, gap = GestureHintBar.gap
+            return NSSize(width: mouseBoxWidth(for: mouse) * 3 + gap * 2, height: h * 4 + gap)
         }
 
         static func size(for crosses: [Cross]) -> NSSize {
@@ -343,6 +395,10 @@ final class GestureHintBar {
             cg?.setAlpha(opacity)
             cg?.beginTransparencyLayer(auxiliaryInfo: nil)
             defer { cg?.endTransparencyLayer() }
+            if let mouse {
+                drawMouse(mouse)
+                return
+            }
             for (i, c) in crosses.enumerated() {
                 let top = CGFloat(i) * (crossHeight + GestureHintBar.crossGap)
                 func box(_ text: String?, col: Int, row: Int) {
@@ -359,11 +415,55 @@ final class GestureHintBar {
             }
         }
 
-        private func drawBox(_ label: String, in r: NSRect) {
+        /// Left, wheel and right across the top — the outer two rounded at their
+        /// outer top corner so the row reads as a mouse — and the body under
+        /// them, rounded at the bottom.
+        private func drawMouse(_ m: MouseHint) {
+            let w = Self.mouseBoxWidth(for: m)
+            let h = GestureHintBar.boxHeight, gap = GestureHintBar.gap
+            let buttonHeight = h * 2
+            let big = buttonHeight * 0.6
+            func button(_ label: String, col: Int, topLeft: CGFloat, topRight: CGFloat) {
+                let r = NSRect(x: CGFloat(col) * (w + gap), y: 0, width: w, height: buttonHeight)
+                drawBox(label, in: r, path: Self.roundedPath(r.insetBy(dx: 0.5, dy: 0.5),
+                                                              topLeft: topLeft, topRight: topRight,
+                                                              bottomLeft: 4, bottomRight: 4))
+            }
+            button(m.left, col: 0, topLeft: big, topRight: 4)
+            button(m.wheel, col: 1, topLeft: 4, topRight: 4)
+            button(m.right, col: 2, topLeft: 4, topRight: big)
+            let body = NSRect(x: 0, y: buttonHeight + gap, width: w * 3 + gap * 2, height: h * 2 - gap)
+            drawBox(m.body, in: body, path: Self.roundedPath(body.insetBy(dx: 0.5, dy: 0.5),
+                                                              topLeft: 4, topRight: 4,
+                                                              bottomLeft: big, bottomRight: big))
+        }
+
+        /// A rectangle with its own radius per corner, in this flipped view.
+        static func roundedPath(_ r: NSRect, topLeft: CGFloat, topRight: CGFloat,
+                                bottomLeft: CGFloat, bottomRight: CGFloat) -> NSBezierPath {
+            let p = NSBezierPath()
+            p.move(to: NSPoint(x: r.minX + topLeft, y: r.minY))
+            p.line(to: NSPoint(x: r.maxX - topRight, y: r.minY))
+            p.appendArc(withCenter: NSPoint(x: r.maxX - topRight, y: r.minY + topRight), radius: topRight,
+                        startAngle: 270, endAngle: 360)
+            p.line(to: NSPoint(x: r.maxX, y: r.maxY - bottomRight))
+            p.appendArc(withCenter: NSPoint(x: r.maxX - bottomRight, y: r.maxY - bottomRight), radius: bottomRight,
+                        startAngle: 0, endAngle: 90)
+            p.line(to: NSPoint(x: r.minX + bottomLeft, y: r.maxY))
+            p.appendArc(withCenter: NSPoint(x: r.minX + bottomLeft, y: r.maxY - bottomLeft), radius: bottomLeft,
+                        startAngle: 90, endAngle: 180)
+            p.line(to: NSPoint(x: r.minX, y: r.minY + topLeft))
+            p.appendArc(withCenter: NSPoint(x: r.minX + topLeft, y: r.minY + topLeft), radius: topLeft,
+                        startAngle: 180, endAngle: 270)
+            p.close()
+            return p
+        }
+
+        private func drawBox(_ label: String, in r: NSRect, path given: NSBezierPath? = nil) {
             let struck = label.hasPrefix(GestureHintBar.struck)
             let text = struck ? String(label.dropFirst(GestureHintBar.struck.count)) : label
             let empty = text.isEmpty
-            let path = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
+            let path = given ?? NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4)
             // An unused gesture is a plain gray box (2026-09-30, Victor: *"place
             // gray boxes on all unused gestures"*) — seen, and plainly not a label.
             let solid = opacity >= 1
