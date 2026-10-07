@@ -2953,8 +2953,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onEngineBusy = { [weak self] why in
             DispatchQueue.main.async { self?.overlay.flash("⚠️ \(why)", duration: 5) }
         }
-        // 🔽 or 🔽 → ended the plain dictation (both since 2026-10-05): the words
-        // go in clean, then Return — see `submitAfterClean`.
+        // The bare 🔽 ended the plain dictation: the words go in clean, then
+        // Return — see `submitAfterClean`. 🔽 → and 🔽 ↓ stop it without one
+        // (2026-10-07; 🔽 → asked for it 2026-10-05 → 10-07).
         hotkeys.onBackSubmit = { [weak self] in
             DispatchQueue.main.async { self?.submitAfterClean = true }
         }
@@ -8571,12 +8572,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 🔽 or 🔽 → ended the plain dictation: Return, after the words (2026-09-23 on
-    /// 🔽 →, the back click since 2026-09-28, both since 2026-10-05).
+    /// The bare 🔽 ended the plain dictation: Return, after the words (2026-09-23 on
+    /// 🔽 →, the back click since 2026-09-28; 🔽 → too 2026-10-05 → 10-07).
     /// A beat after the ⌘V so the paste lands first; `postReturn` waits out
     /// Options+'s flags itself and is stamped as this app's.
     private func submitAfterCleanWords() {
-        Log.info("⏎ plain dictation ended by 🔽 / 🔽 → — Return after the words")
+        Log.info("⏎ plain dictation ended by 🔽 — Return after the words")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             // **Q18 (2026-09-28): never a Return at a shell prompt.** The words
             // land where the caret is when they arrive (Victor's Q6 = C); if that

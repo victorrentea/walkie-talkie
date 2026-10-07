@@ -2333,15 +2333,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
-    /// 🔽 →, the bare 🔽 at rest (2026-10-05) and the keyboard's F5 / 🎤 —
-    /// **start the plain dictation, or stop the one open** (see the `VK_F5` case
-    /// for the why of each guard). `gesture` names the trigger in the log and the
-    /// trace. **Every stop here queues the Return after the words**
-    /// (`onBackSubmit`, 2026-10-05) — Victor: *"după ce inserezi textul, să pui
-    /// un Enter întotdeauna … dictarea se termină cu o linie goală"*; until then
-    /// 🔽 →'s stop never pressed one.
+    /// 🔽 →, 🔽 ↓ mid-sentence (2026-10-07), the bare 🔽 at rest (2026-10-05) and
+    /// the keyboard's F5 / 🎤 — **start the plain dictation, or stop the one open**
+    /// (see the `VK_F5` case for the why of each guard). `gesture` names the
+    /// trigger in the log and the trace. **A stop here inserts the words and
+    /// nothing else** (2026-10-07) — Victor: *"when I dictate cleanly with back
+    /// mouse and swipe to right, that shortcut should just insert the text, not
+    /// hit the enter. The same with the back mouse and drag the mouse down"*. The
+    /// Return after the words is the bare 🔽's alone (`case VK_F6`,
+    /// `onBackSubmit`); 2026-10-05 → 10-07 every stop here queued one too.
     private func plainToggle(_ gesture: String, _ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
-        let who = gesture.hasPrefix("🔽 →") ? "🔽 →" : gesture.hasPrefix("🔽") ? "🔽" : gesture
+        let who = gesture.hasPrefix("🔽 →") ? "🔽 →" : gesture.hasPrefix("🔽 ↓") ? "🔽 ↓" : gesture.hasPrefix("🔽") ? "🔽" : gesture
         let f5Now = CACurrentMediaTime()
         let sinceLastF5 = f5Now - lastF5At
         lastF5At = f5Now
@@ -2383,11 +2385,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             lastBackToggleAt = f5Now
             if !ownClean { lastPlainStartAt = f5Now }
             let stopping = ownClean && ownMicOpen
-            Log.info("🎙️ \(who) — a clean dictation on the Engine\(ownClean ? " (the stop; Return once its words land)" : " (the start)")")
-            DispatchQueue.global().async { [weak self] in
-                if stopping { self?.onBackSubmit?() }
-                self?.onCleanToggle?()
-            }
+            Log.info("🎙️ \(who) — a clean dictation on the Engine\(ownClean ? " (the stop; the words alone, no Return)" : " (the start)")")
+            DispatchQueue.global().async { [weak self] in self?.onCleanToggle?() }
             return swallow(gesture, type, event)
         }
         // The arm says *a start was posted and has not ended* even
@@ -2406,11 +2405,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         lastBackToggleAt = f5Now
         if !closing { lastPlainStartAt = f5Now }
-        Log.info("🎙️ \(who) — Wispr Flow's hands-free toggle\(closing ? " (the stop; Return once its words land)" : " (the start)")")
+        Log.info("🎙️ \(who) — Wispr Flow's hands-free toggle\(closing ? " (the stop; the words alone, no Return)" : " (the start)")")
         if closing {
             postWisprRawStop()
             setWisprArm(0)
-            DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }
         } else {
             // **The arm goes up before the chord is announced** (2026-10-06).
             // `onWisprRawChord` hops to the main queue, where `noteCleanStart`
@@ -3650,10 +3648,25 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onGestureKamikaze?() }
                 return swallow(gesture, type, event)
 
-            // ⬇️ on the **back** button — let the binding go. The same call the
-            // menu's Disconnect row makes, so the gesture and the row cannot
-            // drift apart.
+            // ⬇️ on the **back** button — **during a plain dictation, its stop:
+            // the words alone, no Return** (2026-10-07, 🔽 →'s own stop through
+            // `plainToggle`). Victor: *"The same with the back mouse and drag the
+            // mouse down at the same time. That gesture should just insert the
+            // text without hitting the enter."* A plain sentence whose words are
+            // already in flight has nothing left to stop — swallowed, so the flick
+            // meant for it does not unbind. **Otherwise: let the binding go** —
+            // the same call the menu's Disconnect row makes, so the gesture and
+            // the row cannot drift apart.
             case VK_F12:
+                let wisprSentence = backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation)
+                let ownClean = !wisprSentence && ownDictation && ownCleanSentence
+                if wisprSentence || (ownClean && ownMicOpen) {
+                    return plainToggle(gesture, type, event)
+                }
+                if ownClean {
+                    Log.info("🎙️ 🔽 ↓ — the plain dictation's words are in flight; they land without a Return")
+                    return swallow(gesture, type, event)
+                }
                 DispatchQueue.global().async { [weak self] in self?.onGestureUnbind?() }
                 return swallow(gesture, type, event)
 
@@ -3721,8 +3734,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // words at the caret, bound or not, nothing added
             // (`AppDelegate.cleanSentence`); heard by the Engine — Wispr's
             // hands-free chord on Engine = Wispr, the relay's own source
-            // (`onCleanToggle`) otherwise. Never a picture; **its stop ends in a
-            // Return after the words** since 2026-10-05, as the click's always did.
+            // (`onCleanToggle`) otherwise. Never a picture; **its stop inserts
+            // the words and no Return** (2026-10-07; a Return from 2026-10-05 to
+            // then) — the bare 🔽 is the stop that submits.
             //
             // Three guards, because one flick can re-fire: the 0.6 s sliding
             // re-trigger window (F10's), the 0.8 s settle after a toggle (Wispr's
@@ -4508,9 +4522,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
          ("forward-up",    VK_F8,  "⌃⌥⌘F8",  "dictate at a session that does not exist yet"),
          ("forward-down",  VK_F9,  "⌃⌥⌘F9",  "kamikaze — appends the word to the sentence in flight"),
          ("back-click",    VK_F6,  "⌃⌥⌘F6",
-          "Return — a picture while a prompt is dictating; during a plain dictation: stop it, insert the words, then Return"),
-         ("back-down",     VK_F12, "⌃⌥⌘F12", "unbind — the menu's Disconnect"),
-         ("back-right",    VK_F5,  "⌃⌥⌘F5",  "start or stop a plain dictation — clean words at the caret, heard by the Engine"),
+          "at rest: start a plain dictation — a picture while a prompt is dictating; during a plain dictation: stop it, insert the words, then Return"),
+         ("back-down",     VK_F12, "⌃⌥⌘F12", "during a plain dictation: stop it, the words alone, no Return — otherwise unbind (the menu's Disconnect)"),
+         ("back-right",    VK_F5,  "⌃⌥⌘F5",  "start or stop a plain dictation — clean words at the caret, heard by the Engine; the stop presses no Return"),
          ("back-left",     VK_F3,  "⌃⌥⌘F3",  "Return — at any moment, whatever is dictating"),
          ("back-up",       VK_F4,  "⌃⌥⌘F4",  "start or stop a screen recording, while a dictation is open")]
     }
