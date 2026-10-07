@@ -35,6 +35,10 @@ import AppKit
 /// solid; once the pointer is on that screen it is in the way, so it moves to the
 /// Retina's side of the same seam, small and nearly see-through. See `spot`.
 ///
+/// **Alone, it hides from the pointer** (2026-10-08): with one screen there is
+/// nowhere to flee, so the pointer within `dodge` of the corner fades it out
+/// and leaving fades it back. See `spot`.
+///
 /// Only in Logi mode — the glyphs are the side buttons' (`AboutWindow.logiGesturesOn`).
 /// Never in a screenshot (`sharingType = .none`), never takes the mouse, and it
 /// does not ride the pointer: a fixed spot, so it is read at a glance.
@@ -146,6 +150,12 @@ final class GestureHintBar {
     /// Fled back to the Retina, over his work: nearly gone (2026-10-01).
     static let fledOpacity: CGFloat = 0.3
     static let margin: CGFloat = 16
+    /// **The pointer this close to a bar with nowhere to flee hides it**
+    /// (2026-10-08, Victor: *"when the mouse goes towards the area where the
+    /// tooltips are on a single monitor setup, those should disappear when my
+    /// mouse gets there because they get in the way"*). It fades back once the
+    /// pointer is this far away again.
+    static let dodge: CGFloat = 80
     /// How much bigger the bar is drawn on a screen that is not the Retina.
     static let offRetinaScale: CGFloat = 3
 
@@ -194,14 +204,16 @@ final class GestureHintBar {
 
         let b = Board(frame: NSRect(origin: .zero, size: spot.rect.size))
         b.scale = spot.scale
-        b.opacity = spot.opacity
+        b.opacity = spot.opacity > 0 ? spot.opacity : Self.aloneOpacity
         b.crosses = crosses
         b.mouse = mouse
         b.autoresizingMask = [.width, .height]
         p.contentView = b
         p.alphaValue = 0
         p.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.2; p.animator().alphaValue = 1 }
+        if spot.opacity > 0 {
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.2; p.animator().alphaValue = 1 }
+        }
         panel = p
         board = b
         placed = spot
@@ -211,15 +223,23 @@ final class GestureHintBar {
         guard let panel, let board,
               let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays, pointer: pointer),
               spot != placed else { return }
+        let dodged = spot.opacity == 0, wasDodged = placed?.opacity == 0, first = placed == nil
         if placed == nil {
             Log.info("⌨️ hint bar ×\(Int(spot.scale)) α\(spot.opacity): \(crosses.map(Self.describe).joined(separator: " / "))")
+        } else if dodged != wasDodged, placed?.rect == spot.rect {
+            Log.info(dodged ? "⌨️ hint bar hides from the pointer" : "⌨️ hint bar back")
         } else {
             Log.info("⌨️ hint bar moved ×\(Int(spot.scale)) α\(spot.opacity)")
         }
         placed = spot
         board.scale = spot.scale
-        board.opacity = spot.opacity
+        // A dodge is the panel fading, not the drawing: the board keeps its
+        // opacity for the moment the pointer leaves.
+        if !dodged { board.opacity = spot.opacity }
         panel.setFrame(spot.rect, display: true)
+        if dodged != wasDodged || first {
+            NSAnimationContext.runAnimationGroup { $0.duration = dodged ? 0.15 : 0.3; panel.animator().alphaValue = dodged ? 0 : 1 }
+        }
     }
 
     private func hide() {
@@ -261,7 +281,8 @@ final class GestureHintBar {
             let scale = scale(on: screens)
             let size = NSSize(width: base.width * scale, height: base.height * scale)
             return placement(size: size, on: screens).map {
-                Spot(rect: $0, scale: scale, opacity: scale == 1 ? aloneOpacity : acrossOpacity)
+                let near = NSMouseInRect(pointer, $0.insetBy(dx: -dodge, dy: -dodge), false)
+                return Spot(rect: $0, scale: scale, opacity: near ? 0 : scale == 1 ? aloneOpacity : acrossOpacity)
             }
         }
         guard let (across, seam) = host(on: screens),

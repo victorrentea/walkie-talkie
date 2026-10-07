@@ -145,8 +145,24 @@ final class GestureHintBarTests: XCTestCase {
     }
 
     func testTheRetinaAloneHasNowhereToFlee() {
-        let s = GestureHintBar.spot(base: base, on: [retina], pointer: NSPoint(x: 1700, y: 20))
+        let s = GestureHintBar.spot(base: base, on: [retina], pointer: NSPoint(x: 800, y: 500))
         XCTAssertEqual(s, .init(rect: NSRect(x: 1728 - 200 - 16, y: 16, width: 200, height: 100),
                                 scale: 1, opacity: GestureHintBar.aloneOpacity))
+    }
+
+    // MARK: alone, the pointer coming near hides it (2026-10-08)
+
+    func testTheRetinaAloneHidesFromThePointerOnIt() {
+        let s = GestureHintBar.spot(base: base, on: [retina], pointer: NSPoint(x: 1700, y: 20))
+        XCTAssertEqual(s?.opacity, 0)
+        XCTAssertEqual(s?.rect, NSRect(x: 1728 - 200 - 16, y: 16, width: 200, height: 100))
+    }
+
+    func testTheRetinaAloneHidesFromThePointerApproaching() {
+        // 1512 is the bar's left edge; 60 pt short of it is inside the dodge.
+        let near = GestureHintBar.spot(base: base, on: [retina], pointer: NSPoint(x: 1512 - 60, y: 60))
+        XCTAssertEqual(near?.opacity, 0)
+        let far = GestureHintBar.spot(base: base, on: [retina], pointer: NSPoint(x: 1512 - 100, y: 60))
+        XCTAssertEqual(far?.opacity, GestureHintBar.aloneOpacity)
     }
 }

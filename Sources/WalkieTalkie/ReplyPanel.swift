@@ -45,6 +45,7 @@ enum ReplyPanel {
             return
         }
         close()
+        allowCursorInBackground
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
         guard !text.isEmpty else { return }
@@ -106,12 +107,21 @@ enum ReplyPanel {
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         p.sharingType = .none
         p.hidesOnDeactivate = false
+        p.acceptsMouseMovedEvents = true
         p.contentView = root
         p.setFrameOrigin(origin(for: root.frame.size, at: arrivedAt))
         p.orderFrontRegardless()
         panel = p
         Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕")
     }
+
+    /// **A background app's `NSCursor.set()` is ignored unless the process asks
+    /// for it** — the window server keeps the frontmost app's cursor. Once per
+    /// launch; the same private property every pointer utility sets.
+    private static let allowCursorInBackground: Void = {
+        let cid = _CGSDefaultConnection()
+        _ = CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
+    }()
 
     static func close() {
         panel?.orderOut(nil)
@@ -135,6 +145,11 @@ enum ReplyPanel {
 }
 
 
+@_silgen_name("_CGSDefaultConnection")
+private func _CGSDefaultConnection() -> Int32
+@_silgen_name("CGSSetConnectionProperty")
+private func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFString, _ value: CFTypeRef) -> Int32
+
 /// The ✕ — drawn, not an `NSButton`: a button in a non-activating panel looks
 /// disabled and eats the first click.
 private final class ReplyCloseButton: NSView {
@@ -154,12 +169,13 @@ private final class ReplyCloseButton: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for a in trackingAreas { removeTrackingArea(a) }
-        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways, .inVisibleRect],
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
                                        owner: self))
     }
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
-    override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
-    override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true }
+    override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true; NSCursor.pointingHand.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true; NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }
@@ -188,11 +204,16 @@ private final class LinkLabel: NSTextField {
         for a in trackingAreas { removeTrackingArea(a) }
         guard onClick != nil else { return }
         let fit = NSRect(x: 0, y: 0, width: min(bounds.width, intrinsicContentSize.width), height: bounds.height)
-        addTrackingArea(NSTrackingArea(rect: fit, options: [.mouseEnteredAndExited, .cursorUpdate, .activeAlways],
+        addTrackingArea(NSTrackingArea(rect: fit, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways],
                                        owner: self))
     }
+    // **The hand on enter and on every move, not only `cursorUpdate`** (Victor,
+    // 2026-10-08: *"the mouse should turn into a hand once I hover the title"*
+    // — the underline came, the hand did not): the panel never becomes key, so
+    // the frontmost terminal's I-beam won the cursor back.
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
-    override func mouseEntered(with event: NSEvent) { underline(true) }
+    override func mouseEntered(with event: NSEvent) { underline(true); NSCursor.pointingHand.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseExited(with event: NSEvent) { underline(false); NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {}
