@@ -396,6 +396,13 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   … in X ms`), `CaretHalo.rewindVisibleFrom` is 0.25 s, and `travel(…, visibleFrom:)` holds it on
   the pointer until then, arriving at half of what is left of the prediction (≥ 0.3 s).
   `WT_REWIND_BURST=0` brings the wall-clock warm-up back.
+- **No travel: it falls straight onto the receiving window, sized to *that* window's screen**
+  (2026-10-07, Victor: *"the tunnel effect … should just land directly onto the target terminal.
+  Not move from around the mouse like before … coming from outside, the reverse tunnel should
+  focus on the window and fit on it on its screen, on its center"*). `rewindPoint` is
+  `rewindAim ?? rewindStart` — the pointer only while the window is still being asked for, or when
+  there is none; `fitApproach(to:)` re-sizes the start when the aim lands. Supersedes the travel
+  (and *from where the mouse was*) of the two bullets above; `RewindTimeline.travel` is unused.
 - **The take is kept for every destination** (2026-09-30): the call ran for all since 09-23, but
   `settleTake` was still `latchedAtCaret ? lastTake() : []`, so every bound sentence logged `⏪ no
   rewind — only 0 samples`.
@@ -414,6 +421,11 @@ la final dispar."*
   with `RelayWindow.sentPromptFrame` — the frame the last layout *asked for* (`laidOutFrame`), not the
   one mid-unfold, nil once no prompt is held. Asked at 60 Hz: the panel moving or growing (an edit)
   is followed, nil is the end.
+- **Except the Reverse tunnel** (2026-10-07, Victor: *"I want the reverse tunnel to focus on the
+  target terminal or application that received the dictation and not the preview panel"*): a ring
+  in the tunnel's dress that is rewinding or just rewound (`fadeAim`) is not docked and ends on the
+  window in its own fade. Log `◯ halo not docked on the prompt panel — the reverse tunnel ends …`.
+  The bullet below now holds for every other dress.
 - **Whatever is on screen flies** — after a rewind that is Reverse tunnel, and it keeps being fed the
   take backwards while docked (`rewindTake` is no longer cleared at the rewind's end; the next rewind
   replaces it). The destination's own dress comes back only at the undock, because changing it

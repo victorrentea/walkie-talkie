@@ -1303,16 +1303,7 @@ final class CaretHalo {
         rewindFrom = CFAbsoluteTimeGetCurrent()
         rewindEstimate = predicted
         rewindStart = NSEvent.mouseLocation
-        // The ring starts as tall as the pointer's screen (2026-10-04) —
-        // `RewindTimeline.from`; the old fixed 7× when there is no screen.
-        if let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) {
-            let f = screen.frame
-            rewindApproachFrom = RewindTimeline.from(screenHeight: Double(f.height),
-                                                     longSide: Double(max(f.width, f.height)),
-                                                     restRing: Self.restRing)
-        } else {
-            rewindApproachFrom = Double(Self.approachFrom)
-        }
+        fitApproach(to: rewindAim ?? NSEvent.mouseLocation)
         rewinding = true
         arrow.armed = false
         Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@",
@@ -1335,7 +1326,10 @@ final class CaretHalo {
     /// and it stays on the pointer as before.
     var rewindAim: NSPoint? {
         didSet {
-            guard rewindAim != oldValue, rewinding, live || closing else { return }
+            guard rewindAim != oldValue, rewinding else { return }
+            // Sized to the screen the window is on, not the pointer's.
+            if let aim = rewindAim { fitApproach(to: aim) }
+            guard live || closing else { return }
             follow()
         }
     }
@@ -1359,12 +1353,30 @@ final class CaretHalo {
     /// *"să meargă repede … și apoi să stea acolo, centrat"*; it used to land
     /// only at rest), and **since 2026-10-04 at half the predicted transcription**
     /// — `RewindTimeline.travel`. No window to go to: it stays where it started.
+    ///
+    /// **Superseded 2026-10-07: no travel — it falls straight onto the window.**
+    /// Victor: *"the tunnel effect … should just land directly onto the target
+    /// terminal. Not move from around the mouse like before … coming from
+    /// outside, the reverse tunnel should focus on the window and fit on it on
+    /// its screen, on its center"*. The pointer is only where it waits while
+    /// the window is still being asked for (an `osascript`, usually inside the
+    /// warm-up), and where it stays when there is no window.
     private var rewindPoint: NSPoint? {
-        guard let from = rewindStart else { return rewindAim }
-        guard let to = rewindAim else { return from }
-        let t = CGFloat(RewindTimeline.travel(elapsed: CFAbsoluteTimeGetCurrent() - rewindFrom,
-                                              predicted: rewindEstimate, visibleFrom: Self.rewindVisibleFrom))
-        return NSPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
+        rewindAim ?? rewindStart
+    }
+
+    /// The ring starts as tall as **the screen holding `point`** (2026-10-04,
+    /// the pointer's; since 2026-10-07 the receiving window's) —
+    /// `RewindTimeline.from`; the old fixed 7× when no screen holds it.
+    private func fitApproach(to point: NSPoint) {
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) {
+            let f = screen.frame
+            rewindApproachFrom = RewindTimeline.from(screenHeight: Double(f.height),
+                                                     longSide: Double(max(f.width, f.height)),
+                                                     restRing: Self.restRing)
+        } else {
+            rewindApproachFrom = Double(Self.approachFrom)
+        }
     }
     private var rewindStart: NSPoint?
     /// This rewind's `approachFrom`, fitted to the pointer's screen at the close.
@@ -1865,6 +1877,14 @@ final class CaretHalo {
         // A ring still hearing a sentence stays on the pointer; one coasting
         // through the transcription is about to go down anyway.
         guard !live || coasting else { return }
+        // **The Reverse tunnel stays on the window that got the words**
+        // (2026-10-07, Victor: *"I want the reverse tunnel to focus on the
+        // target terminal or application that received the dictation and not
+        // the preview panel"*) — it ends there in its own fade.
+        if drawn == Self.tunnelStyle, rewinding || fadeAim != nil {
+            Log.info("◯ halo not docked on the prompt panel — the reverse tunnel ends on the window that got the words")
+            return
+        }
         guard live || closing || now - hiddenAt < Self.dockLate else {
             Log.info(String(format: "◯ halo not docked on the prompt panel — it went down %.1f s ago", now - hiddenAt))
             return
