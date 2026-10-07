@@ -503,23 +503,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// anything, it is telling him what is happening.
     private static let showsGestureHints = false
 
-    /// **Chrome is the frontmost app right now.** The one exception to the rule
-    /// above, and Victor asked for it back by name: while he is dictating *at a
-    /// page*, the `⌘⇧🖱️` row is shown again.
-    ///
-    /// The condition is what makes it worth its pixels. The other hints were paid
-    /// for at every moment of every day to be read once; this one appears only in
-    /// the two conditions that make it actionable at all — a dictation is open
-    /// and he is looking at the browser — so it costs nothing in the hours it is
-    /// not true. It is also the gesture with the strongest claim to being said
-    /// out loud, because the relay *takes it away from Chrome* while it is up:
-    /// ⌘⇧-click normally opens a link in a new tab and jumps to it, and a browser
-    /// that silently stopped doing that reads as broken.
-    ///
-    /// Pushed from `AppDelegate`'s front-app watcher rather than asked for here:
-    /// `NSWorkspace` is a main-thread question and this is read from `layoutContent`,
-    /// which runs while the chip is following the cursor.
-    private var chromeFront = false
     /// Re-read the bound terminal's title; the branch timer's other half.
     var onRefreshBound: (() -> Void)?
     private weak var homeScreen: NSScreen?
@@ -1178,64 +1161,28 @@ private let heardLabel = NSTextField(labelWithString: "")
         spawnMarked && spawnIcon == nil
     }
 
-    /// The gesture that picks an element out of the page — shown **only while
-    /// dictating**, exactly like `shotHint`, because that is the only window in
-    /// which ⌘⇧ in Chrome belongs to the relay at all.
+    /// The picked-elements row: nothing until the first pick, then the newest
+    /// thing he picked.
     ///
-    /// It has to be advertised for the same reason the borrowed mouse button does:
-    /// ⌘⇧-click opens a link in a new tab and jumps to it, and a browser that
-    /// silently stopped doing that would read as broken. The hint and the
-    /// behaviour appear and disappear together, and the row rides beside the
-    /// cursor — which is where his eyes already are while he points at things.
+    /// **The invitation moved into the page (2026-10-07).** Until the first pick
+    /// this row was Chrome's icon and `⌘⇧`, shown while dictating with Chrome in
+    /// front; Victor had it drawn by the extension instead — a badge at the
+    /// bottom centre of the page (`inspect.js`, `showBadge`), which hides when
+    /// the pointer reaches it. It is also the proof that the extension is alive,
+    /// which a row drawn by this app could never be, and it is one row fewer
+    /// beside the cursor. The badge rides `MusicBridge.setPickable`.
     ///
-    /// It names **what the gesture does**, not how the keys are held. `hold` was
-    /// there to explain the 400ms arming delay, but a hint whose first word is a
-    /// mechanic describes the input and leaves the outcome unsaid — and the
-    /// outcome is the only half worth a row beside the cursor. The chord and the
-    /// mouse still follow it, so the delay is still discoverable by trying it.
-    /// **The chord first, then what it does.** It trailed the sentence
-    /// (`— ⌘⇧+click to select element`), which is the wrong order for a row read
-    /// at a glance mid-sentence: the keys are the part he has to *do*, and they
-    /// are what the eye can match against the hand already on the keyboard.
-    ///
-    /// **The mouse is gone from it too, since 2026-08-31.** The row was `⌘⇧` plus
-    /// a drawn left button, and the button was the one glyph on it Victor could
-    /// not act on: a hand already holding two modifiers down over a page is not
-    /// in any doubt about which button clicks. What the row is for is the
-    /// *keys* — they are the half borrowed from Chrome, and the half he has to
-    /// remember — and a picture of hardware beside them spends a third of the row
-    /// restating the obvious. It also drew at a size and baseline of its own,
-    /// which is the only reason this row ever needed `glyphRowWidth`.
-    private static func pickHint(font: NSFont) -> NSAttributedString {
-        NSAttributedString(string: "⌘⇧", attributes: [.font: font])
-    }
-
-    /// The picked-elements row: the gesture until he has used it, the newest thing
-    /// he picked once he has.
-    ///
-    /// The hint gives way to the name because after the first pick the question
-    /// changes. Before it, the only thing worth saying is *that you can do this*;
-    /// after it, he knows the gesture and what he cannot check without a name is
-    /// whether the click caught the button or the div wrapped around it. A count
-    /// alone (`×3`) only tells him something he already believes.
-    ///
-    /// Gated on `listening` like the recording row above it: outside a dictation
-    /// ⌘⇧ belongs to Chrome again, and a row saying otherwise is a lie about which
-    /// gestures are live.
+    /// After the first pick the question changes: he knows the gesture, and what
+    /// he cannot check without a name is whether the click caught the button or
+    /// the div wrapped around it. A count alone (`×3`) only tells him something
+    /// he already believes.
     private var pickText: NSAttributedString? {
         guard gathering else { return nil }
-        // The invitation, but only with Chrome in front — see `chromeFront`.
-        // Once he has picked something the row belongs to the picks and stays
-        // whatever app he has switched to: they are travelling with this
-        // dictation, and that is a fact about the message, not about the window.
-        //
-        // **The invitation is `listening`'s alone.** Once the microphone has
-        // closed ⌘⇧ belongs to Chrome again, so offering it through the decode
-        // would be a lie about which gestures are live — while the *count* is a
-        // fact about the message and stays for as long as the message does.
-        guard pickCount > 0 else {
-            return (listening && chromeFront) ? Self.pickHint(font: hintFont) : nil
-        }
+        // The row belongs to the picks and stays whatever app he has switched
+        // to: they are travelling with this dictation, and that is a fact about
+        // the message, not about the window — and it stays for as long as the
+        // message does.
+        guard pickCount > 0 else { return nil }
         // **The count, then the drag mark, then — for four seconds — the newest
         // selector.** `⤢` is Victor's *"diagonal 2-sided arrow … next to the
         // number, to tell whether there is any move element"*: a drag is the one
@@ -4077,17 +4024,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// nothing is bound, there is no app icon to show and no target to lose, and
     /// the state lasts exactly as long as one sentence. `nil` puts the chip back
     /// to whatever it was actually saying.
-    /// Chrome came to the front, or left it. Relayouts only while a dictation is
-    /// open, since that is the only state the row can appear in — outside it the
-    /// flag is recorded and nothing moves, which matters because this fires on
-    /// every app switch all day.
-    func setChromeFront(_ value: Bool) {
-        guard chromeFront != value else { return }
-        chromeFront = value
-        guard listening, pickCount == 0 else { return }
-        layoutContent()
-    }
-
     /// `mark` is the one character of the label that survives the row being
     /// dropped — see `spawnCollapsed`. Passing none keeps the old behaviour: a
     /// title row of its own, which is what Replace Wispr wants.

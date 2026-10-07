@@ -219,6 +219,7 @@ function openMusicSocket() {
       console.log('[walkie] reloading on request from the relay');
       return chrome.runtime.reload();
     }
+    if (msg.type === 'pickable') return setPickable(!!msg.on);
     if (msg.type !== 'dictation') return;
     // The relay replays the state on connect, so this is also how a worker that
     // was torn down mid-dictation learns it still owes a resume.
@@ -234,9 +235,25 @@ function openMusicSocket() {
     // alive to turn it back on. A blip that is only a blip costs a stutter: the
     // next probe reconnects and the replayed active:true pauses again.
     resumeWhatWePaused().catch(() => {});
+    // And the ⌘⇧ badge goes with it: no app, no picker to point at.
+    setPickable(false);
   };
   musicSocket.onclose = dropped;
   musicSocket.onerror = () => { try { musicSocket.close(); } catch {} };
+}
+
+// ---------------------------------------------------------------------------
+// The ⌘⇧ badge (2026-10-07)
+//
+// `{type:"pickable", on}` from the app says ⌘⇧-pick is live; `inspect.js` draws
+// a pill at the bottom of the page for as long as it is. Forwarded to the top
+// frame of every tab — the one he switches to next must already have it — and
+// kept in storage.session for a page that loads mid-sentence and asks.
+async function setPickable(on) {
+  await chrome.storage.session.set({ pickable: on });
+  const tabs = await chrome.tabs.query({});
+  await Promise.all(tabs.map((tab) =>
+    chrome.tabs.sendMessage(tab.id, { type: 'pickable', on }, { frameId: 0 }).catch(() => {})));
 }
 
 // A periodic alarm rather than a setTimeout chain: with no socket open there is
@@ -263,6 +280,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       respond({ live, sessions: c.sessions, why: live ? null : await alive() });
     });
     return true;      // the answer comes later
+  }
+  if (msg?.type === 'pickable?') {
+    chrome.storage.session.get('pickable').then(({ pickable }) => respond(!!pickable));
+    return true;
   }
   if (msg?.type === 'pick') {
     deliver(msg.pick).then(respond);

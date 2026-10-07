@@ -163,7 +163,7 @@ enum OverlayStates {
 
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
                  when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint unless Chrome is in front.",
+                 note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint (the extension draws that one in the page).",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setSpawnDestination("caret", icon: RelayWindow.pinGlyph)
@@ -262,19 +262,9 @@ enum OverlayStates {
                 o.pinListenWarmth(0.5)
             },
 
-            Shot(slug: "listening-chrome", group: "Dictating", title: "Dictating, at a page",
-                 when: "Dictating *and* Chrome is the frontmost app.",
-                 note: "The one gesture hint the chip still shows. It is worth its pixels because it is only on screen when it is actionable — and because the relay takes ⌘⇧-click *away* from Chrome while it is up, so a browser that silently stopped opening links would read as broken. The keys and nothing else, since 2026-08-31: the drawn left button that used to follow them was the one glyph on the row he could not act on.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.setListening(true)
-                o.setShotCount(1)
-                o.setChromeFront(true)
-            },
-
             Shot(slug: "listening-picks", group: "Dictating", title: "Dictating, with elements picked",
                  when: "After the first ⌘⇧-click in Chrome, whatever app he switches to afterwards.",
-                 note: "The invitation gives way to the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. **For four seconds** — the row below is where it ends up.",
+                 note: "No row at all before the first pick — the `⌘⇧` invitation is a badge the extension draws at the bottom of the page since 2026-10-07. Then the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. **For four seconds** — the row below is where it ends up.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setListening(true)
@@ -325,13 +315,12 @@ enum OverlayStates {
             },
 
             Shot(slug: "listening-everything", group: "Dictating", title: "Dictating, everything at once",
-                 when: "Rare, and the widest the chip ever gets: browser in front, three frames taken, picks made, a highlight riding along.",
-                 note: "Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the ⌘⇧ row is an invitation before the first pick and outlives the message after it — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. **The counts line up in the icon column**, which is the overview Victor asked for — `📸 ×3`, the quotation, `×3` in Chrome, read downwards — rather than a fourth row restating the other three.",
+                 when: "Rare, and the widest the chip ever gets: three frames taken, picks made, a highlight riding along.",
+                 note: "Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the picks row outlives the message — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. **The counts line up in the icon column**, which is the overview Victor asked for — `📸 ×3`, the quotation, `×3` in Chrome, read downwards — rather than a fourth row restating the other three.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setListening(true)
                 o.setShotCount(3)
-                o.setChromeFront(true)
                 o.setPicks(count: 3, newest: "main.content > button.buy-button")
                 o.setSelection(selection, count: 2)
                 o.pinListenElapsed(2)
@@ -683,7 +672,6 @@ enum OverlayStates {
         o.setPicks(count: 0, newest: nil)
         o.setShotCount(0)
         o.clearSelection()
-        o.setChromeFront(false)
         o.setSpawnDestination(nil)
         o.setBound(label: nil)
         o.setWisprHearing(false)

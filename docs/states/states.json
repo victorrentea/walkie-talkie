@@ -107,7 +107,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 46,
+    "height" : 93,
     "image" : "held-waiting.png",
     "note" : "**The one chip an unbound pointer may carry.** *The pointer is clean when nothing is bound* still holds for a relay with nothing to say; this row is something to say — *\"mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie\"*. It counts what `awaitingBind` holds, so a second sentence says `2`, and it goes the instant a bind delivers them. Built like `☠️ Kamikaze`: an emoji in the icon column, words beside it. It is announced once with a flash, `📨 held — bind a terminal to send it`.",
     "shape" : "chip",
@@ -133,12 +133,12 @@
     "group" : "At rest",
     "height" : 69,
     "image" : "replace-wispr.png",
-    "note" : "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint unless Chrome is in front.",
+    "note" : "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint (the extension draws that one in the page).",
     "shape" : "chip",
     "slug" : "replace-wispr",
     "title" : "Replace Wispr — this one goes to the caret",
     "when" : "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-    "width" : 215
+    "width" : 205
   },
   {
     "alpha" : 0.80000000000000004,
@@ -249,20 +249,8 @@
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
     "height" : 117,
-    "image" : "listening-chrome.png",
-    "note" : "The one gesture hint the chip still shows. It is worth its pixels because it is only on screen when it is actionable — and because the relay takes ⌘⇧-click *away* from Chrome while it is up, so a browser that silently stopped opening links would read as broken. The keys and nothing else, since 2026-08-31: the drawn left button that used to follow them was the one glyph on the row he could not act on.",
-    "shape" : "chip",
-    "slug" : "listening-chrome",
-    "title" : "Dictating, at a page",
-    "when" : "Dictating *and* Chrome is the frontmost app.",
-    "width" : 308
-  },
-  {
-    "alpha" : 0.80000000000000004,
-    "group" : "Dictating",
-    "height" : 117,
     "image" : "listening-picks.png",
-    "note" : "The invitation gives way to the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. **For four seconds** — the row below is where it ends up.",
+    "note" : "No row at all before the first pick — the `⌘⇧` invitation is a badge the extension draws at the bottom of the page since 2026-10-07. Then the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. **For four seconds** — the row below is where it ends up.",
     "shape" : "chip",
     "slug" : "listening-picks",
     "title" : "Dictating, with elements picked",
@@ -322,11 +310,11 @@
     "group" : "Dictating",
     "height" : 141,
     "image" : "listening-everything.png",
-    "note" : "Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the ⌘⇧ row is an invitation before the first pick and outlives the message after it — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. **The counts line up in the icon column**, which is the overview Victor asked for — `📸 ×3`, the quotation, `×3` in Chrome, read downwards — rather than a fourth row restating the other three.",
+    "note" : "Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the picks row outlives the message — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. **The counts line up in the icon column**, which is the overview Victor asked for — `📸 ×3`, the quotation, `×3` in Chrome, read downwards — rather than a fourth row restating the other three.",
     "shape" : "chip",
     "slug" : "listening-everything",
     "title" : "Dictating, everything at once",
-    "when" : "Rare, and the widest the chip ever gets: browser in front, three frames taken, picks made, a highlight riding along.",
+    "when" : "Rare, and the widest the chip ever gets: three frames taken, picks made, a highlight riding along.",
     "width" : 337
   },
   {
@@ -368,7 +356,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-local-now.png",
     "note" : "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land.",
     "shape" : "chip",
@@ -380,7 +368,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-local-now-loading.png",
     "note" : "`(loading)` says the key will not answer at once — not that it will not work. Pressed now, the WAV waits for the weights (up to 90 s, the fallback's own window) and the words go where the sentence was going.",
     "shape" : "chip",
@@ -392,7 +380,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-fallback-countdown.png",
     "note" : "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
     "shape" : "chip",
@@ -404,7 +392,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-fallback-now.png",
     "note" : "`auto now...`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
     "shape" : "chip",
@@ -416,14 +404,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 46,
     "image" : "listening-wispr-starting.png",
     "note" : "Victor: *\"10 s startup time is killing\"*. The relay records on its own microphone and the local model has the words at the close; Wispr Flow is launched in the background for the next sentence.",
     "shape" : "flash",
     "slug" : "listening-wispr-starting",
     "title" : "Wispr Flow is not up — this Mac listens",
     "when" : "A sentence started on Engine = Wispr Flow while Wispr is not running, or was launched by the relay under 12 s ago (auto fallback on).",
-    "width" : 308
+    "width" : 127
   },
   {
     "alpha" : 0.80000000000000004,

@@ -593,6 +593,71 @@
     }
   }
 
+  // ---------------------------------------------------------------- badge
+  //
+  // **The ⌘⇧ invitation, drawn in the page (2026-10-07).** It was a row on the
+  // chip beside the cursor — Chrome's icon and `⌘⇧`, while dictating with Chrome
+  // in front. Victor had it moved here: a pill at the bottom centre of the page,
+  // which also proves the extension is alive (a row the app drew could only
+  // promise it), and leaves the chip one row lighter.
+  //
+  // Shown exactly while `/ping` would say yes: the app pushes `pickable` over
+  // the music socket (`MusicBridge.setPickable`), the worker forwards it to the
+  // top frame of every tab, and a page that loads mid-sentence asks for it.
+  //
+  // **It never takes a click.** `pointer-events:none` throughout; "disappears
+  // when I move my mouse over it" is a distance test on the mousemove we
+  // already listen to, so whatever is underneath stays clickable and the badge
+  // comes back once the pointer has left.
+  const BADGE_CLEAR_PX = 24;    // how near the pointer may come before it fades
+  let badge = null;             // { host, pill } while shown
+
+  function showBadge() {
+    if (badge || window.top !== window) return;
+    const host = document.createElement('div');
+    host.style.cssText = 'all:initial;position:fixed;left:0;bottom:0;width:0;height:0;z-index:2147483647;pointer-events:none;';
+    const shadow = host.attachShadow({ mode: 'closed' });
+    shadow.innerHTML = `
+      <style>
+        .pill {
+          position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+          pointer-events: none; box-sizing: border-box; white-space: nowrap;
+          padding: 6px 14px; border-radius: 999px;
+          background: rgba(28, 28, 30, .88); color: rgba(255, 255, 255, .92);
+          font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+          box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
+          transition: opacity .15s linear;
+        }
+        .pill.away { opacity: 0; }
+        kbd { font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #ff8f88; }
+      </style>
+      <div class="pill">Hold <kbd>⌘⇧</kbd> and click to point at an element</div>`;
+    (document.body || document.documentElement).appendChild(host);
+    badge = { host, pill: shadow.querySelector('.pill') };
+    clearBadge(mouse.x, mouse.y);
+  }
+
+  function hideBadge() {
+    badge?.host.remove();
+    badge = null;
+  }
+
+  function clearBadge(x, y) {
+    const r = badge.pill.getBoundingClientRect();
+    const near = x > r.left - BADGE_CLEAR_PX && x < r.right + BADGE_CLEAR_PX &&
+                 y > r.top - BADGE_CLEAR_PX && y < r.bottom + BADGE_CLEAR_PX;
+    badge.pill.classList.toggle('away', near);
+  }
+
+  if (window.top === window) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg?.type === 'pickable') msg.on ? showBadge() : hideBadge();
+    });
+    chrome.runtime.sendMessage({ type: 'pickable?' })
+      .then((on) => { if (on) showBadge(); })
+      .catch(() => {});
+  }
+
   // ----------------------------------------------------------------- events
 
   addEventListener('keydown', (e) => {
@@ -623,6 +688,7 @@
 
   addEventListener('mousemove', (e) => {
     mouse = { x: e.clientX, y: e.clientY };
+    if (badge) clearBadge(e.clientX, e.clientY);
     if (drag) return moveDrag(e);
     // Only while one is actually up: `ui` outlives every arm, and a style write
     // on every mousemove for a hidden node is a cost paid all day for nothing.

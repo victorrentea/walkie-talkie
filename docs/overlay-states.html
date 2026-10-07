@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 59 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 58 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -231,9 +231,9 @@
       <section class="card" id="held-waiting">
         <header>
           <h3>Unbound, with sentences waiting for a bind</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">239×46 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">239×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/held-waiting.png" width="239" height="46" style="opacity:0.8" alt="Unbound, with sentences waiting for a bind"></div>
+        <div class="shot"><img src="states/held-waiting.png" width="239" height="93" style="opacity:0.8" alt="Unbound, with sentences waiting for a bind"></div>
         <p class="when">A sentence was spoken with nothing bound (Victor&#x27;s Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.</p>
         <p class="note"><strong>The one chip an unbound pointer may carry.</strong> <em>The pointer is clean when nothing is bound</em> still holds for a relay with nothing to say; this row is something to say — <em>&quot;mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie&quot;</em>. It counts what <code>awaitingBind</code> holds, so a second sentence says <code>2</code>, and it goes the instant a bind delivers them. Built like <code>☠️ Kamikaze</code>: an emoji in the icon column, words beside it. It is announced once with a flash, <code>📨 held — bind a terminal to send it</code>.</p>
         <code class="slug">held-waiting</code>
@@ -257,11 +257,11 @@
       <section class="card" id="replace-wispr">
         <header>
           <h3>Replace Wispr — this one goes to the caret</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">215×69 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">205×69 pt</span></div>
         </header>
-        <div class="shot"><img src="states/replace-wispr.png" width="215" height="69" style="opacity:0.8" alt="Replace Wispr — this one goes to the caret"></div>
+        <div class="shot"><img src="states/replace-wispr.png" width="205" height="69" style="opacity:0.8" alt="Replace Wispr — this one goes to the caret"></div>
         <p class="when">The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.</p>
-        <p class="note">The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint unless Chrome is in front.</p>
+        <p class="note">The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint (the extension draws that one in the page).</p>
         <code class="slug">replace-wispr</code>
       </section>
       <section class="card" id="replace-wispr-attached">
@@ -357,16 +357,6 @@
         <p class="note"><strong>It counts <code>MicRecorder.voicedSeconds</code>, not the clock</strong>, and that correction is Victor&#x27;s: <em>&quot;uneori eu pur și simplu tac — dacă tac pe microfon și nu vine semnal, nu știu cât de valoroasă e întârzierea asta&quot;</em>. The corpus is emphatic — the median dictation is only <strong>38% voiced</strong>, so a wall-clock bar would fill while he was thinking and tell him the one thing it exists not to. Full at <strong>three voiced seconds</strong>: the first bucket where both failure modes are at their floor, about fifteen words at his measured 5.1 words per voiced second, and within a hair of where he put the boundary by feel.</p>
         <code class="slug">listening-warming</code>
       </section>
-      <section class="card" id="listening-chrome">
-        <header>
-          <h3>Dictating, at a page</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/listening-chrome.png" width="308" height="117" style="opacity:0.8" alt="Dictating, at a page"></div>
-        <p class="when">Dictating <em>and</em> Chrome is the frontmost app.</p>
-        <p class="note">The one gesture hint the chip still shows. It is worth its pixels because it is only on screen when it is actionable — and because the relay takes ⌘⇧-click <em>away</em> from Chrome while it is up, so a browser that silently stopped opening links would read as broken. The keys and nothing else, since 2026-08-31: the drawn left button that used to follow them was the one glyph on the row he could not act on.</p>
-        <code class="slug">listening-chrome</code>
-      </section>
       <section class="card" id="listening-picks">
         <header>
           <h3>Dictating, with elements picked</h3>
@@ -374,7 +364,7 @@
         </header>
         <div class="shot"><img src="states/listening-picks.png" width="308" height="117" style="opacity:0.8" alt="Dictating, with elements picked"></div>
         <p class="when">After the first ⌘⇧-click in Chrome, whatever app he switches to afterwards.</p>
-        <p class="note">The invitation gives way to the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. <strong>For four seconds</strong> — the row below is where it ends up.</p>
+        <p class="note">No row at all before the first pick — the <code>⌘⇧</code> invitation is a badge the extension draws at the bottom of the page since 2026-10-07. Then the newest selector, tail-first: what he cannot check otherwise is whether the click caught the button or the div wrapped around it. <strong>For four seconds</strong> — the row below is where it ends up.</p>
         <code class="slug">listening-picks</code>
       </section>
       <section class="card" id="listening-picks-settled">
@@ -423,8 +413,8 @@
           <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">337×141 pt</span></div>
         </header>
         <div class="shot"><img src="states/listening-everything.png" width="337" height="141" style="opacity:0.8" alt="Dictating, everything at once"></div>
-        <p class="when">Rare, and the widest the chip ever gets: browser in front, three frames taken, picks made, a highlight riding along.</p>
-        <p class="note">Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. <strong>The quotation is above Chrome and Chrome is last</strong>, since 2026-09-09: a highlight belongs to <em>this</em> message and goes out with it, while the ⌘⇧ row is an invitation before the first pick and outlives the message after it — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. <strong>The counts line up in the icon column</strong>, which is the overview Victor asked for — <code>📸 ×3</code>, the quotation, <code>×3</code> in Chrome, read downwards — rather than a fourth row restating the other three.</p>
+        <p class="when">Rare, and the widest the chip ever gets: three frames taken, picks made, a highlight riding along.</p>
+        <p class="note">Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. <strong>The quotation is above Chrome and Chrome is last</strong>, since 2026-09-09: a highlight belongs to <em>this</em> message and goes out with it, while the picks row outlives the message — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. <strong>The counts line up in the icon column</strong>, which is the overview Victor asked for — <code>📸 ×3</code>, the quotation, <code>×3</code> in Chrome, read downwards — rather than a fourth row restating the other three.</p>
         <code class="slug">listening-everything</code>
       </section>
       <section class="card" id="listening-flash">
@@ -460,9 +450,9 @@
       <section class="card" id="transcribing-local-now">
         <header>
           <h3>⌘⌃X — the local model, now</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-local-now.png" width="308" height="117" style="opacity:0.8" alt="⌘⌃X — the local model, now"></div>
+        <div class="shot"><img src="states/transcribing-local-now.png" width="308" height="93" style="opacity:0.8" alt="⌘⌃X — the local model, now"></div>
         <p class="when">From one second into the wait for ElevenLabs (or Wispr Flow) with <em>Backup Local Pre-Transcribe</em> off — never while the microphone is open. With it on, the row is the <code>💻 local in 3s / ⌘⌃X ...</code> countdown.</p>
         <p class="note"><strong>The quick exit, written where he is looking</strong> (2026-09-28). Victor: <em>&quot;I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip&quot;</em>. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like <code>📋 Re-paste ⌘V</code>: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (<em>&quot;only displayed after 1 s after starting the transcribing&quot;</em>), so a fast engine never shows it. It goes when the words land.</p>
         <code class="slug">transcribing-local-now</code>
@@ -470,9 +460,9 @@
       <section class="card" id="transcribing-local-now-loading">
         <header>
           <h3>⌘⌃X while the local model is cold</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-local-now-loading.png" width="308" height="117" style="opacity:0.8" alt="⌘⌃X while the local model is cold"></div>
+        <div class="shot"><img src="states/transcribing-local-now-loading.png" width="308" height="93" style="opacity:0.8" alt="⌘⌃X while the local model is cold"></div>
         <p class="when">Waiting on ElevenLabs with the local weights not loaded (a cold start, or the helper restarted).</p>
         <p class="note"><code>(loading)</code> says the key will not answer at once — not that it will not work. Pressed now, the WAV waits for the weights (up to 90 s, the fallback&#x27;s own window) and the words go where the sentence was going.</p>
         <code class="slug">transcribing-local-now-loading</code>
@@ -480,9 +470,9 @@
       <section class="card" id="transcribing-fallback-countdown">
         <header>
           <h3>Fallback to local — counting down to the budget</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
+        <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="308" height="93" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
         <p class="when">From one second into the wait for ElevenLabs or Wispr Flow with <em>Backup Local Pre-Transcribe</em> on (the default), until the engine&#x27;s p95 for that length runs out.</p>
         <p class="note"><strong>The countdown is on the row with the keys</strong> (2026-10-07; <code>💻 local in 3s / ⌘⌃X ...</code> is Victor&#x27;s own wording, the 💻 in the glyph column — replacing 10-06&#x27;s <code>⌘⌃X - 💻 fallback, auto in 3s...</code>). Victor: <em>&quot;put a countdown timer … when the timer expires, the local dictation is automatically injected&quot;</em>, then <em>&quot;put it like fallback to local in countdown timer and then show the key shortcuts&quot;</em>. At the close the relay reads the engine&#x27;s p95 (<code>DecodeRate.budget</code>) and starts the local model <code>budget − localEta</code> into the wait, so its words are ready about when the count reaches zero — and then they go in (<code>via: local-auto</code>). ⌘⌃X puts them in sooner (<code>via: local-forced</code>); the engine&#x27;s words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; <strong>no engine&#x27;s name</strong> (<em>&quot;don&#x27;t leak the name of any tool, only the icon&quot;</em> — the logo on the first row says which). It replaces the <code>🤔⏱️</code> the first row grew past 150 % of the estimate, and 09-29&#x27;s <em>offered, never inserted</em> <code>Use local</code>.</p>
         <code class="slug">transcribing-fallback-countdown</code>
@@ -490,9 +480,9 @@
       <section class="card" id="transcribing-fallback-now">
         <header>
           <h3>Fallback to local — the budget ran out</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-fallback-now.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — the budget ran out"></div>
+        <div class="shot"><img src="states/transcribing-fallback-now.png" width="308" height="93" style="opacity:0.8" alt="Fallback to local — the budget ran out"></div>
         <p class="when">The count reached zero with the engine&#x27;s words still out and the local decode not quite done.</p>
         <p class="note"><code>auto now...</code>: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.</p>
         <code class="slug">transcribing-fallback-now</code>
@@ -500,9 +490,9 @@
       <section class="card" id="listening-wispr-starting">
         <header>
           <h3>Wispr Flow is not up — this Mac listens</h3>
-          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">127×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-wispr-starting.png" width="308" height="93" style="opacity:0.8" alt="Wispr Flow is not up — this Mac listens"></div>
+        <div class="shot"><img src="states/listening-wispr-starting.png" width="127" height="46" style="opacity:0.8" alt="Wispr Flow is not up — this Mac listens"></div>
         <p class="when">A sentence started on Engine = Wispr Flow while Wispr is not running, or was launched by the relay under 12 s ago (auto fallback on).</p>
         <p class="note">Victor: <em>&quot;10 s startup time is killing&quot;</em>. The relay records on its own microphone and the local model has the words at the close; Wispr Flow is launched in the background for the next sentence.</p>
         <code class="slug">listening-wispr-starting</code>
@@ -745,7 +735,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 9358356 · 07 Oct 2026 · built 07 Oct 2026, 13:07
+  Generated from <code>OverlayStates.swift</code> · repo at 849aad9 · 07 Oct 2026 · built 07 Oct 2026, 13:13
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

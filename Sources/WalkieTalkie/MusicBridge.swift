@@ -43,6 +43,12 @@ final class MusicBridge {
     /// Bumped on every edge, so a client can tell a fresh event from the state
     /// replay it gets on connect.
     private var seq = 0
+    /// Is ⌘⇧-pick live right now — `ElementPicker.dictating`. A second state on
+    /// the same socket, sent as its own `{type:"pickable", on}` so the music's
+    /// edges stay exactly what they were: the music pauses for *any* open
+    /// microphone, the pick only for a sentence with somewhere to go. The
+    /// extension draws its bottom-centre `⌘⇧` badge from it (2026-10-07).
+    private var pickable = false
 
     func start() {
         queue.async { [weak self] in self?.startListener() }
@@ -60,6 +66,10 @@ final class MusicBridge {
                 self.active = false
                 self.seq += 1
                 self.broadcast(self.stateJSON())
+            }
+            if self.pickable {
+                self.pickable = false
+                self.broadcast(self.pickableJSON())
             }
             for conn in self.connections.values { conn.cancel() }
             self.connections.removeAll()
@@ -80,6 +90,16 @@ final class MusicBridge {
             self.broadcast(self.stateJSON())
             Log.info(value ? "⏸️ dictation open — pausing audible Chrome tabs"
                            : "▶️ dictation over — resuming them")
+        }
+    }
+
+    /// Show or hide the in-page `⌘⇧` badge. Same contract as `setActive`: any
+    /// thread, a repeat is dropped, replayed to every client on connect.
+    func setPickable(_ value: Bool) {
+        queue.async { [weak self] in
+            guard let self = self, self.pickable != value else { return }
+            self.pickable = value
+            self.broadcast(self.pickableJSON())
         }
     }
 
@@ -115,6 +135,10 @@ final class MusicBridge {
 
     private func stateJSON() -> String {
         "{\"type\":\"dictation\",\"active\":\(active),\"seq\":\(seq)}"
+    }
+
+    private func pickableJSON() -> String {
+        "{\"type\":\"pickable\",\"on\":\(pickable)}"
     }
 
     private func startListener() {
@@ -162,6 +186,7 @@ final class MusicBridge {
             case .ready:
                 Log.info("🎵 music bridge: Chrome connected (\(self.connections.count) total)")
                 self.send(self.stateJSON(), to: conn)
+                self.send(self.pickableJSON(), to: conn)
                 self.drain(conn)
             case .failed, .cancelled:
                 self.connections.removeValue(forKey: id)
