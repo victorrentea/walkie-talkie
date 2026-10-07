@@ -10608,7 +10608,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if self.overlay.showSentPrompt(shown, hold: hold, shots: frames,
                                            stamps: stamps,
                                            selection: selection,
-                                           front: screen.flatMap { sources[$0] },
                                            // What he said, apart from what the
                                            // preview adds to it — the panel needs
                                            // the seam to know what is editable.

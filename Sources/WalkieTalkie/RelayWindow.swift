@@ -27,8 +27,6 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     private let selectionLabel = NSTextField(labelWithString: "")
 /// The frozen selection, quoted, at the very top of the prompt panel.
 private let quoteLabel = NSTextField(labelWithString: "")
-/// What was in front of him when he started talking.
-private let frontLabel = NSTextField(labelWithString: "")
 private let heardLabel = NSTextField(labelWithString: "")
     private let promptLabel = PromptField(wrappingLabelWithString: "")
     /// The pictures this message is carrying, drawn under the words it is
@@ -417,7 +415,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     private var promptShots: [(path: String, stamp: String)] = []
     /// Shown above the words rather than folded into them — see `layoutContent`.
     private var promptSelection: String?
-    private var promptFront: String?
     /// **Which microphone heard it and which engine wrote it** (2026-10-06,
     /// Victor: *"In the presenting window, the [panel] left top, be sure to
     /// clearly mention the engine that was used and the microphone that was
@@ -570,7 +567,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `promptFont` and the panel's own rows are outside the rule: the panel is
     /// parked in a corner and is read whole, not glanced at.
     private let titleFont = NSFont.systemFont(ofSize: 17)
-    private let promptFont = NSFont.systemFont(ofSize: 16)
+    /// 20, up from 16 (2026-10-07, Victor: *"increase the font size of the prompt"*).
+    private let promptFont = NSFont.systemFont(ofSize: 20)
     private let hintFont = NSFont.systemFont(ofSize: 17)
 
     /// The quote mark is 30pt against the text's 16 — big enough to be the thing
@@ -770,9 +768,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// Flashes must survive the idle case: the Accessibility warning fires at
     /// launch, long before any dictation, and would be invisible if this row only
     /// ever appeared while listening.
-    /// The focused-window row's text, in one place so the string that is measured
-    /// and the string that is drawn cannot drift apart.
-    private static func frontLine(_ front: String) -> String { "🪟 Active window: " + front }
 
     /// A flash still outranks the paused note: anything the relay has to say
     /// takes the row, and the note comes back when the flash is done.
@@ -1510,13 +1505,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         quoteLabel.isHidden = true
         root.addSubview(quoteLabel)
 
-        frontLabel.font = .systemFont(ofSize: 14)
-        frontLabel.textColor = .secondaryLabelColor
-        frontLabel.lineBreakMode = .byTruncatingTail
-        frontLabel.maximumNumberOfLines = 1
-        frontLabel.cell?.truncatesLastVisibleLine = true
-        frontLabel.isHidden = true
-        root.addSubview(frontLabel)
         heardLabel.font = .systemFont(ofSize: 14, weight: .medium)
         heardLabel.textColor = .labelColor
         heardLabel.lineBreakMode = .byTruncatingTail
@@ -2042,10 +2030,6 @@ private let heardLabel = NSTextField(labelWithString: "")
                 let text: CGFloat = measure(singleLine(selection), font: promptFont)
                 contextWidth = max(contextWidth, text + quoteRowHeight + pad * 2)
             }
-            if let front = promptFront {
-                let text: CGFloat = measure(Self.frontLine(front), font: NSFont.systemFont(ofSize: 14))
-                contextWidth = max(contextWidth, text + pad * 2)
-            }
             if let warning = promptWarning {
                 contextWidth = max(contextWidth, measure(warning, font: warningLabel.font ?? hintFont) + pad * 2)
             }
@@ -2058,7 +2042,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             }
         }
         let width = sentPrompt != nil
-            ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 3)
+            ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 3 * 1.3)
             : min(natural, screenWidth / 3)
         let innerWidth = width - pad * 2
 
@@ -2273,7 +2257,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             // that is actually free instead of 80 fewer.
             let below = (promptWarning != nil ? 16 + rowGap : 0)
                 + (promptShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
-                + (promptFront != nil ? 19 + rowGap : 0)
                 + (promptHeard != nil ? Self.heardHeight + rowGap : 0)
                 + cancelButton.frame.height + rowGap
                 + (hintText != nil ? 22 + rowGap : 0)
@@ -2330,21 +2313,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             shotsRow.isHidden = true
         }
 
-        // **Under the strip, and named.** Where he was when he said it used to sit
-        // above the transcript, where it read as a heading over the words — as if
-        // the sentence were about that window. It is not: it is one more thing
-        // the envelope is carrying, like the frames, and it belongs at the end of
-        // the manifest with them. Naming it is the other half — a bare title
-        // under a row of screenshots is indistinguishable from a caption for
-        // them, and "Active window" is the label that says which of the two it is.
-        if let front = promptFront {
-            frontLabel.stringValue = Self.frontLine(front)
-            frontLabel.frame.size = NSSize(width: innerWidth, height: 19)
-            frontLabel.isHidden = false
-            rows.append((frontLabel, 19))
-        } else {
-            frontLabel.isHidden = true
-        }
+        // **No "Active window" row** (2026-10-07, Victor: *"hide the active window
+        // that was selected as irrelevant"*). It sat under the strip naming the
+        // window he was in; he never needed it to decide Send or Cancel.
 
         // The last line of the manifest, right above the buttons: how the words
         // were heard. Full names, not the chip's logos — this is read once, at
@@ -4623,7 +4594,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     @discardableResult
     func showSentPrompt(_ text: String, hold: TimeInterval, shots: [String] = [],
                         stamps: [String] = [],
-                        selection: String? = nil, front: String? = nil,
+                        selection: String? = nil,
                         words: String? = nil, warning: String? = nil,
                         heard: String? = nil,
                         buttons: Bool = true, spawning: Bool = false) -> Bool {
@@ -4677,7 +4648,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             (path: $0.element, stamp: $0.offset < stamps.count ? stamps[$0.offset] : "")
         }
         promptSelection = quoted
-        promptFront = front?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // Handed in with the prompt rather than through a setter of its own:
         // `showSentPrompt` resolves any panel still on screen first, and that
         // clears this — so a warning set before the panel opened would be wiped
@@ -5018,7 +4988,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         promptSpawning = false
         promptShots = []
         promptSelection = nil
-        promptFront = nil
         promptWarning = nil
         promptHeard = nil
         if holdForSpawn {

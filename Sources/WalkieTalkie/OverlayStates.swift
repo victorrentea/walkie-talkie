@@ -543,14 +543,6 @@ enum OverlayStates {
                 o.showSentPrompt(transcript, hold: 6, selection: selection, words: transcript, heard: heard)
             },
 
-            Shot(slug: "prompt-front", group: "The held prompt", title: "The prompt, naming the window he was in",
-                 when: "Whenever the front window could be read at capture time.",
-                 note: "Under the strip and *named*. Above the words it read as a heading — as if the sentence were about that window; it is one more thing the envelope carries, so it belongs at the end of the manifest with the frames.",
-                 shape: "panel", alpha: 1.0) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.showSentPrompt(transcript, hold: 6, front: "OrderService.java — petclinic", words: transcript, heard: heard)
-            },
-
             Shot(slug: "prompt-warning", group: "The held prompt", title: "The prompt, flagged by the confidence gate",
                  when: "When the transcript came back under the confidence floor.",
                  note: "The note sits between the words and the frames, because it is *about* the words. It is the panel saying it does not trust what it is showing — which is exactly when the edit and the Cancel are worth their pixels.",
@@ -567,7 +559,7 @@ enum OverlayStates {
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(3),
                                  stamps: ["", "0:38", "1:52"], selection: selection,
-                                 front: "OrderService.java — petclinic", words: transcript,
+                                 words: transcript,
                                  warning: "⚠️ low confidence (0.42) — check the words before it goes", heard: heard)
             },
 
