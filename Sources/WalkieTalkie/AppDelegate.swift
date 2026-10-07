@@ -1424,6 +1424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("🎚️ microphone ← the other app: \(id == "auto" ? "automatic" : id)")
         }
         micId = InputDevice.chosenId
+        micAnnouncer.onMic = { [weak self] glyph in self?.status.setMicGlyph(glyph) }
         micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for

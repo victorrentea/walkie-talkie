@@ -2029,13 +2029,49 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // icon so the icon is always the walkie-talkie with a yellow circle around
         // it"*). The bare device meant *unbound* from 2026-08-28 to today; the
         // chip's `📍 Unbound` row and the menu's Bind row say that now.
-        let icon = Self.boundIcon
+        // **The microphone beside it, in a disc of the same orange** (2026-10-07,
+        // Victor: *"display the microphone currently connected in a orange
+        // circle in the menu bar icon"*) — the resolved device's glyph, the one
+        // the green tab and the chip name; nothing when no microphone resolves.
+        let icon = micGlyph.flatMap { Self.withMic(Self.boundIcon, glyph: $0) } ?? Self.boundIcon
         item.button?.image = icon
         item.button?.title = badge
         // The same picture and badge, repeated on the displays macOS will not put
         // a status item on. One call site, so the copies cannot say something the
         // original does not — see `MenuBarMirror`.
         mirror.set(icon: icon, badge: badge)
+    }
+
+    /// The microphone that would record now — `MicAnnouncer.onMic`.
+    func setMicGlyph(_ glyph: String?) {
+        guard glyph != micGlyph else { return }
+        micGlyph = glyph
+        refreshGlyph()
+    }
+    private var micGlyph: String?
+
+    /// The walkie-talkie's disc colour, sampled off `walkie-bound.png`.
+    private static let discOrange = NSColor(srgbRed: 1.0, green: 0.727, blue: 0.152, alpha: 1)
+    private static var micIcons: [String: NSImage] = [:]
+
+    /// `icon` and, 3 pt to its right, an 18 pt orange disc with `glyph` in it.
+    private static func withMic(_ icon: NSImage?, glyph: String) -> NSImage? {
+        guard let icon else { return nil }
+        if let cached = micIcons[glyph] { return cached }
+        let d: CGFloat = 18, gap: CGFloat = 3
+        let mark = Glyphs.emoji(glyph, ink: 12)
+        let size = NSSize(width: icon.size.width + gap + d, height: max(icon.size.height, d))
+        let out = NSImage(size: size, flipped: false) { _ in
+            icon.draw(in: NSRect(x: 0, y: (size.height - icon.size.height) / 2,
+                                 width: icon.size.width, height: icon.size.height))
+            let disc = NSRect(x: icon.size.width + gap, y: (size.height - d) / 2, width: d, height: d)
+            discOrange.setFill()
+            NSBezierPath(ovalIn: disc).fill()
+            mark.draw(in: disc.insetBy(dx: (d - 12) / 2, dy: (d - 12) / 2))
+            return true
+        }
+        micIcons[glyph] = out
+        return out
     }
 
     /// The two menu-bar pictures, scaled to the bar's height once.
