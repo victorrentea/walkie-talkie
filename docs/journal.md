@@ -15341,3 +15341,19 @@ Victor: *"the message during transcribing should be: 💻 local in 3s / <shortcu
 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`. The words lead again, so the `💻` goes back to the
 row's glyph column (`localNowLeadsWithKeys` and its centred-label branch removed); `local now / ⌘⌃X ...`
 at zero. `AutoLocal.rowText`, tested in `AutoLocalBudgetTests`.
+
+## The spawn's `kamikaze` waits for the session to take its prompt (2026-10-07)
+
+Victor, after 🔼 ↓ on a prompt sent to a new session: *"Didn't really receive [it] … about ten
+seconds before it started working. … If that's in a new terminal, it still receives the kamikaze.
+End to end it."* The offer is armed at the spawn's bind, ~1 s after the launch, and the flick sent
+the word at once — at 13:48:46, into a Claude Code that took its `argv` prompt only at 13:48:49.8.
+The keystrokes sat in the booting TUI and surfaced as a queued message at 13:49:02, **16 s late**;
+the read-back saw an empty `❯` and reported it delivered. `sendKamikazeOnceStarted` now polls
+`startedTranscript` (the held dialog's signal) and types the word once the prompt is in the
+transcript; past `spawnStartWait` it is **not** sent (a trust question would take `kamikaze` +
+Return as its answer) and the chip says so. `POST /test/gesture {"name": "forward-down", "direct":
+true}` calls `onGestureKamikaze`. End to end on the installed build: `/test/spawn`, the flick the
+instant the offer appeared — the word went 3.6 s after the launch (1 s after the prompt), Claude
+Code queued it 1 s later, handed it to the running turn at +5 s, and the window closed itself 27 s
+after the launch.

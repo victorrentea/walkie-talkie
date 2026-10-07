@@ -2686,6 +2686,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "forward-click":
                     self.forwardClickToggle()
                     out = ["direct": "forwardClickToggle"]
+                case "forward-down":
+                    self.hotkeys.onGestureKamikaze?()
+                    out = ["direct": "onGestureKamikaze"]
                 default:
                     out = nil
                 }
@@ -7689,7 +7692,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         guard let self = self else { return }
                         if m.kind == "dictation", let bound {
                             self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: "spawn:\(bound.address)") { [weak self] in
-                                self?.sendKamikaze(to: bound)
+                                self?.sendKamikazeOnceStarted(to: bound, directory: m.directory, since: launched)
                             }
                         }
                         // The window is there (bound, or at least opened with the
@@ -7973,9 +7976,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// takes it. Polled off the main thread every quarter second; the folder is
     /// named the way Claude Code names it (every non-alphanumeric → `-`).
     private func releaseWhenSessionStarts(directory: String, since: Date) {
-        let folder = String((directory as NSString).standardizingPath.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude/projects").appendingPathComponent(folder)
+        let dir = Self.transcriptFolder(for: directory)
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let deadline = since.addingTimeInterval(Self.spawnStartWait)
             var took: URL?
@@ -7994,6 +7995,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.error(String(format: "✨ no transcript with the prompt in %@ after %.0f s — the dialog goes anyway", dir.path, waited))
             }
             DispatchQueue.main.async { self?.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade) }
+        }
+    }
+
+    /// `~/.claude/projects/<folder>/`, named the way Claude Code names it.
+    private static func transcriptFolder(for directory: String) -> URL {
+        let folder = String((directory as NSString).standardizingPath.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects").appendingPathComponent(folder)
+    }
+
+    /// **The kamikaze for a spawn waits until the session has taken its prompt**
+    /// (2026-10-07). The offer is armed at the bind, ~1 s after the launch, but
+    /// a new Claude Code takes 2–10 s to read its `argv` prompt; the word typed
+    /// into it before that sat in a booting TUI and surfaced 16 s later (13:48:46
+    /// typed, 13:49:02 queued — Victor: *"didn't really receive … about ten
+    /// seconds before it started working"*). The same signal as the held dialog
+    /// (`startedTranscript`); once it is there the word queues behind the prompt
+    /// and Claude Code hands it to the turn already running. Never past
+    /// `spawnStartWait`: a session that never started may be on a trust
+    /// question, where `kamikaze` + Return would answer it.
+    private func sendKamikazeOnceStarted(to target: TerminalBinding.Target, directory: String, since: Date) {
+        let dir = Self.transcriptFolder(for: directory)
+        // A restart waits for it, as it does for the word itself.
+        deliveriesInFlight += 1
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let deadline = since.addingTimeInterval(Self.spawnStartWait)
+            var took: URL?
+            while took == nil, Date() < deadline {
+                took = Self.startedTranscript(in: dir, since: since)
+                if took == nil { Thread.sleep(forTimeInterval: 0.25) }
+            }
+            let waited = Date().timeIntervalSince(since)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.deliveriesInFlight -= 1
+                guard took != nil else {
+                    Log.error(String(format: "☠️ kamikaze not sent — the spawned session had not taken its prompt %.0f s after the launch", waited))
+                    self.overlay.flash("☠️ Kamikaze not sent — the new session never started", duration: 3)
+                    return
+                }
+                Log.info(String(format: "☠️ kamikaze to the spawned session, %.1f s after the launch — it has its prompt", waited))
+                self.sendKamikaze(to: target)
+            }
         }
     }
 

@@ -1068,7 +1068,7 @@ final class ElementPicker {
             let name = ((body?["name"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if body?["direct"] as? Bool == true {
                 guard let done = onTestGestureDirect?(name) else {
-                    return respond(conn, 400, ["ok": false, "error": "no direct handler for \(name) (forward-right, forward-click)"])
+                    return respond(conn, 400, ["ok": false, "error": "no direct handler for \(name) (forward-right, forward-click, forward-down)"])
                 }
                 return respond(conn, 200, ["ok": true, "gesture": name].merging(done) { _, new in new })
             }
