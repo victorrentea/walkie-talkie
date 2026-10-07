@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""walkie-reply "<answer>" — show a short answer beside Victor's mouse (2026-10-07).
+
+A prompt he dictated with a `?` in it carries the footer line
+`[If this asks you something, also run: walkie-reply "<answer in ≤2 short sentences>"]`.
+This posts the answer to the running Walkie Talkie (`POST /reply` on 127.0.0.1:8917–8919,
+with the token from ~/.walkie-talkie/reply-token) and `ReplyPanel` shows it next to his
+pointer. Linked into ~/.local/bin. Stdlib only.
+"""
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+
+text = " ".join(sys.argv[1:]).strip() or sys.stdin.read().strip()
+if not text:
+    sys.exit("usage: walkie-reply \"<answer>\"")
+try:
+    token = open(os.path.expanduser("~/.walkie-talkie/reply-token")).read().strip()
+except OSError:
+    sys.exit("walkie-reply: Walkie Talkie has not made ~/.walkie-talkie/reply-token yet")
+try:
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=2).stdout.strip()
+except Exception:
+    top = ""
+body = json.dumps({"token": token, "text": text, "from": os.path.basename(top or os.getcwd())}).encode()
+for port in (8917, 8918, 8919):
+    try:
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/reply", data=body,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=2) as r:
+            if r.status == 200:
+                print("shown")
+                sys.exit(0)
+    except Exception:
+        continue
+sys.exit("walkie-reply: no Walkie Talkie answered on 8917–8919")

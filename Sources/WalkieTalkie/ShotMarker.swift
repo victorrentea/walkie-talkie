@@ -1024,6 +1024,11 @@ enum ShotMarker {
             return "[selected: \"\(text)\" from app \(app)]"
         }
 
+        /// **What he typed into the 🔽 ↓ box** (2026-10-07) — a selection's slot
+        /// and number, his own keys instead of a highlight. Line breaks kept:
+        /// ⌥⏎ in the box was deliberate.
+        static func typed(_ text: String) -> String { "[typed: \"\(text)\"]" }
+
         /// The element's *text* inline; its selector and page are the footer's,
         /// because they are long and nobody reads them mid-sentence.
         static func element(_ index: Int, text: String) -> String {

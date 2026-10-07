@@ -1215,7 +1215,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// what every gate below means — and it is what `localRecording` was called
     /// while the relay's own microphone was the only one that could be open.
     private var listening = false {
-        didSet { if listening, !oldValue { listeningSince = CFAbsoluteTimeGetCurrent() } }
+        didSet {
+            if listening, !oldValue { listeningSince = CFAbsoluteTimeGetCurrent() }
+            // The microphone closed with the 🔽 ↓ box up: what is typed goes in
+            // before the words are sent (2026-10-07).
+            if !listening, oldValue {
+                DispatchQueue.main.async { if TypeInBox.isOpen { TypeInBox.commitIfOpen() } }
+            }
+        }
     }
 
     /// **The ten-minute ceiling on one dictation** — armed in `dictationBegan`,
@@ -1425,6 +1432,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         micId = InputDevice.chosenId
         micAnnouncer.onMic = { [weak self] glyph in self?.status.setMicGlyph(glyph) }
+        // `walkie-reply` reads it; made now, not at the first answer.
+        _ = Self.replyToken
         micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for
@@ -1445,6 +1454,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // flight there is no prompt to add the word to. A second flick takes
         // it back off, because the one reason to repeat it is having changed
         // your mind.
+        hotkeys.onTypeIn = { [weak self] cursor in self?.openTypeIn(at: cursor) }
         hotkeys.onGestureKamikaze = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -1938,6 +1948,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `evals/plan/wispr/`): H2 the process, H4 the chord decoupled from the
         // state (+ `mute`, so a desk run over `WT_WISPR_DB`'s fake rows never
         // reaches his real Wispr), C/H6 a held right-hand modifier pair.
+        // **An agent's answer, beside the pointer** (2026-10-07, `ReplyPanel`).
+        picker.onReply = { body in
+            guard body["token"] as? String == Self.replyToken else {
+                Log.error("💬 POST /reply refused — wrong or missing token")
+                return (403, ["ok": false, "error": "token"])
+            }
+            guard let text = body["text"] as? String,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return (400, ["ok": false, "error": "text"]) }
+            ReplyPanel.show(text, from: body["from"] as? String)
+            return (200, ["ok": true, "chars": text.count])
+        }
+        // **The 🔽 ↓ typing box from a desk**: opens it at the pointer as the
+        // gesture would; `text` types into it, `submit: true` presses Return.
+        picker.onTestTypeIn = { [weak self] body in
+            guard let self else { return (503, ["ok": false]) }
+            var out: [String: Any] = [:]
+            DispatchQueue.main.sync {
+                guard self.listening else { out = ["ok": false, "error": "no prompt recording"]; return }
+                self.openTypeIn(at: NSEvent.mouseLocation)
+                if let text = body["text"] as? String { TypeInBox.type(text) }
+                if body["submit"] as? Bool == true { TypeInBox.commitIfOpen() }
+                out = ["ok": true, "open": TypeInBox.isOpen]
+            }
+            return (200, out)
+        }
         picker.onTestWisprHook = { [weak self] path, body in
             guard let self else { return (503, ["ok": false, "error": "gone"]) }
             switch path {
@@ -3752,6 +3788,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         for extra in pendingExtraSelections {
             guard let marker = extra.marker else { continue }
+            if extra.source == Self.typedSource {
+                selections[marker] = ShotMarker.Token.typed(extra.text)
+                continue
+            }
             selections[marker] = ShotMarker.Token.selection(
                 Self.clampForTerminal(extra.text), app: Self.appName(of: extra.source))
         }
@@ -8354,6 +8394,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// The engine is still recorded per sentence in `outbox.jsonl` and still on
     /// the chip; it simply stopped riding into the prompt. → `Message.engine`
+    /// **A dictated question asks for a short answer back** (2026-10-07, Victor:
+    /// *"when I am asking directly a question, there should be a way that the
+    /// agent is able to reach me back … very briefly"*). Only on a prompt with a
+    /// `?` in it — every other prompt pays nothing. `walkie-reply` (`bin/`,
+    /// linked into `~/bin`) posts to `POST /reply`, and `ReplyPanel` shows it
+    /// beside the pointer.
+    static let questionHint = "[If this asks you something, also run: walkie-reply \"<answer in ≤2 short sentences>\"]"
+
     private static func dictatedHint() -> String {
         // **Four words, and the recogniser's name is not one of them**
         // (2026-09-19, Victor's template). What this clause is *for* is telling
@@ -8731,6 +8779,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // **`[voice: hesitant]` / `[voice: tense]`, beside the hint, or
             // nothing** (2026-09-27) — what the transcript lost, never a number.
             if let tag = m.affect?.verdict.tag { parts.append(tag) }
+            if text.contains("?") { parts.append(questionHint) }
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
@@ -9188,6 +9237,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !rows.isEmpty else { return [] }
         return rows.map { row in
             let clock = " at \(stamp(row.at))"
+            if row.source == typedSource {
+                return ShotMarker.Token.typed(row.text)
+                    .replacingOccurrences(of: "[typed:", with: "[typed\(clock):")
+            }
             let token = ShotMarker.Token.selection(clampForTerminal(row.text),
                                                    app: appName(of: row.source))
             // `[selected: "…"` → `[selected at 0:08: "…"`, one insertion, so the
@@ -9719,6 +9772,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The counter is advanced whether or not the number is usable, so the
     /// eleventh thing of a sentence is silent rather than a second `ten`.
     /// - Precondition: `stateLock` is held.
+    // MARK: - Typed into the prompt (🔽 ↓, 2026-10-07)
+
+    /// The `source` a typed row carries in `pendingExtraSelections` — what makes
+    /// it render `[typed: "…"]` instead of `[selected: "…"]`.
+    static let typedSource = "⌨️ typed"
+
+    /// 🔽 ↓ while a prompt records: the box at the pointer, and what he submits
+    /// filed **at the moment of the gesture**, not of the Return.
+    private func openTypeIn(at cursor: CGPoint) {
+        stateLock.lock()
+        let opened = dictationStartedAt
+        stateLock.unlock()
+        guard listening, let opened else {
+            Log.info("⌨️ 🔽 ↓ — no prompt recording, no typing box")
+            return
+        }
+        let moment = Date()
+        TypeInBox.show(at: cursor) { [weak self] text in
+            self?.fileTyped(text, at: moment, opened: opened)
+        }
+    }
+
+    /// One typed note against the prompt in flight — a selection's slot and
+    /// marker (`fileSelection`'s path minus the Accessibility read), so it lands
+    /// inline where the gesture fell, or under the words when it cannot.
+    private func fileTyped(_ text: String, at moment: Date, opened: Date) {
+        stateLock.lock()
+        guard dictationStartedAt == opened else {
+            stateLock.unlock()
+            Log.info("⌨️ typed \(text.count) chars — that prompt was already sent; dropped")
+            overlay.flash("⌨️ Too late — that prompt was already sent", duration: 3)
+            return
+        }
+        let offset = moment.timeIntervalSince(opened)
+        let marker = reserveMarkerLocked(.selection, at: moment)
+        pendingExtraSelections.append((at: offset, text: text, source: Self.typedSource, marker: marker))
+        stateLock.unlock()
+        if let marker = marker { speakMarker(.selection, marker) }
+        Log.info("⌨️ typed at \(Self.stamp(offset)) — \(text.count) chars"
+                 + (marker.map { ", marker \($0)" } ?? ", no marker — it goes under the words"))
+        overlay.flash("⌨️ \(text.count > 40 ? String(text.prefix(40)) + "…" : text)", duration: 1.5)
+    }
+
+    /// `~/.walkie-talkie/reply-token`, 0600, made once: what `walkie-reply` sends
+    /// and `POST /reply` checks.
+    static let replyToken: String = {
+        let url = Outbox.defaultHome.appendingPathComponent("reply-token")
+        if let s = try? String(contentsOf: url, encoding: .utf8),
+           !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let token = (0..<16).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+        FileManager.default.createFile(atPath: url.path, contents: Data(token.utf8),
+                                       attributes: [.posixPermissions: 0o600])
+        return token
+    }()
+
     private func reserveMarkerLocked(_ kind: ShotMarker.Kind, at moment: Date) -> Int? {
         guard dictationInFlight else { return nil }
         // **Two mechanisms, and a number is only worth reserving if one of them

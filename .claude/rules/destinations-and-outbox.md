@@ -171,3 +171,23 @@ scriem în clipboard la final promptul sau dictarea curată, indiferent ce și c
 - **Do not reintroduce pause**, and do not make `holdsForBind` a menu tick — a tick for it would be pause under another name. → journal: *Pause still does not come back*
 - **Do not reintroduce a typing affordance** on the overlay's surface. → journal: *Scope: dictation helper only*
 - Do not write the outbox line before delivery, and do not let a held sentence replace another.
+
+## The agent answers a dictated question beside the pointer (2026-10-07, `ReplyPanel`)
+
+Victor: *"when I am asking directly a question … the agent is able to reach me back … a bit of a
+panel that appears next to the mouse carrying the response … super important to be brief"*, then
+*"if my mouse doesn't move, that should don't start any timer … having an X icon in the corner for
+me to dismiss it explicitly"*.
+
+- **Only a prompt with a `?` asks for it** — `terminalLine` adds `AppDelegate.questionHint`,
+  `[If this asks you something, also run: walkie-reply "<answer in ≤2 short sentences>"]`, after
+  `[Dictated in RO or EN]`. Every other prompt pays nothing.
+- **`helpers/walkie-reply`** (linked into `~/.local/bin`, which is on the sessions' PATH; `~/bin` is
+  not) posts `{token, text, from: <git toplevel basename>}` to `POST /reply` on 8917–8919. The token is
+  `~/.walkie-talkie/reply-token` (0600, made at launch): the port answers any web page (CORS `*`) and
+  no page can know it — a wrong token is a 403 and `⚠️ 💬 POST /reply refused`.
+- **The panel**: below-right of where the pointer was when the answer arrived, does not follow,
+  `sharingType = .none`, ≤ 400 chars, header `💬 <from>`. **It stays until the ✕** (drawn,
+  first-mouse) **or a newer answer — no clock, no bar** (Victor: *"NO PROGRESSBAR. i have to manually
+  dismiss it"*; a countdown that started when the pointer moved lived for one build). Log `💬 answer
+  from <from> — N chars; up until the ✕`, `💬 answer dismissed (✕)`.

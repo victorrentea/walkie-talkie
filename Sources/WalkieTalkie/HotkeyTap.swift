@@ -997,6 +997,8 @@ final class HotkeyTap {
     /// is reachable without leaving the pointer, and the one that *ends* the
     /// session was the exception.
     var onGestureUnbind: (() -> Void)?
+    /// 🔽 ↓ while a prompt records — the typing box at `cursor` (2026-10-07).
+    var onTypeIn: ((CGPoint) -> Void)?
 
     /// **🔽 ↑ — start or stop a screen recording** (2026-09-18). One gesture for
     /// both, like every other toggle on this mouse: the hand that started it is
@@ -3708,6 +3710,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 }
                 if ownClean {
                     Log.info("🎙️ 🔽 ↓ — the plain dictation's words are in flight; they land without a Return")
+                    return swallow(gesture, type, event)
+                }
+                // **A prompt recording: type a few letters into it** (2026-10-07,
+                // Victor: *"the back button moved to the bottom … would open up a
+                // very tiny input text right next to the cursor … submitted by
+                // hitting enter … annotated and inserted into the dictation"*).
+                // The relay's own engine only — a Wispr sentence has no clock to
+                // put the text where it was typed.
+                if !wisprSentence, ownDictation, ownMicOpen {
+                    let cursor = NSEvent.mouseLocation
+                    DispatchQueue.main.async { [weak self] in self?.onTypeIn?(cursor) }
                     return swallow(gesture, type, event)
                 }
                 DispatchQueue.global().async { [weak self] in self?.onGestureUnbind?() }

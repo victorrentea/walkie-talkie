@@ -461,6 +461,10 @@ final class ElementPicker {
     /// `/test/wispr-chord`, `/test/modifiers` — route name and body in,
     /// status and answer out. See `.claude/rules/desk-testing.md`.
     var onTestWisprHook: ((String, [String: Any]) -> (Int, [String: Any]))?
+    /// `POST /reply` — an agent's short answer (`walkie-reply`, 2026-10-07).
+    var onReply: (([String: Any]) -> (Int, [String: Any]))?
+    /// `POST /test/type-in` — the 🔽 ↓ typing box from a desk.
+    var onTestTypeIn: (([String: Any]) -> (Int, [String: Any]))?
 
     /// `POST /test/input {"name": "…"}` — point the **system's** default input at
     /// a device, and say what it was before.
@@ -1266,6 +1270,22 @@ final class ElementPicker {
                 return respond(conn, 200, ["ok": true, "bound": false, "session": SessionLabel.value])
             }
             respond(conn, 200, ["ok": true, "bound": true].merging(described) { _, new in new })
+
+        // **An agent answering a question he dictated** (2026-10-07, `ReplyPanel`).
+        // Not a test route: `walkie-reply` posts here. The body carries the
+        // token from `~/.walkie-talkie/reply-token` — this port answers any page
+        // in the browser, and no page can know it.
+        case ("POST", "/reply"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            guard let hook = onReply else { return respond(conn, 503, ["ok": false, "error": "no handler"]) }
+            let (code, answer) = hook(body)
+            respond(conn, code, answer)
+
+        case ("POST", "/test/type-in"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            guard let hook = onTestTypeIn else { return respond(conn, 503, ["ok": false, "error": "no handler"]) }
+            let (code, answer) = hook(body)
+            respond(conn, code, answer)
 
         // Chrome preflights the POST because the page's origin is not ours.
         case ("OPTIONS", _):

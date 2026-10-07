@@ -369,6 +369,22 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-10-07: "the back button moved to the bottom … would open
+            # up a very tiny input text right next to the cursor … submitted by
+            # hitting enter … inserted into the dictation".
+            "row": ("🔽 back", "drag down during a prompt"),
+            "does": "open the typing box at the pointer; its text goes into the prompt",
+            "checks": [
+                ("a prompt on the relay's own engine opens the box, before the unbind",
+                 "HotkeyTap `case VK_F12`",
+                 lambda: before(gesture_case(src, "VK_F12"),
+                                r"if !wisprSentence, ownDictation, ownMicOpen \{.*?onTypeIn\?\(cursor\)",
+                                r"onGestureUnbind")),
+                ("…and only after the plain sentence's own branches", "HotkeyTap `case VK_F12`",
+                 lambda: before(gesture_case(src, "VK_F12"), r"return plainToggle\(", r"onTypeIn")),
+            ],
+        },
+        {
             # Victor, 2026-10-05: "If I do the gesture for back and swipe to the
             # left at any point, this means an Enter." A cancel until then.
             "row": ("🔽 back", "drag left, any moment"),

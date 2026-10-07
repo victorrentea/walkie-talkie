@@ -90,7 +90,9 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   bound terminal (mid-sentence: flips bound ⇄ caret, 2026-10-05 — 🔼 ends it); 🔼 ← cancel; 🔼 ↑ new session; 🔼 ↓ kamikaze; ◀️-held + 🔼 bind; **🔽 and 🔽 →
   = plain dictation** (start/stop; words only, follows the Engine; **every stop inserts, then
   Return** — 2026-10-05: the bare 🔽 at rest is no longer Return); 🔽 is the shutter while a prompt
-  records.
+  records; **🔽 ↓ while a prompt records = the typing box** (`[typed: "…"]` inline, 2026-10-07 —
+  `mouse-gestures.md`). A prompt with a `?` asks the agent for `walkie-reply`, shown beside the
+  pointer (`destinations-and-outbox.md`).
 - **Unbound, everything still works:** the sentence is held 5 min for the next bind.
 - **The recipient is latched when the microphone closes — which terminal, not only *not the caret*.**
   A deliberate bind mid-sentence redirects; the 10 s poll never may; a bind or unbind after the close
