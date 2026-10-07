@@ -77,6 +77,11 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   a sentence is being spoken. **Hovering suspends the clock**: the pointer arriving mid-fade brings
   the menu back to solid, leaving lets the fade run. **A click still lands during the fade** —
   nothing turns hit-testing off, the panel is ordered out only once the animation has finished.
+  **Past the solid period the pointer's position decides, read every 0.1 s (`watch`)** — and again
+  in the fade's completion; the tracking areas are only the fast hint (2026-10-07: *"I was hovering
+  the menu … that did not prevent it from fading out"*). A fade in flight is the `fading` flag,
+  never `alphaValue < 1`: the alpha is still 1 in the fade's first frame, which is exactly when the
+  hand crossing menu → submenu exits one and enters the other, so the un-fade did nothing.
   → journal: *The folder menu (2026-09-04)*
 - **It draws a surface and does not follow the pointer** — the one departure from *Nothing beside
   the pointer draws a window*. Rows need edges to be told apart, and it stays where the sentence

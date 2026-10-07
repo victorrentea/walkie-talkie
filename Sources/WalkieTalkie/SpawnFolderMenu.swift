@@ -267,6 +267,19 @@ enum SpawnFolderMenu {
     /// Whether the solid period has run out; the fade an exit triggers only
     /// makes sense once it has.
     private static var solidOver = false
+    /// A fade is running (its completion has not fired and no un-fade has
+    /// reversed it). **Not `alphaValue < 1`**: the window's alpha is still 1
+    /// for the first frame of the animation, and the hand crossing from the
+    /// menu into its submenu exits one and enters the other inside that frame —
+    /// the un-fade read 1, did nothing, and the fade hid the menu under the hand
+    /// (Victor, 2026-10-07).
+    private static var fading = false
+    /// **Where the pointer is, read every 0.1 s once the solid period is over**
+    /// — the authority on fading, with the tracking areas only a faster hint.
+    /// Entered/exited events go missing: a panel that appears or is rebuilt
+    /// under the pointer gets no `mouseEntered`, and a submenu ordered out under
+    /// the hand sends no `mouseExited`. The pointer's position cannot be missed.
+    private static var watch: Timer?
     /// Bumped on every state change, so a fade's completion can tell it has
     /// been superseded by an un-fade and must not hide the panel.
     private static var generation = 0
@@ -336,19 +349,8 @@ enum SpawnFolderMenu {
         hovered = false
         hoveredMain = false
         hoveredSub = false
-        solidOver = false
         generation += 1
-
-        // `.common`, or it stops running the moment anything on the main thread
-        // enters a tracking loop.
-        let t = Timer.scheduledTimer(withTimeInterval: solidSeconds, repeats: false) { _ in
-            solidOver = true
-            // Hovered, the clock has run out and nothing happens: the exit is
-            // what lets the fade start, whenever the hand leaves.
-            if !hovered { fade() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        startClock()
         fillActive(for: p)
     }
 
@@ -412,16 +414,59 @@ enum SpawnFolderMenu {
         hovered = hoveredMain || hoveredSub
         guard hovered != was else { return }
         if hovered {
-            guard let p = panel, p.alphaValue < 1 else { return }
-            // Invalidate the in-flight fade's completion before reversing it.
-            generation += 1
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.15
-                p.animator().alphaValue = 1
-                subpanel?.animator().alphaValue = 1
-            }
+            if fading { unfade() }
         } else if solidOver {
-            fade()
+            // The pointer decides, not the exit: leaving the menu for the
+            // submenu is an exit too, and it lands on the menu.
+            followPointer()
+        }
+    }
+
+    /// **The solid period, from now.** `.common`, or it stops running the
+    /// moment anything on the main thread enters a tracking loop.
+    private static func startClock() {
+        timer?.invalidate()
+        watch?.invalidate()
+        watch = nil
+        solidOver = false
+        fading = false
+        let t = Timer.scheduledTimer(withTimeInterval: solidSeconds, repeats: false) { _ in
+            solidOver = true
+            // Hovered, the clock has run out and nothing happens: the hand
+            // leaving is what lets the fade start — seen by `watch`.
+            let w = Timer(timeInterval: 0.1, repeats: true) { _ in followPointer() }
+            RunLoop.main.add(w, forMode: .common)
+            watch = w
+            followPointer()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    /// The pointer on the menu or its submenu, by position.
+    private static func pointerOnMenu() -> Bool {
+        let m = NSEvent.mouseLocation
+        return [panel, subpanel].contains { $0.map { NSMouseInRect(m, $0.frame, false) } ?? false }
+    }
+
+    /// Past the solid period: on the menu → solid, off it → fading.
+    private static func followPointer() {
+        guard panel != nil, solidOver else { return }
+        // Position only: a flag a missed `mouseExited` left on would keep
+        // the menu up for good.
+        let on = pointerOnMenu()
+        if on && fading { unfade() } else if !on && !fading { fade() }
+    }
+
+    /// Reverse a fade in flight — invalidating its completion first.
+    private static func unfade() {
+        guard let p = panel else { return }
+        generation += 1
+        fading = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            p.animator().alphaValue = 1
+            subpanel?.animator().alphaValue = 1
         }
     }
 
@@ -429,6 +474,9 @@ enum SpawnFolderMenu {
     static func hide() {
         timer?.invalidate()
         timer = nil
+        watch?.invalidate()
+        watch = nil
+        fading = false
         chosen = nil
         closeSubmenu()
         folderRows = [:]
@@ -438,7 +486,9 @@ enum SpawnFolderMenu {
 
     private static func fade() {
         guard let p = panel else { return }
+        generation += 1
         let gen = generation
+        fading = true
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = fadeSeconds
             ctx.timingFunction = CAMediaTimingFunction(name: .linear)
@@ -449,7 +499,9 @@ enum SpawnFolderMenu {
             // second spawn has already put it away, and an un-fade (the hand
             // arriving mid-fade) reversed it — a stale completion must not hide
             // a panel that is solid again.
-            if panel === p && generation == gen { hide() }
+            guard panel === p && generation == gen else { return }
+            // The last word is the pointer's: a hand on it keeps it.
+            if pointerOnMenu() { unfade() } else { hide() }
         })
     }
 
@@ -752,14 +804,7 @@ enum SpawnFolderMenu {
         // well as re-timed — the same invalidate-then-reverse `setHovered` does.
         generation += 1
         p.alphaValue = 1
-        timer?.invalidate()
-        solidOver = false
-        let t = Timer.scheduledTimer(withTimeInterval: solidSeconds, repeats: false) { _ in
-            solidOver = true
-            if !hovered { fade() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
+        startClock()
     }
 
     /// The glyph, drawn once per state and cached: a rebuild makes a new view
