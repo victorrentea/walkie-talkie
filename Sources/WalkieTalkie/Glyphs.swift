@@ -912,8 +912,9 @@ extension Glyphs {
         //
         // **A laptop, not the apple, since 2026-10-04** (Victor: *"în loc de măr
         // pune laptop ca să se înțeleagă local"*) — the apple named a vendor,
-        // the laptop says *this machine*. A colour emoji, so it ignores the ink
-        // and stays lit through the bar, like the device emoji.
+        // the laptop says *this machine*. A colour emoji, so it ignores the ink;
+        // the ramp draws it faded until the bar reaches it (`wordGlyph(lit:)`,
+        // 2026-10-07), as the logos dim with theirs.
         case .mac: return emoji("💻", ink: ink, colour: colour)
         }
     }

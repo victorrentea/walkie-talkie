@@ -107,7 +107,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 93,
+    "height" : 46,
     "image" : "held-waiting.png",
     "note" : "**The one chip an unbound pointer may carry.** *The pointer is clean when nothing is bound* still holds for a relay with nothing to say; this row is something to say — *\"mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie\"*. It counts what `awaitingBind` holds, so a second sentence says `2`, and it goes the instant a bind delivers them. Built like `☠️ Kamikaze`: an emoji in the icon column, words beside it. It is announced once with a flash, `📨 held — bind a terminal to send it`.",
     "shape" : "chip",
@@ -138,7 +138,7 @@
     "slug" : "replace-wispr",
     "title" : "Replace Wispr — this one goes to the caret",
     "when" : "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
-    "width" : 205
+    "width" : 215
   },
   {
     "alpha" : 0.80000000000000004,
@@ -404,14 +404,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 46,
+    "height" : 93,
     "image" : "listening-wispr-starting.png",
     "note" : "Victor: *\"10 s startup time is killing\"*. The relay records on its own microphone and the local model has the words at the close; Wispr Flow is launched in the background for the next sentence.",
     "shape" : "flash",
     "slug" : "listening-wispr-starting",
     "title" : "Wispr Flow is not up — this Mac listens",
     "when" : "A sentence started on Engine = Wispr Flow while Wispr is not running, or was launched by the relay under 12 s ago (auto fallback on).",
-    "width" : 127
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
@@ -596,7 +596,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 763,
+    "height" : 635,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
     "shape" : "panel",

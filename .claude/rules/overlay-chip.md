@@ -298,7 +298,9 @@ yields to `--label`).
   — while the microphone is open nothing has been transcribed, and when something is, the
   microphone is shut — so saying both at once meant one of them was always a forecast. The bar's
   step count is `transcribeWord.count`, so the mark lengthens the ramp rather than sitting outside
-  it, and the logo **fills with it** since 2026-10-01 (it was always lit until then).
+  it, and the logo **fills with it** since 2026-10-01 (it was always lit until then). The 💻, a colour
+  emoji with no ink to take, is drawn at 35 % alpha until its step lights (`wordGlyph(lit:)`,
+  2026-10-07, Victor: *"the laptop … should have a faded form and then it turns bright"*).
 - **No overdue note on the `Transcribing` row since 2026-10-06** — the `  🤔⏱️` appended past 150 %
   of the estimate (2026-09-22/23) is gone (Victor: *"remove the thinking face from the tooltip …
   when the transcribing tool exceeds its time budget"*); the ⌘⌃X row's countdown says how long is
@@ -421,9 +423,10 @@ yields to `--label`).
   same for selections and for drags … so that I can visually check the quality of your annotation"*).
   `RelayWindow.richPrompt`: a `[📸N…]` token ends its paragraph, stays verbatim as the caption (teal,
   monospaced 0.7×), and its picture is drawn under it left-aligned (`NSTextAttachment`, ≤ 220 pt tall,
-  ≤ the panel's width) — the ✂️ cut-out, else the 800 px frame (`AppDelegate` hands `inlineShots:
+  ≤ 30 % of the panel's width — `inlineShotMaxWidthShare`, 2026-10-07) — the ✂️ cut-out, else the 800 px frame (`AppDelegate` hands `inlineShots:
   [N: path]`). `[selected: …]` and `[chrome-selection-N: …]` are their own indented paragraph; other
-  tokens are coloured in place. A frame drawn in the words leaves the strip (`stripShots`); the
+  tokens are coloured in place. A frame drawn in the words leaves the strip (`stripShots`, matched by **shot number** since
+  2026-10-07 — by path the cut-out never equalled the frame, so every inlined picture came back in the strip); the
   automatic 📸0 is not in the preview's words, so it stays there. Editing swaps back to the plain
   words. Shot `prompt-inline`.
 - **Dictating is not a panel state.** The panel is for what the model heard while Cancel can still

@@ -740,7 +740,9 @@ enum OverlayStates {
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         var paths: [String] = []
         for i in 0..<count {
-            let path = (dir as NSString).appendingPathComponent("mock-\(i).png")
+            // Named like a real frame: the panel matches inlined pictures to the
+            // strip by `ScreenCapture.number(of:)`.
+            let path = (dir as NSString).appendingPathComponent("screenshot-\(i)-original.png")
             let size = NSSize(width: 320, height: 200)
             let image = NSImage(size: size)
             image.lockFocus()

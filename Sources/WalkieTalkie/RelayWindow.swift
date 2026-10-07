@@ -703,6 +703,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// every sentence. Four microphones is the whole domain, so a dictionary is
     /// the whole cache.
     private static var wordGlyphs: [String: NSImage] = [:]
+    /// How much of the 💻 shows before the bar reaches it — about where the
+    /// dim grey of the unlit letters sits beside the lit white.
+    private static let unlitEmojiAlpha: CGFloat = 0.35
 
     /// **A recogniser's logo is drawn a rung smaller than the emoji beside it**,
     /// `hqBadge`'s rung and for `hqBadge`'s reason: an emoji is trimmed to its
@@ -720,7 +723,23 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// life of the process. `usingColorSpace` resolves it against the
     /// appearance in force at the moment it is asked, which is also the
     /// appearance the drawing is about to happen in.
-    private static func wordGlyph(_ ch: Character, ink: NSColor) -> NSImage {
+    /// - Parameter lit: whether the bar has reached this character. The logos
+    ///   follow `ink`; the 💻, a colour emoji that ignores ink, is drawn faded
+    ///   until lit (2026-10-07, Victor: *"the laptop icon is bright, not faded
+    ///   like Wispr Flow … it should have a faded form and then it turns bright
+    ///   when it's time by the progress bar"*).
+    private static func wordGlyph(_ ch: Character, ink: NSColor, lit: Bool = true) -> NSImage {
+        if !lit, Glyphs.Engine(rawValue: ch) == .mac {
+            let key = "\(ch)|unlit"
+            if let cached = wordGlyphs[key] { return cached }
+            let bright = wordGlyph(ch, ink: ink)
+            let image = NSImage(size: bright.size, flipped: false) { rect in
+                bright.draw(in: rect, from: .zero, operation: .sourceOver, fraction: unlitEmojiAlpha)
+                return true
+            }
+            wordGlyphs[key] = image
+            return image
+        }
         guard Glyphs.Engine(rawValue: ch) != nil else {
             let key = String(ch)
             if let cached = wordGlyphs[key] { return cached }
@@ -2850,9 +2869,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// anyway, since the unstamped context shot is in the strip. On the picture
     /// there is nothing to match: it is the frame saying when it was taken.
     /// The frames left for the strip: every one whose token is not in the words.
+    /// Matched by **shot number**, not path (2026-10-07, Victor: *"if you inserted
+    /// an image in the text in the panel, do not show it again at the end"*): the
+    /// strip holds the frame, the words draw its cut-out or its 800 px copy, so
+    /// the paths never agreed and every inlined picture came back in the strip.
     private var stripShots: [(path: String, stamp: String)] {
-        let drawn = Set(inlineShotNumbers(in: sentPrompt ?? "").compactMap { promptInlineShots[$0] })
-        return promptShots.filter { !drawn.contains($0.path) }
+        let drawn = Set(inlineShotNumbers(in: sentPrompt ?? ""))
+        return promptShots.filter { ScreenCapture.number(of: $0.path).map { !drawn.contains($0) } ?? true }
     }
 
     /// `[📸N…]`, `[selected: "…"…]`, `[chrome-selection-N: …]`, `[🎦N…]` — the
@@ -2872,6 +2895,9 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// Never taller than this, so a full-screen frame does not push the buttons off.
     private static let inlineShotMaxHeight: CGFloat = 220
+    /// Never wider than this share of the panel (2026-10-07, Victor: *"make the
+    /// width of any inserted picture never exceed thirty percent of that panel"*).
+    private static let inlineShotMaxWidthShare: CGFloat = 0.30
 
     /// **The words as the agent will read them, with what they point at drawn
     /// in place** (2026-10-07, Victor: *"if a picture is inserted in text, make
@@ -2925,7 +2951,7 @@ private let heardLabel = NSTextField(labelWithString: "")
                image.size.width > 0, image.size.height > 0 {
                 breakParagraph()
                 out.append(NSAttributedString(string: raw + "\n", attributes: token))
-                let scale = min(1, (width - 4) / image.size.width, Self.inlineShotMaxHeight / image.size.height)
+                let scale = min(1, width * Self.inlineShotMaxWidthShare / image.size.width, Self.inlineShotMaxHeight / image.size.height)
                 let attachment = NSTextAttachment()
                 attachment.image = image
                 attachment.bounds = NSRect(x: 0, y: 0, width: (image.size.width * scale).rounded(),
@@ -3335,12 +3361,14 @@ private let heardLabel = NSTextField(labelWithString: "")
             // *"iconița Wispr-ului să fie și ea gri și apoi să se aprindă"*). It
             // is a line drawing in the row's own ink (`Glyphs.engine`), so it has
             // the letters' unlit state for free — the same opaque `dim`, no alpha.
+            // The 💻 is a colour emoji with no ink to take, so it does dim by
+            // alpha (2026-10-07, Victor asked for it to fill like Wispr's).
             //
             // **The `→` before the recogniser is a letter, not a picture**
             // (2026-09-24): it is typography, part of the sentence, and fills
             // with the bar like the words round it.
             guard ch.isASCII || ch == "→" || ch == Glyphs.loraMark || ch == Glyphs.dotsGap else {
-                out.append(Self.inline(Self.wordGlyph(ch, ink: i < steps ? lit : dim), font: hintFont))
+                out.append(Self.inline(Self.wordGlyph(ch, ink: i < steps ? lit : dim, lit: i < steps), font: hintFont))
                 continue
             }
             out.append(NSAttributedString(string: String(ch),
@@ -4143,7 +4171,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             // It fills with the bar like the letters round it (2026-10-01) — a
             // logo is drawn in the row's ink, so `dim` is its unlit state too.
             guard ch.isASCII || ch == Glyphs.loraMark || ch == Glyphs.dotsGap else {
-                out.append(Self.inline(Self.wordGlyph(ch, ink: i < steps ? lit : dim), font: hintFont))
+                out.append(Self.inline(Self.wordGlyph(ch, ink: i < steps ? lit : dim, lit: i < steps), font: hintFont))
                 continue
             }
             out.append(NSAttributedString(string: String(ch),
