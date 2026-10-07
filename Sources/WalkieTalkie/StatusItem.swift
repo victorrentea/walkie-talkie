@@ -483,7 +483,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     /// The row's title alone — what `DjiBattery`'s answer repaints. The DJI's
     /// transmitter battery rides after its name, as in Victor Addons' menu
-    /// (2026-10-07): `Mic: 🎤 DJI ≈80 %`.
+    /// (2026-10-07): `Mic: 🎤 DJI 80 %`.
     private func applyMicTitle() {
         var title = "Mic: \(micCurrentLabel?() ?? "—")"
         if InputDevice.resolve().known?.id == "rx", let battery = DjiBattery.suffix { title += " \(battery)" }

@@ -2,7 +2,7 @@ import Foundation
 
 /// **The DJI transmitter's battery on the `Mic:` row, as Victor Addons shows it**
 /// (2026-10-07, Victor: *"should display also the battery … of my DJI the same
-/// way macOS add-ons does it"*) — `Mic: 🎤 DJI ≈80 %`, or `— no TX` when no
+/// way macOS add-ons does it"*) — `Mic: 🎤 DJI 80 %`, or `— no TX` when no
 /// transmitter is linked; nothing when the receiver's status is not live.
 ///
 /// **Asked of Victor Addons, never read off the receiver.** The status comes over
@@ -33,14 +33,14 @@ enum DjiBattery {
         }.resume()
     }
 
-    /// Addons' answer → Addons' own wording: `≈80 %` (one per linked
+    /// Addons' answer → Addons' own wording: `80 %` (one per linked
     /// transmitter, ` / ` between), `— no TX`, or nil when not live.
     static func menuSuffix(json data: Data) -> String? {
         guard let j = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               j["live"] as? Bool == true else { return nil }
         guard (j["linked_mask"] as? Int ?? 0) != 0 else { return "— no TX" }
         let pcts = (j["transmitters"] as? [[String: Any]] ?? [])
-            .compactMap { $0["percent"] as? Int }.map { "≈\($0) %" }
+            .compactMap { $0["percent"] as? Int }.map { "\($0) %" }
         return pcts.isEmpty ? nil : pcts.joined(separator: " / ")
     }
 }

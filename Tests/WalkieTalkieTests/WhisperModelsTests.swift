@@ -78,8 +78,8 @@ final class DjiBatteryTests: XCTestCase {
     private func suffix(_ json: String) -> String? { DjiBattery.menuSuffix(json: Data(json.utf8)) }
 
     func testLinkedTransmittersShowTheirPercent() {
-        XCTAssertEqual(suffix(#"{"present":true,"live":true,"linked_mask":2,"transmitters":[{"unit":2,"level":2,"percent":80}]}"#), "≈80 %")
-        XCTAssertEqual(suffix(#"{"live":true,"linked_mask":3,"transmitters":[{"percent":100},{"percent":20}]}"#), "≈100 % / ≈20 %")
+        XCTAssertEqual(suffix(#"{"present":true,"live":true,"linked_mask":2,"transmitters":[{"unit":2,"level":2,"percent":80}]}"#), "80 %")
+        XCTAssertEqual(suffix(#"{"live":true,"linked_mask":3,"transmitters":[{"percent":100},{"percent":20}]}"#), "100 % / 20 %")
     }
 
     func testNoTransmitterAndNotLive() {

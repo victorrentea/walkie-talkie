@@ -374,7 +374,7 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   `StatusItem`; ⏳ is the only badge that claims the glyph.
   → journal: *The recogniser*
 - **The DJI transmitter's battery rides after `Mic: 🎤 DJI`, as in Victor Addons' menu** (2026-10-07:
-  *"display also the battery … of my DJI the same way macOS add-ons does it"*): `≈80 %`, `— no TX`,
+  *"display also the battery … of my DJI the same way macOS add-ons does it"*): `80 %`, `— no TX`,
   nothing when not live. **Asked of Addons (`GET 127.0.0.1:55123/test/dji/state`), never read off the
   receiver** — its vendor USB interface is exclusive and Addons holds it for its low-battery banner.
   `DjiBattery.refresh` at `menuWillOpen`; the row shows the last reading, then repaints in the open menu.
