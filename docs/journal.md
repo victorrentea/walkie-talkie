@@ -34,6 +34,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *The eraser waits 5 s and fades letter by letter* (2026-09-26 14:20), the eraser of *The caption after a night of use*, and the single centred line that scrolled left once wider than the band (*The caption is centred…*) — superseded 2026-09-28 by *Two lines that roll up*: two centred lines ≤ 80 % of the band, a roll-up on the third, silence rolls lines out after a read time; no eraser, no horizontal scroll
 - *Two escapes, both said out loud: a relay that has not answered for a minute* (2026-09-23, `restart_gate.py`) — superseded 2026-09-28 by *A restart waits for every engine and for his hands*: an app that does not answer is refused (exit 4), never restarted
 - *The back button's two gestures swapped roles* (2026-09-23, `268b111`: 🔽 = the plain toggle, 🔽 → = Return) — superseded 2026-09-28 by *The back button's gestures swapped back*: 🔽 → is the plain toggle, 🔽 is Return (the shutter while a prompt records; stop + words + Return in a plain one)
+- *Every plain dictation ends in a Return* (2026-10-05) for 🔽 →'s stop — superseded 2026-10-07 by *Only the bare 🔽 submits*: 🔽 → and 🔽 ↓ stop a plain dictation with the words alone
 - *🔼 → ends the one open* for a sentence aimed at the bound terminal — superseded 2026-10-05 by *🔼 → mid-sentence flips bound ⇄ caret*: it goes to the caret, and back on the next flick; 🔼 is the stop, ⌘⌃D keeps its own
 - Q9's *Wispr's push-to-talk moves to right ⌘ + right ⇧* (`54+60`, 2026-09-26) — superseded 2026-09-28 by Q23: right ⌥ + right ⇧, `61+60`
 - *Auto fallback to local (p98): ⌘⌃X pressed by the clock* (2026-09-28, 22:25) — superseded 2026-09-29 by *Prepare local transcript (p95)*: p95, not p98; the local words are decoded **ahead** and **offered** (`💻 Use local  ⌘⌃X`), never inserted on a clock — `via: local-auto`, the countdown row and the over-budget flash are gone; the checkbox is *Prepare local transcript (p95)*. Q14 (hard failures) stays automatic
@@ -15306,3 +15307,30 @@ other — **Wispr takes one sentence at a time**, and it was still on the one ha
   source is started by name, and every `borrowEngine` is one of the three listed hard failures
   (Q21 without Wispr's F19 shortcut, Wispr not up, Wispr still finishing).
 
+## Only the bare 🔽 submits; 🔽 → and 🔽 ↓ stop without a Return (2026-10-07)
+
+Victor: *"when I dictate cleanly with back mouse and swipe to right, that shortcut should just
+insert the text, not hit the enter. The same with the back mouse and drag the mouse down at the
+same time. That gesture should just insert the text without hitting the enter. However, the normal
+back should insert dictation and hit enter. Whereas at all points back plus left should mean new
+line wherever I am dictating or not."* `plainToggle` stopped queueing `onBackSubmit` (the keyboard
+F5 and right ⌥ ×2 share it and follow); `case VK_F6` keeps its own submitting stops; 🔽 ← was
+already the ungated Return. `case VK_F12` now reads F6's `wisprSentence` / `ownClean`: an open
+plain sentence goes to `plainToggle`, one in flight is swallowed (a flick meant for it must not
+unbind), anything else unbinds as before. The spec gained *🔽 back · drag down during a plain
+dictation*, and the 10-05 tap (`9b2aa72`) is an old mapping it must reject. Three of its regexes
+had drifted with the 10-06 arm fix and ⌘⌃X's `local-auto` and were failing at HEAD — fixed.
+
+## 🔼 ↓ after a prompt landed: `kamikaze`, alone (2026-10-07)
+
+Victor: *"At the moment that I've fired already a dictation and it's actually enacted in a
+terminal. For the following three seconds, there should be a tooltip next to the mouse saying
+«kamikaze» with question mark. And if I drag my mouse down holding the forward button, that
+should ship a kamikaze word alone, just kamikaze, into the terminal — only after I have prompted,
+not clearly dictated. The three variants of prompt."* (Wispr heard the closing *"I also want this
+kamikaze"* as *"comic art"*.) `AppDelegate.offerKamikaze` arms a 3 s window and flashes
+`☠️ Kamikaze?` (the flash rides beside the pointer) from each prompt route once its words are in:
+`deliverToTerminal` `.delivered`, the spawn's `adoptSpawnedWindow` bind, `deliverCaretPrompt`
+submitted in Terminal.app or VS Code. `onGestureKamikaze` takes it only with no sentence open or
+settling. The word travels the prompt's own route, so the shell guard and the Return logic are
+the ones already measured. Shot `flash-kamikaze-offer`.

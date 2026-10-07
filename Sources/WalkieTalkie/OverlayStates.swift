@@ -438,6 +438,14 @@ enum OverlayStates {
                 o.flash("📨 held — bind a terminal to send it", duration: 60)
             },
 
+            Shot(slug: "flash-kamikaze-offer", group: "Flashes", title: "Flash — kamikaze offered",
+                 when: "Three seconds, the moment a prompt (🔼, 🔼 →, 🔼 ↑) has landed in a terminal (2026-10-07). 🔼 ↓ in that window sends `kamikaze` alone to the same session.",
+                 note: "Never after a plain sentence, nor after a prompt that already carries the word.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.flash("☠️ Kamikaze?", duration: 60)
+            },
+
             Shot(slug: "flash-unguarded", group: "Flashes", title: "Flash — bound to an unguarded shell",
                  when: "At bind, when the target has no shell guard: the flight lands into this.",
                  note: "The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.",

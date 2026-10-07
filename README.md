@@ -195,7 +195,7 @@ Logi Options+, and the app takes no mouse button at all.
 | 🔼 | a prompt at the caret |
 | 🔼 ↑ | a prompt at a new session |
 | 🔼 ← | cancel |
-| 🔼 ↓ | kamikaze |
+| 🔼 ↓ | kamikaze; within 3 s after a prompt landed in a terminal (`☠️ Kamikaze?` by the pointer): send `kamikaze` alone to it |
 | ◀️ held, then 🔼 | bind the window in front |
 | 🔽 → | start / stop a plain dictation at the caret (the stop inserts the words, no Return) |
 | 🔽 | start / stop a plain dictation (ends in Return); the shutter while a prompt records |

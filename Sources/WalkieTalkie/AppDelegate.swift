@@ -1456,6 +1456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 guard self.listening || self.settling else {
+                    if self.takeKamikazeOffer() { return }
                     Log.info("☠️ kamikaze gesture with no sentence in flight — ignored")
                     return
                 }
@@ -7691,8 +7692,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // screen of evidence, and a flash would be a panel thrown over
                 // his work to repeat what it already shows.
                 case .opened(let tty):
-                    self.adoptSpawnedWindow(tty: tty, session: (m.directory, launched)) { [weak self] _ in
+                    self.adoptSpawnedWindow(tty: tty, session: (m.directory, launched)) { [weak self] bound in
                         guard let self = self else { return }
+                        if m.kind == "dictation", let bound {
+                            self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: "spawn:\(bound.address)") { [weak self] in
+                                self?.sendKamikaze(to: bound)
+                            }
+                        }
                         // The window is there (bound, or at least opened with the
                         // prompt in its `argv`): now it is a delivery.
                         let delivery = m.kind == "dictation"
@@ -8144,6 +8150,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let delivery = m.kind == "dictation"
                         ? self.recordDelivery(via: m.via, kind: m.deliveryKind, to: to) : nil
                     self.writeOutbox(m, line: line, delivery: delivery)
+                    if m.kind == "dictation" {
+                        self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: to) { [weak self] in
+                            self?.sendKamikaze(to: target)
+                        }
+                    }
                 case .targetGone:
                     // **Q4 — a dead terminal at delivery: paste at the caret**
                     // (Victor, 2026-09-26), not held. The binding goes
@@ -8538,9 +8549,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: frontPid)
             DispatchQueue.main.async {
                 guard let self else { return }
+                let already = line.contains("\n\nkamikaze")
                 if let vscodeTTY, let frontPid {
                     self.pasteText(line, to: pid, settles: false)
                     self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: line.count)
+                    self.offerKamikaze(already: already, at: "VS Code \(vscodeTTY)") { [weak self] in
+                        guard let self else { return }
+                        self.pasteText("kamikaze", to: frontPid, settles: false)
+                        self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: "kamikaze".count)
+                        self.holdOnClipboard(line, why: "the prompt, again after its kamikaze")
+                    }
                     return
                 }
                 // `deliver` ended this sentence's settle before the hop; a
@@ -8551,6 +8569,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
                 self.lastDictation = line
+                self.offerKamikaze(already: already, at: tty) {
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let ok = TerminalBinding.submitPrompt("kamikaze", toTTY: tty)
+                        Log.info(ok ? "☠️ kamikaze typed into Claude Code on \(tty)" : "☠️ kamikaze could not be typed into \(tty)")
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Kamikaze, after the prompt landed (2026-10-07)
+
+    /// **A prompt that has just landed in a terminal can still be made a
+    /// kamikaze** — for three seconds, `☠️ Kamikaze?` beside the pointer, and
+    /// 🔼 ↓ in that window sends the word alone (`kamikaze`, then Return) to the
+    /// session the prompt went to. Victor: *"At the moment that I've fired
+    /// already a dictation and it's actually enacted in a terminal. For the
+    /// following three seconds, there should be a tooltip next to the mouse
+    /// saying «kamikaze» with question mark. And if I drag my mouse down holding
+    /// the forward button, that should ship a kamikaze word alone … only after
+    /// I have prompted, not clearly dictated."*
+    ///
+    /// Armed by the three prompt routes once the words are in: the bound
+    /// terminal's `.delivered` (🔼 →, a held sentence released by a bind), the
+    /// spawn's window bound (🔼 ↑), the caret prompt submitted to Claude Code in
+    /// Terminal.app or VS Code (🔼). Never by a plain sentence, a caret prompt
+    /// pasted into anything else, or a prompt that already carries the word.
+    /// A sentence open or settling outranks the offer — the flick is then
+    /// that sentence's (`onGestureKamikaze`).
+    private var kamikazeOffer: (send: () -> Void, until: CFAbsoluteTime)?
+    private static let kamikazeOfferSeconds: TimeInterval = 3
+
+    private static func endsInKamikaze(_ text: String?) -> Bool {
+        (text ?? "").hasSuffix("\n\nkamikaze")
+    }
+
+    private func offerKamikaze(already: Bool, at destination: String, send: @escaping () -> Void) {
+        guard !already else { return }
+        kamikazeOffer = (send, CFAbsoluteTimeGetCurrent() + Self.kamikazeOfferSeconds)
+        overlay.flash("☠️ Kamikaze?", duration: Self.kamikazeOfferSeconds)
+        Log.info("☠️ kamikaze offered for \(Int(Self.kamikazeOfferSeconds)) s — the prompt landed in \(destination)")
+    }
+
+    /// True when the flick was the offer's — sent, or arrived a beat late.
+    private func takeKamikazeOffer() -> Bool {
+        guard let offer = kamikazeOffer else { return false }
+        kamikazeOffer = nil
+        guard CFAbsoluteTimeGetCurrent() <= offer.until else { return false }
+        Log.info("☠️ kamikaze — sent alone, after the prompt")
+        overlay.flash("☠️ Kamikaze sent", duration: 1.5)
+        offer.send()
+        return true
+    }
+
+    /// The word alone to a terminal — the bound one's own delivery (shell guard,
+    /// Return, read-back), on the same serial queue, so it can only land after
+    /// the prompt it follows.
+    private func sendKamikaze(to target: TerminalBinding.Target) {
+        deliveriesInFlight += 1
+        deliveryQueue.async { [weak self] in
+            guard let self = self else { return }
+            let outcome = self.terminal.deliver("kamikaze", to: target)
+            DispatchQueue.main.async {
+                self.deliveriesInFlight -= 1
+                self.report(outcome)
             }
         }
     }

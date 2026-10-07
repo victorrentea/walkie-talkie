@@ -453,6 +453,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
     "height" : 46,
+    "image" : "flash-kamikaze-offer.png",
+    "note" : "Never after a plain sentence, nor after a prompt that already carries the word.",
+    "shape" : "flash",
+    "slug" : "flash-kamikaze-offer",
+    "title" : "Flash — kamikaze offered",
+    "when" : "Three seconds, the moment a prompt (🔼, 🔼 →, 🔼 ↑) has landed in a terminal (2026-10-07). 🔼 ↓ in that window sends `kamikaze` alone to the same session.",
+    "width" : 133
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
     "image" : "flash-unguarded.png",
     "note" : "The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.",
     "shape" : "flash",
