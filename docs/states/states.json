@@ -608,6 +608,18 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
+    "height" : 763,
+    "image" : "prompt-inline.png",
+    "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
+    "shape" : "panel",
+    "slug" : "prompt-inline",
+    "title" : "The prompt, with its pictures where they were taken",
+    "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
+    "width" : 749
+  },
+  {
+    "alpha" : 1,
+    "group" : "The held prompt",
     "height" : 191,
     "image" : "prompt-selection.png",
     "note" : "Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.",

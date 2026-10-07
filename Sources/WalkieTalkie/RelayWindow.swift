@@ -413,6 +413,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// it was taken at, written across it by `layoutShots`. An empty stamp is the
     /// automatic context shot, which is always 0:00 and so says nothing.
     private var promptShots: [(path: String, stamp: String)] = []
+    /// **The pictures the words point at, drawn where they point** (2026-10-07):
+    /// shot number → the image to draw under its `[📸N…]` token (the cut-out for
+    /// a ✂️ area, the 800 px frame otherwise). A frame whose token is in the words
+    /// is drawn there and leaves the strip; the rest stay in the strip.
+    private var promptInlineShots: [Int: String] = [:]
     /// Shown above the words rather than folded into them — see `layoutContent`.
     private var promptSelection: String?
     /// **Which microphone heard it and which engine wrote it** (2026-10-06,
@@ -2033,6 +2038,14 @@ private let heardLabel = NSTextField(labelWithString: "")
             if let warning = promptWarning {
                 contextWidth = max(contextWidth, measure(warning, font: warningLabel.font ?? hintFont) + pad * 2)
             }
+            // A picture in the words asks for its own width, up to the cap —
+            // a cut-out squeezed into a four-word panel is a cut-out he cannot check.
+            for n in inlineShotNumbers(in: sentPrompt ?? "") {
+                guard let path = promptInlineShots[n], let image = NSImage(contentsOfFile: path),
+                      image.size.width > 0 else { continue }
+                let w = min(image.size.width, Self.inlineShotMaxHeight * image.size.width / max(image.size.height, 1))
+                contextWidth = max(contextWidth, w + pad * 2 + 8)
+            }
             if let heard = promptHeard {
                 // +12, the prompt row's slack and the emoji's: measured bare it
                 // came out a few points short and cut the engine's name.
@@ -2252,7 +2265,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             // below are all fixed-height — so a long dictation gets every pixel
             // that is actually free instead of 80 fewer.
             let below = (promptWarning != nil ? 16 + rowGap : 0)
-                + (promptShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
+                + (stripShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
                 + (promptHeard != nil ? Self.heardHeight + rowGap : 0)
                 + cancelButton.frame.height + rowGap
                 + (hintText != nil ? 22 + rowGap : 0)
@@ -2262,7 +2275,12 @@ private let heardLabel = NSTextField(labelWithString: "")
             // `sentPrompt` back over it on the next layout pass would undo his
             // last keystroke, and layout runs on every keystroke precisely so the
             // panel can grow with what he types.
-            if !editingPrompt { promptLabel.stringValue = prompt }
+            // **Rich while he reads, plain while he types** (2026-10-07): the
+            // pictures and the highlighted tokens are drawn in the words, and
+            // the field editor gets his words back bare (`beginPromptEdit`).
+            if !editingPrompt {
+                promptLabel.attributedStringValue = richPrompt(prompt, width: innerWidth)
+            }
             let shown = promptLabel.stringValue
             promptLabel.preferredMaxLayoutWidth = innerWidth
             // **Ask the label, not a parallel calculation.** The height used to
@@ -2297,7 +2315,7 @@ private let heardLabel = NSTextField(labelWithString: "")
 
         // The frames, in a strip under the words — oldest first, the same order
         // the agent will read them in, each stamped with when it was taken.
-        if sentPrompt != nil, !promptShots.isEmpty {
+        if sentPrompt != nil, !stripShots.isEmpty {
             let height = layoutShots(width: innerWidth)
             if height > 0 {
                 shotsRow.isHidden = false
@@ -2884,13 +2902,117 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// only if you count columns to match it up, and the count was off by one
     /// anyway, since the unstamped context shot is in the strip. On the picture
     /// there is nothing to match: it is the frame saying when it was taken.
+    /// The frames left for the strip: every one whose token is not in the words.
+    private var stripShots: [(path: String, stamp: String)] {
+        let drawn = Set(inlineShotNumbers(in: sentPrompt ?? "").compactMap { promptInlineShots[$0] })
+        return promptShots.filter { !drawn.contains($0.path) }
+    }
+
+    /// `[📸N…]`, `[selected: "…"…]`, `[chrome-selection-N: …]`, `[🎦N…]` — the
+    /// tokens `ShotMarker.Token` writes into the words.
+    private static let tokenPattern = try? NSRegularExpression(
+        pattern: #"\[(?:📸(\d+)[^\]\n]*|selected: "[\s\S]*?"(?: from app [^\]\n]*)?|chrome-selection-\d+:[^\]\n]*|🎦\d+[^\]\n]*)\]"#)
+
+    /// The shot numbers whose token is in `text` and which have a picture to draw.
+    private func inlineShotNumbers(in text: String) -> [Int] {
+        guard let regex = Self.tokenPattern, !promptInlineShots.isEmpty else { return [] }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { m in
+            guard let r = Range(m.range(at: 1), in: text), let n = Int(text[r]),
+                  promptInlineShots[n] != nil else { return nil }
+            return n
+        }
+    }
+
+    /// Never taller than this, so a full-screen frame does not push the buttons off.
+    private static let inlineShotMaxHeight: CGFloat = 220
+
+    /// **The words as the agent will read them, with what they point at drawn
+    /// in place** (2026-10-07, Victor: *"if a picture is inserted in text, make
+    /// sure that there is a paragraph of text which then ends and the picture
+    /// … interrupts the paragraph … left aligned and then more text … And the
+    /// same for selections and for drags. Make them visible in the panel so that
+    /// I can visually check the quality of your annotation"*).
+    ///
+    /// - A `[📸N…]` token with a picture ends the paragraph: the token on a line
+    ///   of its own as the picture's caption, the picture under it, left-aligned,
+    ///   then the words carry on in a new paragraph.
+    /// - A highlight (`[selected: …]`) and a picked element (`[chrome-selection-N: …]`)
+    ///   are their own indented paragraph, in the token colour.
+    /// - Every other token is coloured where it stands.
+    ///
+    /// The token text is kept verbatim — the panel is where he checks *where*
+    /// the relay put each thing, so the bracket is the thing being checked.
+    private func richPrompt(_ text: String, width: CGFloat) -> NSAttributedString {
+        let out = NSMutableAttributedString()
+        let body: [NSAttributedString.Key: Any] = [.font: promptFont, .foregroundColor: NSColor.labelColor]
+        let tokenFont = NSFont.monospacedSystemFont(ofSize: promptFont.pointSize * 0.7, weight: .medium)
+        let token: [NSAttributedString.Key: Any] = [.font: tokenFont, .foregroundColor: NSColor.systemTeal]
+        let block = NSMutableParagraphStyle()
+        block.firstLineHeadIndent = 14
+        block.headIndent = 14
+        block.paragraphSpacing = 4
+        block.paragraphSpacingBefore = 4
+        let picture = NSMutableParagraphStyle()
+        picture.paragraphSpacing = 6
+
+        guard let regex = Self.tokenPattern else { return NSAttributedString(string: text, attributes: body) }
+        /// Ends the paragraph in progress — no trailing blanks, one newline.
+        func breakParagraph() {
+            while let last = out.string.last, last == " " || last == "\t" {
+                out.deleteCharacters(in: NSRange(location: out.length - 1, length: 1))
+            }
+            if out.length > 0, out.string.last != "\n" { out.append(NSAttributedString(string: "\n", attributes: body)) }
+        }
+        var cursor = text.startIndex
+        var startParagraph = false
+        for m in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(m.range, in: text) else { continue }
+            var words = String(text[cursor..<range.lowerBound])
+            if startParagraph { words = String(words.drop(while: { $0 == " " || $0 == "\t" })) }
+            out.append(NSAttributedString(string: words, attributes: body))
+            startParagraph = false
+            cursor = range.upperBound
+            let raw = String(text[range])
+            let shot = Range(m.range(at: 1), in: text).flatMap { Int(text[$0]) }
+            if let n = shot, let path = promptInlineShots[n], let image = NSImage(contentsOfFile: path),
+               image.size.width > 0, image.size.height > 0 {
+                breakParagraph()
+                out.append(NSAttributedString(string: raw + "\n", attributes: token))
+                let scale = min(1, (width - 4) / image.size.width, Self.inlineShotMaxHeight / image.size.height)
+                let attachment = NSTextAttachment()
+                attachment.image = image
+                attachment.bounds = NSRect(x: 0, y: 0, width: (image.size.width * scale).rounded(),
+                                           height: (image.size.height * scale).rounded())
+                let pic = NSMutableAttributedString(attachment: attachment)
+                pic.append(NSAttributedString(string: "\n", attributes: body))
+                pic.addAttribute(.paragraphStyle, value: picture, range: NSRange(location: 0, length: pic.length))
+                out.append(pic)
+                startParagraph = true
+            } else if raw.hasPrefix("[selected:") || raw.hasPrefix("[chrome-selection-") {
+                breakParagraph()
+                var attrs = token
+                attrs[.paragraphStyle] = block
+                out.append(NSAttributedString(string: raw + "\n", attributes: attrs))
+                startParagraph = true
+            } else {
+                out.append(NSAttributedString(string: raw, attributes: token))
+            }
+        }
+        var tail = String(text[cursor...])
+        if startParagraph { tail = String(tail.drop(while: { $0 == " " || $0 == "\t" })) }
+        out.append(NSAttributedString(string: tail, attributes: body))
+        // A token as the last thing leaves a newline under it: one empty line of panel.
+        while out.string.last == "\n" { out.deleteCharacters(in: NSRange(location: out.length - 1, length: 1)) }
+        return out
+    }
+
     private func layoutShots(width: CGFloat) -> CGFloat {
         shotViews.forEach { $0.removeFromSuperview() }
         shotViews = []
 
         let height = Self.shotThumbHeight
         var x: CGFloat = 0
-        for shot in promptShots.reversed() {
+        for shot in stripShots.reversed() {
             guard let image = NSImage(contentsOfFile: shot.path), image.size.height > 0 else { continue }
             let w = (image.size.width / image.size.height * height).rounded()
             guard x + w <= width else { break }
@@ -4589,6 +4711,7 @@ private let heardLabel = NSTextField(labelWithString: "")
                         selection: String? = nil,
                         words: String? = nil, warning: String? = nil,
                         heard: String? = nil,
+                        inlineShots: [Int: String] = [:],
                         buttons: Bool = true, spawning: Bool = false) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -4639,6 +4762,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         promptShots = shots.enumerated().map {
             (path: $0.element, stamp: $0.offset < stamps.count ? stamps[$0.offset] : "")
         }
+        promptInlineShots = inlineShots
         promptSelection = quoted
         // Handed in with the prompt rather than through a setter of its own:
         // `showSentPrompt` resolves any panel still on screen first, and that
@@ -4832,6 +4956,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         // label under it would be a row appearing at the moment the panel should
         // be getting simpler.
         promptLabel.stringValue = words
+        // The rich read-only text set its own runs; the field types in the panel's.
+        promptLabel.font = promptFont
+        promptLabel.textColor = .labelColor
         promptLabel.isEditable = true
         promptLabel.isSelectable = true
         promptLabel.wantsLayer = true
@@ -4979,6 +5106,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         promptExtras = ""
         promptSpawning = false
         promptShots = []
+        promptInlineShots = [:]
         promptSelection = nil
         promptWarning = nil
         promptHeard = nil

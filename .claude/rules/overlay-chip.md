@@ -416,6 +416,16 @@ yields to `--label`).
   the auto countdown says so) and the device actually opened (`MicRecorder.lastOpened`) or Wispr's own
   (`InputDevice.label(wisprName:)`); the panel only renders it. `GET /test/state.prompt.heard`.
   Two rows, never one line (same evening, Victor: *"should be one below the other"*).
+- **The panel draws what the words point at, where they point** (2026-10-07, Victor: *"if a picture
+  is inserted in text … the picture interrupts the paragraph … left aligned and then more text … the
+  same for selections and for drags … so that I can visually check the quality of your annotation"*).
+  `RelayWindow.richPrompt`: a `[📸N…]` token ends its paragraph, stays verbatim as the caption (teal,
+  monospaced 0.7×), and its picture is drawn under it left-aligned (`NSTextAttachment`, ≤ 220 pt tall,
+  ≤ the panel's width) — the ✂️ cut-out, else the 800 px frame (`AppDelegate` hands `inlineShots:
+  [N: path]`). `[selected: …]` and `[chrome-selection-N: …]` are their own indented paragraph; other
+  tokens are coloured in place. A frame drawn in the words leaves the strip (`stripShots`); the
+  automatic 📸0 is not in the preview's words, so it stays there. Editing swaps back to the plain
+  words. Shot `prompt-inline`.
 - **Dictating is not a panel state.** The panel is for what the model heard while Cancel can still
   stop it; the shot receipt is a number in the recording row, not a `flash(_:)`, because a flash
   takes the chip over for 1.5 s and the count has to keep climbing.

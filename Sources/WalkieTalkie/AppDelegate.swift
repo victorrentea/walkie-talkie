@@ -8976,8 +8976,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return Set(plain.map { $0.path })
         }()
 
+        // **An area whose token is in the words says its corners there, and only
+        // there** (2026-10-07, Victor, reading `[📸1✂️61,341→585,535]` in the
+        // sentence and the same four numbers again in its row: *"only the first
+        // scissors should say [it]; the rest would only add what's new … the
+        // whole thing is inferable from just the number"*). So an inlined area's
+        // row drops the corners, and two or more of them — same screen size, the
+        // cut-out under its own `screenshot-n.jpg` name, no ⇧-drag among them —
+        // share one `📸n✂️` row, the plain frames' fold applied to the cuts. An
+        // area the words could not carry (Wispr) keeps its full row: the corners
+        // have nowhere else to be.
+        let inlinedAreas: [(n: Int, path: String)] = frames.compactMap { path in
+            guard let n = ScreenCapture.number(of: path), m.inlinedShots.contains(n),
+                  (m.areas[path] ?? nil) != nil, ScreenCapture.moveTarget(for: path) == nil,
+                  ScreenCapture.zoom(for: path) != nil else { return nil }
+            return (n, path)
+        }
+        let areaFoldable: Set<String> = {
+            guard inlinedAreas.count > 1,
+                  Set(inlinedAreas.map { size($0.path) }).count == 1,
+                  inlinedAreas.allSatisfy({ ($0.path as NSString).lastPathComponent
+                      == "screenshot-\($0.n)-original.jpg" }) else { return [] }
+            return Set(inlinedAreas.map { $0.path })
+        }()
+        let inlinedAreaPaths = Set(inlinedAreas.map { $0.path })
+
         for (i, path) in frames.enumerated() {
             guard let n = ScreenCapture.number(of: path) else { continue }
+            if areaFoldable.contains(path) {
+                if path == inlinedAreas.first?.path {
+                    rows.append("[📸n✂️ = user-selected area between corners (x,y) given in its token, "
+                        + "cut out at 📁/screenshot-n.jpg; full screen available at -800px and "
+                        + "-original.jpg at \(size(path))]")
+                }
+                continue
+            }
+            if inlinedAreaPaths.contains(path), let cut = ScreenCapture.zoom(for: path) {
+                rows.append("[\(ShotMarker.Token.key(shot: n, area: true)) = "
+                    + "user-selected area between corners (x,y) given in its token, "
+                    + "cut out at \(name(cut)); full screen available at -800px and -original.jpg at \(size(path))]")
+                continue
+            }
             // `shotOffsets` is built as `[screen] + paths`, the same list being
             // walked here.
             let said = caption(i, path, n)
@@ -10689,6 +10728,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // same `pendingScreen` + `pendingShots` in the same order, a few lines
             // up, which is what lets the panel write each stamp on its own frame.
             let stamps = Self.shotStamps(offsets)
+            // The picture each `[📸N…]` token in the words stands for, for the
+            // panel to draw in place (2026-10-07): the cut-out of an area, the
+            // agent's 800 px copy of anything else.
+            var inlineShots: [Int: String] = [:]
+            for path in frames {
+                guard let n = ScreenCapture.number(of: path) else { continue }
+                inlineShots[n] = ScreenCapture.zoom(for: path) ?? ScreenCapture.handover(for: path)
+            }
             if self.overlay.showSentPrompt(shown, hold: hold, shots: frames,
                                            stamps: stamps,
                                            selection: selection,
@@ -10697,6 +10744,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            // the seam to know what is editable.
                                            words: text, warning: warning,
                                            heard: kind == "dictation" ? heard : nil,
+                                           inlineShots: inlineShots,
                                            buttons: !self.autosend,
                                            // Consumed above, so the panel is told
                                            // rather than left to re-derive it.

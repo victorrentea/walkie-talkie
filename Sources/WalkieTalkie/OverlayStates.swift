@@ -543,6 +543,20 @@ enum OverlayStates {
                                  stamps: ["", "0:38"], words: transcript, heard: heard)
             },
 
+            Shot(slug: "prompt-inline", group: "The held prompt", title: "The prompt, with its pictures where they were taken",
+                 when: "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
+                 note: "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
+                 shape: "panel", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                let frames = mockShots(3)
+                let said = "adaugă un test pentru coșul gol, uite aici [📸1✂️61,341→585,535] unde se calculează totalul "
+                    + "[selected: \"public Order placeOrder(Cart cart) {\" from app IntelliJ IDEA] și apoi rulează-l "
+                    + "[📸2🖱️@1204:388] și spune-mi ce iese."
+                o.showSentPrompt(said, hold: 6, shots: frames, stamps: ["", "0:04", "0:09"],
+                                 words: said, heard: heard,
+                                 inlineShots: [1: frames[1], 2: frames[2]])
+            },
+
             Shot(slug: "prompt-selection", group: "The held prompt", title: "The prompt, with a quoted highlight",
                  when: "The dictation carried a selection.",
                  note: "Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.",
