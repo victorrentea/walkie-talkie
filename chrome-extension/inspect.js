@@ -610,6 +610,10 @@
   // already listen to, so whatever is underneath stays clickable and the badge
   // comes back once the pointer has left.
   const BADGE_CLEAR_PX = 24;    // how near the pointer may come before it fades
+  // The Walkie icon leads the pill so it reads as the app's, not Chrome's
+  // (2026-10-07); `walkie.png` is `assets/walkie-bound.png` at 96 px. ⇧ is drawn,
+  // not typed: the font's arrow is a thin sliver beside ⌘ at 13 px.
+  const SHIFT_SVG = '<svg viewBox="0 0 20 17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M10 1.5 18.5 9.5H14V15.5H6V9.5H1.5Z"/></svg>';
   let badge = null;             // { host, pill } while shown
 
   function showBadge() {
@@ -629,9 +633,12 @@
           transition: opacity .15s linear;
         }
         .pill.away { opacity: 0; }
+        .pill > * { vertical-align: middle; }
+        .icon { width: 18px; height: 18px; margin: -2px 6px 0 -6px; }
         kbd { font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #ff8f88; }
+        kbd svg { width: 15px; height: 13px; margin: -2px 0 0 2px; vertical-align: middle; }
       </style>
-      <div class="pill">Hold <kbd>⌘⇧</kbd> and click to point at an element</div>`;
+      <div class="pill"><img class="icon" src="${chrome.runtime.getURL('walkie.png')}" alt="">Hold <kbd>⌘${SHIFT_SVG}</kbd> and click an element</div>`;
     (document.body || document.documentElement).appendChild(host);
     badge = { host, pill: shadow.querySelector('.pill') };
     clearBadge(mouse.x, mouse.y);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Walkie Talkie Inspector",
-  "version": "1.8",
+  "version": "1.9",
   "description": "Hold ⌘⇧ to outline the element under the cursor; ⌘⇧-click hands its selector to the agent Walkie Talkie is talking to, and ⌘⇧-drag reports where you would move it without touching the page. Pauses whatever Chrome is playing while Victor dictates.",
   "content_scripts": [
     {
@@ -13,7 +13,9 @@
     }
   ],
   "background": { "service_worker": "relay.js" },
+  "icons": { "48": "walkie.png", "96": "walkie.png" },
   "action": { "default_title": "Walkie Talkie Inspector" },
+  "web_accessible_resources": [{ "resources": ["walkie.png"], "matches": ["<all_urls>"] }],
   "permissions": ["tabs", "scripting", "storage", "alarms"],
   "host_permissions": ["<all_urls>"]
 }
