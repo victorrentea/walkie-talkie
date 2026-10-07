@@ -627,6 +627,14 @@
   // the music socket (`MusicBridge.setPickable`), the worker forwards it to the
   // top frame of every tab, and a page that loads mid-sentence asks for it.
   //
+  // **A tab rising from the bottom-right corner, the same size at any zoom
+  // (2026-10-07).** Victor: *"a badge showing right in the … right corner of
+  // this screen, like a tab popping from below … a constant size, no matter the
+  // zoom"*. Square at the bottom, rounded on top, it slides up when shown. Page
+  // zoom (⌘+ / ⌘−) scales every CSS pixel, so the worker asks Chrome for the
+  // tab's zoom (`chrome.tabs.getZoom`, then `onZoomChange`) and the pill is
+  // scaled by its inverse (`--z`), its corner gap with it.
+  //
   // **It never takes a click.** `pointer-events:none` throughout; "disappears
   // when I move my mouse over it" is a distance test on the mousemove we
   // already listen to, so whatever is underneath stays clickable and the badge
@@ -641,6 +649,7 @@
   const CMD_SVG = KEY_SVG('M13 4v12a3 3 0 1 0 3-3H4a3 3 0 1 0 3 3V4a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3');
   const SHIFT_SVG = KEY_SVG('M10 1.5 18.5 10H14V18.5H6V10H1.5Z');
   let badge = null;             // { host, pill } while shown
+  let zoom = 1;                 // the tab's page zoom, from the worker
 
   function showBadge() {
     if (badge || window.top !== window) return;
@@ -650,14 +659,18 @@
     shadow.innerHTML = `
       <style>
         .pill {
-          position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+          --z: 1;
+          position: fixed; right: calc(24px * var(--z)); bottom: 0;
+          transform: scale(var(--z)); transform-origin: bottom right;
           pointer-events: none; box-sizing: border-box; white-space: nowrap;
-          padding: 6px 14px; border-radius: 999px;
-          background: rgba(28, 28, 30, .88); color: rgba(255, 255, 255, .92);
+          padding: 7px 14px 8px; border-radius: 10px 10px 0 0;
+          background: rgba(28, 28, 30, .92); color: rgba(255, 255, 255, .92);
           font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-          box-shadow: 0 2px 12px rgba(0, 0, 0, .35);
+          box-shadow: 0 -2px 12px rgba(0, 0, 0, .35);
           transition: opacity .15s linear;
+          animation: rise .25s ease-out;
         }
+        @keyframes rise { from { translate: 0 100%; } to { translate: 0 0; } }
         .pill.away { opacity: 0; }
         .pill > * { vertical-align: middle; }
         .icon { width: 18px; height: 18px; margin: -2px 6px 0 -6px; }
@@ -667,7 +680,15 @@
       <div class="pill"><img class="icon" src="${chrome.runtime.getURL('walkie.png')}" alt="">Hold <kbd>${CMD_SVG}${SHIFT_SVG}</kbd> and click an element</div>`;
     (document.body || document.documentElement).appendChild(host);
     badge = { host, pill: shadow.querySelector('.pill') };
+    applyZoom();
     clearBadge(mouse.x, mouse.y);
+    chrome.runtime.sendMessage({ type: 'zoom?' })
+      .then((z) => { if (typeof z === 'number' && z > 0) { zoom = z; applyZoom(); } })
+      .catch(() => {});
+  }
+
+  function applyZoom() {
+    badge?.pill.style.setProperty('--z', String(1 / zoom));
   }
 
   function hideBadge() {
@@ -688,6 +709,7 @@
     chrome.runtime.onMessage.addListener((msg) => {
       if (life.signal.aborted) return;
       if (msg?.type === 'pickable') msg.on ? showBadge() : hideBadge();
+      if (msg?.type === 'zoom' && msg.factor > 0) { zoom = msg.factor; applyZoom(); }
     });
     chrome.runtime.sendMessage({ type: 'pickable?' })
       .then((on) => { if (on) showBadge(); })

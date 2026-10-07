@@ -256,6 +256,11 @@ async function setPickable(on) {
     chrome.tabs.sendMessage(tab.id, { type: 'pickable', on }, { frameId: 0 }).catch(() => {})));
 }
 
+// ⌘+ / ⌘− on a tab with the badge up: it keeps its size (2026-10-07).
+chrome.tabs.onZoomChange.addListener(({ tabId, newZoomFactor }) => {
+  chrome.tabs.sendMessage(tabId, { type: 'zoom', factor: newZoomFactor }, { frameId: 0 }).catch(() => {});
+});
+
 // A periodic alarm rather than a setTimeout chain: with no socket open there is
 // nothing keeping this worker alive, and a timer scheduled by a worker that is
 // then torn down never fires. An alarm wakes it.
@@ -296,6 +301,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
       respond({ live, sessions: c.sessions, why: live ? null : await alive() });
     });
     return true;      // the answer comes later
+  }
+  // The tab's page zoom, for the badge to undo (2026-10-07).
+  if (msg?.type === 'zoom?') {
+    if (_sender.tab?.id == null) { respond(1); return false; }
+    chrome.tabs.getZoom(_sender.tab.id).then(respond).catch(() => respond(1));
+    return true;
   }
   if (msg?.type === 'pickable?') {
     chrome.storage.session.get('pickable').then(({ pickable }) => respond(!!pickable));
