@@ -633,9 +633,13 @@
   // comes back once the pointer has left.
   const BADGE_CLEAR_PX = 24;    // how near the pointer may come before it fades
   // The Walkie icon leads the pill so it reads as the app's, not Chrome's
-  // (2026-10-07); `walkie.png` is `assets/walkie-bound.png` at 96 px. ⇧ is drawn,
-  // not typed: the font's arrow is a thin sliver beside ⌘ at 13 px.
-  const SHIFT_SVG = '<svg viewBox="0 0 20 17" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"><path d="M10 1.5 18.5 9.5H14V15.5H6V9.5H1.5Z"/></svg>';
+  // (2026-10-07); `walkie.png` is `assets/walkie-bound.png` at 96 px. ⌘ and ⇧
+  // are both drawn, not typed: the font's arrow is a thin sliver beside ⌘ at
+  // 13 px, and a drawn ⇧ beside a typed ⌘ came out bigger than it — the same
+  // 20-unit box, stroke and CSS size keep the two keys equal.
+  const KEY_SVG = (d) => `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="${d}"/></svg>`;
+  const CMD_SVG = KEY_SVG('M13 4v12a3 3 0 1 0 3-3H4a3 3 0 1 0 3 3V4a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3');
+  const SHIFT_SVG = KEY_SVG('M10 1.5 18.5 10H14V18.5H6V10H1.5Z');
   let badge = null;             // { host, pill } while shown
 
   function showBadge() {
@@ -657,10 +661,10 @@
         .pill.away { opacity: 0; }
         .pill > * { vertical-align: middle; }
         .icon { width: 18px; height: 18px; margin: -2px 6px 0 -6px; }
-        kbd { font: 600 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #ff8f88; }
-        kbd svg { width: 15px; height: 13px; margin: -2px 0 0 2px; vertical-align: middle; }
+        kbd { color: #ff8f88; }
+        kbd svg { width: 14px; height: 14px; margin: -2px 1px 0; vertical-align: middle; }
       </style>
-      <div class="pill"><img class="icon" src="${chrome.runtime.getURL('walkie.png')}" alt="">Hold <kbd>⌘${SHIFT_SVG}</kbd> and click an element</div>`;
+      <div class="pill"><img class="icon" src="${chrome.runtime.getURL('walkie.png')}" alt="">Hold <kbd>${CMD_SVG}${SHIFT_SVG}</kbd> and click an element</div>`;
     (document.body || document.documentElement).appendChild(host);
     badge = { host, pill: shadow.querySelector('.pill') };
     clearBadge(mouse.x, mouse.y);
