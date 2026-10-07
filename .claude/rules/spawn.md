@@ -145,7 +145,9 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
 - **The rows are a pure function** (`ActiveTerminals.items`, `swift test`): folder alone when
   unique; shared folder → the task from the tab title, else the tty, plus the tty when two tasks
   match; alphabetical; the bound tty ticked `✓` (either spelling of the tty).
-- **A pick binds and the ordinary delivery sends** (`AppDelegate.redirectSpawn`). The spawn is
+- **A pick binds and the ordinary delivery sends** (`AppDelegate.redirectSpawn`), **without raising
+  the terminal** (2026-10-08, Victor: *"it should not come in front by default … I usually don't care
+  where it is"*). The spawn is
   cleared **at the click** — `showBound` only drops a spawn while `listening`, and the menu still
   answers during the settle. While the bind (`osascript`) is in flight `commit` **holds** the
   sentence (`spawnPickInFlight`, no flash) and the pick's `showBound` releases it; the caret is

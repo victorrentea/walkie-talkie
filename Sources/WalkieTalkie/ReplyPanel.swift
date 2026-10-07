@@ -27,6 +27,7 @@ enum ReplyPanel {
     static let maxChars = 400
     private static let width: CGFloat = 380
     private static let font = NSFont.systemFont(ofSize: 15)
+    private static let headerH: CGFloat = 20
 
     private static let walkie: NSImage? = RelayWindow.walkieURL("walkie-bound").flatMap { NSImage(contentsOf: $0) }
 
@@ -54,13 +55,21 @@ enum ReplyPanel {
         let inner = width - 2 * pad
         // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
         // walkie"*) — `walkie-bound.png`, the menu bar's own picture.
+        // **As large as the answer, cut with … at the end** (Victor, 2026-10-08:
+        // *"increase the font of the title to be the same as the response,
+        // possibly doing ellipsis at the end"*).
         let header = LinkLabel(labelWithString: label ?? "agent")
         header.lineBreakMode = .byTruncatingTail
-        header.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        header.textColor = NSColor.white.withAlphaComponent(0.55)
+        header.cell?.truncatesLastVisibleLine = true
+        header.font = NSFont.systemFont(ofSize: font.pointSize, weight: .semibold)
+        header.textColor = NSColor.white.withAlphaComponent(0.6)
+        // **The click is the answer read: the panel goes** (Victor, 2026-10-08:
+        // *"I clicked on the title … and it did not close the window. Should
+        // have."*), and the terminal's border flies into the chip.
         if let tty = tty {
             header.onClick = {
-                Log.info("💬 the answer's terminal clicked — binding \(tty)")
+                Log.info("💬 the answer's terminal clicked — binding \(tty), panel closed")
+                close()
                 onBind?(tty)
             }
         }
@@ -69,22 +78,22 @@ enum ReplyPanel {
         body.textColor = .white
         body.preferredMaxLayoutWidth = inner - 18
         let bodySize = body.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
-        let height = pad + 16 + 4 + ceil(bodySize.height) + pad
+        let height = pad + headerH + 6 + ceil(bodySize.height) + pad
 
         let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         root.wantsLayer = true
         root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
         root.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.95).cgColor
-        let icon = NSImageView(frame: NSRect(x: pad, y: height - pad - 16, width: 16, height: 16))
+        let icon = NSImageView(frame: NSRect(x: pad, y: height - pad - headerH + 1, width: 18, height: 18))
         icon.image = Self.walkie
         icon.imageScaling = .scaleProportionallyUpOrDown
         root.addSubview(icon)
-        header.frame = NSRect(x: pad + 21, y: height - pad - 16, width: inner - 24 - 21, height: 16)
+        header.frame = NSRect(x: pad + 24, y: height - pad - headerH, width: inner - 24 - 24, height: headerH)
         body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
         root.addSubview(body)
-        let x = ReplyCloseButton(frame: NSRect(x: width - 28, y: height - 28, width: 20, height: 20))
+        let x = ReplyCloseButton(frame: NSRect(x: width - 28, y: height - pad - headerH, width: 20, height: 20))
         x.onClick = { Log.info("💬 answer dismissed (✕)"); close() }
         root.addSubview(x)
 
@@ -163,8 +172,13 @@ private final class LinkLabel: NSTextField {
 
     private func underline(_ on: Bool) {
         guard onClick != nil else { return }
+        // The paragraph style carries the … : an attributed value without one
+        // wraps instead, and the hovered title would lose its ellipsis.
+        let para = NSMutableParagraphStyle()
+        para.lineBreakMode = .byTruncatingTail
         let s = NSMutableAttributedString(string: stringValue,
-                                          attributes: [.font: font as Any, .foregroundColor: textColor as Any])
+                                          attributes: [.font: font as Any, .foregroundColor: textColor as Any,
+                                                       .paragraphStyle: para])
         if on { s.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue,
                                range: NSRange(location: 0, length: s.length)) }
         attributedStringValue = s

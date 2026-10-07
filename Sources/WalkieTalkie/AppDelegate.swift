@@ -1433,7 +1433,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         micId = InputDevice.chosenId
         // `walkie-reply` reads it; made now, not at the first answer.
         _ = Self.replyToken
-        ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the answer panel") }
+        ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the answer panel", fly: true) }
         micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for
@@ -5793,8 +5793,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 Log.info("📍 re-bound to \(bound.address) from Active Terminals")
+                // **Bound, not raised** (Victor, 2026-10-08: *"the terminal
+                // application pops in front. It should not … I usually don't
+                // care where it is"*). The words reach it wherever it sits.
                 self.showBound(bound)
-                DispatchQueue.global(qos: .userInitiated).async { TerminalBinding.bringToFront(bound) }
             }
         }
     }
@@ -5849,7 +5851,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// go of it — and the bind runs off the main thread, because it spends itself
     /// in `osascript`. The chip is updated first and the raise follows: the chip
     /// is where he is looking, and it must not wait on a second round trip.
-    private func rebindFromMenu(tty: String, from origin: String = "the menu") {
+    /// `fly`: the terminal's border flies into the chip, the receipt a mouse bind
+    /// gives (Victor, 2026-10-08, on the answer panel's link: *"bring the border
+    /// of the receiving window zooming into the mouse … the same effect as when I
+    /// bind"*). A plain outline, not a picture: the window may be under others.
+    private func rebindFromMenu(tty: String, from origin: String = "the menu", fly: Bool = false) {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let bound = self.terminal.bind(tty: tty) else {
                 DispatchQueue.main.async { [weak self] in
@@ -5858,7 +5864,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             Log.info("📍 re-bound to \(bound.address) from \(origin)")
-            DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
+            let frame = fly ? (bound.sourceFrame ?? TerminalBinding.terminalWindowFrame(tty: tty)) : nil
+            DispatchQueue.main.async { [weak self] in
+                self?.showBound(bound)
+                guard let frame else { return }
+                BindFlight.fly(from: frame, to: { [weak self] in
+                    self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+                }, outlined: true)
+            }
             TerminalBinding.bringToFront(bound)
         }
     }
