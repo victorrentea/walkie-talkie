@@ -769,7 +769,9 @@ final class CaretHalo {
     /// The pointer in the page's coordinates (CSS px, y down from the
     /// panel's top-left), written on every `follow` and `show`.
     private func aimEffectAtPointer() {
-        guard let web = web, let panel = panel else { return }
+        // Docked, the content is scaled by `sublayerTransform` and the window
+        // is the prompt panel's: the effect's centre stays where it was.
+        guard dock == nil, let web = web, let panel = panel else { return }
         let p = aim, f = panel.frame
         web.center(CGPoint(x: p.x - f.origin.x, y: f.maxY - p.y))
         // The bloom and the collapse scale `stage` about its anchor; on a
@@ -879,6 +881,9 @@ final class CaretHalo {
     }
 
     private func rebuild() {
+        // The docked panel is about to be replaced: back in its own geometry
+        // first, so the retiring copy is not left over the prompt panel.
+        settleDock()
         Self.styleChangedAt = CFAbsoluteTimeGetCurrent()
         renderTimer?.invalidate(); renderTimer = nil
         timer?.invalidate(); timer = nil
@@ -897,6 +902,7 @@ final class CaretHalo {
         // ~950pt tall above the Retina — on the screen over it. `show` sets
         // the new one.
         anchor = nil
+        pageRunning = false
         _ = makePanel()
         Log.info("◯ halo panel rebuilt \(Self.sinceStyleChange)")
         if retiring != nil {
@@ -1267,12 +1273,15 @@ final class CaretHalo {
             fadeAim = aim
             rewinding = false
             rewindEndedAt = CFAbsoluteTimeGetCurrent()
-            rewindTake = []; rewindStart = nil
+            // The take is kept until the next rewind replaces it: a ring docked
+            // on the prompt panel goes on playing it backwards (2026-10-07).
+            rewindStart = nil
             Log.info("⏪ the rewind ends")
             // The dress goes back once the ring is out of sight — changing it
-            // now would rebuild the panel under the fade.
+            // now would rebuild the panel under the fade. A docked ring is
+            // still in sight: `undock` puts the dress back when it goes.
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapse + 0.1) { [weak self] in
-                guard let self, !self.live, !self.rewinding else { return }
+                guard let self, !self.live, !self.rewinding, self.dock == nil else { return }
                 self.use(HaloStyle.current(for: self.destination))
             }
             return false
@@ -1522,7 +1531,37 @@ final class CaretHalo {
                         (CFAbsoluteTimeGetCurrent() - t0) * 1000))
     }
 
+    /// The 30 Hz feed of a page effect: the microphone, or the take backwards
+    /// while the rewind runs — and, docked on the prompt panel after a rewind,
+    /// still the take, so the picture over the panel keeps moving on his voice.
+    private func startRenderTimer(_ web: HaloWebHost) {
+        renderTimer?.invalidate()
+        let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
+            guard let self = self else { return }
+            let rewound = self.rewinding
+                || (self.dock != nil && !self.rewindTake.isEmpty && self.style == self.rewindStyle)
+            let samples = rewound
+                ? Self.lift(Self.undoInputGain(self.rewindWindow()))
+                : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
+            web?.feed(samples)
+            if (self.rewinding && self.rewindApproaches) || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
+            else if self.rewinding { web?.approach(scale: self.sparksShrink, alpha: 1) }
+            // The tunnel's centre travels on its own clock, not the pointer's.
+            if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
+            self.under?.feed(samples)
+            // The panel being replaced stays on screen until the new one has
+            // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
+            // switch into the rewind does not freeze the picture.
+            self.retiring?.web?.feed(samples)
+        }
+        renderTimer = r
+        RunLoop.main.add(r, forMode: .common)
+    }
+
     private func show(opening: Opening) {
+        // A ring opening while the last sentence's is still docked on the
+        // prompt panel takes the panel back to the pointer, in a cut.
+        settleDock()
         let panel = self.panel ?? makePanel()
         // **A collapse still in the air is taken back whole**, before anything
         // else: he stopped and started again inside half a second, and what has
@@ -1588,27 +1627,10 @@ final class CaretHalo {
         under?.start()
         if let web = web {
             web.start()
+            pageRunning = true
             Self.seedFrom = CFAbsoluteTimeGetCurrent()
             if Self.approachDemo > 0, !rewinding { rewindFrom = Self.seedFrom; rewindEstimate = Self.approachDemo }
-            renderTimer?.invalidate()
-            let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
-                guard let self = self else { return }
-                let samples = self.rewinding
-                    ? Self.lift(Self.undoInputGain(self.rewindWindow()))
-                    : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
-                web?.feed(samples)
-                if (self.rewinding && self.rewindApproaches) || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
-                else if self.rewinding { web?.approach(scale: self.sparksShrink, alpha: 1) }
-                // The tunnel's centre travels on its own clock, not the pointer's.
-                if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
-                self.under?.feed(samples)
-                // The panel being replaced stays on screen until the new one has
-                // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
-                // switch into the rewind does not freeze the picture.
-                self.retiring?.web?.feed(samples)
-            }
-            renderTimer = r
-            RunLoop.main.add(r, forMode: .common)
+            startRenderTimer(web)
             // `alphaValue` is the web view's fade — see `hide`.
             panel.alphaValue = 1
         }
@@ -1650,6 +1672,20 @@ final class CaretHalo {
     private func hide() {
         timer?.invalidate()
         timer = nil
+        // **Docked on the prompt panel already** (2026-10-07): the words have
+        // landed *there*, so the ring stays over the panel instead of going
+        // into the pointer — the page keeps its feed, and `undock` fades it
+        // when the panel goes. See `dock(onto:)`.
+        if dock != nil {
+            growGraceTimer?.invalidate()
+            growGraceTimer = nil
+            growOnShow = false
+            small = false
+            if !delivering { arrow.hide() }
+            Log.info("◯ caret halo off — it stays docked on the prompt panel")
+            return
+        }
+        hiddenAt = CFAbsoluteTimeGetCurrent()
         // The effect's last frame is what collapses into the pointer, the
         // same way the film's last frame does.
         renderTimer?.invalidate()
@@ -1665,10 +1701,17 @@ final class CaretHalo {
         if let web = web, let panel = panel {
             // A rewound ring goes out fast — the words have just landed.
             let fast = CFAbsoluteTimeGetCurrent() - rewindEndedAt < 1
+            // A dock that takes the panel over mid-fade supersedes this
+            // animation, which still calls its completion: the page must not
+            // be stopped under the panel that is now flying to the prompt.
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = fast ? Self.rewindFade : Self.collapse
                 panel.animator().alphaValue = 0
-            } completionHandler: { [weak self] in web.stop(); self?.under?.stop() }
+            } completionHandler: { [weak self] in
+                guard self?.dock == nil else { return }
+                web.stop(); self?.under?.stop()
+                self?.pageRunning = false
+            }
         }
         // **Straight out, not collapsed.** The ring shrinking into the pointer
         // says *the sentence went there*; an arrow still asking him to place the
@@ -1749,6 +1792,231 @@ final class CaretHalo {
         monitors = []
     }
 
+    // MARK: - Docked on the prompt panel (2026-10-07)
+
+    /// **When the prompt panel opens, the effect flies into it and stays over
+    /// it, see-through, until the panel goes** (2026-10-07). Victor: *"atunci
+    /// când apare panel acela în colț care sumarizează prompt-ul, vreau ca să mi
+    /// se ducă efectul … toate efectele, inclusiv puzzle … în colțul ecranului
+    /// unde apare acel panel, micșorându-se … de la mouse … de la centrul
+    /// ecranului … peste el, la opacitate 50% ca să pot să citesc prin el. Și la
+    /// final dispar."*
+    ///
+    /// **Whatever is on screen at that moment** is what flies — after a rewind
+    /// that is Reverse tunnel, still fed the take backwards
+    /// (`startRenderTimer`); the destination's own dress comes back only when
+    /// the dock ends, because changing it rebuilds the panel.
+    ///
+    /// **Scaled, never resized.** The window's frame travels from where the
+    /// effect is to the panel's, but the content keeps its own size
+    /// (`autoresizesSubviews` off) and is scaled by the content view's
+    /// `sublayerTransform`: a page laid out again at the panel's size would be
+    /// a different picture, and a screen-sized page or a projectM square cannot
+    /// be resized at 60 Hz anyway. The effect's centre (the pointer, the
+    /// tunnel's window, or the middle of an anchored square) lands on the
+    /// panel's centre, scaled so the effect covers the panel (`fill`, never
+    /// above 1 — the film ring stays its size), and the window clips it.
+    ///
+    /// **Over the panel, click-through**: one level above `.statusBar` for the
+    /// length of the dock (the panel is `.statusBar`; the halo normally sits
+    /// one under it), and the halo's window ignores the mouse as always, so
+    /// the panel's buttons and its hover pause still work under it.
+    ///
+    /// `target` is asked on every tick: the panel's settled frame, or nil once
+    /// it is gone — which is the whole of *"la final dispar"*: a 0.3 s fade.
+    /// A ring raised again (`show`) or a style change (`rebuild`) takes it
+    /// back in a cut. Only a ring that is up, collapsing or down for under
+    /// `dockLate` docks; a prompt that arrives with no ring (typed, a test
+    /// route) has nothing to fly.
+    private struct Dock {
+        var target: () -> NSRect?
+        /// The window's frame when the flight began.
+        let from: NSRect
+        /// The effect's centre, in the content's own coordinates.
+        let focus: CGPoint
+        /// The part of the content that was on a screen, content coordinates.
+        let visible: NSRect
+        let startedAt: CFAbsoluteTime
+        let level: NSWindow.Level
+        /// The target as last applied once landed — re-applied only on change.
+        var landedOn: NSRect?
+    }
+    private var dock: Dock?
+    private var dockTimer: Timer?
+    /// Which dock a fade-out's completion belongs to.
+    private var dockGeneration = 0
+    /// When `hide` last ran — a dock may still revive a ring this fresh.
+    private var hiddenAt: CFAbsoluteTime = 0
+    /// The page's frame loop is running (`start` in `show`, `stop` after the fade).
+    private var pageRunning = false
+    static let dockFlight: TimeInterval = 0.6
+    static let dockAlpha: CGFloat = 0.5
+    static let dockFade: TimeInterval = 0.3
+    private static let dockLate: TimeInterval = 1.5
+
+    /// Is the ring sitting on the prompt panel — `GET /test/state.halo.docked`.
+    var isDocked: Bool { dock != nil }
+
+    func dock(onto target: @escaping () -> NSRect?) {
+        if dock != nil { dock?.target = target; return }
+        settleDock()
+        guard let panel, let view = panel.contentView, let to = target() else { return }
+        let now = CFAbsoluteTimeGetCurrent()
+        // A ring still hearing a sentence stays on the pointer; one coasting
+        // through the transcription is about to go down anyway.
+        guard !live || coasting else { return }
+        guard live || closing || now - hiddenAt < Self.dockLate else {
+            Log.info(String(format: "◯ halo not docked on the prompt panel — it went down %.1f s ago", now - hiddenAt))
+            return
+        }
+        let from = panel.frame
+        // The visible part: the window clipped to the screen it is mostly on.
+        let screen = NSScreen.screens.max { a, b in
+            a.frame.intersection(from).width * a.frame.intersection(from).height
+                < b.frame.intersection(from).width * b.frame.intersection(from).height
+        }
+        var seen = screen.map { $0.frame.intersection(from) } ?? from
+        if seen.isEmpty { seen = from }
+        let visible = seen.offsetBy(dx: -from.minX, dy: -from.minY)
+        // Where the effect is centred: the pointer (or the tunnel's window) for
+        // everything that rides it, the middle of what is seen for an anchored
+        // square — Stars sits in the middle of the Retina, the puzzle where
+        // the pointer was when it rose.
+        let rides = drawn.preset?.anchored != true
+        let p = aim
+        let focus = rides && NSMouseInRect(p, seen, false)
+            ? CGPoint(x: p.x - from.minX, y: p.y - from.minY)
+            : CGPoint(x: visible.midX, y: visible.midY)
+
+        dockGeneration &+= 1
+        // Whatever was taking it down is called off: the collapse's delayed
+        // `orderOut` (its generation), its scale and ink, the page's fade.
+        closingGeneration &+= 1
+        closing = false
+        stage?.removeAnimation(forKey: "collapse")
+        stage?.removeAnimation(forKey: "collapse-ink")
+        stage?.removeAnimation(forKey: "bloom")
+        dock = Dock(target: target, from: from, focus: focus, visible: visible,
+                    startedAt: now, level: panel.level, landedOn: nil)
+        if let web, !pageRunning {
+            web.start(); under?.start()
+            pageRunning = true
+        }
+        if let web, renderTimer == nil { startRenderTimer(web) }
+        view.autoresizesSubviews = false
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        if !panel.isVisible {
+            panel.alphaValue = 0
+            panel.orderFrontRegardless()
+        }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.dockFlight
+            panel.animator().alphaValue = Self.dockAlpha
+        }
+        Log.info(String(format: "◯ halo docks on the prompt panel — %@ from %.0f×%.0f at (%.0f, %.0f) to %.0f×%.0f at (%.0f, %.0f)",
+                        drawn.rawValue, from.width, from.height, from.minX, from.minY,
+                        to.width, to.height, to.minX, to.minY))
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.dockTick() }
+        dockTimer = t
+        RunLoop.main.add(t, forMode: .common)
+        dockTick()
+    }
+
+    private func dockTick() {
+        guard let d = dock, let panel, let view = panel.contentView, let layer = view.layer else {
+            dockTimer?.invalidate(); dockTimer = nil
+            return
+        }
+        guard let to = d.target() else { undock(now: false); return }
+        let elapsed = CFAbsoluteTimeGetCurrent() - d.startedAt
+        let landed = elapsed >= Self.dockFlight
+        if landed, d.landedOn == to { return }
+        let t = CGFloat(min(1, elapsed / Self.dockFlight))
+        let u = t * t * (3 - 2 * t)
+        // Cover the panel with what was seen, never grow past full size.
+        let fill = min(1, max(to.width / max(d.visible.width, 1), to.height / max(d.visible.height, 1)))
+        let k = 1 + (fill - 1) * u
+        func mix(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * u }
+        let frame = NSRect(x: mix(d.from.minX, to.minX), y: mix(d.from.minY, to.minY),
+                           width: mix(d.from.width, to.width), height: mix(d.from.height, to.height)).integral
+        // Where the effect's centre is on screen: from where it was, to the
+        // middle of the panel.
+        let focusOnScreen = CGPoint(x: mix(d.from.minX + d.focus.x, to.midX),
+                                    y: mix(d.from.minY + d.focus.y, to.midY))
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if panel.frame != frame { panel.setFrame(frame, display: false) }
+        // `sublayerTransform` turns about the layer's anchor point: content
+        // point c lands at a + M(c − a); M is scale k then translate τ, chosen
+        // so the focus lands on `focusOnScreen` in window coordinates.
+        let local = CGPoint(x: focusOnScreen.x - frame.minX, y: focusOnScreen.y - frame.minY)
+        let a = CGPoint(x: layer.anchorPoint.x * layer.bounds.width, y: layer.anchorPoint.y * layer.bounds.height)
+        let tx = local.x - a.x - k * (d.focus.x - a.x)
+        let ty = local.y - a.y - k * (d.focus.y - a.y)
+        layer.sublayerTransform = CATransform3DScale(CATransform3DMakeTranslation(tx, ty, 0), k, k, 1)
+        CATransaction.commit()
+        if landed { dock?.landedOn = to }
+    }
+
+    /// The panel went (`now: false`): fade out over `dockFade`, then put the
+    /// window back in its own geometry, out of sight. A ring coming up again or
+    /// a rebuild (`now: true`): the geometry back at once, nothing faded.
+    private func undock(now: Bool) {
+        guard let d = dock else { return }
+        dock = nil
+        dockTimer?.invalidate()
+        dockTimer = nil
+        guard let panel else { return }
+        let restore = { [weak panel] in
+            guard let panel else { return }
+            panel.contentView?.layer?.sublayerTransform = CATransform3DIdentity
+            panel.contentView?.autoresizesSubviews = true
+            panel.setFrame(d.from, display: false)
+            panel.level = d.level
+        }
+        guard !now else {
+            Log.info("◯ halo leaves the prompt panel at once — the ring is wanted elsewhere")
+            restore()
+            return
+        }
+        Log.info("◯ halo leaves the prompt panel — the panel went, a \(Int(Self.dockFade * 1000)) ms fade")
+        undockRestore = restore
+        dockGeneration &+= 1
+        let generation = dockGeneration
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.dockFade
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            guard let self, self.dockGeneration == generation, let restore = self.undockRestore else { return }
+            self.undockRestore = nil
+            self.renderTimer?.invalidate()
+            self.renderTimer = nil
+            panel.orderOut(nil)
+            restore()
+            self.web?.stop(); self.under?.stop()
+            self.pageRunning = false
+            self.releaseMonitorsIfIdle()
+            // The dress the rewind's end held back while it was docked.
+            if !self.live, !self.rewinding { self.use(HaloStyle.current(for: self.destination)) }
+        }
+    }
+
+    /// The window's own geometry, still owed by a dock fading out.
+    private var undockRestore: (() -> Void)?
+
+    /// **Before anything else puts the panel somewhere**: a dock still up, or
+    /// one fading out, gives the window back its own frame, level and scale at
+    /// once — `show` and `rebuild` both assume them.
+    private func settleDock() {
+        if dock != nil {
+            undock(now: true)
+        } else if let restore = undockRestore {
+            undockRestore = nil
+            dockGeneration &+= 1          // the fade's completion is not ours any more
+            restore()
+        }
+    }
+
     // MARK: - The idle sweep (2026-09-15)
 
     /// **Nothing here may stand at the pointer with no dictation in flight, and
@@ -1783,7 +2051,8 @@ final class CaretHalo {
     }
 
     private func sweep() {
-        guard !live, !closing, !delivering else { sweepStrikes = 0; return }
+        // A ring docked on the prompt panel is up on purpose, with no dictation.
+        guard !live, !closing, !delivering, dock == nil else { sweepStrikes = 0; return }
         let ringUp = panel?.isVisible ?? false
         let headsUp = arrow.isVisible
         guard ringUp || headsUp else { sweepStrikes = 0; return }
@@ -1813,7 +2082,8 @@ final class CaretHalo {
         // this ring is drawn for right now.
         ["ring": ["visible": panel?.isVisible ?? false, "alpha": Double(panel?.alphaValue ?? 0),
                   "live": live, "closing": closing, "small": small, "monitors": monitors.count,
-                  "style": style.rawValue],
+                  "style": style.rawValue, "docked": dock != nil,
+                  "frame": panel.map { [$0.frame.minX, $0.frame.minY, $0.frame.width, $0.frame.height] } ?? []],
          "heads": arrow.report,
          "destination": destination.rawValue,
          "styles": Dictionary(uniqueKeysWithValues: HaloDestination.allCases.map {
@@ -1838,7 +2108,8 @@ final class CaretHalo {
         // **And through the delivery**, where the ring's own window is already
         // out and the heads are the only thing left: they are what says *the
         // words are landing here*, so they have to go on meaning the pointer.
-        guard live || closing || delivering, let panel = panel else { return }
+        // Docked on the prompt panel, the ring no longer rides the pointer.
+        guard dock == nil, live || closing || delivering, let panel = panel else { return }
         // **A screen-sized panel stays put and the pointer is handed in.**
         // Unless the pointer has crossed to a screen of another size, in
         // which case the panel is rebuilt for that screen.
@@ -1917,7 +2188,8 @@ final class CaretHalo {
     /// any more: it goes to `DropArrow`, which is the mode-specific half of what
     /// the swell used to say.
     private func refresh() {
-        guard live, let panel = panel else { return }
+        // Docked, the panel's alpha is the dock's `dockAlpha`, not the voice's.
+        guard live, dock == nil, let panel = panel else { return }
         // **A page effect carries its own breath.** Every one of them already
         // brightens, swells or emits on the voice from the samples themselves,
         // and the page shows them at full alpha; a second envelope on the

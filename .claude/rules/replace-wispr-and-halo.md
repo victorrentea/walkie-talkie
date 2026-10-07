@@ -403,6 +403,42 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   Measured at the desk 2026-09-23: 4/4 caret dictations (DJI 16 kHz and the built-in 48 kHz mic),
   2.3–2.6 s takes at 1.5–1.6×.
 
+## The effect docks on the prompt panel (2026-10-07)
+
+Victor: *"atunci când apare panel acela în colț care sumarizează prompt-ul, vreau ca să mi se ducă
+efectul … toate efectele, inclusiv puzzle … în colțul ecranului unde apare acel panel, micșorându-se
+… de la mouse … de la centrul ecranului … peste el, la opacitate 50% ca să pot să citesc prin el. Și
+la final dispar."*
+
+- **`CaretHalo.dock(onto:)`, called by `AppDelegate` right after `showSentPrompt` holds a prompt**,
+  with `RelayWindow.sentPromptFrame` — the frame the last layout *asked for* (`laidOutFrame`), not the
+  one mid-unfold, nil once no prompt is held. Asked at 60 Hz: the panel moving or growing (an edit)
+  is followed, nil is the end.
+- **Whatever is on screen flies** — after a rewind that is Reverse tunnel, and it keeps being fed the
+  take backwards while docked (`rewindTake` is no longer cleared at the rewind's end; the next rewind
+  replaces it). The destination's own dress comes back only at the undock, because changing it
+  rebuilds the panel: the rewind's delayed `use(…)` is skipped while docked.
+- **Scaled, never resized.** The window frame travels from where it was to the panel's over
+  `dockFlight` 0.6 s (smoothstep); the content keeps its size (`autoresizesSubviews = false`) and is
+  scaled by the content view's `sublayerTransform`, about the layer's anchor. A page laid out again
+  at the panel's size would be another picture, and a projectM square cannot resize at 60 Hz. The
+  effect's centre — `aim` (pointer, or where the tunnel converged) for a riding effect, the middle of
+  the on-screen part for an `anchored` one (Stars, Mosaic) — lands on the panel's centre, scaled to
+  **cover** the panel (`fill`, capped at 1, so the film ring keeps its size); the window clips it.
+  Proven with a standalone `WKWebView` + `sublayerTransform` + shrunk window capture before writing it.
+- **Over the panel at `dockAlpha` 0.5, click-through**: level `.statusBar + 1` for the dock (normally
+  one *under* the chip), `ignoresMouseEvents` as always, so Send/Cancel and the hover pause work.
+- **Out in `dockFade` 0.3 s when the panel goes**, then ordered out, page stopped, geometry and level
+  restored. A ring coming up (`show`) or a rebuild takes it back **at once** (`settleDock`, which also
+  settles a dock still fading). `hide` while docked keeps the panel and its feed (`◯ caret halo off —
+  it stays docked …`); `follow`, `refresh`, `aimEffectAtPointer` and the idle sweep stand aside.
+- **Only a ring that is up, collapsing, or down for under `dockLate` 1.5 s docks** (revived if its
+  page was already stopped), and never one still hearing a sentence (`live && !coasting`). A prompt
+  with no ring before it (typed, `/test/dictation` alone) has nothing to fly.
+- Log: `◯ halo docks on the prompt panel — <style> from …`, `◯ halo leaves the prompt panel — …`.
+  `GET /test/state.halo.ring.docked` / `.frame`. Pointer-riding and `sharingType = .none`, so it
+  cannot be screenshot; the state route is the review.
+
 ## `PasteHint` — after every delivered sentence (2026-09-22, widened 2026-09-23; **⌘V since 2026-09-28**)
 
 **Q17 (2026-09-28): the row says `📋 Re-paste  ⌘V`** (`PasteHint.label` / `keys`; was `Re-paste ⌘⇧P`

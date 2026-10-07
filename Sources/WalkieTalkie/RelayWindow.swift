@@ -960,7 +960,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// holding, which is where the rest of the engine's facts already live.
     private var engineText: String? {
         guard listening else { return nil }
-        return spawnMarked ? "\(spawnMark ?? "") \(listeningWord)" : listeningWord
+        return spawnCollapsed ? "\(spawnMark ?? "") \(listeningWord)" : listeningWord
     }
 
     /// **Three full stops, not `…`.** The word is a progress bar now
@@ -1176,6 +1176,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `Listening...` — and the ✨ stays where it is, because *that* is still
     /// the fact this destination does not share with a binding: the session does
     /// not exist yet.
+    ///
+    /// **Since 2026-10-07 the ✨ *is* that row's icon** (`sparkleGlyph`, in
+    /// Terminal's place) and so rides in front of `Listening...` only while the
+    /// row is dropped — Victor: *"in front of the folder in which the new session
+    /// is open … not before the prompting text"*.
     private var spawnCollapsed: Bool {
         spawnMarked && spawnIcon == nil
     }
@@ -1527,6 +1532,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// unfolding — and consumed by it, so every other relayout still anchors the
     /// top edge where it already is.
     private var unfoldOrigin: NSPoint?
+    /// The frame `layoutContent` last asked for — see `sentPromptFrame`.
+    private var laidOutFrame: NSRect = .zero
 
     private func moveToTopLeft(of screen: NSScreen) {
         let area = screen.visibleFrame
@@ -2372,6 +2379,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         let oldTop = corner?.y ?? panel.frame.maxY
         let frame = NSRect(x: corner?.x ?? panel.frame.minX, y: oldTop - height,
                            width: width, height: height)
+        laidOutFrame = frame
         if animated {
             // The jump from a one-line "Listening…" to a half-screen prompt is the
             // biggest thing this window ever does, and done instantly it reads as
@@ -2782,6 +2790,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// Not private: the caret destination wears it too (`AppDelegate`, Replace
     /// Wispr), and one rasterisation is the point.
     static let pinGlyph = Glyphs.mapPin(height: 18)
+    /// **A picked spawn folder's icon: the ✨ itself, where Terminal's icon was**
+    /// (2026-10-07, Victor: *"the new [✨] should be there instead of that console
+    /// icon"*). The ✨ says *a session that does not exist yet* on the row that
+    /// names its folder, and no longer rides in front of `Listening...` as well.
+    static let sparkleGlyph = Glyphs.emoji("✨", ink: 18)
 
 
 
@@ -3296,7 +3309,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // build — `🔴 ✨` and nothing else — and it is invisible in review,
         // because the *other* spawn state (a picked folder, wider chip) drew
         // correctly. Measured, not reasoned: `docs/states/spawn.png`.
-        if spawnMarked, let mark = spawnMark {
+        if spawnCollapsed, let mark = spawnMark {
             out.append(Self.inline(Glyphs.emoji(mark, ink: iconInk), font: hintFont))
             out.append(NSAttributedString(string: " ", attributes: [.font: hintFont]))
         }
@@ -5433,6 +5446,14 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard draggingSelf else { return }
         let origin = panel.frame.origin
         panel.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y + dy))
+        laidOutFrame = panel.frame
+    }
+
+    /// **Where the held prompt's panel is settling** — the frame the last
+    /// layout asked for, not the one mid-unfold — for the halo to dock on
+    /// (`CaretHalo.dock(onto:)`, 2026-10-07). Nil once no prompt is held.
+    var sentPromptFrame: NSRect? {
+        sentPrompt != nil && panel.isVisible ? laidOutFrame : nil
     }
 }
 

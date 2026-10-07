@@ -5682,19 +5682,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             self.spawnFolder = choice.path
-            // **The folder he picked gets a row of its own, behind Terminal's
-            // icon** — the shape a binding has, which is what he asked for:
-            // *"ca și cum aș fi fost deja bind-uit la un alt astfel de
-            // terminal"*. The name loses its ✨ here because the ✨ has not gone
-            // anywhere — it stays in front of `Listening...` one row up, saying
-            // the one thing a binding's row cannot: this session does not exist
-            // yet. See `RelayWindow.spawnCollapsed`.
-            //
-            // Terminal's icon and not the app the spawn happens to be launched
-            // from: `SpawnTerminal` opens a Terminal.app window, always, so this
-            // is a fact about the destination rather than a guess about it.
-            self.overlay.setSpawnDestination(choice.name, mark: "✨",
-                                             icon: Self.appIcon("com.apple.Terminal", height: 18))
+            // **The folder he picked gets a row of its own, behind the ✨** —
+            // the shape a binding has (*"ca și cum aș fi fost deja bind-uit la
+            // un alt astfel de terminal"*, 2026-09-07), with the ✨ where
+            // Terminal's icon was since 2026-10-07 (*"the new [✨] should be
+            // there instead of that console icon"*). The ✨ then leaves
+            // `Listening...`: it says *not yet running* once, on the row that
+            // names the folder. See `RelayWindow.spawnCollapsed`.
+            self.overlay.setSpawnDestination(choice.name, mark: "✨", icon: RelayWindow.sparkleGlyph)
             Log.info("✨ spawn folder chosen — \(choice.path)")
         }
     }
@@ -5773,7 +5768,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         spawnFolder = folder
         if let folder = folder {
             overlay.setSpawnDestination((folder as NSString).lastPathComponent, mark: "✨",
-                                        icon: Self.appIcon("com.apple.Terminal", height: 18))
+                                        icon: RelayWindow.sparkleGlyph)
         } else {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
         }
@@ -10801,6 +10796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            spawning: spawn) {
                 self.held = message
                 self.hotkeys.promptHeld = true
+                // **The effect flies into the panel and stays over it,
+                // see-through, until it goes** (2026-10-07) — `CaretHalo.dock`.
+                self.caretHalo.dock { [weak self] in self?.overlay.sentPromptFrame }
             } else {
                 self.commit(message)
             }
