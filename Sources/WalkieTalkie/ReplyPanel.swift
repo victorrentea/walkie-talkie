@@ -15,13 +15,19 @@ import AppKit
 /// *"having an X icon in the corner for me to dismiss it explicitly"*, then,
 /// over a countdown that started when the pointer moved: *"NO PROGRESSBAR. i
 /// have to manually dismiss it"*). An answer that went away on a timer while he
-/// was looking at the terminal is one he never got. A newer answer replaces it.
+/// was looking at the terminal is one he never got.
+///
+/// **Answers queue, one on screen at a time** (2026-10-08, Victor: *"să nu apară
+/// una peste alta, să apară doar după ce am închis una … pe rând, stau la
+/// coadă"*). A newer answer waits behind the open one and comes up, at the
+/// pointer, when that one is closed (✕ or its link).
 ///
 /// It sits where the pointer was when the answer arrived and does not follow —
 /// it is read, and clicked once. `sharingType = .none`: the next dictation's
 /// pictures are of his screen, not of this.
 enum ReplyPanel {
     private static var panel: NSPanel?
+    private static var queue: [(text: String, label: String?, tty: String?)] = []
     private static var arrivedAt: NSPoint = .zero
 
     static let maxChars = 400
@@ -44,11 +50,19 @@ enum ReplyPanel {
             DispatchQueue.main.async { show(raw, from: label, tty: tty) }
             return
         }
-        close()
-        allowCursorInBackground
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
         guard !text.isEmpty else { return }
+        if panel != nil {
+            queue.append((text, label, tty))
+            Log.info("💬 answer from \(label ?? "agent") queued behind the open one — \(queue.count) waiting")
+            return
+        }
+        present(text, from: label, tty: tty)
+    }
+
+    private static func present(_ text: String, from label: String?, tty: String?) {
+        allowCursorInBackground
         shown = text
         arrivedAt = NSEvent.mouseLocation
 
@@ -112,7 +126,7 @@ enum ReplyPanel {
         p.setFrameOrigin(origin(for: root.frame.size, at: arrivedAt))
         p.orderFrontRegardless()
         panel = p
-        Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕")
+        Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
     }
 
     /// **A background app's `NSCursor.set()` is ignored unless the process asks
@@ -127,6 +141,14 @@ enum ReplyPanel {
         panel?.orderOut(nil)
         panel = nil
         shown = nil
+        guard !queue.isEmpty else { return }
+        let next = queue.removeFirst()
+        // The next hop, so a click that closed this one is over before the
+        // next panel lands under the pointer.
+        DispatchQueue.main.async {
+            guard panel == nil else { queue.insert(next, at: 0); return }
+            present(next.text, from: next.label, tty: next.tty)
+        }
     }
 
 

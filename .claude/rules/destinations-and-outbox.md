@@ -180,14 +180,18 @@ panel that appears next to the mouse carrying the response … super important t
 me to dismiss it explicitly"*.
 
 - **Only a prompt with a `?` asks for it** — `terminalLine` adds `AppDelegate.questionHint`,
-  `[If this asks you something, also run: walkie-reply "<answer in ≤2 short sentences>"]`, after
-  `[Dictated in RO or EN]`. Every other prompt pays nothing.
+  `[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>". Only to answer me — never to ask me something, never to report work done.]`, after
+  `[Dictated in RO or EN]`. Every other prompt pays nothing. **Narrowed 2026-10-08**: an agent
+  answered *"E oare posibil?"* (a request) by doing it, then `walkie-reply "Gata: …"` — Victor: *"nu
+  că au terminat … un pic abuz"*. Then, the same night: *"exclusiv când eu întreb ceva. Atât … Niciodată
+  să nu fie folosit ca să mă întrebe Claude pe mine ceva"* — **only the answer to his question; never
+  a question for him, never a completion notice.**
 - **`helpers/walkie-reply`** (linked into `~/.local/bin`, which is on the sessions' PATH; `~/bin` is
   not) posts `{token, text, from: <git toplevel basename>}` to `POST /reply` on 8917–8919. The token is
   `~/.walkie-talkie/reply-token` (0600, made at launch): the port answers any web page (CORS `*`) and
   no page can know it — a wrong token is a 403 and `⚠️ 💬 POST /reply refused`.
 - **The panel**: below-right of where the pointer was when the answer arrived, does not follow,
   `sharingType = .none`, ≤ 400 chars, header: the walkie icon, then `<folder> — <task from the tab title>` (else `<folder> · <tty>`; `walkie-reply` sends the tty of its first ancestor that has one). **The name is a link**: hand cursor + underline on hover, a click binds that terminal (`rebindFromMenu`, from "the answer panel", `fly: true` — bound, brought forward, and **its window's outline flies into the chip**, the mouse bind's receipt, outlined), **and closes the panel** (2026-10-08: *"it did not close the window. Should have"*). The header is the body's 15 pt (semibold, 60 % white), one line, `…` at the end. **It stays until the ✕** (drawn,
-  first-mouse)**, a click on the name, or a newer answer — no clock, no bar** (Victor: *"NO PROGRESSBAR. i have to manually
+  first-mouse) or a click on the name — no clock, no bar**. **A newer answer queues behind it** and comes up at the pointer once it is closed (2026-10-08: *"să nu apară una peste alta … pe rând, stau la coadă"*); log `… queued behind the open one — N waiting` (Victor: *"NO PROGRESSBAR. i have to manually
   dismiss it"*; a countdown that started when the pointer moved lived for one build). Log `💬 answer
   from <from> — N chars; up until the ✕`, `💬 answer dismissed (✕)`.

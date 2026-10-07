@@ -117,6 +117,9 @@ final class GestureHintBar {
             back.click = "📸 shot"
             // Stop is ⏹️, never the word (2026-09-30).
             back.up = s.filming ? "⏹️ video" : "🔴 video"
+            // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
+            // de taste din colț"*) — `HotkeyTap.onTypeIn`.
+            back.down = "⌨️ type"
         } else {
             back.click = "⏹️ + ⏎"
             back.right = "⏹️"

@@ -14,7 +14,7 @@ final class GestureHintBarTests: XCTestCase {
     func testAPromptIsVictorsSketch() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true)), [
             Cross(click: "🏁 end", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 shot", up: "🔴 video", down: "", left: "", right: ""),
+            Cross(click: "📸 shot", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
         ])
     }
 

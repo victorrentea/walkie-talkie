@@ -8427,7 +8427,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `?` in it — every other prompt pays nothing. `walkie-reply` (`bin/`,
     /// linked into `~/bin`) posts to `POST /reply`, and `ReplyPanel` shows it
     /// beside the pointer.
-    static let questionHint = "[If this asks you something, also run: walkie-reply \"<answer in ≤2 short sentences>\"]"
+    ///
+    /// **An answer, or a question it is blocked on — never "done"** (2026-10-08).
+    /// *"E oare posibil?"* over a request was answered by doing it and then
+    /// `walkie-reply "Gata: … Dă refresh la Gmail."` — Victor: *"n-ar trebui să
+    /// folosească acel feature decât dacă … o întrebare … blocant, nu că au
+    /// terminat … mi s-a părut un pic abuz"*. A task phrased as a question is a
+    /// task. Then, minutes later, narrower still: *"exclusiv când eu întreb
+    /// ceva. Atât. … Niciodată să nu fie folosit ca să mă întrebe Claude pe mine
+    /// ceva."* — his question in, its answer out; nothing else rides it.
+    static let questionHint = "[If I asked you a question, also run: walkie-reply \"<the answer in ≤2 short sentences>\". Only to answer me — never to ask me something, never to report work done.]"
 
     private static func dictatedHint() -> String {
         // **Four words, and the recogniser's name is not one of them**

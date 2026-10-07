@@ -2,7 +2,9 @@
 """walkie-reply "<answer>" — show a short answer beside Victor's mouse (2026-10-07).
 
 A prompt he dictated with a `?` in it carries the footer line
-`[If this asks you something, also run: walkie-reply "<answer in ≤2 short sentences>"]`.
+`[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>". Only to answer me — never to ask me something, never to report work done.]`
+(narrowed 2026-10-08: a "done, refresh Gmail" after a request phrased as a question
+was a modal he had no need of).
 This posts the answer to the running Walkie Talkie (`POST /reply` on 127.0.0.1:8917–8919,
 with the token from ~/.walkie-talkie/reply-token) and `ReplyPanel` shows it next to his
 pointer. Linked into ~/.local/bin. Stdlib only.
