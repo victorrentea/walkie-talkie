@@ -171,10 +171,14 @@ private final class BottomTab {
     /// The wave's glint, 30 fps while the tab shows a wave (`WaveGlyph.glint`).
     private var glintTimer: Timer?
     private var shownText = ""
+    /// The tab sliding up, and down, in seconds.
+    private static let rise: TimeInterval = 0.32, fall: TimeInterval = 0.45
 
     func show(_ text: String, tint: NSColor, hold: TimeInterval) {
         shownText = text
-        startGlint()
+        // One pass over the tab's whole life on screen: the rise (a fresh tab
+        // only), the hold, the fall — the light reaches the end as it goes.
+        startGlint(lasting: (panel == nil ? Self.rise : 0) + hold + Self.fall)
         if let label, let panel, let tabView {
             label.attributedStringValue = Self.attributed(text)
             tintView?.layer?.backgroundColor = tint.cgColor
@@ -239,7 +243,7 @@ private final class BottomTab {
         p.orderFrontRegardless()
 
         panel = p; tabView = tab; label = l; tintView = tintV
-        animate(rising: true, duration: 0.32) { [weak self] in self?.startHold(hold) }
+        animate(rising: true, duration: Self.rise) { [weak self] in self?.startHold(hold) }
     }
 
     private func resize(panel: NSPanel, tab: NSView, label: NSTextField, text: String) {
@@ -257,7 +261,7 @@ private final class BottomTab {
     private func startHold(_ hold: TimeInterval) {
         holdTimer?.invalidate()
         let t = Timer(timeInterval: hold, repeats: false) { [weak self] _ in
-            self?.animate(rising: false, duration: 0.45) { [weak self] in self?.teardown() }
+            self?.animate(rising: false, duration: Self.fall) { [weak self] in self?.teardown() }
         }
         RunLoop.main.add(t, forMode: .common)
         holdTimer = t
@@ -267,7 +271,13 @@ private final class BottomTab {
     /// Victor: *"a bit animated … from the microphone towards the
     /// transcription … like a bright section moving, from left to right …
     /// something gentle"*). The attachment is redrawn with the glint further on.
-    private func startGlint() {
+    ///
+    /// **Once, timed to the tab** (same day, Victor: *"the light moving through
+    /// should get at its end when the overlay disappears, (not restart from
+    /// left)"*): `lasting` is the tab's time on screen, and the head reaches the
+    /// wave's right end as the tab is gone. A `show` over a tab already up
+    /// starts a new pass over its new life.
+    private func startGlint(lasting: TimeInterval) {
         glintTimer?.invalidate()
         glintTimer = nil
         guard shownText.contains(MicAnnouncer.wave) else { return }
@@ -277,7 +287,7 @@ private final class BottomTab {
                 if self?.panel == nil { tm.invalidate() }
                 return
             }
-            let phase = Date().timeIntervalSince(start).truncatingRemainder(dividingBy: WaveGlyph.glintPeriod) / WaveGlyph.glintPeriod
+            let phase = min(1, Date().timeIntervalSince(start) / lasting)
             label.attributedStringValue = Self.attributed(self.shownText, glint: CGFloat(phase))
         }
         RunLoop.main.add(t, forMode: .common)
@@ -377,13 +387,11 @@ enum WaveGlyph {
     /// the extremes).
     static let aspect: CGFloat = 1.4
 
-    /// One pass of the light along the whole wire, then again.
-    static let glintPeriod: TimeInterval = 2.6
     /// The wire's brightness away from the light.
     static let dim: CGFloat = 0.5
 
-    /// `glint`: nil draws the wire white; 0…1 is how far the light has run
-    /// along it — it enters at the left end and leaves past the right.
+    /// `glint`: nil draws the wire white; 0…1 is where the light's head is along
+    /// it — the left end at 0, the right end at 1 (the tab's last frame).
     ///
     /// **The light travels the wave's own trajectory** (2026-10-08, Victor drew
     /// it on screen: a short bright segment running along the wave's line —
@@ -424,7 +432,7 @@ enum WaveGlyph {
             var at: [CGFloat] = [0]
             for j in 1..<path.count { at.append(at[j - 1] + hypot(path[j].x - path[j - 1].x, path[j].y - path[j - 1].y)) }
             let total = at[at.count - 1], tail = h * 0.75
-            let head = glint * (total + tail)
+            let head = glint * total
             cg.saveGState()
             cg.setShadow(offset: .zero, blur: wire * 1.6, color: NSColor.white.withAlphaComponent(0.85).cgColor)
             cg.beginTransparencyLayer(auxiliaryInfo: nil)

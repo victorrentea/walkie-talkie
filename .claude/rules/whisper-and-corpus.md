@@ -331,8 +331,11 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   (U+E000) in the text and `〰` in logs and `startupBanner`. **The green tab names the engine too**,
   after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main). **A glint runs
   along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
-  gentle"*): the bars sit at 50 % white and a light runs **the wave's own trajectory** every 2.6 s
-  (`BottomTab.startGlint`, `WaveGlyph.image(glint:)`, redrawn at 30 fps while the tab is up). Victor drew
+  gentle"*): the bars sit at 50 % white and a light runs **the wave's own trajectory** **once per tab**
+  (`BottomTab.startGlint(lasting:)`, `WaveGlyph.image(glint:)`, redrawn at 30 fps while the tab is up):
+  the pass lasts the tab's life on screen — rise 0.32 s (a fresh tab), hold, fall 0.45 s — so the head
+  reaches the wave's right end as the tab is gone (*"should get at its end when the overlay disappears,
+  (not restart from left)"*; a 2.6 s loop until then). A `show` over a tab already up starts a new pass. Victor drew
   it on screen the same morning — a wave as one serpentine line and a short bright segment travelling
   along it (*"following the trajectory of the wavelength itself"*): `WaveGlyph.trajectory` reads the bars
   as that line — up bar 0, a small arc over the gap to bar 1's top, down it, an arc under to bar 2's foot
