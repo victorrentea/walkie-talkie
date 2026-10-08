@@ -28,6 +28,7 @@ prefer the local engine.
 | `POST /test/selection {"text"}` | file a highlight via `fileSelection`; 409 outside a dictation |
 | `POST /test/area {x,y,w,h, "to"?}` | the wheel drag without the wheel (global Cocoa points; `to` = the ⇧-drag's move); only the crop overlay is skipped |
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn; the folder menu alone |
+| `POST /test/spawn-pick {"tty"}` | an *Active Terminals* / folder-session row clicked (`redirectSpawn`) — 409 with no spawn pending (2026-10-08). With `/test/gesture {"name": "forward-up", "direct": true}` (mid-sentence: `convertDictationToSpawn`) it is the whole 🔼 ↑ → pick from a desk |
 | `POST /test/replace-wispr {"on"}` | the mode behind the forward button |
 | `POST /test/wispr {"on"}` · `{"hotkey": true}` · `{"historyRoute"}` | fake Wispr's mic edge · fake its start gesture · row as the delivery |
 | `POST /test/wispr-handsfree` · `{"hand": true}` | post the **real** chord (fn ⌃ Space). Plain: `relay: true`, ⌘V swallowed, words delivered. `hand`: as if Victor pressed it. **Installed build only** (`.build/debug` has no Accessibility, `CGEventPost` fails silently) |
