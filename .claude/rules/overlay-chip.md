@@ -430,6 +430,15 @@ yields to `--label`).
   2026-10-07 — by path the cut-out never equalled the frame, so every inlined picture came back in the strip); the
   automatic 📸0 is not in the preview's words, so it stays there. Editing swaps back to the plain
   words. Shot `prompt-inline`.
+- **A screen recording rides the strip, last, as a picture** (2026-10-08, Victor: *"when I send the
+  movie, it doesn't show up into the preview panel … show it … at the end, just like a picture, but
+  with a red dot visible and a length displayed on top of it"*). `ScreenFilm.stop` writes
+  `poster.jpg` (the middle frame, 800 px, `FilmSheet.poster`); `AppDelegate` hands `films: [(poster,
+  seconds)]` to `showSentPrompt`; `stripShots` appends them after the screenshots. Red 1 pt rim and a
+  `● 4.2s` pill (`filmBadge`) where a screenshot carries its m:ss. Shot `prompt-film`. While
+  recording, `FilmBorder` draws a red dot in each corner as sublayers of the blinking border, so
+  they blink in step with it and stay out of the frames (`sharingType = .none`; a 2026-10-08 film
+  checked: no red in any frame).
 - **Dictating is not a panel state.** The panel is for what the model heard while Cancel can still
   stop it; the shot receipt is a number in the recording row, not a `flash(_:)`, because a flash
   takes the chip over for 1.5 s and the count has to keep climbing.

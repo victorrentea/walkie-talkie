@@ -157,6 +157,18 @@ enum FilmSheet {
         return url
     }
 
+    /// One frame at 800 px on its long side, as JPEG — the film's picture in the
+    /// prompt panel's strip, where the screenshots' own 800 px copies sit
+    /// (2026-10-08). Nil if the frame cannot be read; the strip then skips it.
+    @discardableResult
+    static func poster(of frame: URL, to url: URL) -> URL? {
+        guard let image = thumbnail(frame, width: 400),
+              let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
+        else { return nil }
+        CGImageDestinationAddImage(dest, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? url : nil
+    }
+
     /// **Thumbnailed by ImageIO, never by decoding the full frame first.**
     /// `kCGImageSourceCreateThumbnailFromImageAlways` with a max pixel size
     /// decodes at a reduced scale, so a 50-cell sheet off a 5K display never

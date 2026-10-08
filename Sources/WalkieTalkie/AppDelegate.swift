@@ -11077,6 +11077,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            words: text, warning: warning,
                                            heard: kind == "dictation" ? heard : nil,
                                            inlineShots: inlineShots,
+                                           films: message.films.compactMap { f in
+                                               f.poster.map { (poster: $0.path, seconds: f.duration) }
+                                           },
                                            buttons: !self.autosend,
                                            // Consumed above, so the panel is told
                                            // rather than left to re-derive it.

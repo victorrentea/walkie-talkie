@@ -58,6 +58,9 @@ final class ScreenFilm {
         let dir: URL
         let frames: [FilmSheet.Frame]
         let sheet: URL?
+        /// One 800 px frame from the middle of the recording, for the prompt
+        /// panel's strip — the film's picture beside the screenshots' (2026-10-08).
+        let poster: URL?
         let duration: TimeInterval
         /// Frames the encoder could not keep up with. Reported rather than
         /// hidden: it is the difference between *nothing happened in that second*
@@ -186,9 +189,11 @@ final class ScreenFilm {
         }
         let sheet = FilmSheet.write(frames: sheetFrames,
                                     to: dir.appendingPathComponent("sheet.png"))
+        let poster = FilmSheet.poster(of: sheetFrames[sheetFrames.count / 2].url,
+                                      to: dir.appendingPathComponent("poster.jpg"))
         Log.info(String(format: "🎬 recording stopped — %d frames over %.1fs%@",
                         taken.count, duration, missed > 0 ? ", \(missed) dropped" : ""))
-        return Result(dir: dir, frames: sheetFrames, sheet: sheet,
+        return Result(dir: dir, frames: sheetFrames, sheet: sheet, poster: poster,
                       duration: duration, dropped: missed)
     }
 
@@ -318,10 +323,19 @@ final class ScreenFilm {
 /// fade, just a plain red border, a few pixels solid, around the screen
 /// recorded, and blinking 50% transparent to 100% opaque"*). Solid 5 pt, a
 /// hard step between 100 % and 50 % every half second — no ease. Clicks pass
-/// through; `sharingType = .none` keeps it out of the frames it frames.
+/// through; `sharingType = .none` keeps it out of the frames it frames
+/// (checked on a 10:16 film the same day: no red in any frame).
+///
+/// **A red dot in each corner, blinking with it** (2026-10-08, Victor: *"there
+/// should be a red dot also blinking in line with the red border across the
+/// borders whenever the screen is getting recorded"*). The dots are sublayers of
+/// the border's own layer, so the one animation blinks both — in step by
+/// construction, never by two timers agreeing — and the same `sharingType`
+/// keeps them out of the frames.
 enum FilmBorder {
     private static var panel: NSPanel?
     static let width: CGFloat = 5
+    static let dot: CGFloat = 14
 
     static func show(on screen: NSScreen) {
         guard Thread.isMainThread else { DispatchQueue.main.async { show(on: screen) }; return }
@@ -340,6 +354,19 @@ enum FilmBorder {
         v.wantsLayer = true
         v.layer?.borderWidth = width
         v.layer?.borderColor = NSColor.systemRed.cgColor
+        // Just inside the border, one per corner.
+        let inset = width + 4
+        let size = screen.frame.size
+        for origin in [NSPoint(x: inset, y: inset),
+                       NSPoint(x: size.width - inset - dot, y: inset),
+                       NSPoint(x: inset, y: size.height - inset - dot),
+                       NSPoint(x: size.width - inset - dot, y: size.height - inset - dot)] {
+            let d = CALayer()
+            d.frame = CGRect(origin: origin, size: CGSize(width: dot, height: dot))
+            d.cornerRadius = dot / 2
+            d.backgroundColor = NSColor.systemRed.cgColor
+            v.layer?.addSublayer(d)
+        }
         let blink = CAKeyframeAnimation(keyPath: "opacity")
         blink.values = [1.0, 0.5]
         blink.keyTimes = [0, 0.5]

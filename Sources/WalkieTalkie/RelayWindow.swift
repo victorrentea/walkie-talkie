@@ -418,6 +418,12 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// a ✂️ area, the 800 px frame otherwise). A frame whose token is in the words
     /// is drawn there and leaves the strip; the rest stay in the strip.
     private var promptInlineShots: [Int: String] = [:]
+    /// **The screen recordings riding with the held prompt** (2026-10-08, Victor:
+    /// *"when I send the movie, it doesn't show up into the preview panel … show
+    /// it … at the end, just like a picture, but with a red dot visible and a
+    /// length displayed on top of it"*): each one's poster frame and its length,
+    /// drawn after the screenshots in the strip.
+    private var promptFilms: [(poster: String, seconds: TimeInterval)] = []
     /// Shown above the words rather than folded into them — see `layoutContent`.
     private var promptSelection: String?
     /// **Which microphone heard it and which engine wrote it** (2026-10-06,
@@ -2891,9 +2897,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// an image in the text in the panel, do not show it again at the end"*): the
     /// strip holds the frame, the words draw its cut-out or its 800 px copy, so
     /// the paths never agreed and every inlined picture came back in the strip.
-    private var stripShots: [(path: String, stamp: String)] {
+    /// The recordings come last, newest last, as they were made after the
+    /// screenshots they ride with or at least after the context shot.
+    private var stripShots: [(path: String, stamp: String, film: TimeInterval?)] {
         let drawn = Set(inlineShotNumbers(in: sentPrompt ?? ""))
         return promptShots.filter { ScreenCapture.number(of: $0.path).map { !drawn.contains($0) } ?? true }
+            .map { (path: $0.path, stamp: $0.stamp, film: nil) }
+            + promptFilms.map { (path: $0.poster, stamp: "", film: $0.seconds) }
     }
 
     /// `[📸N…]`, `[selected: "…"…]`, `[chrome-selection-N: …]`, `[🎦N…]` — the
@@ -3015,7 +3025,14 @@ private let heardLabel = NSTextField(labelWithString: "")
             view.layer?.masksToBounds = true
             view.layer?.borderWidth = 1
             view.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.35).cgColor
-            if let badge = Self.stampBadge(shot.stamp) {
+            if let seconds = shot.film {
+                // A film reads as a film by its red rim and the ● + length on
+                // it, where a screenshot carries its m:ss.
+                view.layer?.borderColor = NSColor.systemRed.cgColor
+                let badge = Self.filmBadge(seconds)
+                badge.frame.origin = NSPoint(x: Self.stampInset, y: Self.stampInset)
+                view.addSubview(badge)
+            } else if let badge = Self.stampBadge(shot.stamp) {
                 // Bottom-left, a hair in from the corner — the corner the eye
                 // arrives at reading the strip left to right, and the one edge of
                 // a screenshot of Victor's desktop that is reliably empty.
@@ -3072,6 +3089,32 @@ private let heardLabel = NSTextField(labelWithString: "")
         pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.62).cgColor
         pill.layer?.cornerRadius = 3
         label.frame.origin = NSPoint(x: stampPadX,
+                                     y: ((size.height - label.frame.height) / 2).rounded())
+        pill.addSubview(label)
+        return pill
+    }
+
+    /// The film's pill: a red ● and its length (`3.2s`), on the same dark
+    /// ground as a screenshot's m:ss so the two read as one family.
+    private static func filmBadge(_ seconds: TimeInterval) -> NSView {
+        let label = NSTextField(labelWithString: String(format: "%.1fs", seconds))
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+        label.textColor = .white
+        label.sizeToFit()
+        let dot: CGFloat = 7
+        let size = NSSize(width: stampPadX + dot + 3 + ceil(label.frame.width) + stampPadX,
+                          height: ceil(label.frame.height) + stampPadY * 2)
+        let pill = NSView(frame: NSRect(origin: .zero, size: size))
+        pill.wantsLayer = true
+        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.62).cgColor
+        pill.layer?.cornerRadius = 3
+        let red = NSView(frame: NSRect(x: stampPadX, y: ((size.height - dot) / 2).rounded(),
+                                       width: dot, height: dot))
+        red.wantsLayer = true
+        red.layer?.backgroundColor = NSColor.systemRed.cgColor
+        red.layer?.cornerRadius = dot / 2
+        pill.addSubview(red)
+        label.frame.origin = NSPoint(x: stampPadX + dot + 3,
                                      y: ((size.height - label.frame.height) / 2).rounded())
         pill.addSubview(label)
         return pill
@@ -4710,6 +4753,7 @@ private let heardLabel = NSTextField(labelWithString: "")
                         words: String? = nil, warning: String? = nil,
                         heard: String? = nil,
                         inlineShots: [Int: String] = [:],
+                        films: [(poster: String, seconds: TimeInterval)] = [],
                         buttons: Bool = true, spawning: Bool = false) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -4761,6 +4805,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             (path: $0.element, stamp: $0.offset < stamps.count ? stamps[$0.offset] : "")
         }
         promptInlineShots = inlineShots
+        promptFilms = films
         promptSelection = quoted
         // Handed in with the prompt rather than through a setter of its own:
         // `showSentPrompt` resolves any panel still on screen first, and that
@@ -5105,6 +5150,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         promptSpawning = false
         promptShots = []
         promptInlineShots = [:]
+        promptFilms = []
         promptSelection = nil
         promptWarning = nil
         promptHeard = nil

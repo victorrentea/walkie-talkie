@@ -596,6 +596,18 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
+    "height" : 203,
+    "image" : "prompt-film.png",
+    "note" : "2026-10-08, Victor: the film shows in the strip like a picture, at the end — its middle frame, a red rim, and a red ● with its length where a screenshot carries its m:ss.",
+    "shape" : "panel",
+    "slug" : "prompt-film",
+    "title" : "The prompt, with a screen recording",
+    "when" : "The dictation carried a 🎬 film (🔽 ↑ while recording).",
+    "width" : 385
+  },
+  {
+    "alpha" : 1,
+    "group" : "The held prompt",
     "height" : 584,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",

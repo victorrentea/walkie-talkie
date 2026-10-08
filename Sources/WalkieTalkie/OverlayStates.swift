@@ -532,6 +532,17 @@ enum OverlayStates {
                                  stamps: ["", "0:38"], words: transcript, heard: heard)
             },
 
+            Shot(slug: "prompt-film", group: "The held prompt", title: "The prompt, with a screen recording",
+                 when: "The dictation carried a 🎬 film (🔽 ↑ while recording).",
+                 note: "2026-10-08, Victor: the film shows in the strip like a picture, at the end — its middle frame, a red rim, and a red ● with its length where a screenshot carries its m:ss.",
+                 shape: "panel", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                let frames = mockShots(3)
+                o.showSentPrompt(transcript, hold: 6, shots: Array(frames.prefix(2)),
+                                 stamps: ["", "0:38"], words: transcript, heard: heard,
+                                 films: [(poster: frames[2], seconds: 4.2)])
+            },
+
             Shot(slug: "prompt-inline", group: "The held prompt", title: "The prompt, with its pictures where they were taken",
                  when: "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
                  note: "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
