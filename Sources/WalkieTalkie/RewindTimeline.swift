@@ -223,17 +223,25 @@ enum RewindTimeline {
 
     /// **Arrived, it circles like a loading icon** (same message: *"and then
     /// there start circling like a loading icon"*): clockwise round `c`, one
-    /// turn every `orbitPeriod`, the radius opening from 0 to `orbitRadius` over
-    /// `orbitGrow` so the arrival does not jump. `since` is the time since it landed.
-    static func orbit(around c: CGPoint, since t: TimeInterval) -> CGPoint {
-        guard t > 0 else { return c }
-        let r = orbitRadius * CGFloat(min(t / orbitGrow, 1))
-        let angle = -2 * Double.pi * t / orbitPeriod
+    /// turn every `orbitPeriod`, starting at angle 0 — `c + (r, 0)`, where the
+    /// wave lands (`orbitEntry`). `since` is the time since it landed.
+    ///
+    /// **Round the window, not round a point** (2026-10-08, Victor: *"circle …
+    /// the target window on a circle with the diameter equals to two thirds of
+    /// its smallest axis, leaving dust in a circle form"*): `r` is
+    /// `orbitRadius(for:)` of the receiving window. Until then it was 50 pt,
+    /// opening from the centre over 0.4 s — a knot, not a ring.
+    static func orbit(around c: CGPoint, radius r: CGFloat, since t: TimeInterval) -> CGPoint {
+        let angle = -2 * Double.pi * max(t, 0) / orbitPeriod
         return CGPoint(x: c.x + r * CGFloat(cos(angle)), y: c.y + r * CGFloat(sin(angle)))
     }
-    static let orbitRadius: CGFloat = 50
+    /// Where the orbit begins, so the wave can end there.
+    static func orbitEntry(around c: CGPoint, radius r: CGFloat) -> CGPoint { CGPoint(x: c.x + r, y: c.y) }
+    /// A diameter of ⅔ of the window's shorter side.
+    static func orbitRadius(for size: CGSize) -> CGFloat { min(size.width, size.height) / 3 }
+    /// No window to measure (the middle of the screen stands in): a small ring.
+    static let orbitRadiusFallback: CGFloat = 50
     static let orbitPeriod: TimeInterval = 1.2
-    static let orbitGrow: TimeInterval = 0.4
 
     /// **Sparks shrinks at the tunnel's own rate** (2026-10-02, Victor: *"dacă
     /// … Stars se micșorează în același stil în care se micșorează și Reverse

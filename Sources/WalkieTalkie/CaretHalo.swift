@@ -1334,6 +1334,10 @@ final class CaretHalo {
             follow()
         }
     }
+    /// **The dust's ring round the receiving window** (2026-10-08): ⅓ of its
+    /// shorter side, written by `AppDelegate.aimRewind` with `rewindAim`; nil →
+    /// `RewindTimeline.orbitRadiusFallback`.
+    var rewindOrbitRadius: CGFloat?
     /// `rewindAim` as it was when the rewind ended, kept until the next ring
     /// comes up — the settle clears the sentence's aim before the 0.15 s fade is
     /// over, and the fade must stay where the tunnel converged.
@@ -1379,8 +1383,11 @@ final class CaretHalo {
             guard rewindStyle.hasTrail else {
                 return NSPoint(x: from.x + (to.x - from.x) * CGFloat(p), y: from.y + (to.y - from.y) * CGFloat(p))
             }
-            if t < span { return RewindTimeline.wave(from: from, to: to, progress: p) }
-            return RewindTimeline.orbit(around: to, since: t - span)
+            let r = rewindOrbitRadius ?? RewindTimeline.orbitRadiusFallback
+            if t < span {
+                return RewindTimeline.wave(from: from, to: RewindTimeline.orbitEntry(around: to, radius: r), progress: p)
+            }
+            return RewindTimeline.orbit(around: to, radius: r, since: t - span)
         }
         return rewindAim ?? rewindStart
     }

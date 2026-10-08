@@ -220,13 +220,16 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(RewindTimeline.wave(from: a, to: b, progress: 0.5).y, 0, accuracy: 1e-9)
         let far = RewindTimeline.wave(from: .zero, to: CGPoint(x: 5000, y: 0), progress: 0.375)
         XCTAssertLessThanOrEqual(abs(far.y), RewindTimeline.waveMax)        // capped on a long flight
-        XCTAssertEqual(RewindTimeline.orbit(around: b, since: 0), b)  // lands without a jump
-        for t in [0.5, 1.0, 1.7] {
-            let p = RewindTimeline.orbit(around: b, since: t)
-            XCTAssertEqual(hypot(p.x - b.x, p.y - b.y), RewindTimeline.orbitRadius, accuracy: 1e-9)
+        let r = RewindTimeline.orbitRadius(for: CGSize(width: 958, height: 525))
+        XCTAssertEqual(r, 175, accuracy: 1e-9)                         // ⅔ of the shorter side, as a diameter
+        XCTAssertEqual(RewindTimeline.orbit(around: b, radius: r, since: 0),
+                       RewindTimeline.orbitEntry(around: b, radius: r))   // the wave lands where it starts
+        for t in [0.3, 1.0, 1.7] {
+            let p = RewindTimeline.orbit(around: b, radius: r, since: t)
+            XCTAssertEqual(hypot(p.x - b.x, p.y - b.y), r, accuracy: 1e-9)
         }
-        let quarter = RewindTimeline.orbit(around: .zero, since: RewindTimeline.orbitPeriod * 1.25)  // past the opening
-        XCTAssertEqual(quarter.y, -RewindTimeline.orbitRadius, accuracy: 1e-9)   // clockwise
+        let quarter = RewindTimeline.orbit(around: .zero, radius: r, since: RewindTimeline.orbitPeriod / 4)
+        XCTAssertEqual(quarter.y, -r, accuracy: 1e-9)                  // clockwise
     }
 
     /// 2026-10-04: the ring starts as tall as the screen.
