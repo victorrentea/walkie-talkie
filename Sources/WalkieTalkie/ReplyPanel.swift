@@ -123,11 +123,13 @@ enum ReplyPanel {
         }
         root.addSubview(icon)
         let textX = pad + iconSide + 6
-        header.frame = NSRect(x: textX, y: height - pad - headerH + 3, width: inner - (textX - pad) - 24, height: 20)
+        header.frame = NSRect(x: textX, y: height - pad - headerH + 3, width: inner - (textX - pad) - iconSide - 6, height: 20)
         body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
         root.addSubview(body)
-        let x = ReplyCloseButton(frame: NSRect(x: width - 28, y: height - pad - headerH + 3, width: 20, height: 20))
+        // **The ✕ as large as the walkie** (2026-10-08, Victor: *"X-ul … aceeași
+        // mărime ca și simbolul Walkie Talkie"*).
+        let x = ReplyCloseButton(frame: NSRect(x: width - pad - iconSide, y: height - pad - headerH, width: iconSide, height: iconSide))
         x.onClick = { Log.info("💬 answer dismissed (✕)"); close() }
         root.addSubview(x)
 
@@ -200,10 +202,10 @@ private final class ReplyCloseButton: NSView {
         NSColor.white.withAlphaComponent(hot ? 0.25 : 0.1).setFill()
         NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).fill()
         let p = NSBezierPath()
-        let r = bounds.insetBy(dx: 6.5, dy: 6.5)
+        let r = bounds.insetBy(dx: bounds.width * 0.32, dy: bounds.height * 0.32)
         p.move(to: NSPoint(x: r.minX, y: r.minY)); p.line(to: NSPoint(x: r.maxX, y: r.maxY))
         p.move(to: NSPoint(x: r.minX, y: r.maxY)); p.line(to: NSPoint(x: r.maxX, y: r.minY))
-        p.lineWidth = 1.6
+        p.lineWidth = 1.8
         NSColor.white.withAlphaComponent(0.85).setStroke()
         p.stroke()
     }
