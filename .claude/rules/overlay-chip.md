@@ -444,7 +444,10 @@ yields to `--label`).
   takes the chip over for 1.5 s and the count has to keep climbing.
   → journal: *Two shapes: the chip and the panel*
 - **Pinned to the pointer on every mouse event; growth into the panel animated 0.22 s ease out,
-  everything else instant.** → journal: *Two shapes: the chip and the panel*
+  everything else instant.** **A prompt's panel sneaks in from the left edge** (2026-10-08, Victor:
+  *"make the panel that shows the prompt sneak in from the left edge to appear"*): full size just past
+  the screen's left edge in one frame, then `RelayWindow.sneakIn` 0.3 s ease-out to the top-left
+  corner (it swelled out of the pointer until then); `hoverPauseSettle` follows it. → journal: *Two shapes: the chip and the panel*
 - **Unbound and idle, there is no overlay window at all.** `layoutContent` omits the title row when
   there is no destination, and `refreshPresence` counts any row as a reason to be on screen (not
   `rowCount > 1`). **The documented exception (2026-09-26): `📨 N waiting — bind to send`**

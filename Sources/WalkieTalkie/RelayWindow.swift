@@ -2394,12 +2394,22 @@ private let heardLabel = NSTextField(labelWithString: "")
         let frame = NSRect(x: corner?.x ?? panel.frame.minX, y: oldTop - height,
                            width: width, height: height)
         laidOutFrame = frame
+        // **A prompt sneaks in from the left edge** (2026-10-08, Victor: *"make
+        // the panel that shows the prompt sneak in from the left edge to
+        // appear"*) — superseding the swell out of the cursor below: the panel
+        // takes its full size just past the screen's left edge, in one frame,
+        // and slides right into the corner. `RelayPanel` does not constrain the
+        // frame, so the start can sit off screen.
+        if animated, corner != nil {
+            let edge = (homeScreen ?? panel.screen ?? NSScreen.main)?.frame.minX ?? frame.minX
+            panel.setFrame(NSRect(x: edge - width, y: frame.minY, width: width, height: height), display: false)
+        }
         if animated {
             // The jump from a one-line "Listening…" to a half-screen prompt is the
             // biggest thing this window ever does, and done instantly it reads as
             // a new window appearing rather than as this one unfolding.
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.22
+                ctx.duration = corner != nil ? Self.sneakIn : 0.22
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 panel.animator().setFrame(frame, display: true)
             }
@@ -4825,6 +4835,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // where he has been watching the recording row — and handing the
         // destination to the animation instead makes the corner the place it
         // *arrives*: it swells out of the pointer and settles top-left.
+        // **Superseded 2026-10-08: it sneaks in from the left edge** — see
+        // `layoutContent`. The corner is still where it arrives.
         //
         // Same argument as the bind flight, run backwards. There the travel says
         // *that window is now this chip*; here it says *what you just said is now
@@ -4883,9 +4895,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// panel that cannot become key, and `.activeAlways` is what lets them.
     private var promptHoverPaused = false
     private var promptShownAt: Date?
-    /// `layoutContent`'s unfold is 0.22 s; a hair past it so the first frame
-    /// read is the corner, not the pointer the panel came out of.
-    private static let hoverPauseSettle: TimeInterval = 0.25
+    /// `layoutContent`'s slide is `sneakIn`; a hair past it so the first frame
+    /// read is the corner, not a panel still on its way in.
+    private static let hoverPauseSettle: TimeInterval = sneakIn + 0.03
+    /// The prompt's slide in from the left edge (`layoutContent`).
+    static let sneakIn: TimeInterval = 0.3
     /// The one sign it is waiting, in the row flashes use — and the keys that
     /// still answer it, since there are no buttons to show them on.
     private static let hoverPauseHint = "⏸ Paused — ⏎ to send, ⎋ to cancel"
