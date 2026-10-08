@@ -1514,6 +1514,9 @@ final class HotkeyTap {
     /// continued movement and shorter than letting go of the button, moving back
     /// and pressing again.
     private var lastF10At: CFTimeInterval = 0
+    /// The last F10 that was **acted on** (handed to `onForwardRight`) — not a
+    /// dropped re-fire. Tells a sentence 🔼 → opened from one the 🔼 click did.
+    private var lastF10ActedAt: CFTimeInterval = 0
     /// The last 🔽 → (F5, the plain dictation's toggle), for the same re-trigger guard.
     private var lastF5At: CFTimeInterval = 0
     /// **Right ⌥ tapped twice, alone — the plain dictation's toggle too**
@@ -3607,6 +3610,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 reconcileButtons()
                 if leftIsHeld {
                     Log.info("🎯 ⬅️ held + forward button flicked right — bind, then dictate at it")
+                    lastF10ActedAt = f10Now
                     DispatchQueue.global().async { [weak self] in self?.onGestureBindAndDictate?() }
                     return swallow(gesture, type, event)
                 }
@@ -3615,10 +3619,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // the same fix: a re-fire slow enough to clear the window above
                 // is still the flick that started the dictation, and the only
                 // thing it could do here is undo it.
-                if let age = openSentenceAge, age < Self.gestureStopDwellSeconds {
+                // **Only a sentence this gesture opened** (2026-10-08, Victor:
+                // *"once I start dictating with caret, I need to do the gesture
+                // forward swipe right twice to enter in the bound mode"* — 09:15:17,
+                // a 🔼-click sentence 1.3 s old, the flip dropped): a re-fire can
+                // only come from an F10, so a sentence the click or ⌘⌃D opened
+                // flips at once.
+                if let age = openSentenceAge, age < Self.gestureStopDwellSeconds,
+                   f10Now - lastF10ActedAt <= age + 0.5 {
                     Log.info("🎯 ➡️ F10 \(String(format: "%.0f", sinceLastF10 * 1000))ms on, but the sentence is only \(String(format: "%.0f", age * 1000))ms old — not stopping it")
                     return swallow("\(gesture) — the sentence is too young to stop", type, event)
                 }
+                lastF10ActedAt = f10Now
                 queueToggle()
                 DispatchQueue.global().async { [weak self] in self?.onForwardRight?() }
                 return swallow(gesture, type, event)

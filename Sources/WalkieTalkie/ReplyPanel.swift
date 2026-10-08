@@ -163,7 +163,9 @@ enum ReplyPanel {
             root.addSubview(skull)
             hot.append(skull.frame)
             let fit = min(header.frame.width, header.intrinsicContentSize.width)
-            hot.append(NSRect(x: header.frame.minX, y: header.frame.minY, width: fit, height: header.frame.height))
+            let link = NSRect(x: header.frame.minX, y: header.frame.minY, width: fit, height: header.frame.height)
+            hot.append(link)
+            root.link = (link, { header.onClick?() })
         }
         root.hot = hot
 
@@ -269,6 +271,13 @@ private func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFSt
 /// underneath"*); `hot` are the clickable rects, where the hand is theirs.
 private final class ReplyRoot: NSView {
     var hot: [NSRect] = []
+    /// **The name is clicked through here, not through its label** (2026-10-08,
+    /// Victor: *"even if I drag on the title, it should still be draggable"* —
+    /// the `NSTextField` never moved the panel): a press on `link` that does not
+    /// move is the name's click, one that moves drags.
+    var link: (rect: NSRect, click: () -> Void)?
+    private var press = PressOrDrag()
+    private var onLink = false
     private func arrow(_ event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
         if !hot.contains(where: { $0.contains(p) }) { NSCursor.arrow.set() }
@@ -283,7 +292,16 @@ private final class ReplyRoot: NSView {
     override func mouseEntered(with event: NSEvent) { arrow(event) }
     override func mouseMoved(with event: NSEvent) { arrow(event) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    override func mouseDown(with event: NSEvent) {
+        onLink = link?.rect.contains(convert(event.locationInWindow, from: nil)) == true
+        if onLink { press.down(window) } else { window?.performDrag(with: event) }
+    }
+    override func mouseDragged(with event: NSEvent) { if onLink { press.dragged(window) } }
+    override func mouseUp(with event: NSEvent) {
+        guard onLink else { return }
+        onLink = false
+        if press.up() { link?.click() }
+    }
 }
 
 /// **A press on a clickable that moves is a drag, not a click** (2026-10-08,
@@ -414,14 +432,11 @@ private final class LinkLabel: NSTextField {
     // 2026-10-08: *"the mouse should turn into a hand once I hover the title"*
     // — the underline came, the hand did not): the panel never becomes key, so
     // the frontmost terminal's I-beam won the cursor back.
-    override func hitTest(_ point: NSPoint) -> NSView? { onClick == nil ? nil : super.hitTest(point) }
+    /// Never hit: a press on it is `ReplyRoot`'s — a drag, or the name's click.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseEntered(with event: NSEvent) { underline(true); NSCursor.pointingHand.set() }
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseExited(with event: NSEvent) { underline(false); NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    private var press = PressOrDrag()
-    override func mouseDown(with event: NSEvent) { press.down(window) }
-    override func mouseDragged(with event: NSEvent) { press.dragged(window) }
-    override func mouseUp(with event: NSEvent) { if press.up() { onClick?() } }
 }

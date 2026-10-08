@@ -206,4 +206,5 @@ me to dismiss it explicitly"*.
   panel (*"the mouse has the icon from what's underneath"* — Chrome's I-beam won through), leaving
   the hand to the walkie, the name, ☠️ and ✕ (`ReplyRoot.hot`). **The clickables drag too** (same day, *"anything as long as I
   don't click it but drag it"*): a press that moves past 3 pt drags the panel and clicks nothing
-  (`PressOrDrag`).
+  (`PressOrDrag`). **The name's label is never hit** — `ReplyRoot.link` takes its press (click or
+  drag); the `NSTextField` with mouse overrides did not move the panel (*"even if I drag on the title"*).
