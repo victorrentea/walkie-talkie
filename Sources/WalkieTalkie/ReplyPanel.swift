@@ -23,12 +23,10 @@ import AppKit
 /// pointer, when that one is closed (✕ or its link).
 ///
 /// It sits where the pointer was when the answer arrived and does not follow —
-/// it is read, and clicked once. **It rises from the bottom of the screen like
-/// a toast, a little past its place, and settles back** (2026-10-08, Victor:
-/// *"să intre din josul ecranului, up, ca un fel de toaster până în dreptul meu
-/// … să vină un pic peste și să vină puțin înapoi … marginea de sus a panelului
-/// … un pic sub mouse"*): centred on the pointer's x, its top edge `belowPointer`
-/// under the pointer. `sharingType = .none`: the next dictation's
+/// it is read, and clicked once. **It zooms in out of the pointer, fading in**
+/// (`zoom`; a toast rising from the screen's bottom until the same afternoon),
+/// centred on the pointer's x, its top edge `belowPointer` under the pointer
+/// (2026-10-08, Victor: *"marginea de sus a panelului … un pic sub mouse"*). `sharingType = .none`: the next dictation's
 /// pictures are of his screen, not of this.
 enum ReplyPanel {
     private static var panel: NSPanel?
@@ -206,7 +204,7 @@ enum ReplyPanel {
         p.setFrameOrigin(target)
         p.orderFrontRegardless()
         panel = p
-        rise(p, to: target)
+        zoom(p, around: arrivedAt)
         Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
     }
 
@@ -235,8 +233,9 @@ enum ReplyPanel {
 
     /// How far under the pointer the top edge settles.
     private static let belowPointer: CGFloat = 14
-    private static let riseSeconds = 0.5
-    private static var riseTimer: Timer?
+    private static let zoomSeconds = 0.3
+    private static let zoomFrom: CGFloat = 0.3
+    private static var zoomTimer: Timer?
 
     /// Centred on the pointer's x, top edge `belowPointer` under it — above the
     /// pointer instead when there is no room below; clamped into its screen.
@@ -254,30 +253,42 @@ enum ReplyPanel {
         NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main
     }
 
-    /// **The toast**: from just under the screen's bottom edge up to `target`,
-    /// on an ease-out-back curve — past the place by ~10 %, then back. A timer,
-    /// not `animator()`: a borderless panel's frame animation has no overshoot,
-    /// and the curve is the gesture. Fades in over the first third so a display
-    /// below this one never shows it passing.
-    private static func rise(_ p: NSPanel, to target: NSPoint) {
-        riseTimer?.invalidate()
-        guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
-        let bottom = (screen(at: arrivedAt)?.frame.minY ?? 0) - p.frame.height
+    /// **It grows out of the pointer, small to full, fading in** (2026-10-08,
+    /// Victor: *"should not swipe in from the bottom, but zoom in … from small to
+    /// its final size, by also increasing in opacity. To be less disturbed of
+    /// transition in the brain"*) — it was a toast rising from the screen's
+    /// bottom edge that morning. Scale `zoomFrom` → 1 on an ease-out cubic, no
+    /// overshoot, around the edge's centre nearest the pointer; alpha 0 → 1 over
+    /// the same `zoomSeconds`. A timer on the root layer's transform, so nothing
+    /// relayouts; the shadow is re-cut every frame to follow the shape.
+    private static func zoom(_ p: NSPanel, around point: NSPoint) {
+        zoomTimer?.invalidate()
+        guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil,
+              let layer = p.contentView?.layer else { return }
+        let f = p.frame
+        let a = CGPoint(x: min(max(point.x, f.minX), f.maxX) - f.minX,
+                        y: point.y > f.midY ? f.height : 0)
+        func scaled(_ k: CGFloat) -> CATransform3D {
+            CATransform3DTranslate(CATransform3DScale(CATransform3DMakeTranslation(a.x, a.y, 0), k, k, 1), -a.x, -a.y, 0)
+        }
         let start = Date()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer.transform = scaled(zoomFrom)
+        CATransaction.commit()
         p.alphaValue = 0
-        p.setFrameOrigin(NSPoint(x: target.x, y: bottom))
         let t = Timer(timeInterval: 1.0 / 120, repeats: true) { timer in
             guard panel === p else { timer.invalidate(); return }
-            let u = min(1, Date().timeIntervalSince(start) / riseSeconds)
-            // easeOutBack, s = 1.4: peaks ≈ 9 % past the target near u = 0.7.
-            let s = 1.4, v = u - 1
-            let k = 1 + (s + 1) * v * v * v + s * v * v
-            p.setFrameOrigin(NSPoint(x: target.x, y: bottom + (target.y - bottom) * CGFloat(k)))
-            p.alphaValue = CGFloat(min(1, u * 3))
-            if u >= 1 { timer.invalidate(); p.setFrameOrigin(target); p.alphaValue = 1 }
+            let u = min(1, Date().timeIntervalSince(start) / zoomSeconds)
+            let e = 1 - pow(1 - u, 3)
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            layer.transform = u >= 1 ? CATransform3DIdentity : scaled(zoomFrom + (1 - zoomFrom) * CGFloat(e))
+            CATransaction.commit()
+            p.alphaValue = CGFloat(e)
+            p.invalidateShadow()
+            if u >= 1 { timer.invalidate() }
         }
         RunLoop.main.add(t, forMode: .common)
-        riseTimer = t
+        zoomTimer = t
     }
 }
 
