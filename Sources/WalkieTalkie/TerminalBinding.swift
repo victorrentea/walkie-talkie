@@ -753,6 +753,7 @@ final class TerminalBinding {
             case .some:
                 break
             }
+            if Self.deliverToInbox(line, tty: tty) { return .delivered }
             guard Self.writeToTerminalApp(line, tty: tty) else {
                 unbind()
                 return .targetGone("no Terminal.app tab on \(target.address)")
@@ -819,6 +820,73 @@ final class TerminalBinding {
             // differently for exactly that reason.
             return Self.paste(line, into: running) ? .delivered : .failed("paste into \(app) failed")
         }
+    }
+
+    // MARK: - The session's inbox (2026-10-08)
+
+    /// **Into a Claude Code session without typing** (Victor, 2026-10-08: *"nu
+    /// vreau niciun dialog de confirmare și sunt ok să rămână în coadă până când
+    /// termină tura … poți să folosești moduri"*). A session running the
+    /// `walkie-inbox` mod keeps `~/.walkie-talkie/inbox/<tty>/.alive` fresh (every
+    /// 2 s); the sentence is written there as `<stamp>.msg` and the mod submits it
+    /// with `$.prompt.submit({ asUser: true })` — read as his own words, queued
+    /// behind a running turn, never folded into it. No keystrokes, so none of the
+    /// paste folding, lost Returns or *review and press Enter* the typed path
+    /// fights, and no channel's `--dangerously-load-development-channels` dialog.
+    ///
+    /// **The rename is the lock.** The mod claims a message by renaming it to
+    /// `.taken`; a message not claimed within `inboxTakeWait` is withdrawn the
+    /// same way, and whichever rename lands first owns it — so a slow mod and the
+    /// typed fallback can never both deliver one sentence. Withdrawn → nil, and
+    /// the caller types it as before. `WT_INBOX=0` turns the route off.
+    static let inboxRoot = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".walkie-talkie/inbox")
+    private static let inboxFresh: TimeInterval = 6
+    private static let inboxTakeWait: TimeInterval = 3
+    private static let inboxOff = ProcessInfo.processInfo.environment["WT_INBOX"] == "0"
+
+    /// Whether a live `walkie-inbox` listens on this tty — `GET /test/state`.
+    static func inboxListening(tty: String) -> Bool {
+        let alive = inboxRoot.appendingPathComponent((tty as NSString).lastPathComponent)
+            .appendingPathComponent(".alive")
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: alive.path),
+              let at = attrs[.modificationDate] as? Date else { return false }
+        return Date().timeIntervalSince(at) < inboxFresh
+    }
+
+    private static func deliverToInbox(_ line: String, tty: String) -> Bool {
+        guard !inboxOff, inboxListening(tty: tty) else { return false }
+        let fm = FileManager.default
+        let short = (tty as NSString).lastPathComponent
+        let dir = inboxRoot.appendingPathComponent(short)
+        let stamp = String(format: "%013.0f", Date().timeIntervalSince1970 * 1000)
+            + "-" + UUID().uuidString.prefix(8)
+        let tmp = dir.appendingPathComponent("\(stamp).tmp")
+        let msg = dir.appendingPathComponent("\(stamp).msg")
+        do {
+            try line.write(to: tmp, atomically: false, encoding: .utf8)
+            try fm.moveItem(at: tmp, to: msg)
+        } catch {
+            try? fm.removeItem(at: tmp)
+            Log.error("📥 inbox on \(short) not written (\(error.localizedDescription)) — typing it")
+            return false
+        }
+        let started = Date()
+        while Date().timeIntervalSince(started) < inboxTakeWait {
+            if !fm.fileExists(atPath: msg.path) {
+                Log.info("📥 \(short): taken by the session's walkie-inbox in \(Int(Date().timeIntervalSince(started) * 1000)) ms — \(line.count) chars, no keystrokes")
+                return true
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        let withdrawn = dir.appendingPathComponent("\(stamp).withdrawn")
+        guard (try? fm.moveItem(at: msg, to: withdrawn)) != nil else {
+            Log.info("📥 \(short): taken by walkie-inbox at the last moment — \(line.count) chars")
+            return true
+        }
+        try? fm.removeItem(at: withdrawn)
+        Log.error("📥 \(short): walkie-inbox did not take it in \(Int(inboxTakeWait)) s — withdrawn, typing it")
+        return false
     }
 
     // MARK: - Terminal.app
