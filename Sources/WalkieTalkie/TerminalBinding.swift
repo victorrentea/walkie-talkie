@@ -1206,7 +1206,16 @@ final class TerminalBinding {
         case .keystroke(let p, _):
             pid = p
         }
-        guard let pid, let app = NSRunningApplication(processIdentifier: pid) else { return false }
+        guard let pid, let raised = raise(pid: pid) else { return false }
+        let (activated, axFront) = raised
+        Log.info("🪟 \(target.address) brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
+        return true
+    }
+
+    /// **The app in front, and its focused window raised** — the half of
+    /// `bringToFront` after the window was put at index 1 inside its own app.
+    private static func raise(pid: pid_t) -> (Bool, AXError)? {
+        guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
         let activated = app.activate(options: [])
         let element = AXUIElementCreateApplication(pid)
         let axFront = AXUIElementSetAttributeValue(element, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
@@ -1219,7 +1228,63 @@ final class TerminalBinding {
             AXUIElementPerformAction(w, kAXRaiseAction as CFString)
             AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
         }
-        Log.info("🪟 \(target.address) brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
+        return (activated, axFront)
+    }
+
+    /// **The Terminal window showing this tty, in front and centred on the
+    /// Retina — at once, no flight** (2026-10-08, Victor, of the walkie icon on
+    /// the answer panel: *"that terminal should pop in front … on the retina in
+    /// the center of the screen … with no animation, just immediately"*). For
+    /// reading more of an answer, so the window comes to where he is looking
+    /// rather than him going to find it; nothing is bound. Its size is kept,
+    /// shrunk only to fit the Retina's visible frame. No built-in display (lid
+    /// closed) → the screen under the pointer.
+    ///
+    /// Off the main thread — `osascript`. Returns whether the window was found.
+    @discardableResult
+    static func presentOnRetina(tty: String) -> Bool {
+        let screen = DispatchQueue.main.sync { CaretHalo.retina ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main }
+        guard let screen, let primary = DispatchQueue.main.sync(execute: { NSScreen.screens.first }) else { return false }
+        // AppleScript's bounds: origin top-left of the primary, y downwards.
+        let v = screen.visibleFrame
+        let left = Int(v.minX), top = Int(primary.frame.maxY - v.maxY)
+        let right = Int(v.maxX), bottom = Int(primary.frame.maxY - v.minY)
+        let script = """
+        tell application "Terminal"
+            repeat with w in windows
+                try
+                    repeat with t in tabs of w
+                        if tty of t is "\(escape(devicePath(tty)))" then
+                            try
+                                set miniaturized of w to false
+                            end try
+                            set b to bounds of w
+                            set ww to (item 3 of b) - (item 1 of b)
+                            set hh to (item 4 of b) - (item 2 of b)
+                            if ww > \(right - left) then set ww to \(right - left)
+                            if hh > \(bottom - top) then set hh to \(bottom - top)
+                            set x to \(left) + ((\(right - left) - ww) div 2)
+                            set y to \(top) + ((\(bottom - top) - hh) div 2)
+                            set bounds of w to {x, y, x + ww, y + hh}
+                            set selected of t to true
+                            set index of w to 1
+                            return "ok"
+                        end if
+                    end repeat
+                end try
+            end repeat
+            return ""
+        end tell
+        """
+        guard osascript(script) == "ok" else {
+            Log.error("🪟 no Terminal window is showing \(tty) — nothing centred")
+            return false
+        }
+        guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal")
+                .first?.processIdentifier,
+              let raised = raise(pid: pid) else { return false }
+        let (activated, axFront) = raised
+        Log.info("🪟 \(tty) centred on \(screen.localizedName) and brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
         return true
     }
 

@@ -33,7 +33,11 @@ enum ReplyPanel {
     static let maxChars = 400
     private static let width: CGFloat = 380
     private static let font = NSFont.systemFont(ofSize: 15)
-    private static let headerH: CGFloat = 20
+    /// 26, up from 20, to carry the 26 pt walkie (2026-10-08, *"make the icon
+    /// slightly larger … so I can click it easier"*); the name and the ✕ are
+    /// centred in it.
+    private static let headerH: CGFloat = 26
+    private static let iconSide: CGFloat = 26
 
     private static let walkie: NSImage? = RelayWindow.walkieURL("walkie-bound").flatMap { NSImage(contentsOf: $0) }
 
@@ -44,6 +48,13 @@ enum ReplyPanel {
     /// I will rebind my Walkie to that terminal … underlined if I hover it, in
     /// the hand of the mouse"*) — `AppDelegate.rebindFromMenu`.
     static var onBind: ((String) -> Void)?
+
+    /// **A click on the walkie puts that terminal in front, centred on the
+    /// Retina, at once** (2026-10-08, Victor: *"if I click on the Walkie Talkie
+    /// icon … that terminal should pop in front … on the retina in the center of
+    /// the screen … with no animation"*) — to read more, or ask more, there.
+    /// Nothing is bound; the name is the link that binds.
+    static var onPresent: ((String) -> Void)?
 
     static func show(_ raw: String, from label: String?, tty: String? = nil) {
         guard Thread.isMainThread else {
@@ -100,15 +111,23 @@ enum ReplyPanel {
         root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
         root.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.95).cgColor
-        let icon = NSImageView(frame: NSRect(x: pad, y: height - pad - headerH + 1, width: 18, height: 18))
+        let icon = ReplyIcon(frame: NSRect(x: pad, y: height - pad - headerH, width: iconSide, height: iconSide))
         icon.image = Self.walkie
         icon.imageScaling = .scaleProportionallyUpOrDown
+        if let tty = tty {
+            icon.onClick = {
+                Log.info("💬 the answer's walkie clicked — \(tty) to the front, centred on the Retina, panel closed")
+                close()
+                onPresent?(tty)
+            }
+        }
         root.addSubview(icon)
-        header.frame = NSRect(x: pad + 24, y: height - pad - headerH, width: inner - 24 - 24, height: headerH)
+        let textX = pad + iconSide + 6
+        header.frame = NSRect(x: textX, y: height - pad - headerH + 3, width: inner - (textX - pad) - 24, height: 20)
         body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
         root.addSubview(body)
-        let x = ReplyCloseButton(frame: NSRect(x: width - 28, y: height - pad - headerH, width: 20, height: 20))
+        let x = ReplyCloseButton(frame: NSRect(x: width - 28, y: height - pad - headerH + 3, width: 20, height: 20))
         x.onClick = { Log.info("💬 answer dismissed (✕)"); close() }
         root.addSubview(x)
 
@@ -198,6 +217,26 @@ private final class ReplyCloseButton: NSView {
     override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true; NSCursor.pointingHand.set() }
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true; NSCursor.arrow.set() }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick?() }
+}
+
+/// The walkie: a button only when the answer names a terminal — the hand on
+/// hover, a click brings that terminal forward (`ReplyPanel.onPresent`).
+private final class ReplyIcon: NSImageView {
+    var onClick: (() -> Void)?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for a in trackingAreas { removeTrackingArea(a) }
+        guard onClick != nil else { return }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+    override func cursorUpdate(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
+    override func mouseEntered(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
+    override func mouseMoved(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
+    override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {}
     override func mouseUp(with event: NSEvent) { onClick?() }

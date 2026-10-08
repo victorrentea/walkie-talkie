@@ -555,9 +555,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `promptFont` and the panel's own rows are outside the rule: the panel is
     /// parked in a corner and is read whole, not glanced at.
     private let titleFont = NSFont.systemFont(ofSize: 17)
-    /// 30, up from 20 (2026-10-08, Victor: *"the font in the prompting preview … fifty percent
-    /// larger"*); 20 had been 16 the day before.
-    private let promptFont = NSFont.systemFont(ofSize: 30)
+    /// 25 (2026-10-08): 30 for one build (*"fifty percent larger"*), then *"too large now …
+    /// half in between"*; 20 before, 16 the day before that.
+    private let promptFont = NSFont.systemFont(ofSize: 25)
     private let hintFont = NSFont.systemFont(ofSize: 17)
 
     /// The quote mark is 30pt against the text's 16 — big enough to be the thing
@@ -567,11 +567,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// the row into something scanned rather than parsed. Dropped below the
     /// baseline so it reads as a mark hanging beside the line instead of a
     /// character sitting on it.
-    /// 40 and a 40pt row since 2026-10-08, when the quoted text followed `promptFont` to 30:
-    /// a 30pt line is ~36pt tall and clipped in the old 30pt row.
-    private let quoteFont = NSFont.systemFont(ofSize: 40, weight: .bold)
-    /// Tall enough for the 40pt mark; the 30pt text rides inside it.
-    private let quoteRowHeight: CGFloat = 40
+    /// 35 and a 35pt row since 2026-10-08, when the quoted text followed `promptFont` to 25:
+    /// a 25pt line is ~30pt tall and clipped in the old 30pt row.
+    private let quoteFont = NSFont.systemFont(ofSize: 35, weight: .bold)
+    /// Tall enough for the 35pt mark; the 25pt text rides inside it.
+    private let quoteRowHeight: CGFloat = 35
 
     private func quoted(_ text: String) -> NSAttributedString {
         let out = NSMutableAttributedString(

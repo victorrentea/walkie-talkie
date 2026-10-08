@@ -1434,6 +1434,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `walkie-reply` reads it; made now, not at the first answer.
         _ = Self.replyToken
         ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the answer panel", fly: true) }
+        ReplyPanel.onPresent = { tty in
+            DispatchQueue.global(qos: .userInitiated).async { TerminalBinding.presentOnRetina(tty: tty) }
+        }
         micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for
