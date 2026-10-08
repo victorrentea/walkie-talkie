@@ -556,8 +556,10 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// parked in a corner and is read whole, not glanced at.
     private let titleFont = NSFont.systemFont(ofSize: 17)
     /// 25 (2026-10-08): 30 for one build (*"fifty percent larger"*), then *"too large now …
-    /// half in between"*; 20 before, 16 the day before that.
-    private let promptFont = NSFont.systemFont(ofSize: 25)
+    /// half in between"*; 20 before, 16 the day before that. **JetBrains Mono** since the
+    /// same morning (*"JetBrains Mono, să-l văd mai clar. Nu-mi place fontul"*) — installed
+    /// in `~/Library/Fonts`; the system face if it ever is not.
+    private let promptFont = NSFont(name: "JetBrainsMono-Regular", size: 25) ?? NSFont.systemFont(ofSize: 25)
     private let hintFont = NSFont.systemFont(ofSize: 17)
 
     /// The quote mark is 30pt against the text's 16 — big enough to be the thing
