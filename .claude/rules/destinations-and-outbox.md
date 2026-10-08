@@ -204,4 +204,6 @@ me to dismiss it explicitly"*.
   text and the text shouldn't be selectable"*): the words are an `InertLabel` (not selectable, no hit),
   a press anywhere off the four clickables is `performDrag`; `ReplyRoot` sets the **arrow** over the
   panel (*"the mouse has the icon from what's underneath"* — Chrome's I-beam won through), leaving
-  the hand to the walkie, the name, ☠️ and ✕ (`ReplyRoot.hot`).
+  the hand to the walkie, the name, ☠️ and ✕ (`ReplyRoot.hot`). **The clickables drag too** (same day, *"anything as long as I
+  don't click it but drag it"*): a press that moves past 3 pt drags the panel and clicks nothing
+  (`PressOrDrag`).

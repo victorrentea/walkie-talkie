@@ -286,6 +286,34 @@ private final class ReplyRoot: NSView {
     override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
 }
 
+/// **A press on a clickable that moves is a drag, not a click** (2026-10-08,
+/// Victor: *"I should be able to drag not only on the text but anything as long
+/// as I don't click it but drag it"*). Past `slop` the panel follows the
+/// pointer and the release clicks nothing.
+private struct PressOrDrag {
+    static let slop: CGFloat = 3
+    private var from: NSPoint = .zero
+    private var origin: NSPoint = .zero
+    private var dragging = false
+
+    mutating func down(_ window: NSWindow?) {
+        from = NSEvent.mouseLocation
+        origin = window?.frame.origin ?? .zero
+        dragging = false
+    }
+
+    mutating func dragged(_ window: NSWindow?) {
+        let p = NSEvent.mouseLocation
+        let dx = p.x - from.x, dy = p.y - from.y
+        if !dragging, hypot(dx, dy) < Self.slop { return }
+        dragging = true
+        window?.setFrameOrigin(NSPoint(x: origin.x + dx, y: origin.y + dy))
+    }
+
+    /// True when the press was a click.
+    mutating func up() -> Bool { defer { dragging = false }; return !dragging }
+}
+
 /// The answer's words: never the target of a click, so a press on them is
 /// `ReplyRoot`'s drag and no selection starts.
 private final class InertLabel: NSTextField {
@@ -326,8 +354,10 @@ private final class ReplyCloseButton: NSView {
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true; NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) { onClick?() }
+    private var press = PressOrDrag()
+    override func mouseDown(with event: NSEvent) { press.down(window) }
+    override func mouseDragged(with event: NSEvent) { press.dragged(window) }
+    override func mouseUp(with event: NSEvent) { if press.up() { onClick?() } }
 }
 
 /// The walkie: a button only when the answer names a terminal — the hand on
@@ -348,8 +378,10 @@ private final class ReplyIcon: NSImageView {
     override func mouseMoved(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
     override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) { onClick?() }
+    private var press = PressOrDrag()
+    override func mouseDown(with event: NSEvent) { press.down(window) }
+    override func mouseDragged(with event: NSEvent) { press.dragged(window) }
+    override func mouseUp(with event: NSEvent) { if press.up() { onClick?() } }
 }
 
 /// The header: plain text, or — when it names a terminal — a link: the hand
@@ -388,6 +420,8 @@ private final class LinkLabel: NSTextField {
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseExited(with event: NSEvent) { underline(false); NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) { onClick?() }
+    private var press = PressOrDrag()
+    override func mouseDown(with event: NSEvent) { press.down(window) }
+    override func mouseDragged(with event: NSEvent) { press.dragged(window) }
+    override func mouseUp(with event: NSEvent) { if press.up() { onClick?() } }
 }
