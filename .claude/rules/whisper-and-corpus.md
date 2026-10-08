@@ -322,7 +322,8 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   `BottomTab`, **blue** (`MicAnnouncer.startupTint`), 3 s, with `StatusItem.engineBannerTitle`
   (`ElevenLabs + Live ☁️`, `Wispr ☁️` — not `Wispr Flow`, 2026-10-06 —, `Turbo💻 1.5 GB`), shown once from
   `applicationDidFinishLaunching` after the engine is restored; never under `RELAY_SHOOT`.
-  `/test/state.startupBanner` holds its words.
+  `/test/state.startupBanner` holds its words. **The microphone and the engine are split by ` / `**
+  (2026-10-08): `🎤 / ElevenLabs ☁️ + Live`.
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
   glyph, the tick and the recording to disagree. → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*
