@@ -326,7 +326,10 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   wave** (2026-10-08 — ` / ` that morning, then *"put such a wave, but symmetrical both sides"*):
   `WaveGlyph`, seven mirrored white bars at the text's cap height, written `MicAnnouncer.wave`
   (U+E000) in the text and `〰` in logs and `startupBanner`. **The green tab names the engine too**,
-  after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main).
+  after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main). **A glint runs
+  along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
+  gentle"*): the bars sit at 50 % white and a soft two-bar bell of full white passes left to right every
+  1.6 s, the attachment redrawn at 30 fps while the tab is up (`BottomTab.startGlint`, `WaveGlyph.glint`).
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
   glyph, the tick and the recording to disagree. → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*

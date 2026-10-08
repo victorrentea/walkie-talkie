@@ -168,8 +168,13 @@ private final class BottomTab {
     private var tintView: NSView?
     private var motion: Timer?
     private var holdTimer: Timer?
+    /// The wave's glint, 30 fps while the tab shows a wave (`WaveGlyph.glint`).
+    private var glintTimer: Timer?
+    private var shownText = ""
 
     func show(_ text: String, tint: NSColor, hold: TimeInterval) {
+        shownText = text
+        startGlint()
         if let label, let panel, let tabView {
             label.attributedStringValue = Self.attributed(text)
             tintView?.layer?.backgroundColor = tint.cgColor
@@ -258,7 +263,30 @@ private final class BottomTab {
         holdTimer = t
     }
 
+    /// **A bright spot runs along the wave, microphone → engine** (2026-10-08,
+    /// Victor: *"a bit animated … from the microphone towards the
+    /// transcription … like a bright section moving, from left to right …
+    /// something gentle"*). The attachment is redrawn with the glint further on.
+    private func startGlint() {
+        glintTimer?.invalidate()
+        glintTimer = nil
+        guard shownText.contains(MicAnnouncer.wave) else { return }
+        let start = Date()
+        let t = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] tm in
+            guard let self, let label = self.label else {
+                if self?.panel == nil { tm.invalidate() }
+                return
+            }
+            let phase = Date().timeIntervalSince(start).truncatingRemainder(dividingBy: WaveGlyph.glintPeriod) / WaveGlyph.glintPeriod
+            label.attributedStringValue = Self.attributed(self.shownText, glint: CGFloat(phase))
+        }
+        RunLoop.main.add(t, forMode: .common)
+        glintTimer = t
+    }
+
     private func teardown() {
+        glintTimer?.invalidate()
+        glintTimer = nil
         panel?.orderOut(nil)
         panel = nil; tabView = nil; label = nil; tintView = nil
     }
@@ -280,7 +308,7 @@ private final class BottomTab {
     }
 
     /// White, centred, bold 40 — with `MicAnnouncer.wave` drawn as `WaveGlyph`.
-    private static func attributed(_ text: String) -> NSAttributedString {
+    private static func attributed(_ text: String, glint: CGFloat? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         para.alignment = .center
         para.lineBreakMode = .byTruncatingTail
@@ -289,7 +317,7 @@ private final class BottomTab {
         for (i, part) in text.components(separatedBy: MicAnnouncer.wave).enumerated() {
             if i > 0 {
                 let a = NSTextAttachment()
-                let img = WaveGlyph.image(height: font.capHeight * 1.25)
+                let img = WaveGlyph.image(height: font.capHeight * 1.25, glint: glint)
                 a.image = img
                 a.bounds = NSRect(x: 0, y: (font.capHeight - img.size.height) / 2,
                                   width: img.size.width, height: img.size.height)
@@ -336,12 +364,27 @@ private final class BottomTab {
 enum WaveGlyph {
     static let heights: [CGFloat] = [0.3, 0.6, 0.82, 1.0, 0.82, 0.6, 0.3]
 
-    static func image(height h: CGFloat) -> NSImage {
+    /// One pass of the glint, left to right, then again.
+    static let glintPeriod: TimeInterval = 1.6
+    /// The bars' brightness away from the glint.
+    static let dim: CGFloat = 0.5
+
+    /// `glint`: nil draws every bar white; 0…1 is where the bright spot is
+    /// along its pass — it enters left of the first bar and leaves right of
+    /// the last, a soft bell two bars wide, the rest at `dim`.
+    static func image(height h: CGFloat, glint: CGFloat? = nil) -> NSImage {
         let bar = max(2, (h * 0.11).rounded()), gap = max(2, (h * 0.12).rounded())
         let w = CGFloat(heights.count) * bar + CGFloat(heights.count - 1) * gap
         return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
-            NSColor.white.setFill()
+            let n = CGFloat(heights.count)
             for (i, k) in heights.enumerated() {
+                var alpha: CGFloat = 1
+                if let g = glint {
+                    let at = -1.5 + g * (n + 2)
+                    let d = (CGFloat(i) - at) / 1.1
+                    alpha = dim + (1 - dim) * exp(-d * d)
+                }
+                NSColor.white.withAlphaComponent(alpha).setFill()
                 let bh = (h * k).rounded()
                 let r = NSRect(x: CGFloat(i) * (bar + gap), y: ((h - bh) / 2).rounded(), width: bar, height: bh)
                 NSBezierPath(roundedRect: r, xRadius: bar / 2, yRadius: bar / 2).fill()
