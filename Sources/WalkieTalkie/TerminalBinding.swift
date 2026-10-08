@@ -1242,6 +1242,7 @@ final class TerminalBinding {
     @discardableResult
     static func bringToFront(_ target: Target) -> Bool {
         let pid: pid_t?
+        var windowAt: CGPoint?
         switch target.handle {
         case .terminalApp(let tty), .tmux(_, let tty):
             if case .tmux(let pane, _) = target.handle {
@@ -1261,7 +1262,8 @@ final class TerminalBinding {
                                 end try
                                 set selected of t to true
                                 set index of w to 1
-                                return "ok"
+                                set b to bounds of w
+                                return "ok " & (item 1 of b) & " " & (item 2 of b)
                             end if
                         end repeat
                     end try
@@ -1269,10 +1271,11 @@ final class TerminalBinding {
                 return ""
             end tell
             """
-            guard osascript(script) == "ok" else {
+            guard let answer = osascript(script), answer.hasPrefix("ok") else {
                 Log.error("🪟 no Terminal window is showing \(target.address) — nothing brought forward")
                 return false
             }
+            windowAt = Self.topLeft(answer)
             pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal")
                 .first?.processIdentifier
         case .ide:
@@ -1281,7 +1284,7 @@ final class TerminalBinding {
         case .keystroke(let p, _):
             pid = p
         }
-        guard let pid, let raised = raise(pid: pid) else { return false }
+        guard let pid, let raised = raise(pid: pid, windowAt: windowAt) else { return false }
         let (activated, axFront) = raised
         Log.info("🪟 \(target.address) brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
         return true
@@ -1289,21 +1292,56 @@ final class TerminalBinding {
 
     /// **The app in front, and its focused window raised** — the half of
     /// `bringToFront` after the window was put at index 1 inside its own app.
-    private static func raise(pid: pid_t) -> (Bool, AXError)? {
+    ///
+    /// **The window at `windowAt`, not the focused one** (2026-10-08, Victor, of
+    /// the reply pop-up's name: *"it brings in front the wrong terminal"*). Read
+    /// right after AppleScript put the tab's window at index 1, AX's
+    /// `kAXFocusedWindow` can still be the window that was key before — and
+    /// raising *that* is the wrong terminal coming forward. So the window is
+    /// picked by its top-left (AppleScript's `bounds`, the same top-left, y-down
+    /// space as `kAXPosition`); the focused window only when none matches.
+    private static func raise(pid: pid_t, windowAt: CGPoint? = nil) -> (Bool, AXError)? {
         guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
         let activated = app.activate(options: [])
         let element = AXUIElementCreateApplication(pid)
         let axFront = AXUIElementSetAttributeValue(element, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         // The window as well as the app: an application that comes forward with
         // no main window leaves him looking at a front with no caret in it.
-        var window: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &window) == .success,
-           let window, CFGetTypeID(window) == AXUIElementGetTypeID() {
-            let w = window as! AXUIElement
+        var chosen: AXUIElement?
+        if let at = windowAt {
+            var list: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXWindowsAttribute as CFString, &list) == .success,
+               let windows = list as? [AXUIElement] {
+                chosen = windows.first { w in
+                    var value: CFTypeRef?
+                    var p = CGPoint.zero
+                    guard AXUIElementCopyAttributeValue(w, kAXPositionAttribute as CFString, &value) == .success,
+                          let value, CFGetTypeID(value) == AXValueGetTypeID(),
+                          AXValueGetValue(value as! AXValue, .cgPoint, &p) else { return false }
+                    return abs(p.x - at.x) <= 2 && abs(p.y - at.y) <= 2
+                }
+            }
+            if chosen == nil { Log.info("🪟 no window of pid \(pid) at (\(Int(at.x)), \(Int(at.y))) — raising the focused one") }
+        }
+        if chosen == nil {
+            var window: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &window) == .success,
+               let window, CFGetTypeID(window) == AXUIElementGetTypeID() {
+                chosen = (window as! AXUIElement)
+            }
+        }
+        if let w = chosen {
             AXUIElementPerformAction(w, kAXRaiseAction as CFString)
             AXUIElementSetAttributeValue(w, kAXMainAttribute as CFString, kCFBooleanTrue)
         }
         return (activated, axFront)
+    }
+
+    /// `"ok <x> <y>"` from a script that answered a window's top-left.
+    private static func topLeft(_ answer: String) -> CGPoint? {
+        let parts = answer.split(separator: " ")
+        guard parts.count >= 3, let x = Double(parts[1]), let y = Double(parts[2]) else { return nil }
+        return CGPoint(x: x, y: y)
     }
 
     /// **The Terminal window showing this tty, in front and centred on the
@@ -1343,7 +1381,7 @@ final class TerminalBinding {
                             set bounds of w to {x, y, x + ww, y + hh}
                             set selected of t to true
                             set index of w to 1
-                            return "ok"
+                            return "ok " & x & " " & y
                         end if
                     end repeat
                 end try
@@ -1351,13 +1389,13 @@ final class TerminalBinding {
             return ""
         end tell
         """
-        guard osascript(script) == "ok" else {
+        guard let answer = osascript(script), answer.hasPrefix("ok") else {
             Log.error("🪟 no Terminal window is showing \(tty) — nothing centred")
             return false
         }
         guard let pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal")
                 .first?.processIdentifier,
-              let raised = raise(pid: pid) else { return false }
+              let raised = raise(pid: pid, windowAt: topLeft(answer)) else { return false }
         let (activated, axFront) = raised
         Log.info("🪟 \(tty) centred on \(screen.localizedName) and brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
         return true

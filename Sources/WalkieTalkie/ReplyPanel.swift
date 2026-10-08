@@ -49,10 +49,18 @@ enum ReplyPanel {
     /// What is on screen — `GET /test/state`.
     static var shown: String?
 
-    /// **A click on the terminal's name binds it** (Victor: *"if I click on it,
-    /// I will rebind my Walkie to that terminal … underlined if I hover it, in
-    /// the hand of the mouse"*) — `AppDelegate.rebindFromMenu`.
+    /// **The 📍 binds that terminal** (2026-10-08, Victor: *"the new icon … next
+    /// to the death face … would rebind me, but it only displays if I'm not
+    /// already bound to that terminal … the [pin] that shows caret"*) —
+    /// `AppDelegate.rebindFromMenu`, with the border flying into the chip.
+    /// It was the name's click until then.
     static var onBind: ((String) -> Void)?
+    /// Is Walkie bound to this tty right now — decides whether the 📍 is drawn.
+    static var isBound: ((String) -> Bool)?
+    /// **A click on the terminal's name brings it in front, where it is**
+    /// (2026-10-08, Victor: *"if I click the name of it, it's not rebind … it
+    /// brings in front the wrong terminal"*) — nothing is bound; the 📍 binds.
+    static var onRaise: ((String) -> Void)?
 
     /// **A click on the walkie puts that terminal in front, centred on the
     /// Retina, at once** (2026-10-08, Victor: *"if I click on the Walkie Talkie
@@ -100,14 +108,14 @@ enum ReplyPanel {
         header.cell?.truncatesLastVisibleLine = true
         header.font = NSFont.systemFont(ofSize: font.pointSize, weight: .semibold)
         header.textColor = NSColor.white.withAlphaComponent(0.6)
-        // **The click is the answer read: the panel goes** (Victor, 2026-10-08:
+        // **The click is the answer read: the pop-up goes** (Victor, 2026-10-08:
         // *"I clicked on the title … and it did not close the window. Should
-        // have."*), and the terminal's border flies into the chip.
+        // have."*), and that terminal comes in front — bound by the 📍 only.
         if let tty = tty {
             header.onClick = {
-                Log.info("💬 the answer's terminal clicked — binding \(tty), panel closed")
+                Log.info("💬 the reply pop-up's name clicked — \(tty) to the front, pop-up closed")
                 close()
-                onBind?(tty)
+                onRaise?(tty)
             }
         }
         // **Not selectable; a press on the words drags the panel** (2026-10-08,
@@ -132,14 +140,15 @@ enum ReplyPanel {
         icon.imageScaling = .scaleProportionallyUpOrDown
         if let tty = tty {
             icon.onClick = {
-                Log.info("💬 the answer's walkie clicked — \(tty) to the front, centred on the Retina, panel closed")
+                Log.info("💬 the reply pop-up's walkie clicked — \(tty) to the front, centred on the Retina, pop-up closed")
                 close()
                 onPresent?(tty)
             }
         }
         root.addSubview(icon)
         let textX = pad + iconSide + 6
-        let buttons: CGFloat = tty == nil ? 1 : 2
+        let pinned = tty.map { !(isBound?($0) ?? false) } ?? false
+        let buttons: CGFloat = tty == nil ? 1 : (pinned ? 3 : 2)
         header.frame = NSRect(x: textX, y: height - pad - headerH + 3,
                               width: inner - (textX - pad) - buttons * (iconSide + 6), height: 20)
         body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
@@ -156,12 +165,25 @@ enum ReplyPanel {
             let skull = ReplyCloseButton(frame: x.frame.offsetBy(dx: -(iconSide + 6), dy: 0))
             skull.glyph = "☠️"
             skull.onClick = {
-                Log.info("💬 the answer's ☠️ clicked — kamikaze to \(tty), panel closed")
+                Log.info("💬 the reply pop-up's ☠️ clicked — kamikaze to \(tty), pop-up closed")
                 close()
                 onKamikaze?(tty)
             }
             root.addSubview(skull)
             hot.append(skull.frame)
+            // **📍 left of the ☠️, only while another terminal is bound** — the
+            // caret's map pin (`Glyphs.mapPin`), not 💬.
+            if pinned {
+                let pin = ReplyCloseButton(frame: skull.frame.offsetBy(dx: -(iconSide + 6), dy: 0))
+                pin.image = Glyphs.mapPin(height: (iconSide * 0.6).rounded())
+                pin.onClick = {
+                    Log.info("💬 the reply pop-up's 📍 clicked — binding \(tty), pop-up closed")
+                    close()
+                    onBind?(tty)
+                }
+                root.addSubview(pin)
+                hot.append(pin.frame)
+            }
             let fit = min(header.frame.width, header.intrinsicContentSize.width)
             let link = NSRect(x: header.frame.minX, y: header.frame.minY, width: fit, height: header.frame.height)
             hot.append(link)
@@ -343,10 +365,17 @@ private final class InertLabel: NSTextField {
 private final class ReplyCloseButton: NSView {
     var onClick: (() -> Void)?
     var glyph: String?
+    /// A drawn picture in place of the glyph (the 📍's map pin).
+    var image: NSImage?
     private var hot = false
     override func draw(_ dirtyRect: NSRect) {
         NSColor.white.withAlphaComponent(hot ? 0.25 : 0.1).setFill()
         NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).fill()
+        if let image = image {
+            image.draw(in: NSRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
+                                  width: image.size.width, height: image.size.height))
+            return
+        }
         if let glyph = glyph {
             let a: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: bounds.height * 0.55)]
             let size = (glyph as NSString).size(withAttributes: a)

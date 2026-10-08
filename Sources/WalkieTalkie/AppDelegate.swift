@@ -1433,7 +1433,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         micId = InputDevice.chosenId
         // `walkie-reply` reads it; made now, not at the first answer.
         _ = Self.replyToken
-        ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the answer panel", fly: true) }
+        ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the reply pop-up", fly: true) }
+        ReplyPanel.isBound = { [weak self] tty in
+            self?.terminal.target?.address == (tty as NSString).lastPathComponent
+        }
+        ReplyPanel.onRaise = { [weak self] tty in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let target = self?.terminal.resolve(tty: tty) else {
+                    Log.error("🪟 no terminal on \(tty) — nothing brought forward")
+                    return
+                }
+                TerminalBinding.bringToFront(target)
+            }
+        }
         ReplyPanel.onPresent = { tty in
             DispatchQueue.global(qos: .userInitiated).async { TerminalBinding.presentOnRetina(tty: tty) }
         }

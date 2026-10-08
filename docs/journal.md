@@ -15374,3 +15374,14 @@ condensed to fit the time estimated for the flight."*
 - **Not for** an anchored dress, a pinned canvas, or the film (placed by the pointer, not by `aim`):
   those keep the Reverse tunnel. `WT_HALO_FLIGHT=0` restores the tunnel for every bound sentence.
 - **Not docked** on the prompt panel, same exception as the tunnel (2026-10-07).
+
+## The caret prompt flies too; a bow, then a loading orbit; the reply pop-up's 📍 (2026-10-08)
+
+- Victor: *"Unify the experience … if I prompt at caret … I don't want to see the reverse tunnel …
+  move on a certain trajectory towards the center of the recipient window, and then there start
+  circling like a loading icon … a bit elliptical."* The bound flight now covers caret prompts, bows
+  (`RewindTimeline.arc`, 0.3 × the distance) and circles the window's centre once arrived
+  (`RewindTimeline.orbit`, 50 pt, 1.2 s a turn).
+- Victor named the answer panel the **reply pop-up**. Its name now only brings the terminal in front;
+  a 📍 left of ☠️ binds, shown only when not already bound there. The *wrong terminal* was AX's stale
+  focused window being raised; `raise(pid:windowAt:)` picks the window by position.

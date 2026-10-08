@@ -174,6 +174,22 @@ scriem în clipboard la final promptul sau dictarea curată, indiferent ce și c
 
 ## The agent answers a dictated question beside the pointer (2026-10-07, `ReplyPanel`)
 
+**Its name is the reply pop-up** (2026-10-08, Victor: *"Let's call it reply pop-up. Make sure we align
+the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's …`.
+
+- **Name = in front, 📍 = bind** (2026-10-08, *"if I click the name … it's not rebind … it brings in
+  front the wrong terminal … the new icon … next to the death face … would rebind me, but it only
+  displays if I'm not already bound to that terminal … the [pin] that shows caret"*). A click on the
+  name brings that terminal forward where it is (`ReplyPanel.onRaise` → `resolve(tty:)` →
+  `bringToFront`), binds nothing. **📍** (`Glyphs.mapPin`, drawn) sits left of ☠️, only when Walkie is
+  not bound to that tty (`ReplyPanel.isBound`); it binds with the border flight (`onBind` →
+  `rebindFromMenu(fly:)`). The bullets below that say the name binds are superseded.
+- **The wrong terminal came forward because AX's focused window was stale**: `raise(pid:)` raised
+  `kAXFocusedWindow` right after AppleScript put the tab's window at index 1, which can still be the
+  previous key window. `bringToFront` and `presentOnRetina` now answer the window's top-left and
+  `raise(pid:windowAt:)` raises the AX window at that `kAXPosition` (focused one only when none matches;
+  log `🪟 no window of pid … at (x, y)`).
+
 Victor: *"when I am asking directly a question … the agent is able to reach me back … a bit of a
 panel that appears next to the mouse carrying the response … super important to be brief"*, then
 *"if my mouse doesn't move, that should don't start any timer … having an X icon in the corner for
