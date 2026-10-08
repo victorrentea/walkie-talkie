@@ -414,15 +414,16 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   take backwards at `rewindSpeed` (one pass over the prediction, then looping). Not docked on the
   prompt panel — it ends on the terminal like the tunnel. Anything else bound keeps the Reverse
   tunnel; `WT_HALO_FLIGHT=0` brings it back. Log `⏪ the rewind: … — flying from the pointer to the terminal`.
-- **A prompt at the caret flies too, and both bow and then circle** (2026-10-08, Victor: *"Unify
-  the experience … if I prompt at caret … I don't want to see the reverse tunnel … [the effect] would
-  move on a certain trajectory towards the center of the recipient window, and then there start
-  circling like a loading icon … a bit elliptical"*). `CaretHalo.flies` covers `.caret` as well as
-  `.bound` (his caret dress is Smoke); the path is `RewindTimeline.arc` — straight line plus a
-  sideways bulge `bow` 0.3 × the length at the middle, **always down the screen — concave, a ∪ under the line** (same afternoon: *"should be concave"*; left of travel for one build) — and past the prediction
-  `RewindTimeline.orbit`: clockwise round the window's centre, `orbitRadius` 50 pt, one turn per
-  `orbitPeriod` 1.2 s, opening over `orbitGrow` 0.4 s. The Reverse tunnel is left only for a dress
-  that cannot ride (and the spawn keeps Sparks).
+- **A prompt at the caret flies too; only the dust waves and circles** (2026-10-08, Victor: *"Unify
+  the experience … if I prompt at caret … I don't want to see the reverse tunnel"*, then *"Only the
+  dust effect should go circle … the tendrils … go straight to the target. The dust should be more
+  fluid … going on an oscillation towards the destination, and then there it circles around"*).
+  `CaretHalo.flies` covers `.caret` as well as `.bound`. A dress with a trail or fluid (`hasTrail` —
+  his caret Smoke) follows `RewindTimeline.wave` (2 sine periods across the line, amplitude 0.12 × the
+  length ≤ 120 pt, zero at both ends) and past the prediction `RewindTimeline.orbit` (clockwise, 50 pt,
+  1.2 s a turn, opening over 0.4 s); any other (Tendrils) goes straight and stays on the centre. The
+  afternoon's bow (*"a bit elliptical"*, then *"concave"*) is gone. The Reverse tunnel is left only
+  for a dress that cannot ride (and the spawn keeps Sparks).
 - **The take is kept for every destination** (2026-09-30): the call ran for all since 09-23, but
   `settleTake` was still `latchedAtCaret ? lastTake() : []`, so every bound sentence logged `⏪ no
   rewind — only 0 samples`.

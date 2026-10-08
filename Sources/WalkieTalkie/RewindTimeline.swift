@@ -195,26 +195,31 @@ enum RewindTimeline {
         return u * u * (3 - 2 * u)
     }
 
-    /// **Not straight there — a bow, like half an ellipse** (2026-10-08, Victor,
-    /// for a prompt at the caret, then for both: *"the trajectory shouldn't be
-    /// necessarily direct; should be a bit elliptical towards the center of the
-    /// recipient"*). The straight line from `a` to `b` plus a sideways bulge of
-    /// `bow` × its length at the middle (`sin(π·p)`).
+    /// **The dust oscillates its way there; everything else goes straight**
+    /// (2026-10-08, the third ask of the afternoon, Victor: *"Only the dust
+    /// effect should go circle … the tendrils … go straight to the target. The
+    /// dust should be more fluid … going on an oscillation towards the
+    /// destination, and then there it circles around. Only that."*). Superseded
+    /// the same afternoon: a bow like half an ellipse for every effect (*"a bit
+    /// elliptical"*), then that bow made concave (*"should be concave"*).
     ///
-    /// **Concave: it sags** (same afternoon, Victor: *"the trajectory … to the
-    /// recipient app center should be concave"*) — the bulge always goes down
-    /// the screen (Cocoa's y up, so the perpendicular whose y is negative), a ∪
-    /// under the straight line whichever way it travels; it went to the left of
-    /// travel for one build, which was a hump half the time. Straight up or down
-    /// there is no "down" to the side: it bows left.
-    static func arc(from a: CGPoint, to b: CGPoint, progress p: Double) -> CGPoint {
+    /// The straight line from `a` to `b` plus a sideways sine, `waves` whole
+    /// periods along it, its amplitude `waveShare` × the length (at most
+    /// `waveMax` pt) under a `sin(π·p)` envelope — nothing at either end, so it
+    /// leaves the pointer and meets the orbit without a kink.
+    static func wave(from a: CGPoint, to b: CGPoint, progress p: Double) -> CGPoint {
         let dx = b.x - a.x, dy = b.y - a.y, q = CGFloat(p)
-        // (−dy, dx) is left of travel; flip it if that points up.
-        let side: CGFloat = dx > 0 ? -1 : 1
-        let bulge = CGFloat(bow * sin(.pi * p)) * side
-        return CGPoint(x: a.x + dx * q - dy * bulge, y: a.y + dy * q + dx * bulge)
+        let length = hypot(dx, dy)
+        guard length > 0 else { return a }
+        let amplitude = min(CGFloat(waveShare) * length, waveMax)
+        let off = amplitude * CGFloat(sin(.pi * p) * sin(2 * .pi * waves * p))
+        // The unit perpendicular, left of travel.
+        let nx = -dy / length, ny = dx / length
+        return CGPoint(x: a.x + dx * q + nx * off, y: a.y + dy * q + ny * off)
     }
-    static let bow = 0.3
+    static let waves = 2.0
+    static let waveShare = 0.12
+    static let waveMax: CGFloat = 120
 
     /// **Arrived, it circles like a loading icon** (same message: *"and then
     /// there start circling like a loading icon"*): clockwise round `c`, one

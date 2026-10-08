@@ -1365,17 +1365,21 @@ final class CaretHalo {
     ///
     /// **A bound or caret prompt's own effect flies there instead** (2026-10-08)
     /// — see `flies`: from the pointer latched at the close to the window's
-    /// centre on a bow (`RewindTimeline.arc`, on `flight`'s clock), then round
-    /// it like a loading icon (`orbit`) until the words land. Until the window
+    /// centre on `flight`'s clock — straight, or for the dust (`hasTrail`) on a
+    /// wave (`RewindTimeline.wave`) and then round it like a loading icon
+    /// (`orbit`) until the words land. Until the window
     /// answers it waits on the pointer.
     private var rewindPoint: NSPoint? {
         if flies, let from = rewindStart, let to = rewindAim {
             let t = CFAbsoluteTimeGetCurrent() - rewindFrom
             let span = max(rewindEstimate, RewindTimeline.minimumSpan)
-            if t < span {
-                return RewindTimeline.arc(from: from, to: to,
-                                          progress: RewindTimeline.flight(elapsed: t, predicted: rewindEstimate))
+            let p = RewindTimeline.flight(elapsed: t, predicted: rewindEstimate)
+            // Only the dust (a trail or fluid effect) oscillates and then circles;
+            // Tendrils and the rest go straight and stay (2026-10-08).
+            guard rewindStyle.hasTrail else {
+                return NSPoint(x: from.x + (to.x - from.x) * CGFloat(p), y: from.y + (to.y - from.y) * CGFloat(p))
             }
+            if t < span { return RewindTimeline.wave(from: from, to: to, progress: p) }
             return RewindTimeline.orbit(around: to, since: t - span)
         }
         return rewindAim ?? rewindStart
@@ -1488,8 +1492,9 @@ final class CaretHalo {
     /// the experience … if I prompt at caret … I don't want to see the reverse
     /// tunnel … the [caret's] effect would move on a certain trajectory towards
     /// the center of the recipient window, and then there start circling like a
-    /// loading icon … a bit elliptical"*) — and since then both bow on the way
-    /// (`RewindTimeline.arc`) and circle once there (`RewindTimeline.orbit`).
+    /// loading icon … a bit elliptical"*). Since the third ask that afternoon
+    /// only the dust (`hasTrail`) waves its way there (`RewindTimeline.wave`)
+    /// and circles (`RewindTimeline.orbit`); Tendrils and the rest go straight.
     /// `WT_HALO_FLIGHT=0` brings the tunnel back for both.
     private var flies: Bool {
         (destination == .bound || destination == .caret) && !Self.flightOff

@@ -207,20 +207,19 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(RewindTimeline.flight(elapsed: 0.6, predicted: 0.1), 1)                 // minimumSpan
     }
 
-    /// 2026-10-08: the flight bows to one side, then circles the window's centre.
-    func testFlightBowsThenOrbits() {
+    /// 2026-10-08: the dust oscillates to the window, then circles its centre.
+    func testFlightOscillatesThenOrbits() {
         let a = CGPoint(x: 0, y: 0), b = CGPoint(x: 100, y: 0)
-        XCTAssertEqual(RewindTimeline.arc(from: a, to: b, progress: 0), a)
-        let end = RewindTimeline.arc(from: a, to: b, progress: 1)
+        XCTAssertEqual(RewindTimeline.wave(from: a, to: b, progress: 0), a)
+        let end = RewindTimeline.wave(from: a, to: b, progress: 1)
         XCTAssertEqual(end.x, 100, accuracy: 1e-9)
         XCTAssertEqual(end.y, 0, accuracy: 1e-9)
-        let mid = RewindTimeline.arc(from: a, to: b, progress: 0.5)
-        XCTAssertEqual(mid.x, 50, accuracy: 1e-9)
-        XCTAssertEqual(mid.y, -30, accuracy: 1e-9)                   // sags below the line, 0.3 × the length
-        let back = RewindTimeline.arc(from: b, to: a, progress: 0.5)
-        XCTAssertEqual(back.y, -30, accuracy: 1e-9)                  // concave whichever way it travels
-        let up = RewindTimeline.arc(from: a, to: CGPoint(x: 100, y: 100), progress: 0.5)
-        XCTAssertLessThan(up.y, 50)                                  // below the diagonal's middle
+        // two waves: off the line to one side, then the other, back on it at the middle
+        XCTAssertGreaterThan(RewindTimeline.wave(from: a, to: b, progress: 0.125).y, 1)
+        XCTAssertLessThan(RewindTimeline.wave(from: a, to: b, progress: 0.375).y, -1)
+        XCTAssertEqual(RewindTimeline.wave(from: a, to: b, progress: 0.5).y, 0, accuracy: 1e-9)
+        let far = RewindTimeline.wave(from: .zero, to: CGPoint(x: 5000, y: 0), progress: 0.375)
+        XCTAssertLessThanOrEqual(abs(far.y), RewindTimeline.waveMax)        // capped on a long flight
         XCTAssertEqual(RewindTimeline.orbit(around: b, since: 0), b)  // lands without a jump
         for t in [0.5, 1.0, 1.7] {
             let p = RewindTimeline.orbit(around: b, since: t)
