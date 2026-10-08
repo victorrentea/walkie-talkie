@@ -5235,14 +5235,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Point a sentence aimed at the bound terminal at the caret instead — the
     /// other half of `aimAtBoundTerminal`, see `toggleDictation`. It becomes
     /// what 🔼 would have opened: the caret **prompt**, envelope and all (a
-    /// plain sentence that was redirected goes back to being plain words).
+    /// plain sentence that was redirected goes back to being plain words —
+    /// unless something is attached to it by now: then it stays a prompt).
     private func aimAtCaret() {
         pasteMode = true
-        if cleanSentence { cleanRedirected = false } else { caretPrompt = true }
+        var stillPrompt = false
+        if cleanSentence {
+            // **Once it carries an attachment there is no way back to plain**
+            // (2026-10-08). Victor: *"once I'm in the prompting mode, then I
+            // have any of these attached … It will be unable for me to get back
+            // into the plain dictation mode."* Plain words would drop them, so
+            // it becomes what 🔼 would have opened: the caret prompt.
+            if hasAttachments {
+                stillPrompt = true
+                cleanSentence = false
+                cleanRedirected = false
+                submitAfterClean = false
+                caretPrompt = true
+            } else {
+                cleanRedirected = false
+            }
+        } else {
+            caretPrompt = true
+        }
         overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph)
         syncBorrowedGestures()
-        overlay.flash("↩️ to the caret", duration: 1.5)
-        Log.info("↩️ redirected mid-sentence — these words go to the caret, not the bound terminal")
+        overlay.flash(stillPrompt ? "↩️ to the caret — still a prompt (it has attachments)" : "↩️ to the caret",
+                      duration: stillPrompt ? 2.5 : 1.5)
+        Log.info("↩️ redirected mid-sentence — these words go to the caret, not the bound terminal"
+                 + (stillPrompt ? "; a plain sentence turned prompt keeps its attachments, so it stays a prompt" : ""))
+    }
+
+    /// Anything attached to the open sentence — pictures (taken or on their
+    /// way), a film, highlights, typed notes, picks.
+    private var hasAttachments: Bool {
+        if film != nil || !pendingFilms.isEmpty { return true }
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return picturesTaken > 0 || !pendingShots.isEmpty || pendingScreen != nil
+            || pendingSelection != nil || !pendingExtraSelections.isEmpty || !pendingPicks.isEmpty
     }
 
     /// Point a caret sentence at the terminal the relay was bound to last, and
@@ -6651,6 +6682,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash("🎬 start dictating first — a recording rides a sentence", duration: 4)
             return
         }
+        if refusesAttachment("🎬 the screen recording") {
+            overlay.flash(Self.plainAttachesNothing, duration: 3)
+            return
+        }
         guard let started = ScreenFilm.start() else {
             overlay.flash("⚠️ could not start the recording", duration: 5)
             return
@@ -6840,6 +6875,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !answeringInBackground else { return }
         syncLocalNow()
         let live = hasDestination && listening
+        // **A plain dictation attaches nothing; a prompt attaches everything**
+        // (2026-10-08). Victor: *"If I am in plain dictation mode, there
+        // shouldn't be possible to take photos … Nor select text … Just plain
+        // dictation mode. However … I can switch into the prompting mode."*
+        // `relayPromptOpen` is what tells the tap a plain sentence has been
+        // turned into a prompt (🔼 →, 🔼 ↑ — `cleanRedirected`), so the same
+        // read, `cleanSentenceOpen`, refuses before the switch and lets through
+        // after it. Written before `attachable` is read.
+        hotkeys.relayPromptOpen = listening && !(cleanSentence && !cleanRedirected)
+        let attachable = live && !hotkeys.cleanSentenceOpen
         // **Replace Wispr borrows them too, since 2026-09-08.** It did not until
         // then, and the argument was that both buttons are taken in order to
         // *add to a message* while that mode has no message — one string, going
@@ -6869,15 +6914,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.ownDictation = listening || source.isRecording || speculative || settling
         hotkeys.ownMicOpen = listening || source.isRecording || speculative
         hotkeys.sentenceQueueAccepts = Self.sentenceQueueOn && queueRefusal() == nil
-        picker.dictating = live
+        picker.dictating = attachable
         // The in-page badge that says ⌘⇧ is live — the chip's old `⌘⇧` row,
         // drawn by the extension since 2026-10-07 (`inspect.js`, `showBadge`).
-        music.setPickable(live)
+        music.setPickable(attachable)
         // The halves as well as the verdict, so a refused ⌘⇧ can name the one
         // that was missing rather than saying an undivided no — see
         // `ElementPicker.listening`.
         picker.listening = listening
         picker.bound = hasDestination
+        picker.plain = live && !attachable
         // **The ring round the pointer rides the same switch**, and deliberately
         // on `listening` rather than on `live`: since 2026-09-11 it answers *is
         // it hearing me?*, and the microphone is either open or it is not —
@@ -7068,7 +7114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // It has to settle over two seconds first, which is longer than that
         // gesture survives in practice, and the receipt says so on the chip
         // before a word is pasted.
-        syncSelectionWatch(live)
+        syncSelectionWatch(attachable)
     }
 
     // MARK: - The bound terminal
@@ -9717,6 +9763,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to the chip takes `stateLock` from the main queue — the two together
         // are a deadlock with a highlight on one side of it. The cost of asking
         // for a highlight that turns out to be a repeat is one AX call.
+        if refusesAttachment("👁 the highlight") { return }
         let source = WindowContext.describe()
         stateLock.lock()
         // The probe outliving its dictation — the same guard the shutter's ⌘C
@@ -9874,6 +9921,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("⌨️ 🔽 ↓ — no prompt recording, no typing box")
             return
         }
+        if refusesAttachment("⌨️ the typing box") { return }
         let moment = Date()
         TypeInBox.show(at: cursor) { [weak self] text in
             self?.fileTyped(text, at: moment, opened: opened)
@@ -9974,6 +10022,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mark?(kind, number)
     }
 
+    /// **A plain dictation attaches nothing** (2026-10-08) — the one read every
+    /// attachment door asks: the shutter, the crop, a ⌘⇧ pick, a highlight, a
+    /// film, the typing box. Victor: *"If I am in plain dictation mode, there
+    /// shouldn't be possible to take photos … Nor select text … Just plain
+    /// dictation mode."* `HotkeyTap.cleanSentenceOpen` is lock-guarded, so any
+    /// thread may ask, and it turns false the moment the sentence becomes a
+    /// prompt (🔼 →, 🔼 ↑ — `relayPromptOpen`).
+    private func refusesAttachment(_ what: String) -> Bool {
+        guard hotkeys.cleanSentenceOpen else { return false }
+        Log.info("\(what) refused — a plain dictation attaches nothing (🔼 → or 🔼 ↑ makes it a prompt)")
+        return true
+    }
+
+    static let plainAttachesNothing = "🧼 Plain dictation — 🔼 → makes it a prompt"
+
     private func plusOneShot(cursor: NSPoint) {
         guard hasDestination else { return }
         // **A plain dictation takes no picture, at the start or at the end**
@@ -9981,10 +10044,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The back click is its stop, not a shutter, already; this closes the
         // other door, ⌃⌥P. Asked of the tap's arm, which is lock-guarded — this
         // runs off the main thread, where `cleanSentence` lives.
-        if hotkeys.cleanSentenceOpen {
-            Log.info("📸 refused — a plain dictation (back click) takes no pictures")
-            return
-        }
+        if refusesAttachment("📸 the shutter") { return }
         // Sampled at the gesture, like the cursor and for the same reason: by the
         // time `screencapture` returns, a subprocess later, the moment he pressed
         // at is a second in the past — and a second is a whole sentence.
@@ -10118,6 +10178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// second or two he should not be charged for.
     private func areaShot(from anchor: NSPoint, at takenAt: Date) {
         guard hasDestination else { return }
+        if refusesAttachment("✂️ the area crop") { return }
         // Sampled with the gesture, like the shutter's: by the time the box is
         // drawn the front window may be one he switched to in order to frame it.
         let source = WindowContext.describe()
@@ -10231,6 +10292,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// code ran. A second receipt across the screen would be the same news, later
     /// and further away. What this adds is the running total, in the chip.
     private func record(_ pick: ElementPick) {
+        if refusesAttachment("🎯 the ⌘⇧ pick") { return }
         stateLock.lock()
         // **A drag amends the press that started it, rather than arriving beside
         // it.** The extension picks on the *press* — the outline turns green

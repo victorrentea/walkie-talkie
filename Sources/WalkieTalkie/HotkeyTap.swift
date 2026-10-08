@@ -230,12 +230,28 @@ final class HotkeyTap {
     /// no longer listens on that pair.)
     private var enginePairHeld = false
 
-    /// A clean sentence is open, whichever engine is hearing it.
+    /// **The relay's open sentence is a prompt** — written by
+    /// `AppDelegate.syncBorrowedGestures`, `listening` and not plain. It is
+    /// what tells a plain sentence turned into a prompt mid-way (🔼 →, 🔼 ↑)
+    /// from one still plain: the arm and `ownCleanSentence` stay up for the
+    /// whole sentence, so without it the back button stayed its stop and every
+    /// attachment stayed refused after the switch (2026-10-08).
+    var relayPromptOpen: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return relayPromptOpenFlag }
+        set { stateLock.lock(); relayPromptOpenFlag = newValue; stateLock.unlock() }
+    }
+    private var relayPromptOpenFlag = false
+
+    /// A clean sentence is open, whichever engine is hearing it — and still
+    /// plain: one turned into a prompt is not (`relayPromptOpen`). **Every
+    /// attachment refuses on this** (2026-10-08): the context frame, the
+    /// shutter, the crop, ⌘⇧ picks, highlights, films, the typing box.
     var cleanSentenceOpen: Bool {
         stateLock.lock()
         let own = ownDictationFlag && ownCleanSentenceFlag
+        let prompt = relayPromptOpenFlag
         stateLock.unlock()
-        return own || backStopsWispr
+        return !prompt && (own || backStopsWispr)
     }
 
     /// **Which of Wispr Flow's two start gestures was seen**, and the whole of
@@ -1773,6 +1789,9 @@ final class HotkeyTap {
             let bare = !event.flags.contains(.maskCommand) && !event.flags.contains(.maskControl)
                     && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
             guard dictating, bare, !promptHeld, !leftIsHeld, !rightIsHeld else { return false }
+            // **A plain dictation crops nothing** (2026-10-08) — the press goes
+            // on as at rest. Last: it samples Wispr's microphone.
+            guard !cleanSentenceOpen else { return false }
             areaAnchor = NSEvent.mouseLocation
             areaAnchorCG = event.location
             areaPressedAt = Date()
@@ -3715,8 +3734,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // the same call the menu's Disconnect row makes, so the gesture and
             // the row cannot drift apart.
             case VK_F12:
-                let wisprSentence = backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation)
-                let ownClean = !wisprSentence && ownDictation && ownCleanSentence
+                // A plain sentence turned into a prompt is a prompt here: the typing box.
+                let promoted = relayPromptOpen
+                let wisprSentence = !promoted && (backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation))
+                let ownClean = !promoted && !wisprSentence && ownDictation && ownCleanSentence
                 if wisprSentence || (ownClean && ownMicOpen) {
                     return plainToggle(gesture, type, event)
                 }
@@ -3836,10 +3857,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // otherwise be a picture.
             case VK_F6:
                 let f6Now = CACurrentMediaTime()
-                let wisprSentence = backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation)
+                // **A plain sentence turned into a prompt (🔼 →, 🔼 ↑) is a
+                // prompt from then on** (2026-10-08): this button is its shutter,
+                // and 🔼 its stop — Victor: *"I can switch into the prompting
+                // mode … then I have any of these attached"*.
+                let promoted = relayPromptOpen
+                let wisprSentence = !promoted && (backStopsWispr || (wisprMicIsOpen?() == true && !ownDictation))
                 // A clean sentence on the relay's own engine is this button's
                 // stop too (2026-09-25), never its shutter.
-                let ownClean = !wisprSentence && ownDictation && ownCleanSentence
+                let ownClean = !promoted && !wisprSentence && ownDictation && ownCleanSentence
                 if !wisprSentence, !ownClean, dictating, ownDictation {
                     let cursor = NSEvent.mouseLocation
                     DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }

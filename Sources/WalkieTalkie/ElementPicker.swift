@@ -653,6 +653,15 @@ final class ElementPicker {
     }
     private var listeningFlag = false
 
+    /// **A plain dictation is open** (2026-10-08) — the third reason `dictating`
+    /// can be false with both halves true: plain words carry no picks. Only so
+    /// the refusal can say so.
+    var plain: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return plainFlag }
+        set { stateLock.lock(); plainFlag = newValue; stateLock.unlock() }
+    }
+    private var plainFlag = false
+
     /// Is there anywhere for a dictation to go — a bound terminal, a pending
     /// spawn, or paste mode (`AppDelegate.hasDestination`).
     var bound: Bool {
@@ -762,7 +771,7 @@ final class ElementPicker {
         // *during* a dictation, i.e. after the edge it exists to deliver.
         case ("GET", "/up"):
             respond(conn, 200, ["ok": true, "session": SessionLabel.value,
-                                "dictating": dictating, "listening": listening, "bound": bound])
+                                "dictating": dictating, "listening": listening, "bound": bound, "plain": plain])
 
         // Reload the unpacked Chrome extension, from the one place that can:
         // inside Chrome. `curl -X POST localhost:8917/chrome/reload` after an

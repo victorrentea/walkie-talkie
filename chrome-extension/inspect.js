@@ -400,6 +400,7 @@
       !refusal      ? '<b>⚠ Walkie Talkie is not running</b>'
       : !refusal.bound     ? '<b>⚠ no terminal bound</b> <i>— bind one, then dictate</i>'
       : !refusal.listening ? '<b>⚠ not recording</b> <i>— ⌘⇧ is Chrome&rsquo;s outside a dictation</i>'
+      : refusal.plain      ? '<b>⚠ plain dictation</b> <i>— 🔼 → makes it a prompt</i>'
       : '<b>⚠ the relay refused the pick</b>';
     Object.assign(ui.tag.style, { left: `${mouse.x + 16}px`, top: `${mouse.y + 16}px` });
     clearTimeout(refuseTimer);
