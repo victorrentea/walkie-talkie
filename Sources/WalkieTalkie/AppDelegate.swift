@@ -1437,6 +1437,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ReplyPanel.onPresent = { tty in
             DispatchQueue.global(qos: .userInitiated).async { TerminalBinding.presentOnRetina(tty: tty) }
         }
+        ReplyPanel.onKamikaze = { [weak self] tty in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let target = self?.terminal.resolve(tty: tty)
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    guard let target = target else { self.kamikazeNotSent(to: tty); return }
+                    Log.info("☠️ kamikaze — sent from the answer panel to \(target.address)")
+                    self.overlay.flash("☠️ Kamikaze sent", duration: 1.5)
+                    self.sendKamikaze(to: target)
+                }
+            }
+        }
         micAnnouncer.start()
         // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
         // the row and the gesture must not be able to drift apart. It exists for

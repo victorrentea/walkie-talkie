@@ -195,3 +195,13 @@ me to dismiss it explicitly"*.
   first-mouse) or a click on the name — no clock, no bar**. **A newer answer queues behind it** and comes up at the pointer once it is closed (2026-10-08: *"să nu apară una peste alta … pe rând, stau la coadă"*); log `… queued behind the open one — N waiting` (Victor: *"NO PROGRESSBAR. i have to manually
   dismiss it"*; a countdown that started when the pointer moved lived for one build). Log `💬 answer
   from <from> — N chars; up until the ✕`, `💬 answer dismissed (✕)`.
+- **☠️ left of the ✕ = kamikaze to that session** (2026-10-08, Victor: *"to the left of the X … an
+  emoji with a skull … with a click, it sends kamikaze back to the session that sent this message"*):
+  shown only when the answer names a tty; closes the panel, `TerminalBinding.resolve(tty:)` (bind's
+  lookup without the binding) → `sendKamikaze` — the shell guard still stands; no tab → `kamikazeNotSent`.
+  Log `💬 the answer's ☠️ clicked`, `☠️ kamikaze — sent from the answer panel to ttysNNN`.
+- **The panel is a surface, not a document** (2026-10-08, *"drag the little window … by clicking on the
+  text and the text shouldn't be selectable"*): the words are an `InertLabel` (not selectable, no hit),
+  a press anywhere off the four clickables is `performDrag`; `ReplyRoot` sets the **arrow** over the
+  panel (*"the mouse has the icon from what's underneath"* — Chrome's I-beam won through), leaving
+  the hand to the walkie, the name, ☠️ and ✕ (`ReplyRoot.hot`).

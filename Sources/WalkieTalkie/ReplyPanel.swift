@@ -61,6 +61,12 @@ enum ReplyPanel {
     /// Nothing is bound; the name is the link that binds.
     static var onPresent: ((String) -> Void)?
 
+    /// **The ☠️ left of the ✕ sends that session `kamikaze`** (2026-10-08,
+    /// Victor: *"to the left of the X … an emoji with a skull … with a click, it
+    /// sends kamikaze back to the session that sent this message"*) — the
+    /// answer was the last thing he needed from it. Closes the panel.
+    static var onKamikaze: ((String) -> Void)?
+
     static func show(_ raw: String, from label: String?, tty: String? = nil) {
         guard Thread.isMainThread else {
             DispatchQueue.main.async { show(raw, from: label, tty: tty) }
@@ -104,14 +110,19 @@ enum ReplyPanel {
                 onBind?(tty)
             }
         }
-        let body = NSTextField(wrappingLabelWithString: text)
+        // **Not selectable; a press on the words drags the panel** (2026-10-08,
+        // Victor: *"I should be able to drag the little window … by clicking
+        // on the text and the text shouldn't be selectable"*) — the label
+        // passes the click through to `ReplyRoot`.
+        let body = InertLabel(wrappingLabelWithString: text)
+        body.isSelectable = false
         body.font = font
         body.textColor = .white
         body.preferredMaxLayoutWidth = inner - 18
         let bodySize = body.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
         let height = pad + headerH + 6 + ceil(bodySize.height) + pad
 
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: width, height: height))
+        let root = ReplyRoot(frame: NSRect(x: 0, y: 0, width: width, height: height))
         root.wantsLayer = true
         root.layer?.cornerRadius = 10
         root.layer?.masksToBounds = true
@@ -128,7 +139,9 @@ enum ReplyPanel {
         }
         root.addSubview(icon)
         let textX = pad + iconSide + 6
-        header.frame = NSRect(x: textX, y: height - pad - headerH + 3, width: inner - (textX - pad) - iconSide - 6, height: 20)
+        let buttons: CGFloat = tty == nil ? 1 : 2
+        header.frame = NSRect(x: textX, y: height - pad - headerH + 3,
+                              width: inner - (textX - pad) - buttons * (iconSide + 6), height: 20)
         body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
         root.addSubview(body)
@@ -137,6 +150,22 @@ enum ReplyPanel {
         let x = ReplyCloseButton(frame: NSRect(x: width - pad - iconSide, y: height - pad - headerH, width: iconSide, height: iconSide))
         x.onClick = { Log.info("💬 answer dismissed (✕)"); close() }
         root.addSubview(x)
+        var hot = [x.frame]
+        if tty != nil { hot.append(icon.frame) }
+        if let tty = tty {
+            let skull = ReplyCloseButton(frame: x.frame.offsetBy(dx: -(iconSide + 6), dy: 0))
+            skull.glyph = "☠️"
+            skull.onClick = {
+                Log.info("💬 the answer's ☠️ clicked — kamikaze to \(tty), panel closed")
+                close()
+                onKamikaze?(tty)
+            }
+            root.addSubview(skull)
+            hot.append(skull.frame)
+            let fit = min(header.frame.width, header.intrinsicContentSize.width)
+            hot.append(NSRect(x: header.frame.minX, y: header.frame.minY, width: fit, height: header.frame.height))
+        }
+        root.hot = hot
 
         let p = NSPanel(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
@@ -234,14 +263,50 @@ private func _CGSDefaultConnection() -> Int32
 @_silgen_name("CGSSetConnectionProperty")
 private func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFString, _ value: CFTypeRef) -> Int32
 
-/// The ✕ — drawn, not an `NSButton`: a button in a non-activating panel looks
-/// disabled and eats the first click.
+/// **The panel's own surface: an arrow, and a press drags it** (2026-10-08).
+/// The arrow because the window server keeps the frontmost app's cursor —
+/// Victor saw Chrome's under the panel (*"the mouse has the icon from what's
+/// underneath"*); `hot` are the clickable rects, where the hand is theirs.
+private final class ReplyRoot: NSView {
+    var hot: [NSRect] = []
+    private func arrow(_ event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        if !hot.contains(where: { $0.contains(p) }) { NSCursor.arrow.set() }
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for a in trackingAreas { removeTrackingArea(a) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+    override func cursorUpdate(with event: NSEvent) { arrow(event) }
+    override func mouseEntered(with event: NSEvent) { arrow(event) }
+    override func mouseMoved(with event: NSEvent) { arrow(event) }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+}
+
+/// The answer's words: never the target of a click, so a press on them is
+/// `ReplyRoot`'s drag and no selection starts.
+private final class InertLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// The ✕ (and, with a `glyph`, the ☠️) — drawn, not an `NSButton`: a button in
+/// a non-activating panel looks disabled and eats the first click.
 private final class ReplyCloseButton: NSView {
     var onClick: (() -> Void)?
+    var glyph: String?
     private var hot = false
     override func draw(_ dirtyRect: NSRect) {
         NSColor.white.withAlphaComponent(hot ? 0.25 : 0.1).setFill()
         NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).fill()
+        if let glyph = glyph {
+            let a: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: bounds.height * 0.55)]
+            let size = (glyph as NSString).size(withAttributes: a)
+            (glyph as NSString).draw(at: NSPoint(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2), withAttributes: a)
+            return
+        }
         let p = NSBezierPath()
         let r = bounds.insetBy(dx: bounds.width * 0.32, dy: bounds.height * 0.32)
         p.move(to: NSPoint(x: r.minX, y: r.minY)); p.line(to: NSPoint(x: r.maxX, y: r.maxY))
@@ -276,6 +341,8 @@ private final class ReplyIcon: NSImageView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
                                        owner: self))
     }
+    /// Not a button → part of the surface, so a press there drags.
+    override func hitTest(_ point: NSPoint) -> NSView? { onClick == nil ? nil : super.hitTest(point) }
     override func cursorUpdate(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
     override func mouseEntered(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
     override func mouseMoved(with event: NSEvent) { if onClick != nil { NSCursor.pointingHand.set() } }
@@ -315,6 +382,7 @@ private final class LinkLabel: NSTextField {
     // 2026-10-08: *"the mouse should turn into a hand once I hover the title"*
     // — the underline came, the hand did not): the panel never becomes key, so
     // the frontmost terminal's I-beam won the cursor back.
+    override func hitTest(_ point: NSPoint) -> NSView? { onClick == nil ? nil : super.hitTest(point) }
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseEntered(with event: NSEvent) { underline(true); NSCursor.pointingHand.set() }
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }

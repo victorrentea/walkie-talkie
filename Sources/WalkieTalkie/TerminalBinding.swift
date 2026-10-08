@@ -391,6 +391,14 @@ final class TerminalBinding {
     /// `bound-tty` without the second line passes nil and binds as before.
     func bind(tty: String, pane: String? = nil, owner expected: TTYOwner? = nil,
               spawned: Bool = false) -> Target? {
+        guard let bound = resolve(tty: tty, pane: pane, owner: expected) else { return nil }
+        adopt(bound, spawned: spawned)
+        return bound
+    }
+
+    /// `bind(tty:)` without the binding: the `Target` a delivery to that tab
+    /// needs, the bound one left as it is — the answer panel's ☠️ sends there.
+    func resolve(tty: String, pane: String? = nil, owner expected: TTYOwner? = nil) -> Target? {
         let device = Self.devicePath(tty)
         let short = (device as NSString).lastPathComponent
         let tabs = Self.liveTitles()
@@ -408,7 +416,6 @@ final class TerminalBinding {
             Log.error("bind: \(short) now belongs to another tab (login \(now.pid), was \(expected.pid)) — the bound tab was closed, not restored")
             return nil
         }
-        adopt(bound, spawned: spawned)
         return bound
     }
 
