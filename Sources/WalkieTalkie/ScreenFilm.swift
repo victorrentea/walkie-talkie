@@ -136,6 +136,7 @@ final class ScreenFilm {
             return nil
         }
         let film = ScreenFilm(displayID: CGDirectDisplayID(number.uint32Value), dir: dir)
+        FilmBorder.show(on: screen)
         film.begin()
         return film
     }
@@ -162,6 +163,7 @@ final class ScreenFilm {
     func stop() -> Result? {
         timer?.cancel()
         timer = nil
+        FilmBorder.hide()
         let duration = CACurrentMediaTime() - startedAt
         // Drain: two permits means at most two encodes in flight, so taking both
         // is *the encoder is finished*.
@@ -213,6 +215,7 @@ final class ScreenFilm {
                 Log.info("🎬 \(Int(Self.maxSeconds))s ceiling reached — stopping the recording")
                 timer?.cancel()
                 timer = nil
+                FilmBorder.hide()
                 return
             }
             // Never wait on the encoder from the capture queue: a late frame is
@@ -307,5 +310,52 @@ final class ScreenFilm {
     private static func screenUnderPointer() -> NSScreen? {
         let p = NSEvent.mouseLocation
         return NSScreen.screens.first { $0.frame.contains(p) } ?? NSScreen.main
+    }
+}
+
+/// **A plain red border round the screen being filmed, blinking** (2026-10-08,
+/// Victor: *"when the movie is recorded, there should be a red border, not any
+/// fade, just a plain red border, a few pixels solid, around the screen
+/// recorded, and blinking 50% transparent to 100% opaque"*). Solid 5 pt, a
+/// hard step between 100 % and 50 % every half second — no ease. Clicks pass
+/// through; `sharingType = .none` keeps it out of the frames it frames.
+enum FilmBorder {
+    private static var panel: NSPanel?
+    static let width: CGFloat = 5
+
+    static func show(on screen: NSScreen) {
+        guard Thread.isMainThread else { DispatchQueue.main.async { show(on: screen) }; return }
+        hide()
+        let p = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
+                        backing: .buffered, defer: false)
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = false
+        p.ignoresMouseEvents = true
+        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        p.sharingType = .none
+        p.hidesOnDeactivate = false
+        let v = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        v.wantsLayer = true
+        v.layer?.borderWidth = width
+        v.layer?.borderColor = NSColor.systemRed.cgColor
+        let blink = CAKeyframeAnimation(keyPath: "opacity")
+        blink.values = [1.0, 0.5]
+        blink.keyTimes = [0, 0.5]
+        blink.calculationMode = .discrete
+        blink.duration = 1.0
+        blink.repeatCount = .infinity
+        v.layer?.add(blink, forKey: "blink")
+        p.contentView = v
+        p.setFrame(screen.frame, display: true)
+        p.orderFrontRegardless()
+        panel = p
+    }
+
+    static func hide() {
+        guard Thread.isMainThread else { DispatchQueue.main.async { hide() }; return }
+        panel?.orderOut(nil)
+        panel = nil
     }
 }

@@ -196,3 +196,11 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 - Do not call `WindowContext.describe()` while holding `stateLock`.
 - Do not hide the overlay's own decorations around a capture — they are not in it (`sharingType`).
 - Read `docs/pointer-line.md` before either building the pointer line or re-deriving it.
+
+## The film's red border (2026-10-08, `FilmBorder` in `ScreenFilm.swift`)
+
+Victor: *"a red border, not any fade, just a plain red border, a few pixels solid, around the screen
+recorded, and blinking 50% transparent to 100% opaque"*. 5 pt `systemRed` round the filmed display
+(the one resolved at `start`), a **hard step** 100 % ↔ 50 % every 0.5 s (discrete keyframes — no
+ease), click-through, `sharingType = .none`. Up at `ScreenFilm.start`, down at `stop` and at the 30 s
+ceiling. Not yet seen in a frame — if `CGDisplayCreateImage` ever draws it, that is the bug to chase.
