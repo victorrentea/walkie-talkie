@@ -30,6 +30,17 @@ The middle button held and dragged during a dictation selects a rectangle of the
 
 ## The release matches the press (`HotkeyTap`)
 
+- **Logi mode, a prompt open: the press is held back, and a click is replayed** (2026-10-08, Victor:
+  *"when I click down the wheel and start dragging, the application behind receives the event of wheel
+  click … there should be no event of click the wheel sent"*) — supersedes *press passed through* in the
+  two bullets below and *The plain click survives in Logi mode* above, for the length of an attachable
+  dictation. `areaPressHeld`: the press and every drag event under the threshold are swallowed; a drag
+  (crop) or a halo dial keeps the release too, so the app underneath sees nothing; a press that ends as
+  a click is replayed at the release (`replayMiddleClick`, down + up at the press's point, stamped
+  `replayStamp` so `areaDrag` passes it). Log `🛞 the held wheel press was a click — replayed …`. At rest
+  and in a plain dictation the wheel is untouched, as before. The dial still sees the button through
+  `CGEventSource.buttonState(.hidSystemState)`.
+
 - **A swallowed release never brings a passed press up.** A press that went out puts the button *down* in session state, and a release this tap eats never takes it back up. Measured the hard way: a crop at 00:23 left `CGEventSource.buttonState` answering *middle: down* **seven hours later**, and what Victor had for those hours was a VS Code editor tab stuck to his cursor — as far as the window server was concerned a drag had been in progress since the night before. → journal: *The release matches the press, and in Logi mode both go through*
 - **Swallow the release only if the press was ours** (`areaPressPassed`). Logi mode: press out, release out; the app underneath gets a middle-down and a middle-up with the movement removed — a click it ignores, the ends being in different places. Tick off: the wheel's own branch swallowed the press, so this swallows the release. Neither mode may leave the OS holding a button. → journal: *The release matches the press, and in Logi mode both go through*
 - **With *Mouse Gestures: Wheel* the drag claims the press** (`claimWheelPress`, the same claim the release and the 2 s hold race for) and cancels the cancel timer; the release then finds `tapped` false and fires nothing. **That branch also clears `wheelArmed` / `wheelDown` itself**, because the release never reaches the branch that normally clears them: left standing, they would swallow the release of the *next* middle press — one this file passed through — the orphan bug written a third time. → journal: *The release matches the press, and in Logi mode both go through*

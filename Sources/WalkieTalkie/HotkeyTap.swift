@@ -1675,6 +1675,22 @@ final class HotkeyTap {
     /// cursor. Measured on 2026-09-10, seven hours after the crop that caused
     /// it, with an editor tab stuck to the pointer.
     private var areaPressPassed = false
+    /// **Logi mode, a prompt open: the wheel press is held back** (2026-10-08,
+    /// Victor: *"when I click down the wheel and start dragging, the
+    /// application behind receives the event of wheel click … If I start
+    /// dragging the mouse, then there should be no event of click the wheel
+    /// sent"*). Until then the press went straight out and only the release of
+    /// a drag was swallowed, so Chrome had its middle-down (autoscroll, a tab
+    /// armed to close) before the box ever opened. Now the press — and every
+    /// drag event under the threshold — is swallowed; a drag or a halo dial
+    /// keeps the release too, and a press that ends as a click is replayed at
+    /// the release (`replayMiddleClick`), at the spot it was pressed, so the
+    /// wheel still closes a tab. The cost: that click lands at the release, not
+    /// the press.
+    private var areaPressHeld = false
+    private var areaPressAtCG: CGPoint = .zero
+    /// Marks the replayed click, so this tap lets it through untouched.
+    private static let replayStamp: Int64 = 0x7774_4d49_4443_4c4b
     /// **The ⇧-locked box is parked, waiting for its destination** — pushed in
     /// from `CropSelectionOverlay.onAwaitingDestination` on the main thread,
     /// read here on the tap thread.
@@ -1771,12 +1787,14 @@ final class HotkeyTap {
     /// the swallow decision raceless: the drag that arms the crop and the
     /// release that ends it are the same serial stream of events.
     private func areaDrag(_ type: CGEventType, _ event: CGEvent) -> Bool {
-        guard event.getIntegerValueField(.mouseEventButtonNumber) == MOUSE_BUTTON_MIDDLE else { return false }
+        guard event.getIntegerValueField(.mouseEventButtonNumber) == MOUSE_BUTTON_MIDDLE,
+              event.getIntegerValueField(.eventSourceUserData) != Self.replayStamp else { return false }
 
         switch type {
         case .otherMouseDown:
             areaAnchor = nil
             areaCropping = false
+            areaPressHeld = false
             haloDialed = false
             // **The source is locked and parked: this press is the destination's**
             // (2026-09-24) — claimed on sight, no threshold, ⇧/⌘/⌥ allowed (they
@@ -1807,8 +1825,12 @@ final class HotkeyTap {
             areaAnchor = NSEvent.mouseLocation
             areaAnchorCG = event.location
             areaPressedAt = Date()
-            areaPressPassed = useLogiGestures
-            return false
+            // Logi mode: held back until it is a click or a drag (`areaPressHeld`).
+            // Wheel mode: the wheel's own branch below swallows it, as before.
+            areaPressPassed = false
+            areaPressHeld = useLogiGestures
+            areaPressAtCG = event.location
+            return areaPressHeld
 
         case .otherMouseDragged:
             if areaCropping {
@@ -1825,9 +1847,10 @@ final class HotkeyTap {
             // **A press that has been turned is a dial, not a drag** — see
             // `haloDial`. The hand wobbles while it works the wheel, and a box
             // opening under a halo he is choosing is the collision this guards.
-            guard let anchor = areaAnchor, dictating, !haloDialed else { return false }
+            // A held press's drag events stay here too: the app never saw the down.
+            guard let anchor = areaAnchor, dictating, !haloDialed else { return areaPressHeld }
             let now = event.location
-            guard hypot(now.x - areaAnchorCG.x, now.y - areaAnchorCG.y) >= Self.areaDragThreshold else { return false }
+            guard hypot(now.x - areaAnchorCG.x, now.y - areaAnchorCG.y) >= Self.areaDragThreshold else { return areaPressHeld }
             areaCropping = true
             // **With *Use Logi Gestures* off the press was swallowed and still
             // means something** — a dictation to end, and a 2s timer that would
@@ -1845,6 +1868,9 @@ final class HotkeyTap {
 
         case .otherMouseUp:
             let cropping = areaCropping
+            let dialed = haloDialed
+            let held = areaPressHeld
+            areaPressHeld = false
             areaAnchor = nil
             areaCropping = false
             areaDrawingDestination = false
@@ -1871,6 +1897,11 @@ final class HotkeyTap {
             // `CropSelectionOverlay.driven`, and the two ways that poll is wrong
             // once a tap has an opinion about the button.
             if cropping { onAreaEnd?() }
+            // A held press that stayed a click is handed on now, whole.
+            if held {
+                if !cropping && !dialed { replayMiddleClick(at: areaPressAtCG) }
+                return true
+            }
             // **The release matches the press, always.** Ours only if the press
             // was ours; out if the press went out, whatever happened in between.
             return cropping && !areaPressPassed
@@ -1878,6 +1909,18 @@ final class HotkeyTap {
         default:
             return false
         }
+    }
+
+    /// The click a held wheel press turned out to be — down and up at the spot
+    /// it was pressed, stamped so `areaDrag` lets both through.
+    private func replayMiddleClick(at point: CGPoint) {
+        for type in [CGEventType.otherMouseDown, .otherMouseUp] {
+            guard let e = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: point,
+                                  mouseButton: .center) else { continue }
+            e.setIntegerValueField(.eventSourceUserData, value: Self.replayStamp)
+            e.post(tap: .cghidEventTap)
+        }
+        Log.info("🛞 the held wheel press was a click — replayed to the app underneath")
     }
 
     /// **A right click while the wheel drags a box locks it** (2026-10-07).
