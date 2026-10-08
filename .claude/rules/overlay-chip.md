@@ -351,7 +351,7 @@ yields to `--label`).
   *"toate textele care apar în tooltipul de lângă maus trebuie să aibă aceeași mărime de font și
   font face"* (2026-09-01). The title was semibold, the selection row 14, the waits semibold 20 —
   all three are 17 regular now. Emphasis is the glyph column's job. The **panel is exempt**
-  (`promptFont` — JetBrains Mono 25 pt since 2026-10-08 (30 for one build: *"too large"*), the quote mark 35 in a 35 pt row —; the panel is capped at 1.3 × a third of the screen and has no "Active window" row since 2026-10-07). → journal: *One face, one size, one weight — everywhere on the chip*
+  (`promptFont` — JetBrains Mono 12.5 pt since 2026-10-08 (30, then 25 the same morning; *"fifty percent smaller"*), the quote mark 22 in a 22 pt row —; the panel is capped at 1.3 × a third of the screen and has no "Active window" row since 2026-10-07). → journal: *One face, one size, one weight — everywhere on the chip*
 - **The waits are `iconInk`, white-plus-halo.** The hourglass was 30 pt `hintInk` for two days and
   went back to icon size on 2026-09-02 (*"clepsidra este prea mare"*); the fix that mattered was
   joining `refreshChrome`'s white-plus-halo list, the one place a row becomes legible on a bare

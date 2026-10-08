@@ -558,8 +558,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// 25 (2026-10-08): 30 for one build (*"fifty percent larger"*), then *"too large now …
     /// half in between"*; 20 before, 16 the day before that. **JetBrains Mono** since the
     /// same morning (*"JetBrains Mono, să-l văd mai clar. Nu-mi place fontul"*) — installed
-    /// in `~/Library/Fonts`; the system face if it ever is not.
-    private let promptFont = NSFont(name: "JetBrainsMono-Regular", size: 25) ?? NSFont.systemFont(ofSize: 25)
+    /// in `~/Library/Fonts`; the system face if it ever is not. **12.5** later that morning
+    /// (*"fifty percent smaller"*).
+    private static let promptSize: CGFloat = 12.5
+    private let promptFont = NSFont(name: "JetBrainsMono-Regular", size: RelayWindow.promptSize)
+        ?? NSFont.systemFont(ofSize: RelayWindow.promptSize)
     private let hintFont = NSFont.systemFont(ofSize: 17)
 
     /// The quote mark is 30pt against the text's 16 — big enough to be the thing
@@ -569,18 +572,18 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// the row into something scanned rather than parsed. Dropped below the
     /// baseline so it reads as a mark hanging beside the line instead of a
     /// character sitting on it.
-    /// 35 and a 35pt row since 2026-10-08, when the quoted text followed `promptFont` to 25:
-    /// a 25pt line is ~30pt tall and clipped in the old 30pt row.
-    private let quoteFont = NSFont.systemFont(ofSize: 35, weight: .bold)
-    /// Tall enough for the 35pt mark; the 25pt text rides inside it.
-    private let quoteRowHeight: CGFloat = 35
+    /// Follows `promptFont` (2026-10-08): 22 and a 22pt row for the 12.5pt quoted text
+    /// (35/35 at 25, 40/40 at 30 earlier that morning).
+    private let quoteFont = NSFont.systemFont(ofSize: 22, weight: .bold)
+    /// Tall enough for the 22pt mark; the 12.5pt text rides inside it.
+    private let quoteRowHeight: CGFloat = 22
 
     private func quoted(_ text: String) -> NSAttributedString {
         let out = NSMutableAttributedString(
             string: "“",
             attributes: [.font: quoteFont,
                          .foregroundColor: NSColor.tertiaryLabelColor,
-                         .baselineOffset: -7])
+                         .baselineOffset: -4])
         out.append(NSAttributedString(
             string: " " + singleLine(text),
             attributes: [.font: promptFont, .foregroundColor: NSColor.labelColor]))
