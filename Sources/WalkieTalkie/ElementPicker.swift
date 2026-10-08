@@ -252,7 +252,7 @@ final class ElementPicker {
     /// dictation opened instead — which is what the recorder's own clock would
     /// have said — and the placement `ShotMarker.place` does becomes reachable
     /// from a desk. The only way to see a *whole* envelope without talking.
-    var onTestDictationStart: ((Bool) -> Void)?
+    var onTestDictationStart: ((_ clock: Bool, _ clean: Bool) -> Void)?
     /// `POST /test/halo {"style": "milkdrop87", "step": 1, "demo": 6, "opts": {...}}` —
     /// pick a halo (or step through them), preview it on the clip for `demo`
     /// seconds, with per-run preset options; answers what is now current.
@@ -843,7 +843,7 @@ final class ElementPicker {
 
         case ("POST", "/test/dictation/start"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
-            onTestDictationStart?((body?["clock"] as? Bool) ?? false)
+            onTestDictationStart?((body?["clock"] as? Bool) ?? false, (body?["clean"] as? Bool) ?? false)
             respond(conn, 200, ["ok": true, "listening": true])
 
         // The wheel drag, without the wheel — see `onTestArea`.

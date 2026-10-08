@@ -24,7 +24,7 @@ prefer the local engine.
 | `POST /unbind` · `GET /target` | let go · current binding (`guarded`: does the shell guard apply) |
 | `GET /engine` | live source, readiness, `wrapMode`·`wrapWhy`·`scratchpadChord`, local model state, `mic`; `wisprShortcuts` (Wispr's `config.json` action → chord, e.g. `ptt: "61+60"`), `wisprStandalone`, `wisprPttCoherent` (standalone ⇒ Wispr's ptt is off 54+61; W-C7) |
 | `POST /test/dictation {"text", "words"?}` | fabricated transcript entering where a real one does; with `words` (`{text,start,end,type}`) `ShotMarker.place` runs for real |
-| `POST /test/dictation/start {"clock"?}` | open a dictation without talking; `clock` installs a wall-clock marker clock (no mic ⇒ no offsets otherwise) |
+| `POST /test/dictation/start {"clock"?, "clean"?}` | open a dictation without talking; `clock` installs a wall-clock marker clock (no mic ⇒ no offsets otherwise); `clean` (2026-10-08) opens the **plain** sentence at the caret — attachments refused until `forward-right` (direct) promotes it |
 | `POST /test/selection {"text"}` | file a highlight via `fileSelection`; 409 outside a dictation |
 | `POST /test/area {x,y,w,h, "to"?}` | the wheel drag without the wheel (global Cocoa points; `to` = the ⇧-drag's move); only the crop overlay is skipped |
 | `POST /test/spawn` · `/test/spawn-folders` | a spawn; the folder menu alone |

@@ -2575,7 +2575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return answer
         }
 
-        picker.onTestDictationStart = { [weak self] wallClock in
+        picker.onTestDictationStart = { [weak self] wallClock, clean in
             guard let self = self else { return }
             if wallClock {
                 // The recorder's clock, stood in for by the wall clock. Real
@@ -2594,7 +2594,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // because `hasDestination` is what the gates below ask, then the
             // bookkeeping that makes a shot attach rather than fly off on its
             // own, and no context frame and no ⌘C.
-            let paste = self.replaceWispr
+            // **`clean`: the plain sentence 🔽 → opens** (2026-10-08) — at the
+            // caret, no context frame, every attachment refused until 🔼 → / 🔼 ↑
+            // makes it a prompt (`refusesAttachment`).
+            if clean { self.hotkeys.ownCleanSentence = true }
+            let paste = self.replaceWispr || clean
             if paste {
                 self.pasteMode = true
                 self.stateLock.lock()
@@ -2614,6 +2618,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // branch ran. The `captureContext` path never had the problem
             // because it does its own hop; this one had to be given one.
             DispatchQueue.main.async {
+                if clean {
+                    self.cleanSentence = true
+                    self.caretPrompt = false
+                    self.cleanRedirected = false
+                }
                 if paste {
                     self.overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph)
                 }
