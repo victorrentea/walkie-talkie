@@ -358,59 +358,67 @@ private final class BottomTab {
     }
 }
 
-/// **Seven bars, tallest in the middle, the two halves mirrored** — Victor's
-/// wave (2026-10-08), whose right side was shorter than its left; *"but
-/// symmetrical both sides"*. White, rounded bars, drawn at the text's size.
+/// **The wave Victor picked** (2026-10-08, an icon he pasted: *"use this"*) —
+/// a flat lead-in, a zigzag of sharp peaks with rounded corners, a flat
+/// lead-out, drawn as one white wire at the text's size. It replaced the same
+/// morning's seven mirrored bars and then the rounded serpentine through them.
 enum WaveGlyph {
-    static let heights: [CGFloat] = [0.3, 0.6, 0.82, 1.0, 0.82, 0.6, 0.3]
+    /// The icon's corners, traced off his picture (960 px, the flat line at
+    /// y 490, the tallest peak 250 px above it): x across the wave 0…1, y
+    /// −1…1 about the flat line, up positive.
+    static let corners: [CGPoint] = [
+        CGPoint(x: 0, y: 0), CGPoint(x: 0.086, y: 0), CGPoint(x: 0.136, y: 0.248),
+        CGPoint(x: 0.164, y: -0.24), CGPoint(x: 0.240, y: 0.56), CGPoint(x: 0.286, y: -0.62),
+        CGPoint(x: 0.371, y: 1.0), CGPoint(x: 0.460, y: -0.992), CGPoint(x: 0.546, y: 0.44),
+        CGPoint(x: 0.621, y: -0.488), CGPoint(x: 0.707, y: 0.82), CGPoint(x: 0.800, y: -0.808),
+        CGPoint(x: 0.857, y: 0.328), CGPoint(x: 0.893, y: 0), CGPoint(x: 1, y: 0),
+    ]
+    /// Width over height, as in his picture (700 × 500 px between the ends and
+    /// the extremes).
+    static let aspect: CGFloat = 1.4
 
-    /// One pass of the light along the whole trajectory, then again.
+    /// One pass of the light along the whole wire, then again.
     static let glintPeriod: TimeInterval = 2.6
-    /// The bars' brightness away from the light.
+    /// The wire's brightness away from the light.
     static let dim: CGFloat = 0.5
 
-    /// `glint`: nil draws every bar white; 0…1 is how far the light has run
-    /// along its trajectory — it enters at the first bar's foot and leaves past
-    /// the last bar's.
+    /// `glint`: nil draws the wire white; 0…1 is how far the light has run
+    /// along it — it enters at the left end and leaves past the right.
     ///
     /// **The light travels the wave's own trajectory** (2026-10-08, Victor drew
-    /// it on screen: a wave as one serpentine line, and a short bright segment
-    /// running along it — *"draw segments of it … progressing through, glowing
-    /// … following the trajectory of the wavelength itself"*). The trajectory is
-    /// the bars read as that line: up the first, a small arc over the gap to the
-    /// top of the second, down it, a small arc under to the foot of the third,
-    /// up… — and since the same morning it is also what is drawn: one wire at
-    /// `dim`, the light a stroke of the wire's width along it, a bright head and
-    /// a fading tail, glowing. Supersedes the same
-    /// morning's two: a band of bars brightening, then a light on the outline.
+    /// it on screen: a short bright segment running along the wave's line —
+    /// *"draw segments of it … progressing through, glowing … following the
+    /// trajectory of the wavelength itself"*): a stroke of the wire's width
+    /// along it, a bright head and a fading tail, glowing, over the wire at
+    /// `dim`.
     static func image(height h: CGFloat, glint: CGFloat? = nil) -> NSImage {
-        let bar = max(2, (h * 0.11).rounded()), gap = max(2, (h * 0.12).rounded())
-        let w = CGFloat(heights.count) * bar + CGFloat(heights.count - 1) * gap
-        // Room for the arcs and the glow, on every frame alike — a glyph that
-        // grew when the light came on would nudge the words beside it.
-        let pad = (bar * 1.5).rounded(.up), wire = max(1.5, (bar * 0.7).rounded())
+        let wire = max(1.5, (h * 0.085).rounded())
+        // Room for the round caps and the glow, on every frame alike — a glyph
+        // that grew when the light came on would nudge the words beside it.
+        let pad = (wire * 1.5).rounded(.up)
+        let w = (h * aspect).rounded()
         return NSImage(size: NSSize(width: w + 2 * pad, height: h + 2 * pad), flipped: false) { _ in
             guard let cg = NSGraphicsContext.current?.cgContext else { return false }
             cg.translateBy(x: pad, y: pad)
-            // **One wire, not seven bars** (2026-10-08, Victor: *"it's not a
-            // contiguous wire. It's a set of lines. Make it so it's a contiguous
-            // wire … following what you currently have, but then with the lines
-            // connected to each other"*, pointing at a drawn audio waveform).
-            let path = trajectory(h: h, bar: bar, gap: gap)
+            // The corners in points, inset by half the wire so the peaks' round
+            // ends stay inside the glyph.
+            let half = (h - wire) / 2
+            let pts = corners.map { CGPoint(x: wire / 2 + $0.x * (w - wire), y: h / 2 + $0.y * half) }
             cg.setLineWidth(wire)
             cg.setLineCap(.round)
             cg.setLineJoin(.round)
             // Opaque inside a layer, the layer dimmed as a whole: a translucent
-            // stroke came out with brighter dots where each run meets its turn.
+            // stroke shows brighter dots wherever it meets itself at a join.
             cg.saveGState()
             cg.setAlpha(glint == nil ? 1 : dim)
             cg.beginTransparencyLayer(auxiliaryInfo: nil)
             cg.setStrokeColor(NSColor.white.cgColor)
-            cg.addLines(between: path)
+            cg.addLines(between: pts)
             cg.strokePath()
             cg.endTransparencyLayer()
             cg.restoreGState()
             guard let glint else { return true }
+            let path = sampled(pts, step: 0.5)
             // Arc length at every point, then the light: the head at `head`, a
             // tail `tail` long behind it.
             var at: [CGFloat] = [0]
@@ -420,11 +428,10 @@ enum WaveGlyph {
             cg.saveGState()
             cg.setShadow(offset: .zero, blur: wire * 1.6, color: NSColor.white.withAlphaComponent(0.85).cgColor)
             cg.beginTransparencyLayer(auxiliaryInfo: nil)
-            // A disc a bar wide at every sample from the tail's end to the head,
-            // each one *replacing* what is under it (`.copy`), so the stroke is
-            // as bright as its brightest point, never brighter where the discs
-            // overlap — no beads, no stripes through the arcs, and no separate
-            // dot for the head.
+            // A disc the wire's width at every sample from the tail's end to the
+            // head, each one *replacing* what is under it (`.copy`), so the stroke
+            // is as bright as its brightest point, never brighter where the discs
+            // overlap — no beads, and no separate dot for the head.
             cg.setBlendMode(.copy)
             for j in 0..<path.count {
                 let d = head - at[j]
@@ -439,40 +446,18 @@ enum WaveGlyph {
         }
     }
 
-    /// The bars as one serpentine line, densely sampled: up bar 0, over to bar
-    /// 1's top, down it, under to bar 2's foot… Centre lines, inset by half a
-    /// bar so the light's round head sits inside each rounded end.
-    private static func trajectory(h: CGFloat, bar: CGFloat, gap: CGFloat) -> [CGPoint] {
-        let ends = heights.enumerated().map { i, k -> (x: CGFloat, lo: CGFloat, hi: CGFloat) in
-            let bh = (h * k).rounded(), y0 = ((h - bh) / 2).rounded()
-            return (CGFloat(i) * (bar + gap) + bar / 2, y0 + bar / 2, y0 + bh - bar / 2)
-        }
-        let step: CGFloat = 0.5
-        var pts: [CGPoint] = []
-        func line(_ a: CGPoint, _ b: CGPoint) {
+    /// The polyline through `pts`, a point every `step` along it.
+    private static func sampled(_ pts: [CGPoint], step: CGFloat) -> [CGPoint] {
+        var out: [CGPoint] = []
+        for i in 0..<(pts.count - 1) {
+            let a = pts[i], b = pts[i + 1]
             let n = max(1, Int(hypot(b.x - a.x, b.y - a.y) / step))
-            for s in 0..<n { let t = CGFloat(s) / CGFloat(n); pts.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)) }
-        }
-        func arc(_ a: CGPoint, _ b: CGPoint, bulge: CGFloat) {
-            let c1 = CGPoint(x: a.x, y: a.y + bulge), c2 = CGPoint(x: b.x, y: b.y + bulge)
-            for s in 0..<24 {
-                let t = CGFloat(s) / 24, u = 1 - t
-                pts.append(CGPoint(x: u*u*u*a.x + 3*u*u*t*c1.x + 3*u*t*t*c2.x + t*t*t*b.x,
-                                   y: u*u*u*a.y + 3*u*u*t*c1.y + 3*u*t*t*c2.y + t*t*t*b.y))
+            for s in 0..<n {
+                let t = CGFloat(s) / CGFloat(n)
+                out.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
             }
         }
-        var up = true
-        for (i, e) in ends.enumerated() {
-            let from = CGPoint(x: e.x, y: up ? e.lo : e.hi), to = CGPoint(x: e.x, y: up ? e.hi : e.lo)
-            line(from, to)
-            if i + 1 < ends.count {
-                let n = ends[i + 1]
-                arc(to, CGPoint(x: n.x, y: up ? n.hi : n.lo), bulge: (up ? 1 : -1) * (bar + gap) * 0.6)
-            } else {
-                pts.append(to)
-            }
-            up.toggle()
-        }
-        return pts
+        out.append(pts[pts.count - 1])
+        return out
     }
 }

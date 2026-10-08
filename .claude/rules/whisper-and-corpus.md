@@ -325,7 +325,9 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   `/test/state.startupBanner` holds its words. **The microphone and the engine are split by a drawn
   wave** (2026-10-08 — ` / ` that morning, then *"put such a wave, but symmetrical both sides"*):
   `WaveGlyph`, seven mirrored white bars at the text's cap height (**one wire since the same morning**,
-  below), written `MicAnnouncer.wave`
+  below; **his own icon since 10:40**: `WaveGlyph.corners`, traced off the waveform icon he pasted with
+  *"use this"* — flat lead-in, sharp zigzag peaks with round joins, flat lead-out, aspect 1.4 — the
+  light running along that polyline), written `MicAnnouncer.wave`
   (U+E000) in the text and `〰` in logs and `startupBanner`. **The green tab names the engine too**,
   after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main). **A glint runs
   along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
