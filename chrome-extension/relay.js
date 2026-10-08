@@ -128,6 +128,25 @@ const MUSIC_RETRY_MINUTES = 0.5;
 
 let musicSocket = null;
 
+// **The music plays on for a second after the microphone opens** (2026-10-08,
+// Victor: *"mai lasă încă o secundă melodia să audă sfârșitul cuvântului care
+// l-a întrerupt"*) — the word it was cut on gets to finish. A sentence that
+// ends inside that second never pauses anything.
+const PAUSE_LAG_MS = 1000;
+let pauseTimer = null;
+
+function schedulePause() {
+  if (pauseTimer) return;
+  pauseTimer = setTimeout(() => {
+    pauseTimer = null;
+    pauseEverythingAudible().catch((e) => console.log('[walkie-music] failed', e));
+  }, PAUSE_LAG_MS);
+}
+
+function cancelPendingPause() {
+  if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null; }
+}
+
 // --- the two halves of the job, injected into the page ---------------------
 
 // Pause every media element that is actually playing, and mark it, so the resume
@@ -223,8 +242,9 @@ function openMusicSocket() {
     if (msg.type !== 'dictation') return;
     // The relay replays the state on connect, so this is also how a worker that
     // was torn down mid-dictation learns it still owes a resume.
-    (msg.active ? pauseEverythingAudible() : resumeWhatWePaused())
-      .catch((e) => console.log('[walkie-music] failed', e));
+    if (msg.active) return schedulePause();
+    cancelPendingPause();
+    resumeWhatWePaused().catch((e) => console.log('[walkie-music] failed', e));
   };
 
   const dropped = () => {
@@ -234,6 +254,7 @@ function openMusicSocket() {
     // away mid-sentence would otherwise leave the music off with nothing left
     // alive to turn it back on. A blip that is only a blip costs a stutter: the
     // next probe reconnects and the replayed active:true pauses again.
+    cancelPendingPause();
     resumeWhatWePaused().catch(() => {});
     // And the ⌘⇧ badge goes with it: no app, no picker to point at.
     setPickable(false);
