@@ -241,6 +241,17 @@ final class HotkeyTap {
         set { stateLock.lock(); relayPromptOpenFlag = newValue; stateLock.unlock() }
     }
     private var relayPromptOpenFlag = false
+    /// **The app's own sentence is open and still plain** — pushed beside
+    /// `relayPromptOpen`. `cleanSentenceOpen` used to know a Wispr plain sentence
+    /// only through `backStopsWispr`, whose arm goes at 12 s when Wispr never
+    /// opens its microphone; the sentence stayed open, and the back click took
+    /// two pictures into it (2026-10-08, Victor: *"I should not be able to take
+    /// the photo or drag during the dictation process"*).
+    var relayPlainOpen: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return relayPlainOpenFlag }
+        set { stateLock.lock(); relayPlainOpenFlag = newValue; stateLock.unlock() }
+    }
+    private var relayPlainOpenFlag = false
 
     /// A clean sentence is open, whichever engine is hearing it — and still
     /// plain: one turned into a prompt is not (`relayPromptOpen`). **Every
@@ -250,8 +261,9 @@ final class HotkeyTap {
         stateLock.lock()
         let own = ownDictationFlag && ownCleanSentenceFlag
         let prompt = relayPromptOpenFlag
+        let plain = relayPlainOpenFlag
         stateLock.unlock()
-        return !prompt && (own || backStopsWispr)
+        return !prompt && (own || plain || backStopsWispr)
     }
 
     /// **Which of Wispr Flow's two start gestures was seen**, and the whole of

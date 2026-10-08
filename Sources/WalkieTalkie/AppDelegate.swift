@@ -6953,6 +6953,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // read, `cleanSentenceOpen`, refuses before the switch and lets through
         // after it. Below `ownDictation`, which `cleanSentenceOpen` reads.
         hotkeys.relayPromptOpen = listening && !(cleanSentence && !cleanRedirected)
+        // …and that one is still plain, in the app's own words: the tap's Wispr arm
+        // expires 12 s in when Wispr never opens its microphone, and the shutter
+        // then took two pictures into a plain sentence (14:30:34/39, 2026-10-08).
+        hotkeys.relayPlainOpen = listening && cleanSentence && !cleanRedirected
         let attachable = live && !hotkeys.cleanSentenceOpen
         picker.dictating = attachable
         // The in-page badge that says ⌘⇧ is live — the chip's old `⌘⇧` row,
