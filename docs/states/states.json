@@ -680,7 +680,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 187,
+    "height" : 153,
     "image" : "prompt-editing.png",
     "note" : "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
     "shape" : "panel",

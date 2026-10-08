@@ -904,6 +904,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     override init() {
         super.init()
+        // The states shooter shows nothing, the menu bar included (`Offstage`).
+        if RelayWindow.shooting { item.isVisible = false }
 
         // **A drawing of a walkie-talkie, in two states, replacing the 🤖.**
         //

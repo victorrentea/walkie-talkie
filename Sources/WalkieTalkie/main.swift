@@ -128,6 +128,9 @@ if let spec = ProcessInfo.processInfo.environment["WT_HALO_DEMO"] {
     CaretHalo.demo(seconds: Double(spec) ?? 20)
 }
 
+// The states catalogue is shot with every window off the displays — `Offstage`.
+if ProcessInfo.processInfo.environment["RELAY_SHOOT"] != nil { Offstage.install() }
+
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,
 // 2026-09-07). It was `.accessory` for two months on the argument that an
