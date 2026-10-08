@@ -336,8 +336,8 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   **since 2026-10-08 afternoon a beat of dim, empty wire on either side** (*"start animating half a second
   after the overlay flies in … end … 300 milliseconds [before] … no more signal to increase the suspense"*):
   the light sets off `glintLead` 0.5 s after the rise (0.32 s, a fresh tab) and has left the wave — tail
-  included, `glint` 1 is now the head a tail past the right end — `glintQuiet` 0.3 s before the fall; the
-  pass is the hold − 0.8 s. Before that it ended exactly as the fall began (*"should get at its end when
+  included, `glint` 1 is now the head a tail past the right end — `glintQuiet` 0.5 s before the fall (0.3 s for one build; *"0.5s before + after"*); the
+  pass is the hold − 1 s. Before that it ended exactly as the fall began (*"should get at its end when
   the overlay disappears, (not restart from left)"*, then *"it finishes too late now. When it's done … only
   then … falls out of screen"*; a 2.6 s loop until then, the fall included for one build). A `show` over a
   tab already up starts a new pass, 0.5 s on. Victor drew

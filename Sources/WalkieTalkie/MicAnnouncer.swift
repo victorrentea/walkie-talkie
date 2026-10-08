@@ -174,7 +174,7 @@ private final class BottomTab {
     /// The tab sliding up, and down, in seconds.
     private static let rise: TimeInterval = 0.32, fall: TimeInterval = 0.45
     /// The dim wire before the light sets off, and after it has gone — see `startGlint`.
-    private static let glintLead: TimeInterval = 0.5, glintQuiet: TimeInterval = 0.3
+    private static let glintLead: TimeInterval = 0.5, glintQuiet: TimeInterval = 0.5
 
     func show(_ text: String, tint: NSColor, hold: TimeInterval) {
         shownText = text
