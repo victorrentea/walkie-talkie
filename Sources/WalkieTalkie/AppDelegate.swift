@@ -2736,6 +2736,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // fabricated transcript passes through. `spawnPending` is armed with it,
         // since the pick is refused without it and refusing is exactly what is
         // being checked here.
+        // A row of the spawn menu's *Active Terminals* (or a folder's sessions)
+        // clicked — `redirectSpawn`, the one stretch of 🔼 ↑ a desk cannot click.
+        picker.onTestSpawnPick = { [weak self] tty in
+            var out: [String: Any] = ["ok": false, "error": "no spawn pending"]
+            DispatchQueue.main.sync {
+                guard let self, self.spawnPending else { return }
+                self.redirectSpawn(toTTY: tty)
+                out = ["ok": true, "tty": tty]
+            }
+            return out
+        }
         picker.onTestSpawnFolders = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
@@ -2782,6 +2793,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "forward-down":
                     self.hotkeys.onGestureKamikaze?()
                     out = ["direct": "onGestureKamikaze"]
+                case "forward-up" where self.listening:
+                    self.convertDictationToSpawn()
+                    out = ["direct": "convertDictationToSpawn"]
                 default:
                     out = nil
                 }

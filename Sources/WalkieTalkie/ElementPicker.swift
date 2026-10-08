@@ -568,6 +568,7 @@ final class ElementPicker {
     var onTestGesture: ((String) -> [String: Any]?)?
     /// `POST /test/gesture {"name", "direct": true}` — the handler, no chord (batch 4).
     var onTestGestureDirect: ((String) -> [String: Any]?)?
+    var onTestSpawnPick: ((String) -> [String: Any])?
 
     /// `GET /test/state` — everything an assertion needs about the dictation in
     /// flight, in one object and from the state the app is already keeping.
@@ -1042,6 +1043,15 @@ final class ElementPicker {
 
         // The three seconds of that gesture nothing else can reach — see
         // `onTestSpawnFolders`.
+        // An *Active Terminals* row clicked — see `onTestSpawnPick`.
+        case ("POST", "/test/spawn-pick"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let tty = body?["tty"] as? String, !tty.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "expected {\"tty\": \"ttysNNN\"}"])
+            }
+            let answer = onTestSpawnPick?(tty) ?? ["ok": false, "error": "no handler"]
+            respond(conn, (answer["ok"] as? Bool) == true ? 200 : 409, answer)
+
         case ("POST", "/test/spawn-folders"):
             onTestSpawnFolders?()
             respond(conn, 200, ["ok": true, "shown": true])
