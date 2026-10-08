@@ -369,26 +369,80 @@ enum WaveGlyph {
     /// The bars' brightness away from the glint.
     static let dim: CGFloat = 0.5
 
-    /// `glint`: nil draws every bar white; 0…1 is where the bright spot is
-    /// along its pass — it enters left of the first bar and leaves right of
-    /// the last, a soft bell two bars wide, the rest at `dim`.
+    /// `glint`: nil draws every bar white; 0…1 is where the light is along its
+    /// pass — it enters left of the first bar and leaves right of the last.
+    ///
+    /// **The light runs along the wave's shape, not across it** (2026-10-08,
+    /// Victor: *"a section of that wavelength brighter following the shape of
+    /// the wavelength, no just fading left-right"*). A bar-by-bar brightness read
+    /// as a band sliding sideways; now a short bright stretch of the outline —
+    /// the curve through the bar tips, top and mirrored bottom — climbs the
+    /// slope, crosses the peak and comes down, with a soft glow. The bars under
+    /// it lift a little, so the section it is on is brighter as a whole.
     static func image(height h: CGFloat, glint: CGFloat? = nil) -> NSImage {
         let bar = max(2, (h * 0.11).rounded()), gap = max(2, (h * 0.12).rounded())
         let w = CGFloat(heights.count) * bar + CGFloat(heights.count - 1) * gap
-        return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
-            let n = CGFloat(heights.count)
+        let n = CGFloat(heights.count)
+        // Room for the glow, on every frame alike — a glyph that grew when the
+        // light came on would nudge the words beside it.
+        let lw = max(1.5, bar * 0.8), pad = (lw * 1.5).rounded(.up)
+        return NSImage(size: NSSize(width: w + 2 * pad, height: h + 2 * pad), flipped: false) { _ in
+            guard let cg = NSGraphicsContext.current?.cgContext else { return false }
+            cg.translateBy(x: pad, y: pad)
+            // Where the light is, in bar units; and how lit a point at `x` is.
+            let at = glint.map { -1.5 + $0 * (n + 2) }
+            func lit(_ x: CGFloat) -> CGFloat {
+                guard let at else { return 0 }
+                let d = (x / (bar + gap) - at) / 0.9
+                return exp(-d * d)
+            }
             for (i, k) in heights.enumerated() {
-                var alpha: CGFloat = 1
-                if let g = glint {
-                    let at = -1.5 + g * (n + 2)
-                    let d = (CGFloat(i) - at) / 1.1
-                    alpha = dim + (1 - dim) * exp(-d * d)
-                }
+                let cx = CGFloat(i) * (bar + gap) + bar / 2
+                let alpha = glint == nil ? 1 : dim + (0.85 - dim) * lit(cx)
                 NSColor.white.withAlphaComponent(alpha).setFill()
                 let bh = (h * k).rounded()
                 let r = NSRect(x: CGFloat(i) * (bar + gap), y: ((h - bh) / 2).rounded(), width: bar, height: bh)
                 NSBezierPath(roundedRect: r, xRadius: bar / 2, yRadius: bar / 2).fill()
             }
+            guard glint != nil else { return true }
+            // The outline: a Catmull-Rom curve through the bar tips, inset by
+            // half the stroke so it rides on the rounded ends, not past them.
+            let tips = heights.enumerated().map { i, k in
+                CGPoint(x: CGFloat(i) * (bar + gap) + bar / 2, y: ((h * k).rounded() - lw) / 2)
+            }
+            var curve: [CGPoint] = []
+            let steps = 12
+            for i in 0..<(tips.count - 1) {
+                let p0 = tips[max(i - 1, 0)], p1 = tips[i], p2 = tips[i + 1], p3 = tips[min(i + 2, tips.count - 1)]
+                for s in 0..<steps {
+                    let t = CGFloat(s) / CGFloat(steps), t2 = t * t, t3 = t2 * t
+                    func cr(_ a: CGFloat, _ b: CGFloat, _ c: CGFloat, _ d: CGFloat) -> CGFloat {
+                        0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3)
+                    }
+                    curve.append(CGPoint(x: cr(p0.x, p1.x, p2.x, p3.x), y: cr(p0.y, p1.y, p2.y, p3.y)))
+                }
+            }
+            curve.append(tips[tips.count - 1])
+            // One glow for the whole stretch: a shadow per segment is clipped
+            // to that segment and comes out as boxes.
+            cg.saveGState()
+            cg.setShadow(offset: .zero, blur: lw * 1.5, color: NSColor.white.withAlphaComponent(0.8).cgColor)
+            cg.beginTransparencyLayer(auxiliaryInfo: nil)
+            cg.setLineCap(.round)
+            cg.setLineWidth(lw)
+            for side: CGFloat in [1, -1] {
+                for j in 0..<(curve.count - 1) {
+                    let a = curve[j], b = curve[j + 1]
+                    let alpha = lit((a.x + b.x) / 2)
+                    guard alpha > 0.02 else { continue }
+                    cg.setStrokeColor(NSColor.white.withAlphaComponent(0.95 * alpha).cgColor)
+                    cg.move(to: CGPoint(x: a.x, y: h / 2 + side * a.y))
+                    cg.addLine(to: CGPoint(x: b.x, y: h / 2 + side * b.y))
+                    cg.strokePath()
+                }
+            }
+            cg.endTransparencyLayer()
+            cg.restoreGState()
             return true
         }
     }
