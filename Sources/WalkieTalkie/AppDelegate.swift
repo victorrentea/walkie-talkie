@@ -2561,6 +2561,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestArea = { [weak self] asked, movedTo in
             guard let self = self else { return ["ok": false, "error": "gone"] }
             guard let main = NSScreen.main else { return ["ok": false, "error": "no screen"] }
+            // The wheel drag's own refusal (`areaShot`), asked here because this
+            // route goes straight to `fileArea`.
+            if self.refusesAttachment("✂️ the area crop (test route)") {
+                return ["ok": false, "error": "a plain dictation attaches nothing"]
+            }
             let rect = asked ?? NSRect(x: main.frame.midX - 400, y: main.frame.midY - 120,
                                        width: 800, height: 240)
             let screen = NSScreen.screens.first { $0.frame.intersects(rect) } ?? main
@@ -6884,16 +6889,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !answeringInBackground else { return }
         syncLocalNow()
         let live = hasDestination && listening
-        // **A plain dictation attaches nothing; a prompt attaches everything**
-        // (2026-10-08). Victor: *"If I am in plain dictation mode, there
-        // shouldn't be possible to take photos … Nor select text … Just plain
-        // dictation mode. However … I can switch into the prompting mode."*
-        // `relayPromptOpen` is what tells the tap a plain sentence has been
-        // turned into a prompt (🔼 →, 🔼 ↑ — `cleanRedirected`), so the same
-        // read, `cleanSentenceOpen`, refuses before the switch and lets through
-        // after it. Written before `attachable` is read.
-        hotkeys.relayPromptOpen = listening && !(cleanSentence && !cleanRedirected)
-        let attachable = live && !hotkeys.cleanSentenceOpen
         // **Replace Wispr borrows them too, since 2026-09-08.** It did not until
         // then, and the argument was that both buttons are taken in order to
         // *add to a message* while that mode has no message — one string, going
@@ -6923,6 +6918,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.ownDictation = listening || source.isRecording || speculative || settling
         hotkeys.ownMicOpen = listening || source.isRecording || speculative
         hotkeys.sentenceQueueAccepts = Self.sentenceQueueOn && queueRefusal() == nil
+        // **A plain dictation attaches nothing; a prompt attaches everything**
+        // (2026-10-08). Victor: *"If I am in plain dictation mode, there
+        // shouldn't be possible to take photos … Nor select text … Just plain
+        // dictation mode. However … I can switch into the prompting mode."*
+        // `relayPromptOpen` is what tells the tap a plain sentence has been
+        // turned into a prompt (🔼 →, 🔼 ↑ — `cleanRedirected`), so the same
+        // read, `cleanSentenceOpen`, refuses before the switch and lets through
+        // after it. Below `ownDictation`, which `cleanSentenceOpen` reads.
+        hotkeys.relayPromptOpen = listening && !(cleanSentence && !cleanRedirected)
+        let attachable = live && !hotkeys.cleanSentenceOpen
         picker.dictating = attachable
         // The in-page badge that says ⌘⇧ is live — the chip's old `⌘⇧` row,
         // drawn by the extension since 2026-10-07 (`inspect.js`, `showBadge`).
