@@ -403,6 +403,17 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `rewindAim ?? rewindStart` — the pointer only while the window is still being asked for, or when
   there is none; `fitApproach(to:)` re-sizes the start when the aim lands. Supersedes the travel
   (and *from where the mouse was*) of the two bullets above; `RewindTimeline.travel` is unused.
+- **A bound sentence flies its own effect to the terminal instead** (2026-10-08, Victor: *"instead of
+  the reverse tunnel that goes towards the receiving terminal … that effect from around the mouse to
+  move … towards that terminal by replaying the sound recorded up to that point backwards …
+  condensed to fit the time estimated for the flight"*). `CaretHalo.boundFlight`: destination
+  `.bound` and a bound dress that rides the pointer (a preset or page effect, not anchored, no
+  `pinnedHorizon`, not the film) → `rewindStyle` is that dress (no rebuild, no warm-up), `rewindPoint`
+  lerps `rewindStart` → `rewindAim` on `RewindTimeline.flight` (smoothstep over the whole
+  `DecodeRate.predict`), the render timer calls `follow()` each tick, no `approach`/shrink, full ink,
+  take backwards at `rewindSpeed` (one pass over the prediction, then looping). Not docked on the
+  prompt panel — it ends on the terminal like the tunnel. Anything else bound keeps the Reverse
+  tunnel; `WT_HALO_FLIGHT=0` brings it back. Log `⏪ the rewind: … — flying from the pointer to the terminal`.
 - **The take is kept for every destination** (2026-09-30): the call ran for all since 09-23, but
   `settleTake` was still `latchedAtCaret ? lastTake() : []`, so every bound sentence logged `⏪ no
   rewind — only 0 samples`.

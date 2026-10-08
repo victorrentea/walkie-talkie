@@ -1306,9 +1306,10 @@ final class CaretHalo {
         fitApproach(to: rewindAim ?? NSEvent.mouseLocation)
         rewinding = true
         arrow.armed = false
-        Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@",
+        Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@%@",
                         seconds, rewindSpeed, predicted, DecodeRate.activeEngine, estimate,
-                        Self.rewindVisibleFrom, rewindStyle.rawValue))
+                        boundFlight ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
+                        boundFlight ? " — flying from the pointer to the terminal" : ""))
         use(rewindStyle)
         return true
     }
@@ -1361,8 +1362,18 @@ final class CaretHalo {
     /// its screen, on its center"*. The pointer is only where it waits while
     /// the window is still being asked for (an `osascript`, usually inside the
     /// warm-up), and where it stays when there is no window.
+    ///
+    /// **A bound sentence's own effect flies there instead** (2026-10-08) — see
+    /// `boundFlight`: from the pointer latched at the close to the terminal's
+    /// centre, on `RewindTimeline.flight`'s clock. Until the window answers it
+    /// waits on the pointer.
     private var rewindPoint: NSPoint? {
-        rewindAim ?? rewindStart
+        if boundFlight, let from = rewindStart, let to = rewindAim {
+            let p = CGFloat(RewindTimeline.flight(elapsed: CFAbsoluteTimeGetCurrent() - rewindFrom,
+                                                  predicted: rewindEstimate))
+            return NSPoint(x: from.x + (to.x - from.x) * p, y: from.y + (to.y - from.y) * p)
+        }
+        return rewindAim ?? rewindStart
     }
 
     /// The ring starts as tall as **the screen holding `point`** (2026-10-04,
@@ -1449,8 +1460,33 @@ final class CaretHalo {
     /// of the screen, so no approach and no travel. It does shrink, at the
     /// tunnel's rate (`sparksShrink`, the same evening).
     private var rewindStyle: HaloStyle {
-        destination == .spawn ? HaloStyle.current(for: .spawn) : Self.tunnelStyle
+        if destination == .spawn { return HaloStyle.current(for: .spawn) }
+        return boundFlight ? HaloStyle.current(for: .bound) : Self.tunnelStyle
     }
+    /// **A bound sentence keeps its own effect and flies it to the terminal**
+    /// (2026-10-08, Victor: *"instead of the reverse tunnel that goes towards the
+    /// receiving terminal, [in] bound dictation, bound prompting, I would like
+    /// that effect from around the mouse to move from where it was currently
+    /// towards that terminal by replaying the sound recorded up to that point
+    /// backwards … condensed to fit the time estimated for the flight"*). The
+    /// bound dress is already on, so `use` changes nothing and nothing warms up:
+    /// the picture he watched while talking leaves the pointer at the close
+    /// (`rewindStart`) and lands on the terminal's centre (`rewindAim`) at the
+    /// predicted end of the transcription (`RewindTimeline.flight`), at its own
+    /// size and full ink, fed the take backwards at `rewindSpeed` — one pass
+    /// over the flight. Late words find it on the terminal, the take looping.
+    /// Only a dress that rides the pointer can fly; an anchored one (Stars, the
+    /// puzzle), a pinned canvas or the film keeps the Reverse tunnel. `WT_HALO_FLIGHT=0`
+    /// brings the tunnel back for bound sentences.
+    private var boundFlight: Bool {
+        destination == .bound && !Self.flightOff && Self.rides(HaloStyle.current(for: .bound))
+    }
+    private static func rides(_ style: HaloStyle) -> Bool {
+        // The film is placed by the pointer itself (`Self.origin()`), not by `aim`.
+        (style.preset != nil || style.coversScreen) && style.isAvailable
+            && style.preset?.anchored != true && style.preset?.pinnedHorizon == nil
+    }
+    private static let flightOff = ProcessInfo.processInfo.environment["WT_HALO_FLIGHT"] == "0"
     private var rewindApproaches: Bool { rewindStyle == Self.tunnelStyle }
     /// **A spawn's Sparks shrinks through the transcription like the tunnel**
     /// (2026-10-02) — `RewindTimeline.shrink` on the same clock, from its full
@@ -1557,9 +1593,11 @@ final class CaretHalo {
                 : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
             web?.feed(samples)
             if (self.rewinding && self.rewindApproaches) || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
-            else if self.rewinding { web?.approach(scale: self.sparksShrink, alpha: 1) }
+            else if self.rewinding && !self.boundFlight { web?.approach(scale: self.sparksShrink, alpha: 1) }
             // The tunnel's centre travels on its own clock, not the pointer's.
             if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
+            // A bound sentence's effect flies to the terminal on its own clock too.
+            if self.rewinding && self.boundFlight { self.follow() }
             self.under?.feed(samples)
             // The panel being replaced stays on screen until the new one has
             // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
@@ -1881,8 +1919,9 @@ final class CaretHalo {
         // (2026-10-07, Victor: *"I want the reverse tunnel to focus on the
         // target terminal or application that received the dictation and not
         // the preview panel"*) — it ends there in its own fade.
-        if drawn == Self.tunnelStyle, rewinding || fadeAim != nil {
-            Log.info("◯ halo not docked on the prompt panel — the reverse tunnel ends on the window that got the words")
+        // **So does a bound sentence's effect that flew there** (2026-10-08).
+        if drawn == Self.tunnelStyle || (boundFlight && drawn == rewindStyle), rewinding || fadeAim != nil {
+            Log.info("◯ halo not docked on the prompt panel — the \(drawn == Self.tunnelStyle ? "reverse tunnel" : "flight") ends on the window that got the words")
             return
         }
         guard live || closing || now - hiddenAt < Self.dockLate else {

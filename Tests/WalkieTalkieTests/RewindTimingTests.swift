@@ -197,6 +197,16 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(RewindTimeline.travel(elapsed: 0.25 + 0.3, predicted: 0.5, visibleFrom: 0.25), 1)  // minimumSpan
     }
 
+    /// 2026-10-08: a bound sentence's effect flies to the terminal over the whole prediction.
+    func testFlightLandsAtThePrediction() {
+        XCTAssertEqual(RewindTimeline.flight(elapsed: 0, predicted: 3), 0)
+        XCTAssertLessThan(RewindTimeline.flight(elapsed: 0.2, predicted: 3), 0.05)              // leaves gently
+        XCTAssertEqual(RewindTimeline.flight(elapsed: 1.5, predicted: 3), 0.5, accuracy: 1e-9)  // half-way at half
+        XCTAssertEqual(RewindTimeline.flight(elapsed: 3, predicted: 3), 1)                      // on the terminal as the words are due
+        XCTAssertEqual(RewindTimeline.flight(elapsed: 9, predicted: 3), 1)                      // and stays there
+        XCTAssertEqual(RewindTimeline.flight(elapsed: 0.6, predicted: 0.1), 1)                 // minimumSpan
+    }
+
     /// 2026-10-04: the ring starts as tall as the screen.
     func testRingStartsAsTallAsTheScreen() {
         let restRing = 0.66 * 0.317

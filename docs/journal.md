@@ -15357,3 +15357,20 @@ true}` calls `onGestureKamikaze`. End to end on the installed build: `/test/spaw
 instant the offer appeared — the word went 3.6 s after the launch (1 s after the prompt), Claude
 Code queued it 1 s later, handed it to the running turn at +5 s, and the window closed itself 27 s
 after the launch.
+
+## A bound sentence's effect flies to the terminal, fed the take backwards (2026-10-08)
+
+Victor (dictated): *"Instead of the reverse tunnel that goes towards the receiving terminal, [in]
+bound dictation, bound prompting, I would like that effect from around the mouse to move from where
+it was currently towards that terminal by replaying the sound recorded up to that point backwards …
+condensed to fit the time estimated for the flight."*
+
+- **The bound dress stays on** (`CaretHalo.boundFlight` → `rewindStyle` = `HaloStyle.current(for:
+  .bound)`, Tendrils on his Mac): no panel rebuild, no warm-up, nothing to fade in.
+- **The flight is the predicted transcription**: `RewindTimeline.flight` = smoothstep over
+  `DecodeRate.predict` (≥ `minimumSpan`), from the pointer latched at the close to the centre of the
+  window `aimRewind` resolves. The take is read backwards at `seconds / predicted` (the existing
+  `rewindSpeed`, 1–8×) — one pass over the flight; late words find it on the terminal, looping.
+- **Not for** an anchored dress, a pinned canvas, or the film (placed by the pointer, not by `aim`):
+  those keep the Reverse tunnel. `WT_HALO_FLIGHT=0` restores the tunnel for every bound sentence.
+- **Not docked** on the prompt panel, same exception as the tunnel (2026-10-07).

@@ -177,6 +177,24 @@ enum RewindTimeline {
     /// The share of the prediction by which the tunnel is on the window.
     static let arriveShare = 0.5
 
+    /// **A bound sentence's own effect flies from the pointer to the terminal**
+    /// (2026-10-08, Victor: *"instead of the reverse tunnel that goes towards the
+    /// receiving terminal … that effect from around the mouse to move from where
+    /// it was currently towards that terminal by replaying the sound recorded up
+    /// to that point backwards … condensed to fit the time estimated for the
+    /// flight"*). The flight is the whole predicted transcription, eased in and
+    /// out, so it lands on the terminal as the words are due; the take is read
+    /// backwards at the speed that fits one pass into the same span
+    /// (`CaretHalo.rewindSpeed`). No warm-up to wait out: the effect is already
+    /// on screen.
+    ///
+    /// - Returns: 0 on the pointer … 1 on the terminal.
+    static func flight(elapsed: TimeInterval, predicted: TimeInterval) -> Double {
+        let span = max(predicted, minimumSpan)
+        let u = min(max(elapsed / span, 0), 1)
+        return u * u * (3 - 2 * u)
+    }
+
     /// **Sparks shrinks at the tunnel's own rate** (2026-10-02, Victor: *"dacă
     /// … Stars se micșorează în același stil în care se micșorează și Reverse
     /// Tunnel … în loc să rămână activ pe tot ecranul, să se micșoreze în timp
