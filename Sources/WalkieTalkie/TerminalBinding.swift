@@ -2063,10 +2063,16 @@ final class TerminalBinding {
     /// Runs `osascript` and `ps` — call it off the main thread.
     static func frontClaudePromptTTY(bundleID: String?) -> String? {
         guard bundleID == "com.apple.Terminal", let tab = frontTerminalTab().tab else { return nil }
-        guard let command = foregroundCommand(onTTY: tab.tty), !refusesDelivery(command) else { return nil }
-        let device = (tab.tty as NSString).lastPathComponent
-        guard publishedDirectory(onTTY: device) != nil else { return nil }
-        return tab.tty
+        return claudePromptOn(tty: tab.tty) ? tab.tty : nil
+    }
+
+    /// **Questions 2 and 3 alone, of any tty**: a non-shell in front on it and a
+    /// live Claude Code published there. The late kamikaze asks it again before
+    /// typing the word into a tab whose session may have ended since its prompt
+    /// (2026-10-08) — `submitPrompt` has no shell guard of its own.
+    static func claudePromptOn(tty: String) -> Bool {
+        guard let command = foregroundCommand(onTTY: tty), !refusesDelivery(command) else { return false }
+        return publishedDirectory(onTTY: (tty as NSString).lastPathComponent) != nil
     }
 
     /// **The same question, asked of a VS Code window** (2026-10-06) — the tty

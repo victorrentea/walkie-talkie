@@ -8686,10 +8686,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pasteText(line, to: pid, settles: false)
                     self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: line.count)
                     self.offerKamikaze(already: already, at: "VS Code \(vscodeTTY)") { [weak self] in
-                        guard let self else { return }
-                        self.pasteText("kamikaze", to: frontPid, settles: false)
-                        self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: "kamikaze".count)
-                        self.holdOnClipboard(line, why: "the prompt, again after its kamikaze")
+                        // A late flick (the offer lasts, 2026-10-08) pastes at the
+                        // caret, so the caret must still be that same terminal.
+                        let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            let still = TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: frontPid) == vscodeTTY
+                            DispatchQueue.main.async {
+                                guard let self else { return }
+                                guard still else { self.kamikazeNotSent(to: "VS Code \(vscodeTTY)"); return }
+                                self.pasteText("kamikaze", to: frontPid, settles: false)
+                                self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: "kamikaze".count)
+                                self.holdOnClipboard(line, why: "the prompt, again after its kamikaze")
+                            }
+                        }
                     }
                     return
                 }
@@ -8701,8 +8710,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
                 self.lastDictation = line
-                self.offerKamikaze(already: already, at: tty) {
+                self.offerKamikaze(already: already, at: tty) { [weak self] in
                     DispatchQueue.global(qos: .userInitiated).async {
+                        // The session may have ended since (the offer lasts):
+                        // never the word + Return at a shell.
+                        guard TerminalBinding.claudePromptOn(tty: tty) else {
+                            DispatchQueue.main.async { self?.kamikazeNotSent(to: tty) }
+                            return
+                        }
                         let ok = TerminalBinding.submitPrompt("kamikaze", toTTY: tty)
                         Log.info(ok ? "☠️ kamikaze typed into Claude Code on \(tty)" : "☠️ kamikaze could not be typed into \(tty)")
                     }
@@ -8711,7 +8726,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    // MARK: - Kamikaze, after the prompt landed (2026-10-07)
+    // MARK: - Kamikaze, after the prompt landed (2026-10-07; lasting 2026-10-08)
 
     /// **A prompt that has just landed in a terminal can still be made a
     /// kamikaze** — for three seconds, `☠️ Kamikaze?` beside the pointer, and
@@ -8730,7 +8745,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pasted into anything else, or a prompt that already carries the word.
     /// A sentence open or settling outranks the offer — the flick is then
     /// that sentence's (`onGestureKamikaze`).
-    private var kamikazeOffer: (send: () -> Void, until: CFAbsoluteTime)?
+    ///
+    /// **The offer outlives its label** (2026-10-08). Victor: *"If I do the
+    /// gesture for Kamikaze, the last terminal that has received a prompt would
+    /// be sent a Kamikaze signal. Even if it's much later than the window
+    /// allowed, the label disappears after a while, but then I can still."* So
+    /// the three seconds are the `☠️ Kamikaze?` flash only; the offer stands
+    /// until it is taken or a newer prompt lands — one carrying the word
+    /// already withdraws it, since the last terminal prompted is then on its way
+    /// out. Each route re-checks its terminal at the flick, because by then the
+    /// session may have ended (`kamikazeNotSent`).
+    private var kamikazeOffer: (send: () -> Void, destination: String)?
     private static let kamikazeOfferSeconds: TimeInterval = 3
 
     private static func endsInKamikaze(_ text: String?) -> Bool {
@@ -8738,21 +8763,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func offerKamikaze(already: Bool, at destination: String, send: @escaping () -> Void) {
-        guard !already else { return }
-        kamikazeOffer = (send, CFAbsoluteTimeGetCurrent() + Self.kamikazeOfferSeconds)
+        guard !already else {
+            if let old = kamikazeOffer { Log.info("☠️ kamikaze offer for \(old.destination) withdrawn — the newest prompt carried the word") }
+            kamikazeOffer = nil
+            return
+        }
+        kamikazeOffer = (send, destination)
         overlay.flash("☠️ Kamikaze?", duration: Self.kamikazeOfferSeconds)
-        Log.info("☠️ kamikaze offered for \(Int(Self.kamikazeOfferSeconds)) s — the prompt landed in \(destination)")
+        Log.info("☠️ kamikaze offered — the prompt landed in \(destination); the flash lasts \(Int(Self.kamikazeOfferSeconds)) s, the offer until the next prompt")
     }
 
-    /// True when the flick was the offer's — sent, or arrived a beat late.
+    /// True when the flick was the offer's.
     private func takeKamikazeOffer() -> Bool {
         guard let offer = kamikazeOffer else { return false }
         kamikazeOffer = nil
-        guard CFAbsoluteTimeGetCurrent() <= offer.until else { return false }
-        Log.info("☠️ kamikaze — sent alone, after the prompt")
+        Log.info("☠️ kamikaze — sent alone, after the prompt, to \(offer.destination)")
         overlay.flash("☠️ Kamikaze sent", duration: 1.5)
         offer.send()
         return true
+    }
+
+    /// A late flick whose session is no longer there to take the word.
+    private func kamikazeNotSent(to destination: String) {
+        Log.error("☠️ kamikaze not sent — no Claude Code prompt on \(destination) any more")
+        overlay.flash("☠️ Kamikaze not sent — that session has ended", duration: 3)
     }
 
     /// The word alone to a terminal — the bound one's own delivery (shell guard,
