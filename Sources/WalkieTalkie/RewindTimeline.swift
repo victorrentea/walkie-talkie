@@ -199,11 +199,19 @@ enum RewindTimeline {
     /// for a prompt at the caret, then for both: *"the trajectory shouldn't be
     /// necessarily direct; should be a bit elliptical towards the center of the
     /// recipient"*). The straight line from `a` to `b` plus a sideways bulge of
-    /// `bow` × its length at the middle (`sin(π·p)`), always to the left of the
-    /// direction of travel.
+    /// `bow` × its length at the middle (`sin(π·p)`).
+    ///
+    /// **Concave: it sags** (same afternoon, Victor: *"the trajectory … to the
+    /// recipient app center should be concave"*) — the bulge always goes down
+    /// the screen (Cocoa's y up, so the perpendicular whose y is negative), a ∪
+    /// under the straight line whichever way it travels; it went to the left of
+    /// travel for one build, which was a hump half the time. Straight up or down
+    /// there is no "down" to the side: it bows left.
     static func arc(from a: CGPoint, to b: CGPoint, progress p: Double) -> CGPoint {
         let dx = b.x - a.x, dy = b.y - a.y, q = CGFloat(p)
-        let bulge = CGFloat(bow * sin(.pi * p))
+        // (−dy, dx) is left of travel; flip it if that points up.
+        let side: CGFloat = dx > 0 ? -1 : 1
+        let bulge = CGFloat(bow * sin(.pi * p)) * side
         return CGPoint(x: a.x + dx * q - dy * bulge, y: a.y + dy * q + dx * bulge)
     }
     static let bow = 0.3

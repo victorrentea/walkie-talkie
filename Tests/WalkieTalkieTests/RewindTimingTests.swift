@@ -216,7 +216,11 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(end.y, 0, accuracy: 1e-9)
         let mid = RewindTimeline.arc(from: a, to: b, progress: 0.5)
         XCTAssertEqual(mid.x, 50, accuracy: 1e-9)
-        XCTAssertEqual(mid.y, 30, accuracy: 1e-9)                    // left of travel, 0.3 × the length
+        XCTAssertEqual(mid.y, -30, accuracy: 1e-9)                   // sags below the line, 0.3 × the length
+        let back = RewindTimeline.arc(from: b, to: a, progress: 0.5)
+        XCTAssertEqual(back.y, -30, accuracy: 1e-9)                  // concave whichever way it travels
+        let up = RewindTimeline.arc(from: a, to: CGPoint(x: 100, y: 100), progress: 0.5)
+        XCTAssertLessThan(up.y, 50)                                  // below the diagonal's middle
         XCTAssertEqual(RewindTimeline.orbit(around: b, since: 0), b)  // lands without a jump
         for t in [0.5, 1.0, 1.7] {
             let p = RewindTimeline.orbit(around: b, since: t)
