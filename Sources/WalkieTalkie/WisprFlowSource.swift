@@ -1973,7 +1973,7 @@ final class WisprFlowSource: DictationSource {
         speculativeDrop?.cancel()
         speculativeDrop = drop
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.speculativeGrace, execute: drop)
-        if relay { armChordAnswerProbe(chord: gestureAt) }
+        if relay { armChordAnswerProbe(chord: gestureAt); armMicOpenWatch(chord: gestureAt) }
         // **The swallow window and the row poll are armed here, at the start
         // chord** (2026-09-13). They used to be armed at the microphone's close,
         // which is the single decision both failures of that day came out of: a
@@ -2020,6 +2020,38 @@ final class WisprFlowSource: DictationSource {
     /// left, the modifiers on the wire now, Secure Input, Wispr's age and input,
     /// the row on top, and who is in front. Diagnosis only — nothing changes.
     private static let chordAnswerProbe: TimeInterval = 1.5
+
+    /// **A Wispr whose microphone has not opened by `micOpenGrace` is out of
+    /// this sentence** (2026-10-08, Victor: *"dictation hangs with «opening
+    /// wispr flow». why? + that should autofall back to local model not hang"*).
+    /// At 14:33:54 Wispr (up 29 h) made its row and never opened its
+    /// microphone; at 14:34:34 it did not answer the chord at all. The chip
+    /// said `Opening Wispr Flow...` for the whole sentence, and the only way
+    /// out was F1's 12 s `speculativeGrace` — which also never fires once a row
+    /// exists. A warm Wispr opens in ~0.4–0.7 s (the bridge's release lines);
+    /// a cold one is already handed to the local model at the start (`AutoLocal.
+    /// wisprStartupGrace`). So past 3 s with no microphone, row or not, the
+    /// relay's own recording carries the sentence (`holdOwnTake`: the chip stops
+    /// saying `Opening`, his stop posts no chord, the local model transcribes
+    /// it), Wispr's open row is dismissed (⌃Escape) so it is free for the next
+    /// one, and a microphone it opens late is a ghost (`armGhostWatch`).
+    static let micOpenGrace: TimeInterval = 3
+    private func armMicOpenWatch(chord: CFAbsoluteTime) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.micOpenGrace) { [weak self] in
+            guard let self, self.gestureAt == chord, self.relayStarted, self.isRecording || self.speculative,
+                  self.ownTakeOnly == nil, !self.micSeen, !self.cancelling,
+                  self.startedMode != .scratchpad, !self.watch.sampleIsRunningInput() else { return }
+            let hadRow = self.historyRow
+            let why = hadRow == nil ? "Wispr Flow did not answer the chord in \(Int(Self.micOpenGrace)) s"
+                                    : "Wispr Flow's microphone did not open in \(Int(Self.micOpenGrace)) s"
+            guard self.holdOwnTake(why) else { return }
+            if let row = hadRow {
+                Log.error("💻 dismissing Wispr's row \(row) (⌃Escape) — it never opened its microphone, so it is free for the next sentence")
+                HotkeyTap.postWisprCancel()
+            }
+            self.armGhostWatch()
+        }
+    }
     private func armChordAnswerProbe(chord: CFAbsoluteTime) {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordAnswerProbe) { [weak self] in
             guard let self, self.gestureAt == chord, self.relayStarted,
@@ -3241,6 +3273,11 @@ final class WisprFlowSource: DictationSource {
     private func endWithRecording(_ why: String, row: Int64?, forced: Bool = false, dismissedAt: Double = 0) {
         // Read now, on main: the next sentence's gesture moves them.
         let pid = pidAtAdoption
+        // **Wispr never heard a word of it** (2026-10-08): then the floor is only
+        // *some speech* (0.3 s), not 1.5 s — the 14:33:54 sentence had 1.2 s
+        // voiced, Recover decoded 40 chars from it, and it was dropped. The
+        // 1.5 s floor guards a sentence Wispr did hear and mangled.
+        let floor = micSeen ? ElevenLabsSource.fallbackVoicedFloor : 0.3
         let closed = lastStopAt > 0 ? Date().timeIntervalSince1970 - (CFAbsoluteTimeGetCurrent() - lastStopAt) : 0
         meterQueue.async { [weak self] in
             guard let self else { return }
@@ -3255,7 +3292,7 @@ final class WisprFlowSource: DictationSource {
                     self.didEnd?(.silent(why))
                     return
                 }
-                if voiced >= ElevenLabsSource.fallbackVoicedFloor {
+                if voiced >= floor {
                     Log.error(String(format: "wispr: %@ — %.1f s voiced on the relay's own recording: the local model %@",
                                      why, voiced, forced ? "takes it" : "stands in (Q14)"))
                     self.didEnd?(.failed(why: why, audio: taken.url, duration: taken.duration))

@@ -638,6 +638,22 @@ name `Wispr Feed`); his microphone is `InputDevice.resolve()`, for Wispr too.
   guest's crash reports kept no exception text, so the exact condition is still a guess.
 - `GET /test/state` → `wisprLive.bridge` {`feed`, `holding`, `held`, `queued`, `pending`}.
 
+## A Wispr whose microphone does not open is out of the sentence at 3 s (2026-10-08)
+
+Victor: *"dictation hangs with «opening wispr flow». why? + that should autofall back to local model
+not hang"*. 14:33:54: Wispr (up 29 h) made row 18613 and never opened its microphone; the chip said
+`Opening Wispr Flow...` for 12 s, the stop waited 2.5 s for an input that never ran, and Q14 refused
+the take at 1.2 s voiced (under 1.5 s) — Recover later decoded 40 chars from it. 14:34:34: no row, no
+microphone; he cancelled at 2.8 s.
+
+- **`WisprFlowSource.micOpenGrace` 3 s** (`armMicOpenWatch`, armed beside the chord probe on every
+  relay start): no microphone seen by then, row or not → `holdOwnTake` (`💻 Wispr Flow's microphone did
+  not open in 3 s` / `did not answer the chord in 3 s`) — the chip drops `Opening`, his stop posts no
+  chord, the local model transcribes the relay's take; Wispr's open row is dismissed (⌃Escape) and
+  `armGhostWatch` dismisses a late microphone. F1's 12 s `speculativeGrace` is now only the net.
+- **A take Wispr never heard falls back at 0.3 s voiced, not 1.5 s** (`endWithRecording`: floor =
+  `micSeen ? fallbackVoicedFloor : 0.3`). The 1.5 s floor guards a sentence Wispr heard and mangled.
+
 ## Diagnostics for a Wispr that will not start (2026-09-29)
 
 Three log lines, no behaviour behind them (journal: *Wispr as the engine, 29 Sep*):
