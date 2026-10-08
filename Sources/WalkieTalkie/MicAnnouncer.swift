@@ -364,86 +364,103 @@ private final class BottomTab {
 enum WaveGlyph {
     static let heights: [CGFloat] = [0.3, 0.6, 0.82, 1.0, 0.82, 0.6, 0.3]
 
-    /// One pass of the glint, left to right, then again.
-    static let glintPeriod: TimeInterval = 1.6
-    /// The bars' brightness away from the glint.
+    /// One pass of the light along the whole trajectory, then again.
+    static let glintPeriod: TimeInterval = 2.6
+    /// The bars' brightness away from the light.
     static let dim: CGFloat = 0.5
 
-    /// `glint`: nil draws every bar white; 0…1 is where the light is along its
-    /// pass — it enters left of the first bar and leaves right of the last.
+    /// `glint`: nil draws every bar white; 0…1 is how far the light has run
+    /// along its trajectory — it enters at the first bar's foot and leaves past
+    /// the last bar's.
     ///
-    /// **The light runs along the wave's shape, not across it** (2026-10-08,
-    /// Victor: *"a section of that wavelength brighter following the shape of
-    /// the wavelength, no just fading left-right"*). A bar-by-bar brightness read
-    /// as a band sliding sideways; now a short bright stretch of the outline —
-    /// the curve through the bar tips, top and mirrored bottom — climbs the
-    /// slope, crosses the peak and comes down, with a soft glow. The bars under
-    /// it lift a little, so the section it is on is brighter as a whole.
+    /// **The light travels the wave's own trajectory** (2026-10-08, Victor drew
+    /// it on screen: a wave as one serpentine line, and a short bright segment
+    /// running along it — *"draw segments of it … progressing through, glowing
+    /// … following the trajectory of the wavelength itself"*). The trajectory is
+    /// the bars read as that line: up the first, a small arc over the gap to the
+    /// top of the second, down it, a small arc under to the foot of the third,
+    /// up… The light is a bar-wide stroke along it, a bright head and a fading
+    /// tail, glowing; the bars stay at `dim` underneath. Supersedes the same
+    /// morning's two: a band of bars brightening, then a light on the outline.
     static func image(height h: CGFloat, glint: CGFloat? = nil) -> NSImage {
         let bar = max(2, (h * 0.11).rounded()), gap = max(2, (h * 0.12).rounded())
         let w = CGFloat(heights.count) * bar + CGFloat(heights.count - 1) * gap
-        let n = CGFloat(heights.count)
-        // Room for the glow, on every frame alike — a glyph that grew when the
-        // light came on would nudge the words beside it.
-        let lw = max(1.5, bar * 0.8), pad = (lw * 1.5).rounded(.up)
+        // Room for the arcs and the glow, on every frame alike — a glyph that
+        // grew when the light came on would nudge the words beside it.
+        let pad = (bar * 1.5).rounded(.up)
         return NSImage(size: NSSize(width: w + 2 * pad, height: h + 2 * pad), flipped: false) { _ in
             guard let cg = NSGraphicsContext.current?.cgContext else { return false }
             cg.translateBy(x: pad, y: pad)
-            // Where the light is, in bar units; and how lit a point at `x` is.
-            let at = glint.map { -1.5 + $0 * (n + 2) }
-            func lit(_ x: CGFloat) -> CGFloat {
-                guard let at else { return 0 }
-                let d = (x / (bar + gap) - at) / 0.9
-                return exp(-d * d)
-            }
+            NSColor.white.withAlphaComponent(glint == nil ? 1 : dim).setFill()
             for (i, k) in heights.enumerated() {
-                let cx = CGFloat(i) * (bar + gap) + bar / 2
-                let alpha = glint == nil ? 1 : dim + (0.85 - dim) * lit(cx)
-                NSColor.white.withAlphaComponent(alpha).setFill()
                 let bh = (h * k).rounded()
                 let r = NSRect(x: CGFloat(i) * (bar + gap), y: ((h - bh) / 2).rounded(), width: bar, height: bh)
                 NSBezierPath(roundedRect: r, xRadius: bar / 2, yRadius: bar / 2).fill()
             }
-            guard glint != nil else { return true }
-            // The outline: a Catmull-Rom curve through the bar tips, inset by
-            // half the stroke so it rides on the rounded ends, not past them.
-            let tips = heights.enumerated().map { i, k in
-                CGPoint(x: CGFloat(i) * (bar + gap) + bar / 2, y: ((h * k).rounded() - lw) / 2)
-            }
-            var curve: [CGPoint] = []
-            let steps = 12
-            for i in 0..<(tips.count - 1) {
-                let p0 = tips[max(i - 1, 0)], p1 = tips[i], p2 = tips[i + 1], p3 = tips[min(i + 2, tips.count - 1)]
-                for s in 0..<steps {
-                    let t = CGFloat(s) / CGFloat(steps), t2 = t * t, t3 = t2 * t
-                    func cr(_ a: CGFloat, _ b: CGFloat, _ c: CGFloat, _ d: CGFloat) -> CGFloat {
-                        0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t3)
-                    }
-                    curve.append(CGPoint(x: cr(p0.x, p1.x, p2.x, p3.x), y: cr(p0.y, p1.y, p2.y, p3.y)))
-                }
-            }
-            curve.append(tips[tips.count - 1])
-            // One glow for the whole stretch: a shadow per segment is clipped
-            // to that segment and comes out as boxes.
+            guard let glint else { return true }
+            let path = trajectory(h: h, bar: bar, gap: gap)
+            // Arc length at every point, then the light: the head at `head`, a
+            // tail `tail` long behind it.
+            var at: [CGFloat] = [0]
+            for j in 1..<path.count { at.append(at[j - 1] + hypot(path[j].x - path[j - 1].x, path[j].y - path[j - 1].y)) }
+            let total = at[at.count - 1], tail = h * 0.75
+            let head = glint * (total + tail)
             cg.saveGState()
-            cg.setShadow(offset: .zero, blur: lw * 1.5, color: NSColor.white.withAlphaComponent(0.8).cgColor)
+            cg.setShadow(offset: .zero, blur: bar * 1.2, color: NSColor.white.withAlphaComponent(0.85).cgColor)
             cg.beginTransparencyLayer(auxiliaryInfo: nil)
-            cg.setLineCap(.round)
-            cg.setLineWidth(lw)
-            for side: CGFloat in [1, -1] {
-                for j in 0..<(curve.count - 1) {
-                    let a = curve[j], b = curve[j + 1]
-                    let alpha = lit((a.x + b.x) / 2)
-                    guard alpha > 0.02 else { continue }
-                    cg.setStrokeColor(NSColor.white.withAlphaComponent(0.95 * alpha).cgColor)
-                    cg.move(to: CGPoint(x: a.x, y: h / 2 + side * a.y))
-                    cg.addLine(to: CGPoint(x: b.x, y: h / 2 + side * b.y))
-                    cg.strokePath()
-                }
+            // A disc a bar wide at every sample from the tail's end to the head,
+            // each one *replacing* what is under it (`.copy`), so the stroke is
+            // as bright as its brightest point, never brighter where the discs
+            // overlap — no beads, no stripes through the arcs, and no separate
+            // dot for the head.
+            cg.setBlendMode(.copy)
+            for j in 0..<path.count {
+                let d = head - at[j]
+                guard d >= 0, d <= tail else { continue }
+                let alpha = pow(1 - d / tail, 1.2)
+                cg.setFillColor(NSColor.white.withAlphaComponent(alpha).cgColor)
+                cg.fillEllipse(in: CGRect(x: path[j].x - bar / 2, y: path[j].y - bar / 2, width: bar, height: bar))
             }
             cg.endTransparencyLayer()
             cg.restoreGState()
             return true
         }
+    }
+
+    /// The bars as one serpentine line, densely sampled: up bar 0, over to bar
+    /// 1's top, down it, under to bar 2's foot… Centre lines, inset by half a
+    /// bar so the light's round head sits inside each rounded end.
+    private static func trajectory(h: CGFloat, bar: CGFloat, gap: CGFloat) -> [CGPoint] {
+        let ends = heights.enumerated().map { i, k -> (x: CGFloat, lo: CGFloat, hi: CGFloat) in
+            let bh = (h * k).rounded(), y0 = ((h - bh) / 2).rounded()
+            return (CGFloat(i) * (bar + gap) + bar / 2, y0 + bar / 2, y0 + bh - bar / 2)
+        }
+        let step: CGFloat = 0.5
+        var pts: [CGPoint] = []
+        func line(_ a: CGPoint, _ b: CGPoint) {
+            let n = max(1, Int(hypot(b.x - a.x, b.y - a.y) / step))
+            for s in 0..<n { let t = CGFloat(s) / CGFloat(n); pts.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)) }
+        }
+        func arc(_ a: CGPoint, _ b: CGPoint, bulge: CGFloat) {
+            let c1 = CGPoint(x: a.x, y: a.y + bulge), c2 = CGPoint(x: b.x, y: b.y + bulge)
+            for s in 0..<24 {
+                let t = CGFloat(s) / 24, u = 1 - t
+                pts.append(CGPoint(x: u*u*u*a.x + 3*u*u*t*c1.x + 3*u*t*t*c2.x + t*t*t*b.x,
+                                   y: u*u*u*a.y + 3*u*u*t*c1.y + 3*u*t*t*c2.y + t*t*t*b.y))
+            }
+        }
+        var up = true
+        for (i, e) in ends.enumerated() {
+            let from = CGPoint(x: e.x, y: up ? e.lo : e.hi), to = CGPoint(x: e.x, y: up ? e.hi : e.lo)
+            line(from, to)
+            if i + 1 < ends.count {
+                let n = ends[i + 1]
+                arc(to, CGPoint(x: n.x, y: up ? n.hi : n.lo), bulge: (up ? 1 : -1) * gap * 0.9)
+            } else {
+                pts.append(to)
+            }
+            up.toggle()
+        }
+        return pts
     }
 }

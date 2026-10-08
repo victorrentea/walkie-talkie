@@ -328,13 +328,17 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   (U+E000) in the text and `〰` in logs and `startupBanner`. **The green tab names the engine too**,
   after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main). **A glint runs
   along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
-  gentle"*): the bars sit at 50 % white and the light passes left to right every 1.6 s, the attachment
-  redrawn at 30 fps while the tab is up (`BottomTab.startGlint`, `WaveGlyph.image(glint:)`). **The light
-  follows the wave's shape** (same morning, *"a section of that wavelength brighter following the shape
-  of the wavelength, no just fading left-right"*): a bright stretch of the outline — a Catmull-Rom curve
-  through the bar tips, top and mirrored bottom — climbs, crosses the peak and comes down, glowing (one
-  shadow over a transparency layer: a shadow per segment came out as boxes); the bars under it lift to
-  85 %. The glyph carries a fixed margin for the glow on every frame, so the words never shift.
+  gentle"*): the bars sit at 50 % white and a light runs **the wave's own trajectory** every 2.6 s
+  (`BottomTab.startGlint`, `WaveGlyph.image(glint:)`, redrawn at 30 fps while the tab is up). Victor drew
+  it on screen the same morning — a wave as one serpentine line and a short bright segment travelling
+  along it (*"following the trajectory of the wavelength itself"*): `WaveGlyph.trajectory` reads the bars
+  as that line — up bar 0, a small arc over the gap to bar 1's top, down it, an arc under to bar 2's foot
+  … — and the light is a bar-wide stroke along it, bright head, a tail of 0.75 × the height fading
+  behind, glowing. Drawn as discs with `.copy` inside a transparency layer, so overlaps never brighten
+  (butt-capped segments striped through the arcs; a separate head disc read as a dot). Superseded the
+  same morning: whole bars brightening as a band (*"no just fading left-right"*), then a light on the
+  outline through the tips. The glyph keeps a fixed margin for the arcs and glow on every frame, so the
+  words never shift.
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
   glyph, the tick and the recording to disagree. → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*
