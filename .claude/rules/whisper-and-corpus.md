@@ -324,7 +324,8 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   `applicationDidFinishLaunching` after the engine is restored; never under `RELAY_SHOOT`.
   `/test/state.startupBanner` holds its words. **The microphone and the engine are split by a drawn
   wave** (2026-10-08 — ` / ` that morning, then *"put such a wave, but symmetrical both sides"*):
-  `WaveGlyph`, seven mirrored white bars at the text's cap height, written `MicAnnouncer.wave`
+  `WaveGlyph`, seven mirrored white bars at the text's cap height (**one wire since the same morning**,
+  below), written `MicAnnouncer.wave`
   (U+E000) in the text and `〰` in logs and `startupBanner`. **The green tab names the engine too**,
   after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main). **A glint runs
   along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
@@ -337,7 +338,12 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   behind, glowing. Drawn as discs with `.copy` inside a transparency layer, so overlaps never brighten
   (butt-capped segments striped through the arcs; a separate head disc read as a dot). Superseded the
   same morning: whole bars brightening as a band (*"no just fading left-right"*), then a light on the
-  outline through the tips. The glyph keeps a fixed margin for the arcs and glow on every frame, so the
+  outline through the tips. **The wave itself is that wire** (same morning, *"it's not a contiguous
+  wire. It's a set of lines … with the lines connected to each other"*, then *"the base shape should
+  have the same rounded single line shape the light follows"*): `trajectory` is stroked at 50 % white,
+  `wire` = 0.7 × the old bar width, round turns bulging 0.6 × (bar + gap); opaque inside a
+  transparency layer dimmed whole — a translucent stroke showed brighter dots where each run met its
+  turn. The glyph keeps a fixed margin for the arcs and glow on every frame, so the
   words never shift.
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the

@@ -379,26 +379,38 @@ enum WaveGlyph {
     /// … following the trajectory of the wavelength itself"*). The trajectory is
     /// the bars read as that line: up the first, a small arc over the gap to the
     /// top of the second, down it, a small arc under to the foot of the third,
-    /// up… The light is a bar-wide stroke along it, a bright head and a fading
-    /// tail, glowing; the bars stay at `dim` underneath. Supersedes the same
+    /// up… — and since the same morning it is also what is drawn: one wire at
+    /// `dim`, the light a stroke of the wire's width along it, a bright head and
+    /// a fading tail, glowing. Supersedes the same
     /// morning's two: a band of bars brightening, then a light on the outline.
     static func image(height h: CGFloat, glint: CGFloat? = nil) -> NSImage {
         let bar = max(2, (h * 0.11).rounded()), gap = max(2, (h * 0.12).rounded())
         let w = CGFloat(heights.count) * bar + CGFloat(heights.count - 1) * gap
         // Room for the arcs and the glow, on every frame alike — a glyph that
         // grew when the light came on would nudge the words beside it.
-        let pad = (bar * 1.5).rounded(.up)
+        let pad = (bar * 1.5).rounded(.up), wire = max(1.5, (bar * 0.7).rounded())
         return NSImage(size: NSSize(width: w + 2 * pad, height: h + 2 * pad), flipped: false) { _ in
             guard let cg = NSGraphicsContext.current?.cgContext else { return false }
             cg.translateBy(x: pad, y: pad)
-            NSColor.white.withAlphaComponent(glint == nil ? 1 : dim).setFill()
-            for (i, k) in heights.enumerated() {
-                let bh = (h * k).rounded()
-                let r = NSRect(x: CGFloat(i) * (bar + gap), y: ((h - bh) / 2).rounded(), width: bar, height: bh)
-                NSBezierPath(roundedRect: r, xRadius: bar / 2, yRadius: bar / 2).fill()
-            }
-            guard let glint else { return true }
+            // **One wire, not seven bars** (2026-10-08, Victor: *"it's not a
+            // contiguous wire. It's a set of lines. Make it so it's a contiguous
+            // wire … following what you currently have, but then with the lines
+            // connected to each other"*, pointing at a drawn audio waveform).
             let path = trajectory(h: h, bar: bar, gap: gap)
+            cg.setLineWidth(wire)
+            cg.setLineCap(.round)
+            cg.setLineJoin(.round)
+            // Opaque inside a layer, the layer dimmed as a whole: a translucent
+            // stroke came out with brighter dots where each run meets its turn.
+            cg.saveGState()
+            cg.setAlpha(glint == nil ? 1 : dim)
+            cg.beginTransparencyLayer(auxiliaryInfo: nil)
+            cg.setStrokeColor(NSColor.white.cgColor)
+            cg.addLines(between: path)
+            cg.strokePath()
+            cg.endTransparencyLayer()
+            cg.restoreGState()
+            guard let glint else { return true }
             // Arc length at every point, then the light: the head at `head`, a
             // tail `tail` long behind it.
             var at: [CGFloat] = [0]
@@ -406,7 +418,7 @@ enum WaveGlyph {
             let total = at[at.count - 1], tail = h * 0.75
             let head = glint * (total + tail)
             cg.saveGState()
-            cg.setShadow(offset: .zero, blur: bar * 1.2, color: NSColor.white.withAlphaComponent(0.85).cgColor)
+            cg.setShadow(offset: .zero, blur: wire * 1.6, color: NSColor.white.withAlphaComponent(0.85).cgColor)
             cg.beginTransparencyLayer(auxiliaryInfo: nil)
             // A disc a bar wide at every sample from the tail's end to the head,
             // each one *replacing* what is under it (`.copy`), so the stroke is
@@ -419,7 +431,7 @@ enum WaveGlyph {
                 guard d >= 0, d <= tail else { continue }
                 let alpha = pow(1 - d / tail, 1.2)
                 cg.setFillColor(NSColor.white.withAlphaComponent(alpha).cgColor)
-                cg.fillEllipse(in: CGRect(x: path[j].x - bar / 2, y: path[j].y - bar / 2, width: bar, height: bar))
+                cg.fillEllipse(in: CGRect(x: path[j].x - wire / 2, y: path[j].y - wire / 2, width: wire, height: wire))
             }
             cg.endTransparencyLayer()
             cg.restoreGState()
@@ -455,7 +467,7 @@ enum WaveGlyph {
             line(from, to)
             if i + 1 < ends.count {
                 let n = ends[i + 1]
-                arc(to, CGPoint(x: n.x, y: up ? n.hi : n.lo), bulge: (up ? 1 : -1) * gap * 0.9)
+                arc(to, CGPoint(x: n.x, y: up ? n.hi : n.lo), bulge: (up ? 1 : -1) * (bar + gap) * 0.6)
             } else {
                 pts.append(to)
             }
