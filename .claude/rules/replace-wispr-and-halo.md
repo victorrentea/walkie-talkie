@@ -423,7 +423,8 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   length ≤ 120 pt, zero at both ends) and past the prediction `RewindTimeline.orbit` — clockwise, 1.2 s a turn, **round the window on a
   circle ⅔ of its shorter side across** (`orbitRadius(for:)`, from the frame `aimRewind` reads; 50 pt with
   no window; *"diameter equals to two thirds of its smallest axis, leaving dust in a circle form"*), the
-  wave landing on the circle's start (`orbitEntry`) — a 50 pt ring opening from the centre until then; any other (Tendrils) goes straight and stays on the centre. The
+  wave landing on the circle's start (`orbitEntry`) **by half the prediction** (`dustArriveShare` 0.5, ≥ 0.6 s —
+  over the whole prediction it landed with the words and the ring was never seen; Tendrils keeps the whole) — a 50 pt ring opening from the centre until then; any other (Tendrils) goes straight and stays on the centre. The
   afternoon's bow (*"a bit elliptical"*, then *"concave"*) is gone. The Reverse tunnel is left only
   for a dress that cannot ride (and the spawn keeps Sparks).
 - **The take is kept for every destination** (2026-09-30): the call ran for all since 09-23, but

@@ -1376,13 +1376,20 @@ final class CaretHalo {
     private var rewindPoint: NSPoint? {
         if flies, let from = rewindStart, let to = rewindAim {
             let t = CFAbsoluteTimeGetCurrent() - rewindFrom
-            let span = max(rewindEstimate, RewindTimeline.minimumSpan)
-            let p = RewindTimeline.flight(elapsed: t, predicted: rewindEstimate)
             // Only the dust (a trail or fluid effect) oscillates and then circles;
             // Tendrils and the rest go straight and stay (2026-10-08).
             guard rewindStyle.hasTrail else {
+                let p = RewindTimeline.flight(elapsed: t, predicted: rewindEstimate)
                 return NSPoint(x: from.x + (to.x - from.x) * CGFloat(p), y: from.y + (to.y - from.y) * CGFloat(p))
             }
+            // **The dust is there by half the prediction, and circles the rest**
+            // (2026-10-08, Victor: *"… moves towards the window, leaving a trail
+            // of dust, and then it circles in there inside while the transcription
+            // works"*): over the whole prediction it landed as the words did
+            // (15:27:56, 1.8 s), and the ring was never seen.
+            let flightTime = max(rewindEstimate * RewindTimeline.dustArriveShare, RewindTimeline.minimumSpan)
+            let span = flightTime
+            let p = RewindTimeline.flight(elapsed: t, predicted: flightTime)
             let r = rewindOrbitRadius ?? RewindTimeline.orbitRadiusFallback
             if t < span {
                 return RewindTimeline.wave(from: from, to: RewindTimeline.orbitEntry(around: to, radius: r), progress: p)

@@ -217,6 +217,8 @@ enum RewindTimeline {
         let nx = -dy / length, ny = dx / length
         return CGPoint(x: a.x + dx * q + nx * off, y: a.y + dy * q + ny * off)
     }
+    /// The dust's flight takes this share of the prediction; it circles the rest.
+    static let dustArriveShare = 0.5
     static let waves = 2.0
     static let waveShare = 0.12
     static let waveMax: CGFloat = 120
