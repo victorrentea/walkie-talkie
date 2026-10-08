@@ -195,6 +195,19 @@ enum RewindTimeline {
         return u * u * (3 - 2 * u)
     }
 
+    /// **A straight flyer shrinks on its way, down to a fifth** (2026-10-08,
+    /// Victor: *"when the tendrils move to the target window, it should be
+    /// decreasing in size down to twenty percent of its original size … on its
+    /// way, it should keep animating"*). On `flight`'s clock, so it is at
+    /// `flightEndScale` as it lands and stays there; the picture keeps running —
+    /// only the engine's `zoom` moves.
+    ///
+    /// - Returns: 1 on the pointer … `flightEndScale` on the window.
+    static func flightScale(elapsed: TimeInterval, predicted: TimeInterval) -> Double {
+        1 - (1 - flightEndScale) * flight(elapsed: elapsed, predicted: predicted)
+    }
+    static let flightEndScale = 0.2
+
     /// **The dust oscillates its way there; everything else goes straight**
     /// (2026-10-08, the third ask of the afternoon, Victor: *"Only the dust
     /// effect should go circle … the tendrils … go straight to the target. The

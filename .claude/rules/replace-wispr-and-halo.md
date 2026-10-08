@@ -428,6 +428,14 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   over the whole prediction it landed with the words and the ring was never seen; Tendrils keeps the whole) — a 50 pt ring opening from the centre until then; any other (Tendrils) goes straight and stays on the centre. The
   afternoon's bow (*"a bit elliptical"*, then *"concave"*) is gone. The Reverse tunnel is left only
   for a dress that cannot ride (and the spawn keeps Sparks).
+- **A straight flyer shrinks to a fifth on the way; Tendrils is ×1.2 at rest** (2026-10-08, Victor:
+  *"when the tendrils move to the target window, it should be decreasing in size … to twenty percent
+  of its original size … the default size around the cursor should increase by twenty percent … on
+  its way, it should keep animating"*). `RewindTimeline.flightScale` = 1 → `flightEndScale` 0.2 on
+  `flight`'s clock, into the engine's `zoom` (`approach`) each render tick for a flying dress without
+  a trail — the picture keeps running, only its size moves. `ProjectMHalo.start` puts `zoom` back to
+  whole on the next ring (the panel is never rebuilt after a flight). Tendrils' `scale` 0.357 → 0.428;
+  the trail/fluid cases that share its preset keep 0.357.
 - **The take is kept for every destination** (2026-09-30): the call ran for all since 09-23, but
   `settleTake` was still `latchedAtCaret ? lastTake() : []`, so every bound sentence logged `⏪ no
   rewind — only 0 samples`.

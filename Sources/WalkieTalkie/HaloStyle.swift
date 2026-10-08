@@ -507,9 +507,12 @@ enum HaloStyle: String, CaseIterable {
         // mărime (mai mic)"*) — 0.728 → 0.51, the same move Sparks got the
         // evening before — and ×0.7 again the same morning, together with
         // Sparks (*"micșorează la 0.7x și pentru efectul cu dictarea
-        // legată"*): 0.51 → 0.357. The page's own `FORMULAS` entry still says
-        // 0.728; the number the app draws at is this one.
-        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.357,
+        // legată"*): 0.51 → 0.357. Then ×1.2 (2026-10-08, *"the default size
+        // around the cursor should increase by twenty percent"*): 0.357 → 0.428,
+        // Tendrils alone — the trail and fluid cases below keep 0.357. The
+        // page's own `FORMULAS` entry still says 0.728; the number the app
+        // draws at is this one.
+        case .milkdrop20:  return Preset(number: 20, name: "Aderrasi + Geiss - Airhandler (Kali Mix) - Painterly Tendrils Colorfast", scale: 0.428,
                                          fade: true, fadeAtEdge: true, fadeFloor: 0)
         // Tendrils 2 si Fluid: exact presetul si marimea lui Tendrils, plus urma.
         // Numerele sunt de pornire, de reglat pe ochi — `WT_HALO_PRESET_OPTS`

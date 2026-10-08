@@ -400,6 +400,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
         // A ring raised again starts its trail clean, at the pointer — not with
         // the smear of the last sentence, nor gliding in from where it ended.
         if !fresh, trail, let r = renderer { renderQueue.async { pmh_reset_trail(r) } }
+        // …and whole again: a flight shrank it to a fifth on the same panel
+        // (`RewindTimeline.flightScale`), and nothing rebuilds it after.
+        if !fresh, let r = renderer { let z = Float(preset.zoom); renderQueue.async { pmh_set_zoom(r, z, 1) } }
         starts += 1
         if !fresh, !trail, prerollSeconds > 0 || centreFadeSeconds > 0 {
             // **Nothing of the last sentence's last frame stands on screen.** The

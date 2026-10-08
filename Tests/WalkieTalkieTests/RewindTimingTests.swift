@@ -207,6 +207,14 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(RewindTimeline.flight(elapsed: 0.6, predicted: 0.1), 1)                 // minimumSpan
     }
 
+    /// 2026-10-08: Tendrils shrinks to a fifth on its way to the window.
+    func testFlightShrinksToAFifth() {
+        XCTAssertEqual(RewindTimeline.flightScale(elapsed: 0, predicted: 3), 1)
+        XCTAssertEqual(RewindTimeline.flightScale(elapsed: 1.5, predicted: 3), 0.6, accuracy: 1e-9)
+        XCTAssertEqual(RewindTimeline.flightScale(elapsed: 3, predicted: 3), 0.2, accuracy: 1e-9)
+        XCTAssertEqual(RewindTimeline.flightScale(elapsed: 9, predicted: 3), 0.2, accuracy: 1e-9)
+    }
+
     /// 2026-10-08: the dust oscillates to the window, then circles its centre.
     func testFlightOscillatesThenOrbits() {
         let a = CGPoint(x: 0, y: 0), b = CGPoint(x: 100, y: 0)

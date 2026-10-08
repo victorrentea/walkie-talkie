@@ -1627,6 +1627,11 @@ final class CaretHalo {
             web?.feed(samples)
             if (self.rewinding && self.rewindApproaches) || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
             else if self.rewinding && !self.flies { web?.approach(scale: self.sparksShrink, alpha: 1) }
+            // Tendrils and the other straight flyers shrink to a fifth on the way (2026-10-08).
+            else if self.rewinding && !self.rewindStyle.hasTrail {
+                web?.approach(scale: CGFloat(RewindTimeline.flightScale(elapsed: CFAbsoluteTimeGetCurrent() - self.rewindFrom,
+                                                                        predicted: self.rewindEstimate)), alpha: 1)
+            }
             // The tunnel's centre travels on its own clock, not the pointer's.
             if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
             // A bound sentence's effect flies to the terminal on its own clock too.
