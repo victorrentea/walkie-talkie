@@ -1638,6 +1638,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `elevenReady` is wired — placed earlier it said `⚠️` (no key) on a Mac
         // with the key, because the menu had no way to read it yet (21:15).
         micAnnouncer.announceStartup(engine: status.engineBannerTitle(engineId))
+        micAnnouncer.engine = { [weak self] in self.map { $0.status.engineBannerTitle($0.engineId) } }
         // The menu asks rather than being told, like the footprint above: the flag
         // flips on every dictation, and the only moment its answer has to be right
         // is the moment the row is on screen.

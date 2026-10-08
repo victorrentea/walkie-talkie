@@ -43,8 +43,21 @@ final class MicAnnouncer {
     /// the microphone's green, up for 3 s with the Engine row's words.
     static let startupTint = NSColor.systemBlue.withAlphaComponent(0.85)
     static let startupHold: TimeInterval = 3.0
-    /// What the launch tab said — `GET /test/state.startupBanner`.
+    /// What the launch tab said — `GET /test/state.startupBanner`, the wave
+    /// spelled `〰`.
     private(set) var startupText: String?
+
+    /// **A sound wave between the microphone and the engine** (2026-10-08,
+    /// Victor, over a seven-bar wave: *"put such a wave, but symmetrical both
+    /// sides … in between the microphone and the engine"* — the ` / ` of the
+    /// same morning, drawn). A private-use character in the text; `BottomTab`
+    /// draws `WaveGlyph` in its place.
+    static let wave = "\u{E000}"
+    static func readable(_ text: String) -> String { text.replacingOccurrences(of: wave, with: "〰") }
+
+    /// The Engine row's words for the green tab — read on main when it rises,
+    /// so a device change names the engine that will hear it.
+    var engine: (() -> String?)?
 
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.mic-announcer", qos: .utility)
     private var pending: DispatchWorkItem?
@@ -94,9 +107,9 @@ final class MicAnnouncer {
         // **A slash between the microphone and the engine** (2026-10-08, Victor:
         // *"put a slash between the emoji meaning the input source and … the
         // transcription engine"*) — `🎤 / ElevenLabs ☁️ + Live`.
-        let text = [mic, engine].compactMap { $0 }.joined(separator: " / ")
-        startupText = text
-        Log.info("🚀 up on \(text) — the launch tab")
+        let text = [mic, engine].compactMap { $0 }.joined(separator: " \(Self.wave) ")
+        startupText = Self.readable(text)
+        Log.info("🚀 up on \(Self.readable(text)) — the launch tab")
         tab.show(text, tint: Self.startupTint, hold: Self.startupHold)
     }
 
@@ -112,8 +125,11 @@ final class MicAnnouncer {
         let now = Self.current()
         guard !now.key.isEmpty, now.key != last else { return }
         last = now.key
-        Log.info("🎤 mic → \(now.text)")
-        DispatchQueue.main.async { [tab] in tab.show(now.text, tint: Self.tint, hold: Self.hold) }
+        DispatchQueue.main.async { [weak self, tab] in
+            let text = [now.text, self?.engine?()].compactMap { $0 }.joined(separator: " \(Self.wave) ")
+            Log.info("🎤 mic → \(Self.readable(text))")
+            tab.show(text, tint: Self.tint, hold: Self.hold)
+        }
     }
 
     /// The resolved device as a comparable key and the tab's copy.
@@ -155,7 +171,7 @@ private final class BottomTab {
 
     func show(_ text: String, tint: NSColor, hold: TimeInterval) {
         if let label, let panel, let tabView {
-            label.stringValue = text
+            label.attributedStringValue = Self.attributed(text)
             tintView?.layer?.backgroundColor = tint.cgColor
             resize(panel: panel, tab: tabView, label: label, text: text)
             startHold(hold)
@@ -199,11 +215,10 @@ private final class BottomTab {
         tintV.wantsLayer = true
         tintV.layer?.backgroundColor = tint.cgColor
         tab.addSubview(tintV)
-        let l = NSTextField(labelWithString: text)
+        let l = NSTextField(labelWithString: "")
         l.font = Self.font
-        l.textColor = .white
-        l.alignment = .center
         l.lineBreakMode = .byTruncatingTail
+        l.attributedStringValue = Self.attributed(text)
         l.frame = labelFrame(width: width)
         tab.addSubview(l)
         if let icon {
@@ -264,9 +279,33 @@ private final class BottomTab {
         t.fire()
     }
 
+    /// White, centred, bold 40 — with `MicAnnouncer.wave` drawn as `WaveGlyph`.
+    private static func attributed(_ text: String) -> NSAttributedString {
+        let para = NSMutableParagraphStyle()
+        para.alignment = .center
+        para.lineBreakMode = .byTruncatingTail
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white, .paragraphStyle: para]
+        let out = NSMutableAttributedString()
+        for (i, part) in text.components(separatedBy: MicAnnouncer.wave).enumerated() {
+            if i > 0 {
+                let a = NSTextAttachment()
+                let img = WaveGlyph.image(height: font.capHeight * 1.25)
+                a.image = img
+                a.bounds = NSRect(x: 0, y: (font.capHeight - img.size.height) / 2,
+                                  width: img.size.width, height: img.size.height)
+                let s = NSMutableAttributedString(attachment: a)
+                s.addAttributes(attrs, range: NSRange(location: 0, length: s.length))
+                out.append(s)
+            }
+            out.append(NSAttributedString(string: part, attributes: attrs))
+        }
+        return out
+    }
+
     private func width(for text: String, screen: NSScreen) -> CGFloat {
-        let probe = NSTextField(labelWithString: text)
+        let probe = NSTextField(labelWithString: "")
         probe.font = Self.font
+        probe.attributedStringValue = Self.attributed(text)
         probe.maximumNumberOfLines = 1
         probe.lineBreakMode = .byClipping
         probe.sizeToFit()
@@ -288,5 +327,26 @@ private final class BottomTab {
     private static func screenUnderMouse() -> NSScreen? {
         let p = NSEvent.mouseLocation
         return NSScreen.screens.first { NSMouseInRect(p, $0.frame, false) } ?? NSScreen.main
+    }
+}
+
+/// **Seven bars, tallest in the middle, the two halves mirrored** — Victor's
+/// wave (2026-10-08), whose right side was shorter than its left; *"but
+/// symmetrical both sides"*. White, rounded bars, drawn at the text's size.
+enum WaveGlyph {
+    static let heights: [CGFloat] = [0.3, 0.6, 0.82, 1.0, 0.82, 0.6, 0.3]
+
+    static func image(height h: CGFloat) -> NSImage {
+        let bar = max(2, (h * 0.11).rounded()), gap = max(2, (h * 0.12).rounded())
+        let w = CGFloat(heights.count) * bar + CGFloat(heights.count - 1) * gap
+        return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
+            NSColor.white.setFill()
+            for (i, k) in heights.enumerated() {
+                let bh = (h * k).rounded()
+                let r = NSRect(x: CGFloat(i) * (bar + gap), y: ((h - bh) / 2).rounded(), width: bar, height: bh)
+                NSBezierPath(roundedRect: r, xRadius: bar / 2, yRadius: bar / 2).fill()
+            }
+            return true
+        }
     }
 }
