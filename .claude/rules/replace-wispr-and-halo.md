@@ -414,6 +414,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   take backwards at `rewindSpeed` (one pass over the prediction, then looping). Not docked on the
   prompt panel — it ends on the terminal like the tunnel. Anything else bound keeps the Reverse
   tunnel; `WT_HALO_FLIGHT=0` brings it back. Log `⏪ the rewind: … — flying from the pointer to the terminal`.
+- **A prompt at the caret flies too, and both bow and then circle** (2026-10-08, Victor: *"Unify
+  the experience … if I prompt at caret … I don't want to see the reverse tunnel … [the effect] would
+  move on a certain trajectory towards the center of the recipient window, and then there start
+  circling like a loading icon … a bit elliptical"*). `CaretHalo.flies` covers `.caret` as well as
+  `.bound` (his caret dress is Smoke); the path is `RewindTimeline.arc` — straight line plus a
+  sideways bulge `bow` 0.3 × the length at the middle, left of travel — and past the prediction
+  `RewindTimeline.orbit`: clockwise round the window's centre, `orbitRadius` 50 pt, one turn per
+  `orbitPeriod` 1.2 s, opening over `orbitGrow` 0.4 s. The Reverse tunnel is left only for a dress
+  that cannot ride (and the spawn keeps Sparks).
 - **The take is kept for every destination** (2026-09-30): the call ran for all since 09-23, but
   `settleTake` was still `latchedAtCaret ? lastTake() : []`, so every bound sentence logged `⏪ no
   rewind — only 0 samples`.

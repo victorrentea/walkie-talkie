@@ -195,6 +195,33 @@ enum RewindTimeline {
         return u * u * (3 - 2 * u)
     }
 
+    /// **Not straight there — a bow, like half an ellipse** (2026-10-08, Victor,
+    /// for a prompt at the caret, then for both: *"the trajectory shouldn't be
+    /// necessarily direct; should be a bit elliptical towards the center of the
+    /// recipient"*). The straight line from `a` to `b` plus a sideways bulge of
+    /// `bow` × its length at the middle (`sin(π·p)`), always to the left of the
+    /// direction of travel.
+    static func arc(from a: CGPoint, to b: CGPoint, progress p: Double) -> CGPoint {
+        let dx = b.x - a.x, dy = b.y - a.y, q = CGFloat(p)
+        let bulge = CGFloat(bow * sin(.pi * p))
+        return CGPoint(x: a.x + dx * q - dy * bulge, y: a.y + dy * q + dx * bulge)
+    }
+    static let bow = 0.3
+
+    /// **Arrived, it circles like a loading icon** (same message: *"and then
+    /// there start circling like a loading icon"*): clockwise round `c`, one
+    /// turn every `orbitPeriod`, the radius opening from 0 to `orbitRadius` over
+    /// `orbitGrow` so the arrival does not jump. `since` is the time since it landed.
+    static func orbit(around c: CGPoint, since t: TimeInterval) -> CGPoint {
+        guard t > 0 else { return c }
+        let r = orbitRadius * CGFloat(min(t / orbitGrow, 1))
+        let angle = -2 * Double.pi * t / orbitPeriod
+        return CGPoint(x: c.x + r * CGFloat(cos(angle)), y: c.y + r * CGFloat(sin(angle)))
+    }
+    static let orbitRadius: CGFloat = 50
+    static let orbitPeriod: TimeInterval = 1.2
+    static let orbitGrow: TimeInterval = 0.4
+
     /// **Sparks shrinks at the tunnel's own rate** (2026-10-02, Victor: *"dacă
     /// … Stars se micșorează în același stil în care se micșorează și Reverse
     /// Tunnel … în loc să rămână activ pe tot ecranul, să se micșoreze în timp

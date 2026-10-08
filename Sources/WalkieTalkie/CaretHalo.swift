@@ -1308,8 +1308,8 @@ final class CaretHalo {
         arrow.armed = false
         Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@%@",
                         seconds, rewindSpeed, predicted, DecodeRate.activeEngine, estimate,
-                        boundFlight ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
-                        boundFlight ? " — flying from the pointer to the terminal" : ""))
+                        flies ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
+                        flies ? " — flying from the pointer to the window" : ""))
         use(rewindStyle)
         return true
     }
@@ -1363,15 +1363,20 @@ final class CaretHalo {
     /// the window is still being asked for (an `osascript`, usually inside the
     /// warm-up), and where it stays when there is no window.
     ///
-    /// **A bound sentence's own effect flies there instead** (2026-10-08) — see
-    /// `boundFlight`: from the pointer latched at the close to the terminal's
-    /// centre, on `RewindTimeline.flight`'s clock. Until the window answers it
-    /// waits on the pointer.
+    /// **A bound or caret prompt's own effect flies there instead** (2026-10-08)
+    /// — see `flies`: from the pointer latched at the close to the window's
+    /// centre on a bow (`RewindTimeline.arc`, on `flight`'s clock), then round
+    /// it like a loading icon (`orbit`) until the words land. Until the window
+    /// answers it waits on the pointer.
     private var rewindPoint: NSPoint? {
-        if boundFlight, let from = rewindStart, let to = rewindAim {
-            let p = CGFloat(RewindTimeline.flight(elapsed: CFAbsoluteTimeGetCurrent() - rewindFrom,
-                                                  predicted: rewindEstimate))
-            return NSPoint(x: from.x + (to.x - from.x) * p, y: from.y + (to.y - from.y) * p)
+        if flies, let from = rewindStart, let to = rewindAim {
+            let t = CFAbsoluteTimeGetCurrent() - rewindFrom
+            let span = max(rewindEstimate, RewindTimeline.minimumSpan)
+            if t < span {
+                return RewindTimeline.arc(from: from, to: to,
+                                          progress: RewindTimeline.flight(elapsed: t, predicted: rewindEstimate))
+            }
+            return RewindTimeline.orbit(around: to, since: t - span)
         }
         return rewindAim ?? rewindStart
     }
@@ -1461,7 +1466,7 @@ final class CaretHalo {
     /// tunnel's rate (`sparksShrink`, the same evening).
     private var rewindStyle: HaloStyle {
         if destination == .spawn { return HaloStyle.current(for: .spawn) }
-        return boundFlight ? HaloStyle.current(for: .bound) : Self.tunnelStyle
+        return flies ? HaloStyle.current(for: destination) : Self.tunnelStyle
     }
     /// **A bound sentence keeps its own effect and flies it to the terminal**
     /// (2026-10-08, Victor: *"instead of the reverse tunnel that goes towards the
@@ -1478,8 +1483,17 @@ final class CaretHalo {
     /// Only a dress that rides the pointer can fly; an anchored one (Stars, the
     /// puzzle), a pinned canvas or the film keeps the Reverse tunnel. `WT_HALO_FLIGHT=0`
     /// brings the tunnel back for bound sentences.
-    private var boundFlight: Bool {
-        destination == .bound && !Self.flightOff && Self.rides(HaloStyle.current(for: .bound))
+    ///
+    /// **And a prompt at the caret, the same way** (2026-10-08, Victor: *"Unify
+    /// the experience … if I prompt at caret … I don't want to see the reverse
+    /// tunnel … the [caret's] effect would move on a certain trajectory towards
+    /// the center of the recipient window, and then there start circling like a
+    /// loading icon … a bit elliptical"*) — and since then both bow on the way
+    /// (`RewindTimeline.arc`) and circle once there (`RewindTimeline.orbit`).
+    /// `WT_HALO_FLIGHT=0` brings the tunnel back for both.
+    private var flies: Bool {
+        (destination == .bound || destination == .caret) && !Self.flightOff
+            && Self.rides(HaloStyle.current(for: destination))
     }
     private static func rides(_ style: HaloStyle) -> Bool {
         // The film is placed by the pointer itself (`Self.origin()`), not by `aim`.
@@ -1593,11 +1607,11 @@ final class CaretHalo {
                 : Self.seeded(Self.tailed(Self.lift(Self.undoInputGain(self.samples?() ?? nil ?? [Float](repeating: 0, count: 1024)))))
             web?.feed(samples)
             if (self.rewinding && self.rewindApproaches) || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
-            else if self.rewinding && !self.boundFlight { web?.approach(scale: self.sparksShrink, alpha: 1) }
+            else if self.rewinding && !self.flies { web?.approach(scale: self.sparksShrink, alpha: 1) }
             // The tunnel's centre travels on its own clock, not the pointer's.
             if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
             // A bound sentence's effect flies to the terminal on its own clock too.
-            if self.rewinding && self.boundFlight { self.follow() }
+            if self.rewinding && self.flies { self.follow() }
             self.under?.feed(samples)
             // The panel being replaced stays on screen until the new one has
             // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
@@ -1920,7 +1934,7 @@ final class CaretHalo {
         // target terminal or application that received the dictation and not
         // the preview panel"*) — it ends there in its own fade.
         // **So does a bound sentence's effect that flew there** (2026-10-08).
-        if drawn == Self.tunnelStyle || (boundFlight && drawn == rewindStyle), rewinding || fadeAim != nil {
+        if drawn == Self.tunnelStyle || (flies && drawn == rewindStyle), rewinding || fadeAim != nil {
             Log.info("◯ halo not docked on the prompt panel — the \(drawn == Self.tunnelStyle ? "reverse tunnel" : "flight") ends on the window that got the words")
             return
         }

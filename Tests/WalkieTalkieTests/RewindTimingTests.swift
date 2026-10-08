@@ -207,6 +207,25 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(RewindTimeline.flight(elapsed: 0.6, predicted: 0.1), 1)                 // minimumSpan
     }
 
+    /// 2026-10-08: the flight bows to one side, then circles the window's centre.
+    func testFlightBowsThenOrbits() {
+        let a = CGPoint(x: 0, y: 0), b = CGPoint(x: 100, y: 0)
+        XCTAssertEqual(RewindTimeline.arc(from: a, to: b, progress: 0), a)
+        let end = RewindTimeline.arc(from: a, to: b, progress: 1)
+        XCTAssertEqual(end.x, 100, accuracy: 1e-9)
+        XCTAssertEqual(end.y, 0, accuracy: 1e-9)
+        let mid = RewindTimeline.arc(from: a, to: b, progress: 0.5)
+        XCTAssertEqual(mid.x, 50, accuracy: 1e-9)
+        XCTAssertEqual(mid.y, 30, accuracy: 1e-9)                    // left of travel, 0.3 × the length
+        XCTAssertEqual(RewindTimeline.orbit(around: b, since: 0), b)  // lands without a jump
+        for t in [0.5, 1.0, 1.7] {
+            let p = RewindTimeline.orbit(around: b, since: t)
+            XCTAssertEqual(hypot(p.x - b.x, p.y - b.y), RewindTimeline.orbitRadius, accuracy: 1e-9)
+        }
+        let quarter = RewindTimeline.orbit(around: .zero, since: RewindTimeline.orbitPeriod * 1.25)  // past the opening
+        XCTAssertEqual(quarter.y, -RewindTimeline.orbitRadius, accuracy: 1e-9)   // clockwise
+    }
+
     /// 2026-10-04: the ring starts as tall as the screen.
     func testRingStartsAsTallAsTheScreen() {
         let restRing = 0.66 * 0.317
