@@ -1334,7 +1334,7 @@ final class CaretHalo {
             follow()
         }
     }
-    /// **The dust's ring round the receiving window** (2026-10-08): ⅓ of its
+    /// **The dust's ring round the receiving window** (2026-10-08): ¼ of its
     /// shorter side, written by `AppDelegate.aimRewind` with `rewindAim`; nil →
     /// `RewindTimeline.orbitRadiusFallback`.
     var rewindOrbitRadius: CGFloat?

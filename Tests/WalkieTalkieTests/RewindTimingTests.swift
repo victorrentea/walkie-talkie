@@ -221,7 +221,7 @@ final class RewindTimelineTests: XCTestCase {
         let far = RewindTimeline.wave(from: .zero, to: CGPoint(x: 5000, y: 0), progress: 0.375)
         XCTAssertLessThanOrEqual(abs(far.y), RewindTimeline.waveMax)        // capped on a long flight
         let r = RewindTimeline.orbitRadius(for: CGSize(width: 958, height: 525))
-        XCTAssertEqual(r, 175, accuracy: 1e-9)                         // ⅔ of the shorter side, as a diameter
+        XCTAssertEqual(r, 131.25, accuracy: 1e-9)                      // ½ of the shorter side, as a diameter
         XCTAssertEqual(RewindTimeline.orbit(around: b, radius: r, since: 0),
                        RewindTimeline.orbitEntry(around: b, radius: r))   // the wave lands where it starts
         for t in [0.3, 1.0, 1.7] {

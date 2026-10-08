@@ -232,15 +232,17 @@ enum RewindTimeline {
     /// the target window on a circle with the diameter equals to two thirds of
     /// its smallest axis, leaving dust in a circle form"*): `r` is
     /// `orbitRadius(for:)` of the receiving window. Until then it was 50 pt,
-    /// opening from the centre over 0.4 s — a knot, not a ring.
+    /// opening from the centre over 0.4 s — a knot, not a ring. Later that day
+    /// (*"a circle of the diameter of fifty percent of the window minimum size"*)
+    /// the ring shrank from ⅔ to ½ of the shorter side.
     static func orbit(around c: CGPoint, radius r: CGFloat, since t: TimeInterval) -> CGPoint {
         let angle = -2 * Double.pi * max(t, 0) / orbitPeriod
         return CGPoint(x: c.x + r * CGFloat(cos(angle)), y: c.y + r * CGFloat(sin(angle)))
     }
     /// Where the orbit begins, so the wave can end there.
     static func orbitEntry(around c: CGPoint, radius r: CGFloat) -> CGPoint { CGPoint(x: c.x + r, y: c.y) }
-    /// A diameter of ⅔ of the window's shorter side.
-    static func orbitRadius(for size: CGSize) -> CGFloat { min(size.width, size.height) / 3 }
+    /// A diameter of ½ of the window's shorter side.
+    static func orbitRadius(for size: CGSize) -> CGFloat { min(size.width, size.height) / 4 }
     /// No window to measure (the middle of the screen stands in): a small ring.
     static let orbitRadiusFallback: CGFloat = 50
     static let orbitPeriod: TimeInterval = 1.2

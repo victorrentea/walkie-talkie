@@ -421,8 +421,9 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `CaretHalo.flies` covers `.caret` as well as `.bound`. A dress with a trail or fluid (`hasTrail` —
   his caret Smoke) follows `RewindTimeline.wave` (2 sine periods across the line, amplitude 0.12 × the
   length ≤ 120 pt, zero at both ends) and past the prediction `RewindTimeline.orbit` — clockwise, 1.2 s a turn, **round the window on a
-  circle ⅔ of its shorter side across** (`orbitRadius(for:)`, from the frame `aimRewind` reads; 50 pt with
-  no window; *"diameter equals to two thirds of its smallest axis, leaving dust in a circle form"*), the
+  circle ½ of its shorter side across** (`orbitRadius(for:)`, from the frame `aimRewind` reads; 50 pt with
+  no window; *"diameter equals to two thirds of its smallest axis, leaving dust in a circle form"*, then the
+  same afternoon *"a circle of the diameter of fifty percent of the window minimum size"*), the
   wave landing on the circle's start (`orbitEntry`) **by half the prediction** (`dustArriveShare` 0.5, ≥ 0.6 s —
   over the whole prediction it landed with the words and the ring was never seen; Tendrils keeps the whole) — a 50 pt ring opening from the centre until then; any other (Tendrils) goes straight and stays on the centre. The
   afternoon's bow (*"a bit elliptical"*, then *"concave"*) is gone. The Reverse tunnel is left only
