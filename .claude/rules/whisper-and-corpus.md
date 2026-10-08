@@ -332,12 +332,15 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   after the same wave: `Listening 🎤 〰 Wispr ☁️` (`MicAnnouncer.engine`, read on main). **A glint runs
   along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
   gentle"*): the bars sit at 50 % white and a light runs **the wave's own trajectory** **once per tab**
-  (`BottomTab.startGlint(lasting:)`, `WaveGlyph.image(glint:)`, redrawn at 30 fps while the tab is up):
-  the pass lasts the rise (0.32 s, a fresh tab) and the hold, so the head reaches the wave's right end
-  **as the fall begins** — the light is done, then the tab slides away (*"should get at its end when the
-  overlay disappears, (not restart from left)"*, then *"it finishes too late now. When it's done … only
+  (`BottomTab.startGlint(after:lasting:)`, `WaveGlyph.image(glint:)`, redrawn at 30 fps while the tab is up):
+  **since 2026-10-08 afternoon a beat of dim, empty wire on either side** (*"start animating half a second
+  after the overlay flies in … end … 300 milliseconds [before] … no more signal to increase the suspense"*):
+  the light sets off `glintLead` 0.5 s after the rise (0.32 s, a fresh tab) and has left the wave — tail
+  included, `glint` 1 is now the head a tail past the right end — `glintQuiet` 0.3 s before the fall; the
+  pass is the hold − 0.8 s. Before that it ended exactly as the fall began (*"should get at its end when
+  the overlay disappears, (not restart from left)"*, then *"it finishes too late now. When it's done … only
   then … falls out of screen"*; a 2.6 s loop until then, the fall included for one build). A `show` over a
-  tab already up starts a new pass. Victor drew
+  tab already up starts a new pass, 0.5 s on. Victor drew
   it on screen the same morning — a wave as one serpentine line and a short bright segment travelling
   along it (*"following the trajectory of the wavelength itself"*): `WaveGlyph.trajectory` reads the bars
   as that line — up bar 0, a small arc over the gap to bar 1's top, down it, an arc under to bar 2's foot

@@ -173,12 +173,16 @@ private final class BottomTab {
     private var shownText = ""
     /// The tab sliding up, and down, in seconds.
     private static let rise: TimeInterval = 0.32, fall: TimeInterval = 0.45
+    /// The dim wire before the light sets off, and after it has gone — see `startGlint`.
+    private static let glintLead: TimeInterval = 0.5, glintQuiet: TimeInterval = 0.3
 
     func show(_ text: String, tint: NSColor, hold: TimeInterval) {
         shownText = text
-        // One pass over the rise (a fresh tab only) and the hold: the light
-        // reaches the end, and only then does the tab fall away.
-        startGlint(lasting: (panel == nil ? Self.rise : 0) + hold)
+        // One pass inside the hold, a quiet wire on either side of it: the light
+        // starts `glintLead` after the tab is in and is gone `glintQuiet` before
+        // it falls away.
+        startGlint(after: (panel == nil ? Self.rise : 0) + Self.glintLead,
+                   lasting: max(hold - Self.glintLead - Self.glintQuiet, 0.3))
         if let label, let panel, let tabView {
             label.attributedStringValue = Self.attributed(text)
             tintView?.layer?.backgroundColor = tint.cgColor
@@ -278,7 +282,14 @@ private final class BottomTab {
     /// falls out of screen"*: `lasting` is the rise and the hold, so the head
     /// reaches the wave's right end as the fall begins. A `show` over a tab
     /// already up starts a new pass over its new hold.
-    private func startGlint(lasting: TimeInterval) {
+    ///
+    /// **A beat of nothing on either side** (2026-10-08, Victor: *"should start
+    /// animating half a second after the overlay flies in from the bottom, and
+    /// end … 300 milliseconds … [before], to be a time that there is no more
+    /// signal to increase the suspense"*): the wire sits dim and empty for
+    /// `after` (the rise + `glintLead`), the light runs for `lasting`, and it has
+    /// left the wave — tail included — `glintQuiet` before the fall.
+    private func startGlint(after delay: TimeInterval, lasting: TimeInterval) {
         glintTimer?.invalidate()
         glintTimer = nil
         guard shownText.contains(MicAnnouncer.wave) else { return }
@@ -288,7 +299,8 @@ private final class BottomTab {
                 if self?.panel == nil { tm.invalidate() }
                 return
             }
-            let phase = min(1, Date().timeIntervalSince(start) / lasting)
+            // Below 0 the head has not reached the wave yet: a dim, empty wire.
+            let phase = min(1, (Date().timeIntervalSince(start) - delay) / lasting)
             label.attributedStringValue = Self.attributed(self.shownText, glint: CGFloat(phase))
         }
         RunLoop.main.add(t, forMode: .common)
@@ -392,7 +404,8 @@ enum WaveGlyph {
     static let dim: CGFloat = 0.5
 
     /// `glint`: nil draws the wire white; 0…1 is where the light's head is along
-    /// it — the left end at 0, the right end at 1 (the tab's last frame).
+    /// it — the left end at 0, and at 1 past the right end by its own tail, so
+    /// the last of it has just left (2026-10-08). Below 0: a dim, empty wire.
     ///
     /// **The light travels the wave's own trajectory** (2026-10-08, Victor drew
     /// it on screen: a short bright segment running along the wave's line —
@@ -433,7 +446,7 @@ enum WaveGlyph {
             var at: [CGFloat] = [0]
             for j in 1..<path.count { at.append(at[j - 1] + hypot(path[j].x - path[j - 1].x, path[j].y - path[j - 1].y)) }
             let total = at[at.count - 1], tail = h * 0.75
-            let head = glint * total
+            let head = glint * (total + tail)
             cg.saveGState()
             cg.setShadow(offset: .zero, blur: wire * 1.6, color: NSColor.white.withAlphaComponent(0.85).cgColor)
             cg.beginTransparencyLayer(auxiliaryInfo: nil)
