@@ -333,9 +333,11 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   along it, microphone → engine** (same day, *"a bright section moving, from left to right … something
   gentle"*): the bars sit at 50 % white and a light runs **the wave's own trajectory** **once per tab**
   (`BottomTab.startGlint(lasting:)`, `WaveGlyph.image(glint:)`, redrawn at 30 fps while the tab is up):
-  the pass lasts the tab's life on screen — rise 0.32 s (a fresh tab), hold, fall 0.45 s — so the head
-  reaches the wave's right end as the tab is gone (*"should get at its end when the overlay disappears,
-  (not restart from left)"*; a 2.6 s loop until then). A `show` over a tab already up starts a new pass. Victor drew
+  the pass lasts the rise (0.32 s, a fresh tab) and the hold, so the head reaches the wave's right end
+  **as the fall begins** — the light is done, then the tab slides away (*"should get at its end when the
+  overlay disappears, (not restart from left)"*, then *"it finishes too late now. When it's done … only
+  then … falls out of screen"*; a 2.6 s loop until then, the fall included for one build). A `show` over a
+  tab already up starts a new pass. Victor drew
   it on screen the same morning — a wave as one serpentine line and a short bright segment travelling
   along it (*"following the trajectory of the wavelength itself"*): `WaveGlyph.trajectory` reads the bars
   as that line — up bar 0, a small arc over the gap to bar 1's top, down it, an arc under to bar 2's foot

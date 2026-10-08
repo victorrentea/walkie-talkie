@@ -176,9 +176,9 @@ private final class BottomTab {
 
     func show(_ text: String, tint: NSColor, hold: TimeInterval) {
         shownText = text
-        // One pass over the tab's whole life on screen: the rise (a fresh tab
-        // only), the hold, the fall — the light reaches the end as it goes.
-        startGlint(lasting: (panel == nil ? Self.rise : 0) + hold + Self.fall)
+        // One pass over the rise (a fresh tab only) and the hold: the light
+        // reaches the end, and only then does the tab fall away.
+        startGlint(lasting: (panel == nil ? Self.rise : 0) + hold)
         if let label, let panel, let tabView {
             label.attributedStringValue = Self.attributed(text)
             tintView?.layer?.backgroundColor = tint.cgColor
@@ -274,9 +274,10 @@ private final class BottomTab {
     ///
     /// **Once, timed to the tab** (same day, Victor: *"the light moving through
     /// should get at its end when the overlay disappears, (not restart from
-    /// left)"*): `lasting` is the tab's time on screen, and the head reaches the
-    /// wave's right end as the tab is gone. A `show` over a tab already up
-    /// starts a new pass over its new life.
+    /// left)"*), then *"it finishes too late now. When it's done … only then …
+    /// falls out of screen"*: `lasting` is the rise and the hold, so the head
+    /// reaches the wave's right end as the fall begins. A `show` over a tab
+    /// already up starts a new pass over its new hold.
     private func startGlint(lasting: TimeInterval) {
         glintTimer?.invalidate()
         glintTimer = nil
