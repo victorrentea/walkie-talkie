@@ -10246,6 +10246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // cancel or not.
             self.caretHalo.veiled = true
             self.overlay.veiled = true
+            // **And the spawn's folder menu, for good** (2026-10-08, Victor: *"the
+            // popup for the new session … should hide immediately rather than
+            // waiting for me to hover out of it. Sometimes it gets in the way of
+            // my selection"*). A drag means he is framing, not choosing; the
+            // folder stays `~/workspace` unless one was already clicked.
+            SpawnFolderMenu.hide()
             CropSelectionOverlay.begin(button: .middle, from: anchor, style: Self.cropStyle) { selection in
                 // Both ways out of the drag — a rectangle or a cancel — come
                 // through here, which is why the resume sits above the branch.

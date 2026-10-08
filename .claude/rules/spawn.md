@@ -83,6 +83,9 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   never `alphaValue < 1`: the alpha is still 1 in the fade's first frame, which is exactly when the
   hand crossing menu → submenu exits one and enters the other, so the un-fade did nothing.
   → journal: *The folder menu (2026-09-04)*
+- **A wheel-drag crop takes it down at once** (2026-10-08, *"should hide immediately rather than
+  waiting for me to hover out of it"*): `areaShot` calls `SpawnFolderMenu.hide()` as the selection
+  overlay goes up — a drag is framing, not choosing, and the menu sat in the way of the box.
 - **It draws a surface and does not follow the pointer** — the one departure from *Nothing beside
   the pointer draws a window*. Rows need edges to be told apart, and it stays where the sentence
   started so the hand can travel to it.
