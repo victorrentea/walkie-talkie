@@ -1271,11 +1271,14 @@ final class CaretHalo {
         guard on != rewinding else { return rewinding }
         guard on else {
             fadeAim = aim
+            // **The dust goes on circling while it fades** (2026-10-09) — see
+            // `orbitFading`; its path needs `rewindStart` until the fade is over.
+            orbitFading = flies && rewindStyle.hasTrail && rewindStart != nil && web != nil
             rewinding = false
             rewindEndedAt = CFAbsoluteTimeGetCurrent()
             // The take is kept until the next rewind replaces it: a ring docked
             // on the prompt panel goes on playing it backwards (2026-10-07).
-            rewindStart = nil
+            if !orbitFading { rewindStart = nil }
             Log.info("⏪ the rewind ends")
             // The dress goes back once the ring is out of sight — changing it
             // now would rebuild the panel under the fade. A docked ring is
@@ -1344,7 +1347,7 @@ final class CaretHalo {
     private var fadeAim: NSPoint?
     /// Where the effect is centred: the pointer, or the rewind's path.
     private var aim: NSPoint {
-        (rewinding ? rewindPoint : fadeAim) ?? NSEvent.mouseLocation
+        (rewinding || orbitFading ? rewindPoint : fadeAim) ?? NSEvent.mouseLocation
     }
     /// **The tunnel starts where the pointer was and travels to the window as
     /// it shrinks** (2026-10-02, Victor: *"întâi pe mouse și să apară mare ca
@@ -1413,6 +1416,15 @@ final class CaretHalo {
         }
     }
     private var rewindStart: NSPoint?
+    /// **The words have landed and the dust is fading where it circles**
+    /// (2026-10-09, Victor: *"când dustul dispare din mișcarea ei de rotație să
+    /// se facă fade, nu să dispară brusc când transcrierea este terminată și
+    /// injectată"*). It stopped dead and went in `rewindFade` (0.15 s — the
+    /// tunnel's *"fade out foarte repede"*, 2026-09-23); now its orbit and the
+    /// backwards take keep running through `dustFade`. Only a flying dress with
+    /// a trail on the page engine; the others keep their quick exit.
+    private var orbitFading = false
+    private static let dustFade: TimeInterval = 0.9
     /// This rewind's `approachFrom`, fitted to the pointer's screen at the close.
     private var rewindApproachFrom = Double(approachFrom)
     private var rewindTake: [Float] = []
@@ -1619,7 +1631,7 @@ final class CaretHalo {
         renderTimer?.invalidate()
         let r = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self, weak web] _ in
             guard let self = self else { return }
-            let rewound = self.rewinding
+            let rewound = self.rewinding || self.orbitFading
                 || (self.dock != nil && !self.rewindTake.isEmpty && self.style == self.rewindStyle)
             let samples = rewound
                 ? Self.lift(Self.undoInputGain(self.rewindWindow()))
@@ -1635,7 +1647,7 @@ final class CaretHalo {
             // The tunnel's centre travels on its own clock, not the pointer's.
             if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
             // A bound sentence's effect flies to the terminal on its own clock too.
-            if self.rewinding && self.flies { self.follow() }
+            if (self.rewinding || self.orbitFading) && self.flies { self.follow() }
             self.under?.feed(samples)
             // The panel being replaced stays on screen until the new one has
             // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the
@@ -1650,6 +1662,7 @@ final class CaretHalo {
         // A ring opening while the last sentence's is still docked on the
         // prompt panel takes the panel back to the pointer, in a cut.
         settleDock()
+        orbitFading = false
         let panel = self.panel ?? makePanel()
         // **A collapse still in the air is taken back whole**, before anything
         // else: he stopped and started again inside half a second, and what has
@@ -1775,9 +1788,13 @@ final class CaretHalo {
         }
         hiddenAt = CFAbsoluteTimeGetCurrent()
         // The effect's last frame is what collapses into the pointer, the
-        // same way the film's last frame does.
-        renderTimer?.invalidate()
-        renderTimer = nil
+        // same way the film's last frame does. **Not the circling dust's**: it
+        // keeps moving while it fades (`orbitFading`).
+        let dust = orbitFading
+        if !dust {
+            renderTimer?.invalidate()
+            renderTimer = nil
+        }
         growGraceTimer?.invalidate()
         growGraceTimer = nil
         growOnShow = false
@@ -1792,13 +1809,23 @@ final class CaretHalo {
             // A dock that takes the panel over mid-fade supersedes this
             // animation, which still calls its completion: the page must not
             // be stopped under the panel that is now flying to the prompt.
+            let fadeGeneration = closingGeneration &+ 1
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = fast ? Self.rewindFade : Self.collapse
+                ctx.duration = dust ? Self.dustFade : (fast ? Self.rewindFade : Self.collapse)
+                if dust { ctx.timingFunction = CAMediaTimingFunction(name: .easeIn) }
                 panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
-                guard self?.dock == nil else { return }
-                web.stop(); self?.under?.stop()
-                self?.pageRunning = false
+                guard let self, self.dock == nil else { return }
+                if dust {
+                    // A new ring since: it owns the timer and the page now.
+                    guard self.closingGeneration == fadeGeneration, !self.live else { return }
+                    self.orbitFading = false
+                    self.rewindStart = nil
+                    self.renderTimer?.invalidate()
+                    self.renderTimer = nil
+                }
+                web.stop(); self.under?.stop()
+                self.pageRunning = false
             }
         }
         // **Straight out, not collapsed.** The ring shrinking into the pointer
@@ -1811,6 +1838,21 @@ final class CaretHalo {
         // the ⌘V goes out — so the heads stay up through the collapse and
         // `setDelivering(false)` takes them down. See `setDelivering`.
         if !delivering { arrow.hide() }
+
+        // The circling dust does not shrink into a point: it fades where it
+        // goes, and the panel leaves with the fade.
+        if dust, panel != nil {
+            closing = true
+            closingGeneration &+= 1
+            let generation = closingGeneration
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.dustFade) { [weak self] in
+                guard let self, self.closingGeneration == generation, !self.live else { return }
+                self.closing = false
+                self.releaseMonitorsIfIdle()
+                self.panel?.orderOut(nil)
+            }
+            return
+        }
 
         guard panel != nil, let stage = stage else {
             releaseMonitorsIfIdle()

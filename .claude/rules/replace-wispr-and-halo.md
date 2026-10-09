@@ -428,6 +428,14 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   over the whole prediction it landed with the words and the ring was never seen; Tendrils keeps the whole) — a 50 pt ring opening from the centre until then; any other (Tendrils) goes straight and stays on the centre. The
   afternoon's bow (*"a bit elliptical"*, then *"concave"*) is gone. The Reverse tunnel is left only
   for a dress that cannot ride (and the spawn keeps Sparks).
+- **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
+  mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
+  injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets
+  `CaretHalo.orbitFading`: `rewindStart` is kept, `aim` stays on `rewindPoint` (the orbit goes on),
+  the render timer keeps feeding the take backwards and calling `follow()`, and the panel fades over
+  `dustFade` 0.9 s (ease-in) with no collapse into a point; the timer, the page and the panel go
+  when it ends. Every other dress keeps `rewindFade` (0.15 s, the tunnel's *"fade out foarte
+  repede"*). A new ring in the fade takes over (`show` clears the flag; generations guard the ends).
 - **A straight flyer shrinks to a fifth on the way; Tendrils is ×1.2 at rest** (2026-10-08, Victor:
   *"when the tendrils move to the target window, it should be decreasing in size … to twenty percent
   of its original size … the default size around the cursor should increase by twenty percent … on
