@@ -166,6 +166,7 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 
 - **Right ⌥ ×2 and F5 over an open prompt end it, as 🔼 would** (2026-10-09, `keyboardEndsOpenPrompt`). They used to be refused (*"the relay's own engine is mid-sentence"*) — the opening half of the no-second-engine rule applied to a stop: at 19:28 a forward-button prompt could not be closed from the keyboard and took a Force Quit. Only the keyboard triggers; the 🔽 gestures keep their mid-prompt meanings and their refusal. Log `🎙️ right ⌥ ×2 over an open prompt — its stop`.
 
+- **A quick question is `Asking`, and its 🔽 stop says `⚡ ask`** (2026-10-09, Victor: *"let's call it quick question … asking in the tooltip"*). The chip's row reads `⚡ Asking → …` (`RelayWindow.asking`), and the corner hint bar's 🔽 click and 🔽 → read `⚡ ask` instead of the plain dictation's `⏹️ + ⏎` / `⏹️` — the stop asks the model and no Return follows (`GestureHintBar.Stage.quick`).
 ## Do not
 
 - **The numbers are duplicated in two places and must not drift**: Options+'s own custom-gesture screen, and `HotkeyTap`'s `VK_F3…VK_F12`.

@@ -150,7 +150,7 @@
     "slug" : "quick-question",
     "title" : "⚡ A quick question",
     "when" : "🔼 ← at rest — nothing to cancel (2026-10-09, `QuickAsk`).",
-    "width" : 235
+    "width" : 217
   },
   {
     "alpha" : 0.80000000000000004,
@@ -620,14 +620,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 616,
+    "height" : 584,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -675,7 +675,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,

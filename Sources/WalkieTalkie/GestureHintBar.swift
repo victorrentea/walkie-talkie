@@ -60,6 +60,9 @@ final class GestureHintBar {
         /// A wheel crop is on screen: the bar draws the mouse instead of the two
         /// side buttons, because that is the hand the crop is in (2026-10-07).
         var crop: CropPhase? = nil
+        /// A ⚡ quick question: its stop asks the model, nothing is typed and
+        /// no Return follows (2026-10-09).
+        var quick = false
     }
 
     /// Where the wheel crop is — `CropSelectionOverlay.Phase`, without `done`.
@@ -120,6 +123,9 @@ final class GestureHintBar {
             // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
             // de taste din colț"*) — `HotkeyTap.onTypeIn`.
             back.down = "⌨️ type"
+        } else if s.quick {
+            back.click = "⚡ ask"
+            back.right = "⚡ ask"
         } else {
             back.click = "⏹️ + ⏎"
             back.right = "⏹️"

@@ -2419,6 +2419,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             MilkDropHalo.optionsOverride = nil
             let landed = self.caretHalo.cycleStyle(by: step)
+            // Logged since 2026-10-09: *"make sure that fn+F7 and F9 look through
+            // the gallery"* — until then a step left no trace to check it by.
+            Log.info("✨ fn+F\(step > 0 ? 9 : 7) — the gallery steps to \(landed.rawValue) (\(landed.title))")
             self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
             // 12 s, not 6 (Victor, 2026-09-23: *"at f7/9 leave the animation 2x longer"*)
             self.caretHalo.preview(seconds: 12)
@@ -6110,7 +6113,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let token = quickToken
         let label = ReplyPanel.quickMark + question
         let started = CFAbsoluteTimeGetCurrent()
-        ReplyPanel.live("", from: label, question: token)
+        // **No pop-up until the answer starts** (2026-10-09, Victor: *"there
+        // should be no prompt preview because it's super fast"*): it opened at
+        // once with the question alone, a preview of his own words for the
+        // second before the model's arrived. The first words open it.
         var painted: CFAbsoluteTime = 0
         QuickAsk.shared.ask(question, onText: { text in
             // ≤ 20 repaints a second; the last words come with `onDone`.
@@ -7270,14 +7276,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // pushed only while settling, so the settle's end (which clears the
         // sentence's aim) does not pull the fading tunnel back onto the pointer.
         if settling { caretHalo.rewindAim = settleAim }
-        caretHalo.setRewind(settling && !listening && !speculative,
+        // **A ⚡ quick question has one effect** (2026-10-09): Reverse tunnel
+        // while he asks, then the collapse into the pointer — no rewind, no
+        // coast, no heads (`CaretHalo.quick`). Its words are typed nowhere.
+        caretHalo.quick = quickAsk
+        caretHalo.setRewind(settling && !listening && !speculative && !quickAsk,
                             take: settleTake, estimate: settleEstimate)
-        caretHalo.setDelivering(settling && settlingAtCaret)
+        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
         // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,
         // like `setDelivering`, so the ring is told to fade rather than to go.
-        let coasting = settling && !listening && !speculative
+        let coasting = settling && !listening && !speculative && !quickAsk
         caretHalo.setCoasting(coasting, estimate: settleEstimate)
         // **The halo dial listens exactly while the ring is up** (2026-09-20)
         // — the same expression, pushed into the tap here so the gesture and
@@ -7316,9 +7326,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : isBound ? .bound : .caret
             caretHalo.setDestination(destination)
             overlay.prompting = destination != .wispr
+            overlay.asking = quickAsk
         }
         caretHalo.setActive(ringUp,
-                            atCaret: atCaret,
+                            atCaret: atCaret && !quickAsk,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
         // **A hint about the last sentence has nothing to say over this one.**
         // The showing is five seconds (`PasteHint.hold`), so this

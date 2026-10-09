@@ -176,6 +176,7 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setSpawnDestination("quick answer — haiku", mark: "⚡")
+                o.asking = true
                 o.setListening(true)
             },
 
@@ -683,6 +684,7 @@ enum OverlayStates {
     /// Back to nothing, so every state is defined by its own `apply` alone and
     /// the catalogue can be reordered without the pictures changing.
     private static func reset(_ o: RelayWindow) {
+        o.asking = false
         o.cancelHeldPrompt()
         o.clearFlash(animated: false)
         o.setHovering(false)

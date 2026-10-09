@@ -798,8 +798,19 @@ final class CaretHalo {
     /// with it, the same way the arrow stops asking for a place to paste.
     func setDestination(_ new: HaloDestination) {
         destination = new
-        use(rewinding ? rewindStyle : HaloStyle.current(for: new))
+        use(rewinding ? rewindStyle : quick ? Self.tunnelStyle : HaloStyle.current(for: new))
     }
+
+    /// **A ⚡ quick question wears Reverse tunnel, and only that** (2026-10-09,
+    /// Victor: *"the effect associated during the dictation should be the
+    /// reverse tunnel … no second effect, just the reverse tunnel … then getting
+    /// smaller until it disappears, fading out around the mouse"*). Set from
+    /// `syncBorrowedGestures` before `setDestination`; the same sync keeps the
+    /// rewind, the coast and the heads off, so at the close the ring goes
+    /// straight into `hide`'s collapse — stretched to `quickCollapse` and fading
+    /// the whole way, under the reply pop-up that opens on the answer's first words.
+    var quick = false
+    private static let quickCollapse: TimeInterval = 1.0
 
     /// Pick another halo **for one destination**, and write it down. If that
     /// destination is the one being worn, the change is seen at once.
@@ -1875,17 +1886,20 @@ final class CaretHalo {
         // by Newton: they are indistinguishable at this length, and this one is
         // an expression.
         let steps = 24
+        // A quick question's ring fades the whole way in, over a second (`quick`).
+        let asked = quick
+        let span = asked ? Self.quickCollapse : Self.collapse
         var scale: [CGFloat] = [], ink: [CGFloat] = []
         for i in 0...steps {
             let t = CGFloat(i) / CGFloat(steps)
             let u = t * t * (3 - 2 * t)
             scale.append(1 - u * (1 - Self.collapseEnd))
-            ink.append(u < 1 - Self.collapseFade ? 1 : (1 - u) / Self.collapseFade)
+            ink.append(asked ? 1 - u : u < 1 - Self.collapseFade ? 1 : (1 - u) / Self.collapseFade)
         }
 
         let shrink = CAKeyframeAnimation(keyPath: "transform.scale")
         shrink.values = scale
-        shrink.duration = Self.collapse
+        shrink.duration = span
         // **Held at the last frame, and never written into the model.** The
         // panel is ordered out on the beat this ends, so a layer snapping back
         // to full size underneath is invisible — and it has to snap back, or the
@@ -1896,12 +1910,12 @@ final class CaretHalo {
 
         let fade = CAKeyframeAnimation(keyPath: "opacity")
         fade.values = ink
-        fade.duration = Self.collapse
+        fade.duration = span
         fade.fillMode = .forwards
         fade.isRemovedOnCompletion = false
         stage.add(fade, forKey: "collapse-ink")
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapse) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + span) { [weak self] in
             guard let self = self, self.closingGeneration == generation, !self.live else { return }
             self.closing = false
             self.releaseMonitorsIfIdle()

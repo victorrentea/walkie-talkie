@@ -984,7 +984,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// three dots are the last three steps, which is the part Victor reads to
     /// know it is done.
     private var listeningWord: String {
-        opening ? "Opening Wispr Flow..." : "\(prompting ? "Prompting" : "Dictating")\(micMark)\(Glyphs.dotsGap)..."
+        opening ? "Opening Wispr Flow..." : "\(asking ? "Asking" : prompting ? "Prompting" : "Dictating")\(micMark)\(Glyphs.dotsGap)..."
     }
 
     /// **`Opening Wispr Flow...` until Wispr's microphone is really open** (Q20,
@@ -1007,6 +1007,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// writes it with the destination, before the row goes up.
     var prompting = true {
         didSet { if prompting != oldValue { applyEngineText() } }
+    }
+
+    /// **A ⚡ quick question is `Asking`** (2026-10-09, Victor: *"let's call it
+    /// quick question … asking"*) — on this row and on the corner hints, whose
+    /// 🔽 stop no longer promises a Return it does not press.
+    var asking = false {
+        didSet { if asking != oldValue { applyEngineText(); updateHintBar() } }
     }
 
     /// **Which recogniser is doing the work, as its own logo** (2026-09-18 as a
@@ -4387,7 +4394,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     private func updateHintBar() {
         guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
         hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
-                             kamikaze: kamikaze, spawn: spawnMarked, held: heldPair, crop: cropPhase))
+                             kamikaze: kamikaze, spawn: spawnMarked, held: heldPair, crop: cropPhase,
+                             quick: asking))
     }
 
     func setHeldPair(_ on: Bool) {

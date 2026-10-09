@@ -33,6 +33,14 @@ final class GestureHintBarTests: XCTestCase {
         ])
     }
 
+    /// 2026-10-09: a quick question's stop asks — no ⏎ promised.
+    func testAQuickQuestionAsks() {
+        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
+            Cross(click: "", up: "", down: "", left: "🗑️ cancel", right: nil),
+            Cross(click: "⚡ ask", up: "", down: "", left: "", right: "⚡ ask"),
+        ])
+    }
+
     func testNothingWhileRightCmdOptIsHeld() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, held: true)), [])
     }
