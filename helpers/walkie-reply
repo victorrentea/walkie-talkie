@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""walkie-reply "<answer>" — show a short answer beside Victor's mouse (2026-10-07).
+"""walkie-reply "<answer>" [--image <path>]… — show a short answer beside Victor's mouse (2026-10-07).
+
+`--image` (2026-10-09, repeatable): a small picture rides the answer — thumbnails under
+the words, as many as fit; a click opens one full size. PNG/JPEG/GIF/TIFF/HEIC/PDF.
 
 A prompt he dictated with a `?` in it carries the footer line
 `[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>". Only to answer me — never to ask me something, never to report work done.]`
@@ -15,9 +18,22 @@ import subprocess
 import sys
 import urllib.request
 
-text = " ".join(sys.argv[1:]).strip() or sys.stdin.read().strip()
-if not text:
-    sys.exit("usage: walkie-reply \"<answer>\"")
+args, images = [], []
+argv = sys.argv[1:]
+while argv:
+    a = argv.pop(0)
+    if a in ("--image", "-i"):
+        if not argv:
+            sys.exit("walkie-reply: --image needs a path")
+        path = os.path.abspath(os.path.expanduser(argv.pop(0)))
+        if not os.path.isfile(path):
+            sys.exit(f"walkie-reply: no such image: {path}")
+        images.append(path)
+    else:
+        args.append(a)
+text = " ".join(args).strip() or ("" if images else sys.stdin.read().strip())
+if not text and not images:
+    sys.exit("usage: walkie-reply \"<answer>\" [--image <path>]…")
 try:
     token = open(os.path.expanduser("~/.walkie-talkie/reply-token")).read().strip()
 except OSError:
@@ -47,7 +63,7 @@ def session_tty():
 
 
 body = json.dumps({"token": token, "text": text, "from": os.path.basename(top or os.getcwd()),
-                   "tty": session_tty()}).encode()
+                   "tty": session_tty(), "images": images}).encode()
 for port in (8917, 8918, 8919):
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/reply", data=body,

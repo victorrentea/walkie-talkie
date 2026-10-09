@@ -1990,8 +1990,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.error("💬 POST /reply refused — wrong or missing token")
                 return (403, ["ok": false, "error": "token"])
             }
-            guard let text = body["text"] as? String,
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            // **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble
+            // should be able to show images … small, but when clicked, opened
+            // up"*): copied now, so a scratch file the agent deletes still opens.
+            let images = ReplyPanel.keep((body["images"] as? [String]) ?? [])
+            let text = (body["text"] as? String) ?? ""
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty
             else { return (400, ["ok": false, "error": "text"]) }
             // **Which terminal asked** (Victor: *"do show what terminal asked
             // instead of 'walkie talkie'"*): the folder, then the task its tab
@@ -2007,8 +2011,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     label = "\(base) · \(tty)"
                 }
             }
-            ReplyPanel.show(text, from: label, tty: (body["tty"] as? String).flatMap { $0.isEmpty ? nil : $0 })
-            return (200, ["ok": true, "chars": text.count, "from": label ?? NSNull()])
+            ReplyPanel.show(text, from: label, tty: (body["tty"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+                            images: images)
+            return (200, ["ok": true, "chars": text.count, "images": images.count, "from": label ?? NSNull()])
         }
         // **The 🔽 ↓ typing box from a desk**: opens it at the pointer as the
         // gesture would; `text` types into it, `submit: true` presses Return.
@@ -2028,11 +2033,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictated after 🔼 ←. `wait: true` answers when the answer is complete,
         // with the two clocks `evals/quick-ask/` measures.
         picker.onTestQuick = { [weak self] body in
+            // `capturable` alone just flips the switch — every reply pop-up after
+            // it shows up in a screenshot (agents' answers included).
+            if let c = body["capturable"] as? Bool { DispatchQueue.main.sync { ReplyPanel.capturable = c } }
+            // `close` takes the open reply pop-up down, as its ✕ would.
+            if body["close"] as? Bool == true { DispatchQueue.main.sync { ReplyPanel.close() } }
+            let frame: Any = DispatchQueue.main.sync {
+                ReplyPanel.frame.map { ["x": $0.minX, "y": $0.minY, "w": $0.width, "h": $0.height] } ?? NSNull()
+            }
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
-                return (400, ["ok": false, "error": "text required"])
+                return body["capturable"] != nil || body["close"] != nil
+                    ? (200, ["ok": true, "frame": frame]) : (400, ["ok": false, "error": "text required"])
             }
             let wait = body["wait"] as? Bool == true
-            if let c = body["capturable"] as? Bool { DispatchQueue.main.sync { ReplyPanel.capturable = c } }
             let done = DispatchSemaphore(value: 0)
             var out: [String: Any] = ["ok": true]
             DispatchQueue.main.async {
@@ -8674,7 +8687,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// task. Then, minutes later, narrower still: *"exclusiv când eu întreb
     /// ceva. Atât. … Niciodată să nu fie folosit ca să mă întrebe Claude pe mine
     /// ceva."* — his question in, its answer out; nothing else rides it.
-    static let questionHint = "[If I asked you a question, also run: walkie-reply \"<the answer in ≤2 short sentences>\". Only to answer me — never to ask me something, never to report work done.]"
+    static let questionHint = "[If I asked you a question, also run: walkie-reply \"<the answer in ≤2 short sentences>\" [--image <path> when a small picture says it better]. Only to answer me — never to ask me something, never to report work done.]"
 
     private static func dictatedHint() -> String {
         // **Four words, and the recogniser's name is not one of them**

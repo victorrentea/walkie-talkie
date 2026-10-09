@@ -30,7 +30,7 @@ import AppKit
 /// pictures are of his screen, not of this.
 enum ReplyPanel {
     private static var panel: NSPanel?
-    private static var queue: [(text: String, label: String?, tty: String?)] = []
+    private static var queue: [(text: String, label: String?, tty: String?, images: [URL])] = []
     private static var arrivedAt: NSPoint = .zero
 
     static let maxChars = 400
@@ -54,6 +54,8 @@ enum ReplyPanel {
     static var shown: String?
     /// The terminal the open pop-up came from.
     private static var shownTTY: String?
+    /// The pictures on the open pop-up.
+    private static var shownImages: [URL] = []
 
     /// **The sender's tty while the pointer is over its pop-up** — 🔼 → there
     /// answers that session (`AppDelegate.replyBack`). Main thread.
@@ -89,20 +91,87 @@ enum ReplyPanel {
     /// answer was the last thing he needed from it. Closes the panel.
     static var onKamikaze: ((String) -> Void)?
 
-    static func show(_ raw: String, from label: String?, tty: String? = nil) {
+    static func show(_ raw: String, from label: String?, tty: String? = nil, images: [URL] = []) {
         guard Thread.isMainThread else {
-            DispatchQueue.main.async { show(raw, from: label, tty: tty) }
+            DispatchQueue.main.async { show(raw, from: label, tty: tty, images: images) }
             return
         }
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty || !images.isEmpty else { return }
         if panel != nil {
-            queue.append((text, label, tty))
+            queue.append((text, label, tty, images))
             Log.info("💬 answer from \(label ?? "agent") queued behind the open one — \(queue.count) waiting")
             return
         }
-        present(text, from: label, tty: tty)
+        present(text, from: label, tty: tty, images: images)
+    }
+
+    // MARK: Pictures (2026-10-09)
+
+    /// **Copies the pictures an agent sent into the cache**, so a scratch file
+    /// it deletes after `walkie-reply` returns still opens on a click. Only
+    /// what `NSImage` can read, at most `maxImages`; the folder keeps the
+    /// newest 100.
+    static func keep(_ paths: [String]) -> [URL] {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ro.victorrentea.wispr-relay/replies", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let stamp = Int(Date().timeIntervalSince1970 * 1000)
+        var kept: [URL] = []
+        for (i, path) in paths.prefix(maxImages).enumerated() {
+            let src = URL(fileURLWithPath: path)
+            guard NSImage(contentsOf: src) != nil else {
+                Log.error("💬 the reply's picture \(path) is not an image this Mac can read — left out")
+                continue
+            }
+            let dst = dir.appendingPathComponent("\(stamp)-\(i)-\(src.lastPathComponent)")
+            do { try FileManager.default.copyItem(at: src, to: dst); kept.append(dst) }
+            catch { Log.error("💬 could not keep the reply's picture \(path): \(error)") }
+        }
+        let all = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey])) ?? [])
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+        for old in all.dropFirst(100) { try? FileManager.default.removeItem(at: old) }
+        return kept
+    }
+
+    static let maxImages = 8
+    /// One picture: up to this tall, across the pop-up's width. Several: one
+    /// row this tall, as many as fit, the last one saying how many did not.
+    private static let singleImageMax: CGFloat = 170
+    private static let thumbHeight: CGFloat = 72
+    private static let thumbGap: CGFloat = 6
+
+    /// A click opens it in Preview, full size (Victor: *"small, but when
+    /// clicked, opened up"*). The pop-up stays.
+    /// The `+N` one opens itself and every picture that did not fit.
+    static func open(_ urls: [URL]) {
+        Log.info("💬 the reply pop-up's picture clicked — \(urls.count) opened in Preview (\(urls[0].lastPathComponent)…)")
+        let preview = URL(fileURLWithPath: "/System/Applications/Preview.app")
+        NSWorkspace.shared.open(urls, withApplicationAt: preview, configuration: NSWorkspace.OpenConfiguration())
+    }
+
+    /// The thumbnails for `inner` points across: frames, bottom-left origin at
+    /// (0, 0), and how many were left out.
+    static func thumbLayout(_ sizes: [NSSize], inner: CGFloat) -> (frames: [NSRect], height: CGFloat, hidden: Int) {
+        guard !sizes.isEmpty else { return ([], 0, 0) }
+        func aspect(_ s: NSSize) -> CGFloat { s.height > 0 ? max(0.3, min(4, s.width / s.height)) : 1 }
+        if sizes.count == 1 {
+            let a = aspect(sizes[0])
+            var h = min(singleImageMax, inner / a)
+            var w = h * a
+            if w > inner { w = inner; h = w / a }
+            return ([NSRect(x: 0, y: 0, width: w, height: h)], h, 0)
+        }
+        var frames: [NSRect] = []
+        var x: CGFloat = 0
+        for s in sizes {
+            let w = min(inner, thumbHeight * aspect(s))
+            if x + w > inner, !frames.isEmpty { break }
+            frames.append(NSRect(x: x, y: 0, width: w, height: thumbHeight))
+            x += w + thumbGap
+        }
+        return (frames, thumbHeight, sizes.count - frames.count)
     }
 
     /// **⚡ The quick answer, as it streams** (2026-10-09, `QuickAsk`): the first
@@ -132,7 +201,7 @@ enum ReplyPanel {
             // An agent's answer waits its turn again; a finished ⚡ one is
             // simply replaced by the next question's.
             if openLabel?.hasPrefix(quickMark) != true {
-                queue.insert((open, openLabel, shownTTY), at: 0)
+                queue.insert((open, openLabel, shownTTY, shownImages), at: 0)
                 Log.info("💬 the open reply pop-up steps back into the queue for a ⚡ quick answer")
             }
             p.orderOut(nil)
@@ -154,13 +223,14 @@ enum ReplyPanel {
     private static var liveToken = 0, dismissedLive = -1
     private static var openLabel: String?
 
-    private static func present(_ text: String, from label: String?, tty: String?) {
+    private static func present(_ text: String, from label: String?, tty: String?, images: [URL] = []) {
         allowCursorInBackground
         shown = text
         shownTTY = tty
+        shownImages = images
         openLabel = label
         arrivedAt = NSEvent.mouseLocation
-        let root = build(text, from: label, tty: tty)
+        let root = build(text, from: label, tty: tty, images: images)
 
         let p = NSPanel(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
@@ -178,11 +248,11 @@ enum ReplyPanel {
         p.orderFrontRegardless()
         panel = p
         zoom(p, around: arrivedAt)
-        Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
+        Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars\(images.isEmpty ? "" : ", \(images.count) picture(s)"); up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
     }
 
     /// The pop-up's content for these words — the header, the body, the buttons.
-    private static func build(_ text: String, from label: String?, tty: String?) -> ReplyRoot {
+    private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
         let pad: CGFloat = 12
         let inner = width - 2 * pad
         // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
@@ -214,8 +284,13 @@ enum ReplyPanel {
         body.font = font
         body.textColor = .white
         body.preferredMaxLayoutWidth = inner - 18
-        let bodySize = body.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
-        let height = pad + headerH + 6 + ceil(bodySize.height) + pad
+        let bodySize = text.isEmpty ? .zero
+            : body.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
+        // **The pictures under the words**, as many as fit (2026-10-09).
+        let pictures = images.compactMap { url in NSImage(contentsOf: url).map { (url, $0) } }
+        let strip = thumbLayout(pictures.map(\.1.size), inner: inner)
+        let stripH = strip.height > 0 ? strip.height + (text.isEmpty ? 0 : 8) : 0
+        let height = pad + headerH + 6 + ceil(bodySize.height) + stripH + pad
 
         let root = ReplyRoot(frame: NSRect(x: 0, y: 0, width: width, height: height))
         root.wantsLayer = true
@@ -238,15 +313,26 @@ enum ReplyPanel {
         let buttons: CGFloat = tty == nil ? 1 : (pinned ? 3 : 2)
         header.frame = NSRect(x: textX, y: height - pad - headerH + 3,
                               width: inner - (textX - pad) - buttons * (iconSide + 6), height: 20)
-        body.frame = NSRect(x: pad, y: pad, width: inner - 18, height: ceil(bodySize.height))
+        body.frame = NSRect(x: pad, y: pad + stripH, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
-        root.addSubview(body)
+        if !text.isEmpty { root.addSubview(body) }
+        var thumbs: [NSRect] = []
+        for (i, f) in strip.frames.enumerated() {
+            let thumb = ReplyThumb(frame: f.offsetBy(dx: pad, dy: pad))
+            thumb.image = pictures[i].1
+            let rest = pictures[i...].map(\.0)
+            let last = i == strip.frames.count - 1 && strip.hidden > 0
+            if last { thumb.more = strip.hidden }
+            thumb.onClick = { open(last ? rest : [rest[0]]) }
+            root.addSubview(thumb)
+            thumbs.append(thumb.frame)
+        }
         // **The ✕ as large as the walkie** (2026-10-08, Victor: *"X-ul … aceeași
         // mărime ca și simbolul Walkie Talkie"*).
         let x = ReplyCloseButton(frame: NSRect(x: width - pad - iconSide, y: height - pad - headerH, width: iconSide, height: iconSide))
         x.onClick = { Log.info("💬 answer dismissed (✕)"); close() }
         root.addSubview(x)
-        var hot = [x.frame]
+        var hot = [x.frame] + thumbs
         if tty != nil { hot.append(icon.frame) }
         if let tty = tty {
             let skull = ReplyCloseButton(frame: x.frame.offsetBy(dx: -(iconSide + 6), dy: 0))
@@ -320,13 +406,14 @@ enum ReplyPanel {
         liveOpen = false
         shown = nil
         shownTTY = nil
+        shownImages = []
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
         // The next hop, so a click that closed this one is over before the
         // next panel lands under the pointer.
         DispatchQueue.main.async {
             guard panel == nil else { queue.insert(next, at: 0); return }
-            present(next.text, from: next.label, tty: next.tty)
+            present(next.text, from: next.label, tty: next.tty, images: next.images)
         }
     }
 
@@ -513,6 +600,58 @@ private final class ReplyCloseButton: NSView {
     override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true; NSCursor.arrow.set() }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     private var press = PressOrDrag()
+    override func mouseDown(with event: NSEvent) { press.down(window) }
+    override func mouseDragged(with event: NSEvent) { press.dragged(window) }
+    override func mouseUp(with event: NSEvent) { if press.up() { onClick?() } }
+}
+
+/// **A picture the agent sent** (2026-10-09): drawn to fill its box, rounded,
+/// a hairline round it; the hand on hover, a click opens it full size
+/// (`ReplyPanel.open`), a press that moves drags the pop-up. `more` > 0 draws
+/// `+N` over the last one shown — the pictures that did not fit.
+private final class ReplyThumb: NSView {
+    var image: NSImage?
+    var more = 0
+    var onClick: (() -> Void)?
+    private var press = PressOrDrag()
+    override func draw(_ dirtyRect: NSRect) {
+        let clip = NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6)
+        NSGraphicsContext.saveGraphicsState()
+        clip.addClip()
+        if let image {
+            // Fill the box, cropping the overflow — a strip of letterboxes reads
+            // as broken pictures.
+            let s = image.size
+            let k = max(bounds.width / max(s.width, 1), bounds.height / max(s.height, 1))
+            let w = s.width * k, h = s.height * k
+            image.draw(in: NSRect(x: (bounds.width - w) / 2, y: (bounds.height - h) / 2, width: w, height: h))
+        }
+        if more > 0 {
+            NSColor.black.withAlphaComponent(0.55).setFill()
+            bounds.fill()
+            let a: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 18, weight: .semibold),
+                                                    .foregroundColor: NSColor.white]
+            let t = "+\(more)" as NSString
+            let ts = t.size(withAttributes: a)
+            t.draw(at: NSPoint(x: (bounds.width - ts.width) / 2, y: (bounds.height - ts.height) / 2), withAttributes: a)
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.white.withAlphaComponent(0.2).setStroke()
+        let edge = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
+        edge.lineWidth = 1
+        edge.stroke()
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for a in trackingAreas { removeTrackingArea(a) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseExited(with event: NSEvent) { NSCursor.arrow.set() }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) { press.down(window) }
     override func mouseDragged(with event: NSEvent) { press.dragged(window) }
     override func mouseUp(with event: NSEvent) { if press.up() { onClick?() } }

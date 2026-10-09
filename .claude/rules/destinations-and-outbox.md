@@ -214,12 +214,22 @@ panel that appears next to the mouse carrying the response … super important t
 me to dismiss it explicitly"*.
 
 - **Only a prompt with a `?` asks for it** — `terminalLine` adds `AppDelegate.questionHint`,
-  `[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>". Only to answer me — never to ask me something, never to report work done.]`, after
+  `[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>" [--image <path> when a small picture says it better]. Only to answer me — never to ask me something, never to report work done.]`, after
   `[Dictated in RO or EN]`. Every other prompt pays nothing. **Narrowed 2026-10-08**: an agent
   answered *"E oare posibil?"* (a request) by doing it, then `walkie-reply "Gata: …"` — Victor: *"nu
   că au terminat … un pic abuz"*. Then, the same night: *"exclusiv când eu întreb ceva. Atât … Niciodată
   să nu fie folosit ca să mă întrebe Claude pe mine ceva"* — **only the answer to his question; never
   a question for him, never a completion notice.**
+- **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble should be able to show
+  images. As much as they fit that window, small, but when clicked, opened up"*):
+  `walkie-reply "<answer>" --image <path>` (repeatable, ≤ 8; text optional with a picture) posts
+  `images: [path]`; `ReplyPanel.keep` copies each readable one into
+  `~/Library/Caches/ro.victorrentea.wispr-relay/replies/` (newest 100 kept), so a scratch file the
+  agent deletes still opens. Under the words: one picture spans the width, ≤ 170 pt tall; several
+  are one 72 pt row, aspect kept, cropped to fill, as many as fit, the last shown wearing `+N` for
+  the rest (`thumbLayout`). A click opens it in Preview — the `+N` one opens itself and every
+  hidden one; the pop-up stays; a press that moves drags it. `questionHint` mentions
+  `[--image <path> when a small picture says it better]`.
 - **`helpers/walkie-reply`** (linked into `~/.local/bin`, which is on the sessions' PATH; `~/bin` is
   not) posts `{token, text, from: <git toplevel basename>}` to `POST /reply` on 8917–8919. The token is
   `~/.walkie-talkie/reply-token` (0600, made at launch): the port answers any web page (CORS `*`) and
