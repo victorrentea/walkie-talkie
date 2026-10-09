@@ -15385,3 +15385,20 @@ condensed to fit the time estimated for the flight."*
 - Victor named the answer panel the **reply pop-up**. Its name now only brings the terminal in front;
   a 📍 left of ☠️ binds, shown only when not already bound there. The *wrong terminal* was AX's stale
   focused window being raised; `raise(pid:windowAt:)` picks the window by position.
+
+
+## ⚡ Quick question, and the reply pop-up's burst (2026-10-09)
+
+Victor asked how much faster Haiku answers a general question than Opus, and whether a quick mode
+was worth adding. Measured through `claude -p` at low effort: **the model is the small part.** A
+cold `claude -p` spends ~2 s starting and ~2 s exiting around a ~1.5 s answer (5.4–9 s whole, every
+model); Haiku and Opus differ by ~1–2 s on a paragraph. A process already started answers its first
+word in ~0.7 s; with Claude Code's ~104k-token system prompt replaced by a lean one (~700 tokens) in
+~0.5 s. He asked whether that was a new harness (no — plain Claude Code, waiting on stdin) and
+pointed out that one long-lived process would accumulate a day of history: so one process per
+question, the next started as soon as one answers. The gesture is his: 🔼 ← (*"forward and left"*),
+which at rest had nothing to do. End to end in the app: 0.55 s to the first word, 1.03 s whole
+(`evals/quick-ask/README.md`). Rules: `destinations-and-outbox.md`, *⚡ Quick question*.
+
+The same morning, 🔼 → over the reply pop-up (answer its sender) stopped merely closing it: it bursts
+to the right in tiles — *"something to suggest that I took my focus and send it to it"* (`ReplyBurst`).

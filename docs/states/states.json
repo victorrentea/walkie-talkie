@@ -35,14 +35,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "listening-kamikaze.png",
     "note" : "**A row under the others**, like everything the sentence carries. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
     "shape" : "chip",
     "slug" : "listening-kamikaze",
     "title" : "Kamikaze — the agent closes when done",
     "when" : "🔼 ↓ while a sentence is open or still on its way. Again takes it back.",
-    "width" : 308
+    "width" : 215
   },
   {
     "alpha" : 0.80000000000000004,
@@ -78,7 +78,7 @@
     "slug" : "spawn",
     "title" : "This sentence opens a new session",
     "when" : "🔼 ↑ — the forward button held, mouse moved up (🛞🛞 with Logi gestures off): the dictation goes to a terminal that does not exist yet.",
-    "width" : 235
+    "width" : 227
   },
   {
     "alpha" : 0.80000000000000004,
@@ -102,7 +102,7 @@
     "slug" : "bind-to-send",
     "title" : "Nothing is bound, and he is talking anyway",
     "when" : "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
-    "width" : 215
+    "width" : 382
   },
   {
     "alpha" : 0.80000000000000004,
@@ -143,7 +143,19 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "At rest",
-    "height" : 141,
+    "height" : 46,
+    "image" : "quick-question.png",
+    "note" : "A clean sentence whose words go to a fast model instead of anywhere on the screen; the answer streams into the reply pop-up beside the pointer, its header the question as heard. The destination row says so, and which model will answer. Words only — no picture, no attachment — so the rows a prompt grows never appear.",
+    "shape" : "chip",
+    "slug" : "quick-question",
+    "title" : "⚡ A quick question",
+    "when" : "🔼 ← at rest — nothing to cancel (2026-10-09, `QuickAsk`).",
+    "width" : 235
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "At rest",
+    "height" : 117,
     "image" : "replace-wispr-attached.png",
     "note" : "It borrowed nothing before, on the argument that both gestures add to a *message* and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — the tally included — and what gets pasted carries `[the shots I took: …]`, `[selected: …]` and `[elements I picked in Chrome: …]` in the wording the terminal already uses. **The highlights joined them on 2026-09-09**, on his ask: they were the one deliberate attachment this envelope refused, and the refusal was really about the *probe* rather than about the highlight. What it still does not carry is anything **automatic**: no opening frame, no `[Focused window: …]` and no `dictated aloud` hint. Attach nothing and it pastes the words alone, byte for byte as before.",
     "shape" : "chip",
@@ -207,7 +219,7 @@
     "slug" : "listening-overrun",
     "title" : "Eight minutes — the wash starts creeping",
     "when" : "From the eighth minute of a single dictation. Nothing Victor has ever said reaches it by talking.",
-    "width" : 308
+    "width" : 382
   },
   {
     "alpha" : 0.80000000000000004,
@@ -231,7 +243,7 @@
     "slug" : "listening-cold",
     "title" : "The first words — too little speech to trust",
     "when" : "From the instant the microphone opens until about a second of actual speech has arrived.",
-    "width" : 308
+    "width" : 185
   },
   {
     "alpha" : 0.80000000000000004,
@@ -308,14 +320,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 141,
+    "height" : 93,
     "image" : "listening-everything.png",
     "note" : "Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. **The quotation is above Chrome and Chrome is last**, since 2026-09-09: a highlight belongs to *this* message and goes out with it, while the picks row outlives the message — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. **The counts line up in the icon column**, which is the overview Victor asked for — `📸 ×3`, the quotation, `×3` in Chrome, read downwards — rather than a fourth row restating the other three.",
     "shape" : "chip",
     "slug" : "listening-everything",
     "title" : "Dictating, everything at once",
     "when" : "Rare, and the widest the chip ever gets: three frames taken, picks made, a highlight riding along.",
-    "width" : 337
+    "width" : 382
   },
   {
     "alpha" : 0.80000000000000004,
@@ -344,19 +356,19 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "transcribing-lora.png",
     "note" : "**A subscript `ᵥ` after the local model's 💻** (2026-10-04, Victor: *\"pune un v mic după acel măr … dacă e modelul meu cu Lora\"*, then *\"ca indice\"*, and the apple became the laptop: *\"ca să se înțeleagă local\"*) — on `Transcribing via` and on the listening row's arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.",
     "shape" : "chip",
     "slug" : "transcribing-lora",
     "title" : "…on Victor's own model",
     "when" : "The wait, when the local model is the Engine and its weights are the LoRA trained on his voice.",
-    "width" : 308
+    "width" : 215
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-local-now.png",
     "note" : "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land.",
     "shape" : "chip",
@@ -368,7 +380,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-local-now-loading.png",
     "note" : "`(loading)` says the key will not answer at once — not that it will not work. Pressed now, the WAV waits for the weights (up to 90 s, the fallback's own window) and the words go where the sentence was going.",
     "shape" : "chip",
@@ -380,7 +392,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-fallback-countdown.png",
     "note" : "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
     "shape" : "chip",
@@ -392,14 +404,14 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-fallback-now.png",
     "note" : "`auto now...`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
     "shape" : "chip",
     "slug" : "transcribing-fallback-now",
     "title" : "Fallback to local — the budget ran out",
     "when" : "The count reached zero with the engine's words still out and the local decode not quite done.",
-    "width" : 308
+    "width" : 354
   },
   {
     "alpha" : 0.80000000000000004,
@@ -572,7 +584,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 106,
+    "height" : 130,
     "image" : "prompt-autosend-paused.png",
     "note" : "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
     "shape" : "panel",

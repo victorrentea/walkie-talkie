@@ -170,6 +170,15 @@ enum OverlayStates {
                 o.setListening(true)
             },
 
+            Shot(slug: "quick-question", group: "At rest", title: "⚡ A quick question",
+                 when: "🔼 ← at rest — nothing to cancel (2026-10-09, `QuickAsk`).",
+                 note: "A clean sentence whose words go to a fast model instead of anywhere on the screen; the answer streams into the reply pop-up beside the pointer, its header the question as heard. The destination row says so, and which model will answer. Words only — no picture, no attachment — so the rows a prompt grows never appear.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setSpawnDestination("quick answer — haiku", mark: "⚡")
+                o.setListening(true)
+            },
+
             Shot(slug: "replace-wispr-attached", group: "At rest",
                  title: "…and he attached things to it anyway",
                  when: "The shutter or a ⌘⇧-pick during a caret dictation — live in this mode since 2026-09-08.",

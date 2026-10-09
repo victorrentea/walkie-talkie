@@ -192,6 +192,14 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   bind runs (`rebindFromMenu(fly: true, then:)`; skipped when already bound to that tty) and the bound
   prompt opens once the bind lands. A sender gone → `⚠️ no terminal on …`, nothing opened.
   Mid-sentence the gesture keeps its flip. Log `💬 🔼 → over the reply pop-up — …`.
+- **🔼 → over the pop-up bursts it to the right** (2026-10-09, Victor: *"swipe to right, fade out,
+  and then in the same time turn into pieces … a bit of an explosion to the right … something to
+  suggest that I took my focus and send it to it"*). `ReplyPanel.shatter` renders the pop-up's layer
+  into an image and `ReplyBurst` flies 9 columns of tiles right — the far column furthest
+  (`reach` 320 pt), each with its own spin and drift, shrinking to 0.55 and fading out — over
+  0.55 s, the right edge leaving first. Timer-driven (`apply(u)`), so `REPLY_BURST_PNG=<dir> swift
+  test --filter ReplyBurstTests` renders it at six moments. Only `replyBack` shatters; ✕, ☠️, 📍 and
+  the name still just close.
 - **The wrong terminal came forward because AX's focused window was stale**: `raise(pid:)` raised
   `kAXFocusedWindow` right after AppleScript put the tab's window at index 1, which can still be the
   previous key window. `bringToFront` and `presentOnRetina` now answer the window's top-left and
@@ -232,3 +240,32 @@ me to dismiss it explicitly"*.
   don't click it but drag it"*): a press that moves past 3 pt drags the panel and clicks nothing
   (`PressOrDrag`). **The name's label is never hit** — `ReplyRoot.link` takes its press (click or
   drag); the `NSTextField` with mouse overrides did not move the panel (*"even if I drag on the title"*).
+
+## ⚡ Quick question (2026-10-09, `QuickAsk`)
+
+Victor: *"a dumb mode or a quick fast mode to this walkie-talkie that will answer as fast as it
+can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
+
+- **🔼 ← at rest opens it** (`onLocalCancel`): only when `cancelSentenceOrPanel` found nothing to
+  cancel and no answer is coming (`QuickAsk.cancel`, which 🔼 ← also does). It is a **clean**
+  sentence (`startDictation(paste: true, clean: true, quick: true)` — words only, no picture, no
+  attachment) whose `deliver` sends the words to `askQuick` **before** any caret or terminal route:
+  nothing is typed anywhere, no outbox line, the question goes on the clipboard (Q17),
+  `lastDelivery.to = "quick"`. The chip's destination row says `⚡ quick answer — haiku`.
+  `quickAsk` is an `Envelope` field.
+- **The answer streams into the reply pop-up** (`ReplyPanel.live`), header `⚡ <the question>` so
+  he sees what was heard, no tty, so only the ✕. It opens at once — an agent's open pop-up steps
+  back to the head of the queue, a finished ⚡ one is replaced — and rewrites in place, top edge
+  fixed, ≤ 20 repaints a second. ✕ while it is coming drops the rest (`dismissedLive`).
+- **One pre-started `claude -p` per question** (stream-json in and out), replaced the moment it has
+  answered, started at launch: Victor, *"a conversation history over the day … will make it slower
+  after a while"*. Lean: its own system prompt (≤ 3 short sentences, plain text, the question's
+  language, mind the recognition mistakes), `--tools ""`, `--strict-mcp-config`,
+  `--setting-sources ""`, cwd `~/.walkie-talkie/quick/`. `WT_QUICK_MODEL` (default `haiku`) and
+  `WT_QUICK_EFFORT` (`low`), env or `elevenlabs.env`. `--bare` loses the subscription login. 45 s
+  timeout; an idle process that dies is restarted, three times at most.
+- **Measured** (`evals/quick-ask/`): in the app, first word **0.55 s** median, whole answer
+  **1.03 s**; a cold `claude -p` 1.40 / 2.51 s; warm with Claude Code's own ~104k-token prompt
+  1.52 / 3.15 s. Opus warm and lean reaches its first word as fast (0.58 s), finishes 0.5 s later.
+- **Desk route:** `POST /test/quick {"text", "wait": true}` → `{answer, error, firstWordMs, totalMs,
+  model}`. Log: `⚡ quick answer (haiku) — first word 0.55 s, whole 1.03 s, N chars`.

@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 59 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 60 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -162,9 +162,9 @@
       <section class="card" id="listening-kamikaze">
         <header>
           <h3>Kamikaze — the agent closes when done</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">215×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-kamikaze.png" width="308" height="93" style="opacity:0.8" alt="Kamikaze — the agent closes when done"></div>
+        <div class="shot"><img src="states/listening-kamikaze.png" width="215" height="117" style="opacity:0.8" alt="Kamikaze — the agent closes when done"></div>
         <p class="when">🔼 ↓ while a sentence is open or still on its way. Again takes it back.</p>
         <p class="note"><strong>A row under the others</strong>, like everything the sentence carries. It says the delivered prompt will end with <code>kamikaze</code> on a line of its own — the agent&#x27;s cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.</p>
         <code class="slug">listening-kamikaze</code>
@@ -198,9 +198,9 @@
       <section class="card" id="spawn">
         <header>
           <h3>This sentence opens a new session</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">235×70 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">227×70 pt</span></div>
         </header>
-        <div class="shot"><img src="states/spawn.png" width="235" height="70" style="opacity:0.8" alt="This sentence opens a new session"></div>
+        <div class="shot"><img src="states/spawn.png" width="227" height="70" style="opacity:0.8" alt="This sentence opens a new session"></div>
         <p class="when">🔼 ↑ — the forward button held, mouse moved up (🛞🛞 with Logi gestures off): the dictation goes to a terminal that does not exist yet.</p>
         <p class="note"><strong>One row, and the ✨ is all that is left of the destination.</strong> It had a title row of its own — Terminal&#x27;s icon, ✨, <code>workspace</code> — and Victor took it off on 2026-09-02: the folder is <em>always</em> <code>~/workspace</code>, which is the whole point of the gesture, and the icon names an app he is not looking at yet. So the mark rides in front of <code>Listening…</code> and the row above it goes. The 🔴 keeps the glyph column: a frozen recording row is indistinguishable from a hung app, and that is the one thing the pulse is here to rule out.</p>
         <code class="slug">spawn</code>
@@ -218,9 +218,9 @@
       <section class="card" id="bind-to-send">
         <header>
           <h3>Nothing is bound, and he is talking anyway</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">215×93 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">382×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/bind-to-send.png" width="215" height="93" style="opacity:0.8" alt="Nothing is bound, and he is talking anyway"></div>
+        <div class="shot"><img src="states/bind-to-send.png" width="382" height="93" style="opacity:0.8" alt="Nothing is bound, and he is talking anyway"></div>
         <p class="when">Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.</p>
         <p class="note"><strong>The destination row names a gesture rather than a place</strong>, because that is what this destination still is: <em>bind to send</em>, behind the same drawn pin <code>at caret</code> rides behind. It is the fourth answer to <em>where do these words go</em> — a terminal already bound, one it is about to open for itself, the caret, and now <strong>later</strong> (<code>AppDelegate.holdsForBind</code>). The sentence is recorded, shown and read exactly as a bound one is, and <code>commit</code> parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says <code>📨 held — bind a terminal to send it</code> once the words have left the dictation, and <code>📨 1 waiting — bind to send</code> until a bind sends it (next shot). <strong>The icon form and not the ✨&#x27;s mark form</strong>: a mark with no icon is <code>spawnCollapsed</code>, which drops the row and rides the glyph in front of <code>Listening...</code>, so the words would never have been drawn.</p>
         <code class="slug">bind-to-send</code>
@@ -264,12 +264,22 @@
         <p class="note">The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint (the extension draws that one in the page).</p>
         <code class="slug">replace-wispr</code>
       </section>
+      <section class="card" id="quick-question">
+        <header>
+          <h3>⚡ A quick question</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">235×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/quick-question.png" width="235" height="46" style="opacity:0.8" alt="⚡ A quick question"></div>
+        <p class="when">🔼 ← at rest — nothing to cancel (2026-10-09, <code>QuickAsk</code>).</p>
+        <p class="note">A clean sentence whose words go to a fast model instead of anywhere on the screen; the answer streams into the reply pop-up beside the pointer, its header the question as heard. The destination row says so, and which model will answer. Words only — no picture, no attachment — so the rows a prompt grows never appear.</p>
+        <code class="slug">quick-question</code>
+      </section>
       <section class="card" id="replace-wispr-attached">
         <header>
           <h3>…and he attached things to it anyway</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">326×141 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">326×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/replace-wispr-attached.png" width="326" height="141" style="opacity:0.8" alt="…and he attached things to it anyway"></div>
+        <div class="shot"><img src="states/replace-wispr-attached.png" width="326" height="117" style="opacity:0.8" alt="…and he attached things to it anyway"></div>
         <p class="when">The shutter or a ⌘⇧-pick during a caret dictation — live in this mode since 2026-09-08.</p>
         <p class="note">It borrowed nothing before, on the argument that both gestures add to a <em>message</em> and this mode has none. Victor overruled the premise: a paste is a message whose recipient happens to be whatever holds the caret, which is routinely another agent. So the rows a bound dictation grows, this one grows too — the tally included — and what gets pasted carries <code>[the shots I took: …]</code>, <code>[selected: …]</code> and <code>[elements I picked in Chrome: …]</code> in the wording the terminal already uses. <strong>The highlights joined them on 2026-09-09</strong>, on his ask: they were the one deliberate attachment this envelope refused, and the refusal was really about the <em>probe</em> rather than about the highlight. What it still does not carry is anything <strong>automatic</strong>: no opening frame, no <code>[Focused window: …]</code> and no <code>dictated aloud</code> hint. Attach nothing and it pastes the words alone, byte for byte as before.</p>
         <code class="slug">replace-wispr-attached</code>
@@ -320,9 +330,9 @@
       <section class="card" id="listening-overrun">
         <header>
           <h3>Eight minutes — the wash starts creeping</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">382×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-overrun.png" width="308" height="93" style="opacity:0.8" alt="Eight minutes — the wash starts creeping"></div>
+        <div class="shot"><img src="states/listening-overrun.png" width="382" height="93" style="opacity:0.8" alt="Eight minutes — the wash starts creeping"></div>
         <p class="when">From the eighth minute of a single dictation. Nothing Victor has ever said reaches it by talking.</p>
         <p class="note"><strong>A microphone left open is the one failure the row could not report.</strong> <code>Listening...</code> says exactly the same thing at ten minutes as at ten seconds, and <code>(8m)</code> is a number he has to read and then compare against a ceiling he has to remember. So the row itself changes: a brick wash creeps across it left to right over the whole of the eighth minute — the same direction the bar fills in, so the two readings never fight — and reaching the far end is the one-minute warning. <strong>Behind the text, never in it</strong>: the ink on this row is spoken for (the letters are the ramp, the tag is <code>HQ</code>, the grey is <em>not yet</em>), and a background is the only channel left that overwrites no meaning already there. Victor, 2026-09-20: <em>&quot;de la opt minute să înceapă progresiv … un fel de background pe subtext … cărămiziu, ceva care să se întindă pe tot textul timp de un minut, încet&quot;</em>. Shown here about halfway across.</p>
         <code class="slug">listening-overrun</code>
@@ -340,9 +350,9 @@
       <section class="card" id="listening-cold">
         <header>
           <h3>The first words — too little speech to trust</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">185×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-cold.png" width="308" height="93" style="opacity:0.8" alt="The first words — too little speech to trust"></div>
+        <div class="shot"><img src="states/listening-cold.png" width="185" height="93" style="opacity:0.8" alt="The first words — too little speech to trust"></div>
         <p class="when">From the instant the microphone opens until about a second of actual speech has arrived.</p>
         <p class="note"><strong><code>Listening...</code> is a progress bar, and it is empty here.</strong> It fills one character at a time as speech arrives and is full when the last dot lights — a <em>count</em>, not a brightness, because a fade over an unknown backdrop gives him nothing to judge &quot;is it done yet?&quot; against. What it forecasts: the local model picks a language off a 30-second window before it decodes a word, and with a second of speech in that window the pick is a guess — and a wrong guess is not a wrong word, it is a whole sentence of Turkish made out of Romanian. Counted by re-decoding 803 of his own clips, <strong>by voiced seconds</strong>: 42% under one voiced second come back in a language Victor does not speak, 15% between one and two, and 1% past two. (The language pin has since taken that mode to zero — the bar still forecasts everything else that is worse when there is less to hear.)</p>
         <code class="slug">listening-cold</code>
@@ -410,9 +420,9 @@
       <section class="card" id="listening-everything">
         <header>
           <h3>Dictating, everything at once</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">337×141 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">382×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-everything.png" width="337" height="141" style="opacity:0.8" alt="Dictating, everything at once"></div>
+        <div class="shot"><img src="states/listening-everything.png" width="382" height="93" style="opacity:0.8" alt="Dictating, everything at once"></div>
         <p class="when">Rare, and the widest the chip ever gets: three frames taken, picks made, a highlight riding along.</p>
         <p class="note">Five rows beside the cursor. This is the state to look at when a row is added — it is the one that says how much of his screen the chip can cover. <strong>The quotation is above Chrome and Chrome is last</strong>, since 2026-09-09: a highlight belongs to <em>this</em> message and goes out with it, while the picks row outlives the message — and a row that shuffles up and down as a highlight comes and goes is a row he has to find again each time. <strong>The counts line up in the icon column</strong>, which is the overview Victor asked for — <code>📸 ×3</code>, the quotation, <code>×3</code> in Chrome, read downwards — rather than a fourth row restating the other three.</p>
         <code class="slug">listening-everything</code>
@@ -440,9 +450,9 @@
       <section class="card" id="transcribing-lora">
         <header>
           <h3>…on Victor&#x27;s own model</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">215×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-lora.png" width="308" height="93" style="opacity:0.8" alt="…on Victor&#x27;s own model"></div>
+        <div class="shot"><img src="states/transcribing-lora.png" width="215" height="117" style="opacity:0.8" alt="…on Victor&#x27;s own model"></div>
         <p class="when">The wait, when the local model is the Engine and its weights are the LoRA trained on his voice.</p>
         <p class="note"><strong>A subscript <code>ᵥ</code> after the local model&#x27;s 💻</strong> (2026-10-04, Victor: <em>&quot;pune un v mic după acel măr … dacă e modelul meu cu Lora&quot;</em>, then <em>&quot;ca indice&quot;</em>, and the apple became the laptop: <em>&quot;ca să se înțeleagă local&quot;</em>) — on <code>Transcribing via</code> and on the listening row&#x27;s arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.</p>
         <code class="slug">transcribing-lora</code>
@@ -450,9 +460,9 @@
       <section class="card" id="transcribing-local-now">
         <header>
           <h3>⌘⌃X — the local model, now</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-local-now.png" width="308" height="117" style="opacity:0.8" alt="⌘⌃X — the local model, now"></div>
+        <div class="shot"><img src="states/transcribing-local-now.png" width="308" height="93" style="opacity:0.8" alt="⌘⌃X — the local model, now"></div>
         <p class="when">From one second into the wait for ElevenLabs (or Wispr Flow) with <em>Backup Local Pre-Transcribe</em> off — never while the microphone is open. With it on, the row is the <code>💻 local in 3s / ⌘⌃X ...</code> countdown.</p>
         <p class="note"><strong>The quick exit, written where he is looking</strong> (2026-09-28). Victor: <em>&quot;I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip&quot;</em>. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like <code>📋 Re-paste ⌘V</code>: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (<em>&quot;only displayed after 1 s after starting the transcribing&quot;</em>), so a fast engine never shows it. It goes when the words land.</p>
         <code class="slug">transcribing-local-now</code>
@@ -460,9 +470,9 @@
       <section class="card" id="transcribing-local-now-loading">
         <header>
           <h3>⌘⌃X while the local model is cold</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-local-now-loading.png" width="308" height="117" style="opacity:0.8" alt="⌘⌃X while the local model is cold"></div>
+        <div class="shot"><img src="states/transcribing-local-now-loading.png" width="308" height="93" style="opacity:0.8" alt="⌘⌃X while the local model is cold"></div>
         <p class="when">Waiting on ElevenLabs with the local weights not loaded (a cold start, or the helper restarted).</p>
         <p class="note"><code>(loading)</code> says the key will not answer at once — not that it will not work. Pressed now, the WAV waits for the weights (up to 90 s, the fallback&#x27;s own window) and the words go where the sentence was going.</p>
         <code class="slug">transcribing-local-now-loading</code>
@@ -470,9 +480,9 @@
       <section class="card" id="transcribing-fallback-countdown">
         <header>
           <h3>Fallback to local — counting down to the budget</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
+        <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="308" height="93" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
         <p class="when">From one second into the wait for ElevenLabs or Wispr Flow with <em>Backup Local Pre-Transcribe</em> on (the default), until the engine&#x27;s p95 for that length runs out.</p>
         <p class="note"><strong>The countdown is on the row with the keys</strong> (2026-10-07; <code>💻 local in 3s / ⌘⌃X ...</code> is Victor&#x27;s own wording, the 💻 in the glyph column — replacing 10-06&#x27;s <code>⌘⌃X - 💻 fallback, auto in 3s...</code>). Victor: <em>&quot;put a countdown timer … when the timer expires, the local dictation is automatically injected&quot;</em>, then <em>&quot;put it like fallback to local in countdown timer and then show the key shortcuts&quot;</em>. At the close the relay reads the engine&#x27;s p95 (<code>DecodeRate.budget</code>) and starts the local model <code>budget − localEta</code> into the wait, so its words are ready about when the count reaches zero — and then they go in (<code>via: local-auto</code>). ⌘⌃X puts them in sooner (<code>via: local-forced</code>); the engine&#x27;s words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; <strong>no engine&#x27;s name</strong> (<em>&quot;don&#x27;t leak the name of any tool, only the icon&quot;</em> — the logo on the first row says which). It replaces the <code>🤔⏱️</code> the first row grew past 150 % of the estimate, and 09-29&#x27;s <em>offered, never inserted</em> <code>Use local</code>.</p>
         <code class="slug">transcribing-fallback-countdown</code>
@@ -480,9 +490,9 @@
       <section class="card" id="transcribing-fallback-now">
         <header>
           <h3>Fallback to local — the budget ran out</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">354×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-fallback-now.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — the budget ran out"></div>
+        <div class="shot"><img src="states/transcribing-fallback-now.png" width="354" height="93" style="opacity:0.8" alt="Fallback to local — the budget ran out"></div>
         <p class="when">The count reached zero with the engine&#x27;s words still out and the local decode not quite done.</p>
         <p class="note"><code>auto now...</code>: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.</p>
         <code class="slug">transcribing-fallback-now</code>
@@ -636,9 +646,9 @@
       <section class="card" id="prompt-autosend-paused">
         <header>
           <h3>Under Autosend, with the pointer on it</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">385×106 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">385×130 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-autosend-paused.png" width="385" height="106" style="opacity:1" alt="Under Autosend, with the pointer on it"></div>
+        <div class="shot"><img src="states/prompt-autosend-paused.png" width="385" height="130" style="opacity:1" alt="Under Autosend, with the pointer on it"></div>
         <p class="when">Autosend is ticked and he moved the pointer onto the panel before its second ran out (2026-09-23).</p>
         <p class="note">The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.</p>
         <code class="slug">prompt-autosend-paused</code>
@@ -745,7 +755,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at dcfd241 · 08 Oct 2026 · built 08 Oct 2026, 10:21
+  Generated from <code>OverlayStates.swift</code> · repo at a8104e8 · 09 Oct 2026 · built 09 Oct 2026, 06:28
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

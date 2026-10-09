@@ -465,6 +465,9 @@ final class ElementPicker {
     var onReply: (([String: Any]) -> (Int, [String: Any]))?
     /// `POST /test/type-in` — the 🔽 ↓ typing box from a desk.
     var onTestTypeIn: (([String: Any]) -> (Int, [String: Any]))?
+    /// `POST /test/quick {"text": "…", "wait": true}` — a ⚡ quick question
+    /// from a desk, words given instead of spoken (2026-10-09, `QuickAsk`).
+    var onTestQuick: (([String: Any]) -> (Int, [String: Any]))?
 
     /// `POST /test/input {"name": "…"}` — point the **system's** default input at
     /// a device, and say what it was before.
@@ -1297,6 +1300,12 @@ final class ElementPicker {
         case ("POST", "/reply"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             guard let hook = onReply else { return respond(conn, 503, ["ok": false, "error": "no handler"]) }
+            let (code, answer) = hook(body)
+            respond(conn, code, answer)
+
+        case ("POST", "/test/quick"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            guard let hook = onTestQuick else { return respond(conn, 503, ["ok": false, "error": "no handler"]) }
             let (code, answer) = hook(body)
             respond(conn, code, answer)
 

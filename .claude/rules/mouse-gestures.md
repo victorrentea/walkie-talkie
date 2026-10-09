@@ -53,7 +53,7 @@ In this mode the app takes **no mouse button at all**. Every mouse event is hand
 | gesture | chord | what it does |
 |---|---|---|
 | 🔼 → | ⌃⌥⌘F10 | start the dictation (**over the reply pop-up: bind its sender first, close it** — 2026-10-09, `replyBack`); **mid-sentence it is a destination toggle** (2026-10-05, `onForwardRight`): a bound prompt goes to the caret (`aimAtCaret` — the 🔼 caret prompt, envelope and all), a caret one back to the bound terminal, or with nothing bound to the terminal bound last, re-binding it (2026-10-01, `aimAtPreviousTerminal`). Again = back, like kamikaze. **It no longer stops a bound sentence — 🔼 does**; it still ends a spawn, an unbound sentence held for a bind, and a caret one with nowhere to go. ⌘⌃D (`onLocalToggle`) never flips: it keeps its stop |
-| 🔼 ← | ⌃⌥⌘F11 | cancel it — throw the audio away |
+| 🔼 ← | ⌃⌥⌘F11 | cancel it — throw the audio away (a held prompt panel, a ⚡ answer still coming); **at rest — nothing to cancel — a ⚡ quick question** (2026-10-09, `QuickAsk`): a clean sentence whose words go to a fast model, the answer streaming into the reply pop-up (`destinations-and-outbox.md`, *⚡ Quick question*); ended like a prompt, by 🔼 |
 | 🔼 ↑ | ⌃⌥⌘F8 | dictate at a session that does not exist yet |
 | ◀️ held, then 🔼 | ⌃⌥⌘F7 | **bind** the terminal in front — no toggle |
 | 🔼 | ⌃⌥⌘F7 | a **prompt at the caret** — in both engines, whatever is bound (2026-09-12): the context frame, `[Dictated in RO or EN]`, highlights, picks, pictures — the terminal's envelope — and **submitted** when the caret is a Claude Code prompt (2026-09-23) |

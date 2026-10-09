@@ -387,6 +387,27 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-10-09: "a quick fast mode … that will answer as fast as
+            # it can … the key to bind it to. I think forward and left".
+            "row": ("🔼 forward", "drag left"),
+            "does": "mid-sentence: CANCEL it; at rest: a ⚡ QUICK QUESTION — clean words to the fast model, answer in the reply pop-up",
+            "checks": [
+                ("F11 raises the cancel, and only the cancel", "HotkeyTap `case VK_F11`",
+                 lambda: has(gesture_case(src, "VK_F11"), r"onLocalCancel\?\(\)") and
+                         not has(gesture_case(src, "VK_F11"), r"onForwardRight|onPasteToggle|onCleanToggle")),
+                ("a cancel comes first; the question only when nothing was cancelled", "AppDelegate `onLocalCancel`",
+                 lambda: before(closure(src, "hotkeys.onLocalCancel"),
+                                r"if self\.cancelSentenceOrPanel\(.*?\) \{ return \}",
+                                r"startDictation\(paste: true, clean: true, quick: true\)")),
+                ("…an answer still coming is dropped before a new question opens", "AppDelegate `onLocalCancel`",
+                 lambda: before(closure(src, "hotkeys.onLocalCancel"),
+                                r"QuickAsk\.shared\.cancel\(\)", r"quick: true")),
+                ("the words go to the quick model before any caret or terminal route", "AppDelegate `deliver`",
+                 lambda: before(function(src, ad, "deliver"), r"if quick \{.*?askQuick\(result\.text\)",
+                                r"if case \.alreadyInserted = result\.delivery")),
+            ],
+        },
+        {
             # Victor, 2026-10-05: "If I do the gesture for back and swipe to the
             # left at any point, this means an Enter." A cancel until then.
             "row": ("🔽 back", "drag left, any moment"),

@@ -44,6 +44,12 @@ enum ReplyPanel {
 
     private static let walkie: NSImage? = RelayWindow.walkieURL("walkie-bound").flatMap { NSImage(contentsOf: $0) }
 
+    /// **Desk only** (`POST /test/quick {"capturable": true}`): the next pop-ups
+    /// show up in a screenshot, so a desk can see what Victor sees.
+    static var capturable = false
+    /// The open pop-up's frame, global Cocoa points.
+    static var frame: NSRect? { panel?.frame }
+
     /// What is on screen — `GET /test/state`.
     static var shown: String?
     /// The terminal the open pop-up came from.
@@ -99,12 +105,84 @@ enum ReplyPanel {
         present(text, from: label, tty: tty)
     }
 
+    /// **⚡ The quick answer, as it streams** (2026-10-09, `QuickAsk`): the first
+    /// call opens the pop-up at the pointer — at once, jumping the queue (the
+    /// open one goes back to its head) — and every later call rewrites its words
+    /// in place, the top edge fixed. Ends with `finishLive`; then it is an
+    /// ordinary pop-up, up until the ✕.
+    static func live(_ raw: String, from label: String?, question token: Int) {
+        // ✕'d while it was still coming: the rest of it is not wanted.
+        guard token != dismissedLive else { return }
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty { text = "…" }
+        if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
+        if let p = panel, liveOpen {
+            let root = build(text, from: label, tty: nil)
+            // The size first: assigning the content view resizes it to the
+            // window's old frame, and the answer stayed cut to its first line.
+            let size = root.frame.size
+            p.setFrame(NSRect(x: p.frame.minX, y: p.frame.maxY - size.height,
+                              width: size.width, height: size.height), display: false)
+            p.contentView = root
+            p.invalidateShadow()
+            shown = text
+            return
+        }
+        if let p = panel, let open = shown {
+            // An agent's answer waits its turn again; a finished ⚡ one is
+            // simply replaced by the next question's.
+            if openLabel?.hasPrefix(quickMark) != true {
+                queue.insert((open, openLabel, shownTTY), at: 0)
+                Log.info("💬 the open reply pop-up steps back into the queue for a ⚡ quick answer")
+            }
+            p.orderOut(nil)
+            panel = nil
+        }
+        present(text, from: label, tty: nil)
+        liveOpen = true
+        liveToken = token
+    }
+
+    /// The quick answer is complete: the pop-up stays, as any other.
+    static func finishLive(question token: Int) { if liveToken == token { liveOpen = false } }
+
+    /// The header of every ⚡ quick answer starts with it (`AppDelegate.askQuick`).
+    static let quickMark = "⚡ "
+
+    /// The ⚡ pop-up is still being written.
+    private(set) static var liveOpen = false
+    private static var liveToken = 0, dismissedLive = -1
+    private static var openLabel: String?
+
     private static func present(_ text: String, from label: String?, tty: String?) {
         allowCursorInBackground
         shown = text
         shownTTY = tty
+        openLabel = label
         arrivedAt = NSEvent.mouseLocation
+        let root = build(text, from: label, tty: tty)
 
+        let p = NSPanel(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
+                        backing: .buffered, defer: false)
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hasShadow = true
+        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 1)
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        p.sharingType = capturable ? .readOnly : .none
+        p.hidesOnDeactivate = false
+        p.acceptsMouseMovedEvents = true
+        p.contentView = root
+        let target = origin(for: root.frame.size, at: arrivedAt)
+        p.setFrameOrigin(target)
+        p.orderFrontRegardless()
+        panel = p
+        zoom(p, around: arrivedAt)
+        Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
+    }
+
+    /// The pop-up's content for these words — the header, the body, the buttons.
+    private static func build(_ text: String, from label: String?, tty: String?) -> ReplyRoot {
         let pad: CGFloat = 12
         let inner = width - 2 * pad
         // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
@@ -199,24 +277,7 @@ enum ReplyPanel {
             root.link = (link, { header.onClick?() })
         }
         root.hot = hot
-
-        let p = NSPanel(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
-                        backing: .buffered, defer: false)
-        p.isOpaque = false
-        p.backgroundColor = .clear
-        p.hasShadow = true
-        p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 1)
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        p.sharingType = .none
-        p.hidesOnDeactivate = false
-        p.acceptsMouseMovedEvents = true
-        p.contentView = root
-        let target = origin(for: root.frame.size, at: arrivedAt)
-        p.setFrameOrigin(target)
-        p.orderFrontRegardless()
-        panel = p
-        zoom(p, around: arrivedAt)
-        Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars; up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
+        return root
     }
 
     /// **A background app's `NSCursor.set()` is ignored unless the process asks
@@ -227,9 +288,36 @@ enum ReplyPanel {
         _ = CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
     }()
 
+    /// **Closed by 🔼 → over it: the pop-up bursts to the right** (2026-10-09) —
+    /// `ReplyBurst`, his focus sent on to the terminal. The queue moves on as on
+    /// any close.
+    static func shatter() {
+        guard let p = panel, let image = snapshot(p) else { return close() }
+        let frame = p.frame, level = p.level
+        close()
+        guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
+        ReplyBurst.play(image: image.cg, scale: image.scale, from: frame, level: level)
+    }
+
+    /// The pop-up as it looks, rendered from its layer tree (the rounded dark
+    /// body included — `cacheDisplay` draws views and skips the layer's fill).
+    private static func snapshot(_ p: NSPanel) -> (cg: CGImage, scale: CGFloat)? {
+        guard let layer = p.contentView?.layer else { return nil }
+        let scale = p.backingScaleFactor
+        let size = layer.bounds.size
+        guard let ctx = CGContext(data: nil, width: Int(size.width * scale), height: Int(size.height * scale),
+                                  bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        layer.render(in: ctx)
+        return ctx.makeImage().map { ($0, scale) }
+    }
+
     static func close() {
         panel?.orderOut(nil)
         panel = nil
+        if liveOpen { dismissedLive = liveToken }
+        liveOpen = false
         shown = nil
         shownTTY = nil
         guard !queue.isEmpty else { return }

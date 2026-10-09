@@ -1109,6 +1109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var caretPrompt = false
     private var cleanSentence = false
     private var submitAfterClean = false
+    /// **⚡ A quick question** (2026-10-09): a clean sentence whose words go to
+    /// `QuickAsk` — a fast model, answering in the reply pop-up — instead of the
+    /// caret. 🔼 ← at rest opens one (`onLocalCancel`). Consumed by `deliver`.
+    private var quickAsk = false
 
     /// Somewhere for this dictation to go: a terminal already bound, one it is
     /// about to open for itself, the caret — or, since 2026-09-11, one he has
@@ -1381,6 +1385,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Synthesised once per Mac and loaded off the main thread — a shutter
         // press must never wait for `say`. → `ShotMarker`
         ShotMarker.prepare()
+        // ⚡ The quick model's process, started now so the first 🔼 ← question
+        // does not pay its ~4 s start-up (`QuickAsk`).
+        QuickAsk.shared.warm()
         overlay = RelayWindow()
 
         // **The ✕ cancels the dictation before it ends anything.** It ended the
@@ -2016,6 +2023,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return (200, out)
         }
+        // **⚡ A quick question from a desk** (2026-10-09): the words, as if
+        // dictated after 🔼 ←. `wait: true` answers when the answer is complete,
+        // with the two clocks `evals/quick-ask/` measures.
+        picker.onTestQuick = { [weak self] body in
+            guard let self, let text = body["text"] as? String, !text.isEmpty else {
+                return (400, ["ok": false, "error": "text required"])
+            }
+            let wait = body["wait"] as? Bool == true
+            if let c = body["capturable"] as? Bool { DispatchQueue.main.sync { ReplyPanel.capturable = c } }
+            let done = DispatchSemaphore(value: 0)
+            var out: [String: Any] = ["ok": true]
+            DispatchQueue.main.async {
+                self.askQuick(text) { answer, error, first, total in
+                    out = ["ok": answer != nil, "answer": answer ?? NSNull(), "error": error ?? NSNull(),
+                           "firstWordMs": first.map { Int($0 * 1000) } ?? NSNull(), "totalMs": Int(total * 1000),
+                           "model": QuickAsk.shared.model,
+                           "frame": ReplyPanel.frame.map { ["x": $0.minX, "y": $0.minY, "w": $0.width, "h": $0.height] } ?? NSNull()]
+                    done.signal()
+                }
+            }
+            guard wait else { return (200, ["ok": true, "asked": text]) }
+            guard done.wait(timeout: .now() + QuickAsk.timeout + 5) == .success else {
+                return (504, ["ok": false, "error": "no answer"])
+            }
+            return (200, out)
+        }
         picker.onTestWisprHook = { [weak self] path, body in
             guard let self else { return (503, ["ok": false, "error": "gone"]) }
             switch path {
@@ -2220,9 +2253,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the menu row make. Victor's ask: the gesture that abandons a sentence
         // must not depend on which app happens to be hearing it. Local behaviour
         // is untouched — `cancelDictationInFlight` tries `localRecording` first.
+        // **At rest it asks a ⚡ quick question** (2026-10-09, Victor: *"the key
+        // to bind it to. I think forward and left"*): with nothing to cancel —
+        // no microphone, no words in flight, no held panel — the flick opens a
+        // clean sentence for `QuickAsk`. An answer still coming is cancelled.
         hotkeys.onLocalCancel = { [weak self] in
             DispatchQueue.main.async {
-                self?.cancelSentenceOrPanel(reason: "⬅️ a cancel flick (🔼 ←)")
+                guard let self else { return }
+                if self.cancelSentenceOrPanel(reason: "⬅️ a cancel flick (🔼 ←)") { return }
+                if QuickAsk.shared.cancel() {
+                    Log.info("⚡ 🔼 ← while the quick answer was coming — dropped")
+                    ReplyPanel.close()
+                    self.overlay.flash("🗑️ Cancelled", duration: 1.5)
+                    return
+                }
+                guard !self.source.phase.isWaitingForWords else { return }
+                Log.info("⚡ 🔼 ← at rest — a quick question for \(QuickAsk.shared.model)")
+                self.startDictation(paste: true, clean: true, quick: true)
             }
         }
         // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
@@ -3573,7 +3620,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // folder (armed at the gesture), a caret sentence says so and outranks
         // the bound terminal for its own length, and a sentence with nothing
         // bound names the gesture that would give it somewhere to go.
-        if pasteMode { overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph) }
+        if quickAsk { overlay.setSpawnDestination("quick answer — \(QuickAsk.shared.model)", mark: "⚡") }
+        else if pasteMode { overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph) }
         else if !spawnPending, !isBound {
             overlay.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
         }
@@ -3994,6 +4042,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let clean = cleanSentence && !cleanRedirected
         let prompt = caretPrompt && !cleanRedirected
         let submitClean = clean && submitAfterClean
+        let quick = quickAsk && clean
+        quickAsk = false
         cleanSentence = false
         caretPrompt = false
         submitAfterClean = false
@@ -4063,6 +4113,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         lastDictation = result.text
         lastAnswerWasWispr = result.engine == "wispr-flow"
+        // **⚡ The words are a question for the quick model** — before any
+        // caret or terminal route: nothing is typed anywhere.
+        if quick {
+            localRecordingApp = nil
+            pasteMode = false
+            latchedAtCaret = false
+            endSettling(reason: "asking the quick model")
+            recordDelivery(via: result.via, kind: result.delivery, to: "quick")
+            if !answeringInBackground {
+                overlay.setSpawnDestination(nil)
+                overlay.clearSelection()
+            }
+            holdOnClipboard(result.text, why: "a ⚡ quick question")
+            askQuick(result.text)
+            return
+        }
         pendingPromptWarning = result.warning
         // A caret sentence whose microphone close this side never saw — the
         // held right ⌘⌥, confirmed by Wispr's row — reaches here with the latch
@@ -4929,6 +4995,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if case .delivered = end {} else {
             caretPrompt = false
             cleanSentence = false
+            quickAsk = false
             submitAfterClean = false
         }
         if !bg { hotkeys.ownCleanSentence = false }
@@ -5398,7 +5465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Gestures* off: its context shot is taken at the **release**, not the
     /// press, so the picture is of the screen his finger left.
     private func startDictation(spawn: Bool = false, paste: Bool = false,
-                                deferContext: Bool = false, clean: Bool = false) {
+                                deferContext: Bool = false, clean: Bool = false, quick: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -5480,6 +5547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `HotkeyTap.onCleanToggle`): the relay's own source, the clean
         // envelope — words only, at the caret, whatever is bound.
         cleanSentence = clean
+        quickAsk = quick && clean
         hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
@@ -5528,6 +5596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let why = source.start() {
             if borrowedForWispr { returnBorrowedEngine("the start was refused") }
             cleanSentence = false
+            quickAsk = false
             hotkeys.ownCleanSentence = false
             // W19: none of this gesture's flags outlive its refusal.
             clearSpawn()
@@ -5956,7 +6025,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is already bound, and the bound prompt opens once the bind has landed.
     /// A sender that is gone flashes like the 📍 and opens nothing.
     private func replyBack(to tty: String) {
-        ReplyPanel.close()
+        ReplyPanel.shatter()
         if ReplyPanel.isBound?(tty) == true {
             Log.info("💬 🔼 → over the reply pop-up — already bound to \(tty), pop-up closed, dictating at it")
             return startDictation()
@@ -5966,6 +6035,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !self.listening, !self.source.isRecording else { return }
             self.startDictation()
         }
+    }
+
+    /// **⚡ The question goes to `QuickAsk`, the answer streams into the reply
+    /// pop-up** (2026-10-09) — the header is the question, so he sees what was
+    /// heard. `done` is the desk route's: the answer, or why not, and the clocks.
+    private var quickToken = 0
+    private func askQuick(_ question: String,
+                          done: ((String?, String?, TimeInterval?, TimeInterval) -> Void)? = nil) {
+        quickToken += 1
+        let token = quickToken
+        let label = ReplyPanel.quickMark + question
+        let started = CFAbsoluteTimeGetCurrent()
+        ReplyPanel.live("", from: label, question: token)
+        var painted: CFAbsoluteTime = 0
+        QuickAsk.shared.ask(question, onText: { text in
+            // ≤ 20 repaints a second; the last words come with `onDone`.
+            let now = CFAbsoluteTimeGetCurrent()
+            guard now - painted > 0.05 else { return }
+            painted = now
+            ReplyPanel.live(text, from: label, question: token)
+        }, onDone: { answer, error, first in
+            let total = CFAbsoluteTimeGetCurrent() - started
+            ReplyPanel.live(answer ?? "⚠️ \(error ?? "no answer")", from: label, question: token)
+            ReplyPanel.finishLive(question: token)
+            if let answer {
+                Log.info(String(format: "⚡ quick answer (%@) — first word %@, whole %.2f s, %d chars",
+                                QuickAsk.shared.model, first.map { String(format: "%.2f s", $0) } ?? "–", total, answer.count))
+            } else {
+                Log.error("⚡ quick answer failed: \(error ?? "?")")
+            }
+            done?(answer, error, first, total)
+        })
     }
 
     private func rebindFromMenu(tty: String, from origin: String = "the menu", fly: Bool = false,
@@ -6114,14 +6215,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **Decided here:** a microphone open on a newer sentence outranks the
     /// panel — the flick is made during that sentence, and the panel keeps
     /// counting as it always has (the panel has ⎋ and ✕ of its own).
-    private func cancelSentenceOrPanel(reason: String) {
+    /// True when there was something to cancel.
+    @discardableResult
+    private func cancelSentenceOrPanel(reason: String) -> Bool {
         let micOpen = listening || source.isRecording || speculative
         if held != nil, !micOpen, overlay.isHoldingPrompt {
             heldCancelReason = reason
             overlay.cancelHeldPrompt()
-            return
+            return true
         }
-        _ = cancelDictationInFlight(reason: reason)
+        return cancelDictationInFlight(reason: reason)
     }
     /// Named in `releaseHeld`'s one `✕ cancelled` line; nil for ✕ / ⎋.
     private var heldCancelReason: String?
@@ -11819,6 +11922,7 @@ extension AppDelegate {
         var kamikaze = false, contextAtWheelRelease = false
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
+        var quickAsk = false
         var latchedAtCaret = false, cleanRedirected = false
         var latch: Latch?
         var latchedMouse: CGPoint?
@@ -11859,7 +11963,7 @@ extension AppDelegate {
         e.kamikaze = kamikaze
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
-        e.submitAfterClean = submitAfterClean
+        e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk
         e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
@@ -11874,6 +11978,7 @@ extension AppDelegate {
         kamikaze = false
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
+        quickAsk = false
         latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
         pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
         pendingAffect = nil
@@ -11916,7 +12021,7 @@ extension AppDelegate {
         kamikaze = e.kamikaze
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
-        submitAfterClean = e.submitAfterClean
+        submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk
         latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning
