@@ -1372,15 +1372,15 @@ final class CaretHalo {
     ///
     /// **A bound or caret prompt's own effect flies there instead** (2026-10-08)
     /// — see `flies`: from the pointer latched at the close to the window's
-    /// centre on `flight`'s clock — straight, or for the dust (`hasTrail`) on a
-    /// wave (`RewindTimeline.wave`) and then round it like a loading icon
-    /// (`orbit`) until the words land. Until the window
+    /// centre on `flight`'s clock — straight, or for the dust (`hasTrail`)
+    /// straight to the nearest point of a ring round it and then round the ring
+    /// like a loading icon (`orbit`) until the words land. Until the window
     /// answers it waits on the pointer.
     private var rewindPoint: NSPoint? {
         if flies, let from = rewindStart, let to = rewindAim {
             let t = CFAbsoluteTimeGetCurrent() - rewindFrom
-            // Only the dust (a trail or fluid effect) oscillates and then circles;
-            // Tendrils and the rest go straight and stay (2026-10-08).
+            // Only the dust (a trail or fluid effect) circles once it is there;
+            // Tendrils and the rest go to the centre and stay (2026-10-08).
             guard rewindStyle.hasTrail else {
                 let p = RewindTimeline.flight(elapsed: t, predicted: rewindEstimate)
                 return NSPoint(x: from.x + (to.x - from.x) * CGFloat(p), y: from.y + (to.y - from.y) * CGFloat(p))
@@ -1394,10 +1394,13 @@ final class CaretHalo {
             let span = flightTime
             let p = RewindTimeline.flight(elapsed: t, predicted: flightTime)
             let r = rewindOrbitRadius ?? RewindTimeline.orbitRadiusFallback
+            // Straight to the ring's nearest point, and round from there (2026-10-09).
+            let angle = RewindTimeline.entryAngle(around: to, from: from)
             if t < span {
-                return RewindTimeline.wave(from: from, to: RewindTimeline.orbitEntry(around: to, radius: r), progress: p)
+                let entry = RewindTimeline.orbitEntry(around: to, radius: r, angle: angle)
+                return NSPoint(x: from.x + (entry.x - from.x) * CGFloat(p), y: from.y + (entry.y - from.y) * CGFloat(p))
             }
-            return RewindTimeline.orbit(around: to, radius: r, since: t - span)
+            return RewindTimeline.orbit(around: to, radius: r, since: t - span, from: angle)
         }
         return rewindAim ?? rewindStart
     }

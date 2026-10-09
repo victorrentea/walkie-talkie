@@ -208,38 +208,30 @@ enum RewindTimeline {
     }
     static let flightEndScale = 0.2
 
-    /// **The dust oscillates its way there; everything else goes straight**
-    /// (2026-10-08, the third ask of the afternoon, Victor: *"Only the dust
-    /// effect should go circle … the tendrils … go straight to the target. The
-    /// dust should be more fluid … going on an oscillation towards the
-    /// destination, and then there it circles around. Only that."*). Superseded
-    /// the same afternoon: a bow like half an ellipse for every effect (*"a bit
-    /// elliptical"*), then that bow made concave (*"should be concave"*).
+    /// **The dust flies straight to the nearest point of its ring** (2026-10-09,
+    /// Victor: *"the trajectory should be from the mouse to the closest point on
+    /// a circle around the center of that window. And once it gets to that
+    /// point, start circling uniformly"*, then, having watched it: *"oscillating
+    /// until one point on the circumference, and then going exactly backwards …
+    /// should go straight to the closest point, and then start looping"*).
+    /// Supersedes 2026-10-08's sine wave, which always aimed at the ring's
+    /// rightmost point: from the left of the window the dust crossed the ring,
+    /// reached the far side and orbited back over the way it had come.
     ///
-    /// The straight line from `a` to `b` plus a sideways sine, `waves` whole
-    /// periods along it, its amplitude `waveShare` × the length (at most
-    /// `waveMax` pt) under a `sin(π·p)` envelope — nothing at either end, so it
-    /// leaves the pointer and meets the orbit without a kink.
-    static func wave(from a: CGPoint, to b: CGPoint, progress p: Double) -> CGPoint {
-        let dx = b.x - a.x, dy = b.y - a.y, q = CGFloat(p)
-        let length = hypot(dx, dy)
-        guard length > 0 else { return a }
-        let amplitude = min(CGFloat(waveShare) * length, waveMax)
-        let off = amplitude * CGFloat(sin(.pi * p) * sin(2 * .pi * waves * p))
-        // The unit perpendicular, left of travel.
-        let nx = -dy / length, ny = dx / length
-        return CGPoint(x: a.x + dx * q + nx * off, y: a.y + dy * q + ny * off)
+    /// The angle of the pointer seen from the centre — where the ring is
+    /// nearest to it, whether the pointer is outside the ring or inside it.
+    /// 0 (the rightmost point) when the pointer is on the centre.
+    static func entryAngle(around c: CGPoint, from p: CGPoint) -> Double {
+        let dx = Double(p.x - c.x), dy = Double(p.y - c.y)
+        return dx == 0 && dy == 0 ? 0 : atan2(dy, dx)
     }
     /// The dust's flight takes this share of the prediction; it circles the rest.
     static let dustArriveShare = 0.5
-    static let waves = 2.0
-    static let waveShare = 0.12
-    static let waveMax: CGFloat = 120
 
     /// **Arrived, it circles like a loading icon** (same message: *"and then
     /// there start circling like a loading icon"*): clockwise round `c`, one
-    /// turn every `orbitPeriod`, starting at angle 0 — `c + (r, 0)`, where the
-    /// wave lands (`orbitEntry`). `since` is the time since it landed.
+    /// turn every `orbitPeriod`, starting at `angle` — where the flight landed
+    /// (`orbitEntry`, `entryAngle`). `since` is the time since it landed.
     ///
     /// **Round the window, not round a point** (2026-10-08, Victor: *"circle …
     /// the target window on a circle with the diameter equals to two thirds of
@@ -248,12 +240,14 @@ enum RewindTimeline {
     /// opening from the centre over 0.4 s — a knot, not a ring. Later that day
     /// (*"a circle of the diameter of fifty percent of the window minimum size"*)
     /// the ring shrank from ⅔ to ½ of the shorter side.
-    static func orbit(around c: CGPoint, radius r: CGFloat, since t: TimeInterval) -> CGPoint {
-        let angle = -2 * Double.pi * max(t, 0) / orbitPeriod
+    static func orbit(around c: CGPoint, radius r: CGFloat, since t: TimeInterval, from start: Double = 0) -> CGPoint {
+        let angle = start - 2 * Double.pi * max(t, 0) / orbitPeriod
         return CGPoint(x: c.x + r * CGFloat(cos(angle)), y: c.y + r * CGFloat(sin(angle)))
     }
-    /// Where the orbit begins, so the wave can end there.
-    static func orbitEntry(around c: CGPoint, radius r: CGFloat) -> CGPoint { CGPoint(x: c.x + r, y: c.y) }
+    /// Where the orbit begins, so the flight can end there.
+    static func orbitEntry(around c: CGPoint, radius r: CGFloat, angle: Double = 0) -> CGPoint {
+        CGPoint(x: c.x + r * CGFloat(cos(angle)), y: c.y + r * CGFloat(sin(angle)))
+    }
     /// A diameter of ½ of the window's shorter side.
     static func orbitRadius(for size: CGSize) -> CGFloat { min(size.width, size.height) / 4 }
     /// No window to measure (the middle of the screen stands in): a small ring.

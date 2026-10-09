@@ -215,26 +215,30 @@ final class RewindTimelineTests: XCTestCase {
         XCTAssertEqual(RewindTimeline.flightScale(elapsed: 9, predicted: 3), 0.2, accuracy: 1e-9)
     }
 
-    /// 2026-10-08: the dust oscillates to the window, then circles its centre.
-    func testFlightOscillatesThenOrbits() {
-        let a = CGPoint(x: 0, y: 0), b = CGPoint(x: 100, y: 0)
-        XCTAssertEqual(RewindTimeline.wave(from: a, to: b, progress: 0), a)
-        let end = RewindTimeline.wave(from: a, to: b, progress: 1)
-        XCTAssertEqual(end.x, 100, accuracy: 1e-9)
-        XCTAssertEqual(end.y, 0, accuracy: 1e-9)
-        // two waves: off the line to one side, then the other, back on it at the middle
-        XCTAssertGreaterThan(RewindTimeline.wave(from: a, to: b, progress: 0.125).y, 1)
-        XCTAssertLessThan(RewindTimeline.wave(from: a, to: b, progress: 0.375).y, -1)
-        XCTAssertEqual(RewindTimeline.wave(from: a, to: b, progress: 0.5).y, 0, accuracy: 1e-9)
-        let far = RewindTimeline.wave(from: .zero, to: CGPoint(x: 5000, y: 0), progress: 0.375)
-        XCTAssertLessThanOrEqual(abs(far.y), RewindTimeline.waveMax)        // capped on a long flight
+    /// 2026-10-09: the dust lands on the ring where it is nearest the pointer, and circles from there.
+    func testDustLandsOnTheNearestPointThenOrbits() {
+        let c = CGPoint(x: 500, y: 300)
         let r = RewindTimeline.orbitRadius(for: CGSize(width: 958, height: 525))
         XCTAssertEqual(r, 131.25, accuracy: 1e-9)                      // ½ of the shorter side, as a diameter
-        XCTAssertEqual(RewindTimeline.orbit(around: b, radius: r, since: 0),
-                       RewindTimeline.orbitEntry(around: b, radius: r))   // the wave lands where it starts
+        // Pointer left of the window: it lands on the ring's left side, not its far right.
+        let left = CGPoint(x: 100, y: 300)
+        let entry = RewindTimeline.orbitEntry(around: c, radius: r, angle: RewindTimeline.entryAngle(around: c, from: left))
+        XCTAssertEqual(entry.x, c.x - r, accuracy: 1e-9)
+        XCTAssertEqual(entry.y, c.y, accuracy: 1e-9)
+        // Nearest point: on the segment from the pointer to the centre, r from the centre.
+        let diag = CGPoint(x: 900, y: 700)
+        let a = RewindTimeline.entryAngle(around: c, from: diag)
+        let e = RewindTimeline.orbitEntry(around: c, radius: r, angle: a)
+        XCTAssertEqual(hypot(e.x - c.x, e.y - c.y), r, accuracy: 1e-9)
+        XCTAssertEqual(hypot(diag.x - e.x, diag.y - e.y), hypot(diag.x - c.x, diag.y - c.y) - r, accuracy: 1e-9)
+        // A pointer inside the ring goes out to it; one on the centre takes angle 0.
+        XCTAssertEqual(RewindTimeline.entryAngle(around: c, from: c), 0)
+        // The orbit starts exactly where the flight landed, stays on the ring, turns clockwise.
+        XCTAssertEqual(RewindTimeline.orbit(around: c, radius: r, since: 0, from: a).x, e.x, accuracy: 1e-9)
+        XCTAssertEqual(RewindTimeline.orbit(around: c, radius: r, since: 0, from: a).y, e.y, accuracy: 1e-9)
         for t in [0.3, 1.0, 1.7] {
-            let p = RewindTimeline.orbit(around: b, radius: r, since: t)
-            XCTAssertEqual(hypot(p.x - b.x, p.y - b.y), r, accuracy: 1e-9)
+            let p = RewindTimeline.orbit(around: c, radius: r, since: t, from: a)
+            XCTAssertEqual(hypot(p.x - c.x, p.y - c.y), r, accuracy: 1e-9)
         }
         let quarter = RewindTimeline.orbit(around: .zero, radius: r, since: RewindTimeline.orbitPeriod / 4)
         XCTAssertEqual(quarter.y, -r, accuracy: 1e-9)                  // clockwise
