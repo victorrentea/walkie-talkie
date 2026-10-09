@@ -57,7 +57,7 @@ enum OverlayStates {
         let selection = "public Order placeOrder(Cart cart) {"
         let transcript = "adaugă un test pentru cazul în care coșul e gol"
         // Every dictated panel names its microphone and engine (2026-10-06).
-        let heard = "Mic: 🎤 DJI\nEngine: ElevenLabs Scribe (scribe_v2)"
+        let heard = "Mic: 🎤 DJI\nEngine: ☁️ ElevenLabs Scribe (scribe_v2)"
         let long = "verifică de ce endpointul de checkout întoarce 500 când "
                  + "coșul are un singur produs fără preț, și dacă e din cauza "
                  + "conversiei de monedă adaugă un test care prinde exact cazul ăsta"

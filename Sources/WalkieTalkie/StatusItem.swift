@@ -1497,8 +1497,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         refreshGlyph()
     }
 
-    /// `Engine: Turbo💻 1.5 GB` while the local model is the one listening;
-    /// `Engine: Wispr Flow` while the other one is.
+    /// `Engine: 💻 v3-turbo 1.5 GB` while the local model is the one listening;
+    /// `Engine: ☁️ Wispr Flow` while the other one is.
     ///
     /// **The row is short and the submenu is long** (Victor, 2026-09-14): the
     /// top-level row is read out of the corner of the eye while the menu bar is
@@ -1579,7 +1579,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "timed to be ready by the engine's p95 for that length (at least 1.5 s, at most 0.3 × the audio + 1 s).\n"
             + "The chip counts down to that moment — 💻 local in 3s / ⌘⌃X ... — and at zero the local words go in; "
             + "⌘⌃X puts them in sooner, and the engine's words landing first discard them.\n"
-            + "Uses \(WhisperModels.option(for: WhisperModels.selected).map { Self.localRowTitle($0, loading: false) } ?? "Local 💻").\n"
+            + "Uses \(WhisperModels.option(for: WhisperModels.selected).map { Self.localRowTitle($0, loading: false) } ?? "\(Self.local) Local").\n"
             + "Keeps the local model loaded while another engine is picked"
             + (ram.map { " (\($0) now)" } ?? "") + "."
         autoLocalRow = auto
@@ -1671,12 +1671,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
         }
     }
 
-    /// `<model name> 💻` — `v3-turbo 💻`, `v3-turbo-victor 💻`
-    /// (2026-10-03, Victor: the model's name, the laptop after it; no `Local`),
-    /// with the ⏳ while the picked model loads.
+    /// `💻 <model name>` — `💻 v3-turbo`, `💻 v3-turbo-victor` (2026-10-03, Victor:
+    /// the model's name, no `Local`; **the laptop first since 2026-10-09**, see
+    /// `cloud`/`local`), with the ⏳ while the picked model loads.
     static func localRowTitle(_ option: WhisperModels.Option, loading: Bool) -> String {
-        "\(option.title) 💻" + (loading ? " ⏳" : "")
+        "\(local) \(option.title)" + (loading ? " ⏳" : "")
     }
+
+    /// **Every engine name starts with where it runs** (2026-10-09, Victor: *"be
+    /// sure to start with the laptop emoji everywhere … so it's clear from the
+    /// first character if this is a local"*) — the menu, the launch and green
+    /// tabs, the prompt panel's `Engine:` row. Reverses 2026-09-30's *after the
+    /// name*.
+    static let cloud = "☁️", local = "💻"
 
     /// Victor picked a local model (a repo id or a folder). `AppDelegate` stores
     /// it and replaces the helper at the next idle moment.
@@ -1889,13 +1896,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // with captions bills three times — the live stream, the corrections
         // and the final upload, 1.06 credits/s against 0.29 batch-only
         // (`evals/elevenlabs-cost.md`). The tooltip carries the figures.
-        // **The ☁️ / 💻 after the name, not before it** (2026-09-30, Victor:
-        // *"move the ☁️ AFTER WisprFlow or ElevenLabs in their names. And
-        // Local💻"*) — the list is read by its names; the emoji qualifies one.
-        case "eleven-live": return "ElevenLabs ☁️ + Live 💸x3" + keyless
-        case "eleven": return "ElevenLabs ☁️" + keyless
-        case "wispr": return "Wispr Flow ☁️"
-        default: return engineLoading ? "Local 💻 ⏳" : "Local 💻"
+        // **The ☁️ / 💻 first** (2026-10-09 — `cloud`/`local`; after the name
+        // from 2026-09-30 until then).
+        case "eleven-live": return "\(Self.cloud) ElevenLabs + Live 💸x3" + keyless
+        case "eleven": return "\(Self.cloud) ElevenLabs" + keyless
+        case "wispr": return "\(Self.cloud) Wispr Flow"
+        default: return engineLoading ? "\(Self.local) Local ⏳" : "\(Self.local) Local"
         }
     }
 
@@ -1913,7 +1919,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
                     "Sent text: ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate), "
                         + "from the recording",
                     "💸x3: every second is billed three times — the live stream, the corrections "
-                        + "and the final upload; measured 1.06 credits/s against 0.29 on ElevenLabs ☁️ alone (28 Sep)",
+                        + "and the final upload; measured 1.06 credits/s against 0.29 on ☁️ ElevenLabs alone (28 Sep)",
                     "Audio leaves this Mac", key].compactMap { $0 })
                 .joined(separator: "\n")
         case "eleven":
@@ -1945,33 +1951,25 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// right after the engine's name in the top-level row's title — `ElevenLabs ☁️
     /// + Live`, `Local 💻 (1.5 GB)` (after the name since 2026-09-30, as in the list).
     func engineBannerTitle(_ id: String) -> String {
-        let name: String, emoji: String
-        switch id {
-        case "eleven", "eleven-live": (name, emoji) = ("ElevenLabs", "☁️")
         // **`Wispr`, not `Wispr Flow`, on the tab** (2026-10-06, Victor: *"numește
         // Wispr în loc de „Wispr Flow" în overlay-ul care se ridică pe jumătate"*).
-        case "wispr": return "Wispr ☁️"
-        default: return engineShortTitle(id)   // already `Turbo💻 1.5 GB`
-        }
-        let title = engineShortTitle(id)
-        guard let r = title.range(of: name) else { return title + " " + emoji }
-        return title.replacingCharacters(in: r, with: name + " " + emoji)
+        if id == "wispr" { return "\(Self.cloud) Wispr" }
+        return engineShortTitle(id)   // `☁️ ElevenLabs + Live`, `💻 v3-turbo 1.5 GB`
     }
 
     private func engineShortTitle(_ id: String) -> String {
         // ⚠️ rather than the price, because the top-level row is read out of the
         // corner of the eye: what he needs from it there is *the cloud one is
         // live and it cannot work*, and the reason is one hover away.
-        if id == "eleven" { return elevenReady?() == true ? "ElevenLabs" : "ElevenLabs ⚠️" }
-        if id == "eleven-live" {
-            return elevenReady?() == true ? "ElevenLabs + Live" : "ElevenLabs + Live ⚠️"
-        }
-        if id == "wispr" { return "Wispr Flow" }
+        let ok = elevenReady?() == true
+        if id == "eleven" { return "\(Self.cloud) ElevenLabs" + (ok ? "" : " ⚠️") }
+        if id == "eleven-live" { return "\(Self.cloud) ElevenLabs + Live" + (ok ? "" : " ⚠️") }
+        if id == "wispr" { return "\(Self.cloud) Wispr Flow" }
         // **The picked model's name, the 💻 against it, then the RAM** —
         // `v3-turbo💻 1.5 GB`, `v3-turbo-victor💻 1.5 GB`, `v3-victor💻 2.9 GB`:
         // the same name as everywhere else since 2026-10-07 (`Turbo LoRA Victor`
         // 2026-10-05, `V3t…` 2026-10-04, *"fara ( ) in jurul GB"*).
-        let name = WhisperModels.displayName(WhisperModels.selected) + "💻"
+        let name = "\(Self.local) " + WhisperModels.displayName(WhisperModels.selected)
         if engineLoading { return name + " loading…" }
         guard let bytes = whisperFootprint?() else { return name }
         return name + String(format: " %.1f GB", Double(bytes) / 1_073_741_824)

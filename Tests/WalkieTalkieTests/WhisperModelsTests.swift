@@ -16,7 +16,7 @@ final class WhisperModelsTests: XCTestCase {
         let c = try XCTUnwrap(WhisperModels.Card.parse(Data(card.utf8)))
         let option = WhisperModels.Option(id: "/x/whisper-turbo-victor", card: c)
         // The card's old `label` / `short` no longer name it (2026-10-07).
-        XCTAssertEqual(StatusItem.localRowTitle(option, loading: false), "v3-turbo-victor 💻")
+        XCTAssertEqual(StatusItem.localRowTitle(option, loading: false), "💻 v3-turbo-victor")
         XCTAssertTrue(option.details.hasPrefix(
             "whisper-turbo-victor · trained 3 Oct 2026 · $3.6 · WER 20.4→15.3%\n"))
         XCTAssertTrue(option.details.contains("Base: openai/whisper-large-v3-turbo"))
@@ -26,7 +26,7 @@ final class WhisperModelsTests: XCTestCase {
     func testOriginalIsNamedAsSuch() {
         XCTAssertEqual(StatusItem.localRowTitle(WhisperModels.Option(id: WhisperModels.original, card: nil),
                                                 loading: false),
-                       "v3-turbo 💻")
+                       "💻 v3-turbo")
         XCTAssertEqual(WhisperModels.displayName(WhisperModels.original), "v3-turbo")
         let noLabel = WhisperModels.Card(name: "x-model")
         XCTAssertEqual(WhisperModels.Option(id: "/m/x", card: noLabel).title, "x-model")

@@ -106,7 +106,7 @@ final class MicAnnouncer {
         let mic = r.known?.glyph ?? r.device.map { "🎙️ \($0.name)" }
         // **A slash between the microphone and the engine** (2026-10-08, Victor:
         // *"put a slash between the emoji meaning the input source and … the
-        // transcription engine"*) — `🎤 / ElevenLabs ☁️ + Live`.
+        // transcription engine"*) — `🎤 / ☁️ ElevenLabs + Live` (the ☁️ first since 2026-10-09).
         let text = [mic, engine].compactMap { $0 }.joined(separator: " \(Self.wave) ")
         startupText = Self.readable(text)
         Log.info("🚀 up on \(Self.readable(text)) — the launch tab")

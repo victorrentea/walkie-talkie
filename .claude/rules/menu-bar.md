@@ -212,6 +212,15 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   fallback, deliberately, because an engine that can run but cannot be picked is the one state
   where the chip and the menu disagree.
 
+- **Every engine name starts with ☁️ or 💻, everywhere** (2026-10-09, Victor: *"be sure to start
+  with the laptop emoji everywhere … so it's clear from the first character if this is a local …
+  in the overlay in the bottom, in the pre-flight panel, everywhere"*) — **supersedes every
+  name-then-emoji example below and in `whisper-and-corpus.md`** (2026-09-30's *after the name*).
+  `StatusItem.cloud` / `StatusItem.local`: the Engine list (`☁️ ElevenLabs + Live 💸x3`,
+  `☁️ ElevenLabs`, `💻 v3-turbo`, `💻 v3-turbo-victor`, `☁️ Wispr Flow`), the top row
+  (`Engine: 💻 v3-turbo-victor 1.5 GB`), the launch and green tabs (`☁️ ElevenLabs + Live`,
+  `☁️ Wispr`), and the prompt panel's `Engine: ☁️ ElevenLabs Scribe (scribe_v2)` /
+  `Engine: 💻 Local Whisper (…)` (`AppDelegate.heardLine`).
 - **The local engine is one row per model, siblings of the cloud engines** (2026-10-03; nested
   under `Local 💻` for one build the same day — Victor: *one radio group, one checkmark, short
   titles*). The list: `ElevenLabs ☁️ + Live 💸x3`, `ElevenLabs ☁️`, `Local 💻 · turbo (original)`,

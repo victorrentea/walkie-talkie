@@ -60,7 +60,7 @@ S1.3 try to switch back to ENG0 mid-sentence — it must be refused.
   sleep 1.5
   CHECK: curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["engine"])'
          curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.load(sys.stdin)["listening"])'
-  EXPECT: engine still T (refused), listening still True. TOP1 names T's engine (e.g. "Engine: ElevenLabs" for eleven, "Engine: ElevenLabs + Live" for eleven-live).
+  EXPECT: engine still T (refused), listening still True. TOP1 names T's engine (e.g. "Engine: ☁️ ElevenLabs" for eleven, "Engine: ☁️ ElevenLabs + Live" for eleven-live).
 
 S1.4 end the sentence.
   DO: curl -s -m20 -X POST $B/test/cancel -H 'content-type: application/json' -d '{}'

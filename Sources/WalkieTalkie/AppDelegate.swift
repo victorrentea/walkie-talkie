@@ -402,15 +402,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wispr = via.hasPrefix("wispr") || via == "pasteboard"
         let mic = wispr ? InputDevice.label(wisprName: wisprMicName)
                         : InputDevice.label(opened: MicRecorder.lastOpened?.device)
-        let local = "Local Whisper" + (engineLabel.isEmpty ? "" : " (\(engineLabel))")
+        // The ☁️ / 💻 first, as everywhere an engine is named (`StatusItem.cloud`).
+        let local = "\(StatusItem.local) Local Whisper" + (engineLabel.isEmpty ? "" : " (\(engineLabel))")
         let engine: String
         switch via {
-        case "elevenlabs-scribe": engine = "ElevenLabs " + (engineLabel.isEmpty ? "Scribe" : engineLabel)
+        case "elevenlabs-scribe": engine = "\(StatusItem.cloud) ElevenLabs " + (engineLabel.isEmpty ? "Scribe" : engineLabel)
         case "local-whisper": engine = local
         case "local-fallback": engine = local + " — fallback"
         case "local-forced": engine = local + " — ⌘⌃X"
         case "local-auto": engine = local + " — auto fallback"
-        case _ where wispr: engine = WisprFlowSource.engineLabel
+        case _ where wispr: engine = "\(StatusItem.cloud) \(WisprFlowSource.engineLabel)"
         default: engine = engineLabel.isEmpty ? via : engineLabel
         }
         return "Mic: \(mic)\nEngine: \(engine)"
