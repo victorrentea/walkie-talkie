@@ -173,9 +173,20 @@ emoji with the three yellow stars just in front of [each] project … [children]
 of them an icon of the terminal"*, and *"a hourglass in front of them if you detect that Claude
 session to be active right now"*.
 
-- **A folder row with live sessions grows a chevron (between name and star) and a submenu on
-  hover; its click still opens a new session** — deliberately unlike an `NSMenu` parent. The
-  chevron column is reserved on every folder row, so sessions landing late move no name.
+- **A folder's sessions are lines under it, not a submenu** (2026-10-09, Victor: *"there are
+  submenus right now which take time and look awkward when they paint … display the terminal which
+  is already working in that project below the entry for that project … a bit indented to the
+  right. So there are no more sub menus … leave Active Terminals … this extra space in front allows
+  you also space to put the checkbox"*) — supersedes the chevron-and-submenu below. Each session is
+  a `FolderRow` with `indent` (`sessionIndent` 8 pt), `sessionFont` 15 pt, `sessionHeight` 24 pt,
+  under its folder: the ✓ in the indent, Terminal's icon, ⏳ when busy, the name; no star. A click
+  binds it (`redirectSpawn`), exactly as an *Active Terminals* pick. The folder row's click still
+  opens a new session. **Only *Active Terminals* keeps a submenu.**
+- **Drawn from the first frame: the last opening's sessions** (`lastSessions`), then `fillActive`'s
+  fresh look relays the menu out (top-left kept, clock not restarted) only when `children` changed —
+  so lines appear under the hand only on the opening after a session started or ended.
+- ~~**A folder row with live sessions grows a chevron (between name and star) and a submenu on
+  hover; its click still opens a new session**~~ (2026-10-07 → 2026-10-09).
 - **`ActiveTerminals.grouped`**: a session belongs to the deepest row whose path is its directory
   or contains it; what no row claims stays under *Active Terminals* (`— none` when nothing is left).
   `regroup()` runs when the sessions land and after a star. Folder submenus name the task from the
@@ -187,10 +198,10 @@ session to be active right now"*.
   **A session any of whose user prompts has `kamikaze` on a line of its own is offered nowhere**
   (`ActiveTerminals.isKamikaze`; the transcript is byte-scanned, only user lines with the word are
   parsed, tool results ignored). A missing file answers *idle, not kamikazed*.
-- **Switching between two submenus waits `submenuGrace`** and happens only if the hand is still on
-  the new row (`entered`) — the diagonal into the open one crosses other rows.
-- `WT_SHOOT_SUB=<folder name>` picks which submenu `WT_SHOOT_MENU` draws open (default: the first
-  folder with sessions, else *Active Terminals*).
+- **Leaving *Active Terminals* for another row closes its submenu after `submenuGrace`** unless the
+  hand reaches it (`entered`) — the diagonal into it crosses other rows.
+- `WT_SHOOT_MENU` draws the session lines in place and *Active Terminals*' submenu open when it has
+  any (`WT_SHOOT_SUB` is gone with the folder submenus).
 
 ## Pinned + recent (`ProjectList`, `helpers/recent_projects.py`)
 
@@ -400,5 +411,5 @@ session to be active right now"*.
 - Do not cache or offset-read in `recent_projects.py`, and do not trim its output file to five.
 - Do not hide *Active Terminals* when nothing is running, move it off the first row, or let a
   pick's words out before its bind lands.
-- Do not make a folder row's click open its submenu — the click starts a new session, always.
+- Do not make a folder row's click do anything but start a new session, and do not put the folder submenus back.
 - Do not offer a session that was sent `kamikaze`.

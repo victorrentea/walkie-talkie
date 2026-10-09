@@ -105,11 +105,31 @@ import AppKit
 /// **its click still opens a new session**, unlike an `NSMenu` parent — and
 /// the sessions it claims leave *Active Terminals*. A session told `kamikaze`
 /// is offered nowhere; one working right now wears a ⏳.
+///
+/// # …on lines of their own, not in a submenu (2026-10-09)
+///
+/// ```
+///   ✨ petclinic                     ★
+///    ✓ [T] ⏳ Spring Security            ← indented, the ✓ in the indent
+///      [T] owners grid paging
+///   ✨ walkie-talkie                 ★
+/// ```
+///
+/// Victor: *"there are submenus right now which take time and look awkward when
+/// they paint … display the terminal which is already working in that project
+/// below the entry for that project having the yellow stars on a line below them
+/// and a bit indented to the right. So there are no more sub menus … leave
+/// Active Terminals … this extra space in front allows you also space to put the
+/// checkbox if it's already connected."* The folder rows' submenus are gone;
+/// *Active Terminals* keeps its own. The sessions found at the last opening are
+/// drawn at once (`lastSessions`) and the menu is relaid out only if the fresh
+/// look finds them changed — rows appearing under the hand is the price, paid
+/// once, on the opening after a session starts or ends.
 enum SpawnFolderMenu {
 
     /// One row: the folder it opens, where that is, and which side of the line
     /// it is on.
-    struct Choice {
+    struct Choice: Equatable {
         let name: String
         let path: String
         var pinned: Bool = false
@@ -212,11 +232,16 @@ enum SpawnFolderMenu {
     /// session* — and the gap after it.
     static let iconSize: CGFloat = 18
     static let iconGap: CGFloat = 6
-    /// A folder row's chevron, between its name and its star; reserved on every
-    /// folder row so the sessions landing late (`fillActive`) do not move a name.
-    static let chevronColumn: CGFloat = 22
     /// In front of every folder name: *a click here opens a new session*.
     static let sparkle = "✨ "
+    /// A session's line under its folder: a smaller face and row, so it reads
+    /// as belonging to the folder above rather than as a folder of its own.
+    private static let sessionFont = NSFont.systemFont(ofSize: 15)
+    private static let sessionHeight: CGFloat = 24
+    /// How far a session line is pushed in under its folder — the room the ✓
+    /// sits in (2026-10-09, *"this extra space in front allows you also space
+    /// to put the checkbox"*).
+    static let sessionIndent: CGFloat = 8
 
     // MARK: - State
 
@@ -237,7 +262,10 @@ enum SpawnFolderMenu {
     /// Every live session found, before `regroup` shares them out between the
     /// folder rows (`children`) and *Active Terminals* (`active`).
     private static var allSessions: [ActiveTerminals.Session]?
-    /// A folder row's submenu, by the row's path.
+    /// The sessions the last opening found — drawn straight away by the next
+    /// one, so the lines under the folders are there from the first frame.
+    private static var lastSessions: [ActiveTerminals.Session]?
+    /// The sessions drawn under a folder row, by the row's path.
     private static var children: [String: [Choice]] = [:]
     /// The folder rows as drawn, by path, so the sessions landing can give
     /// each its chevron in place.
@@ -303,10 +331,9 @@ enum SpawnFolderMenu {
         // this app never waits on. See `RecentProjects.refreshIfStale`.
         RecentProjects.refreshIfStale()
         rendered = rows()
-        active = nil
-        allSessions = nil
-        children = [:]
         boundTTY = bound
+        allSessions = lastSessions
+        regroup()
         guard !rendered.pinned.isEmpty || !rendered.recent.isEmpty else { return }
         chosen = pick
 
@@ -380,20 +407,23 @@ enum SpawnFolderMenu {
         DispatchQueue.global(qos: .userInitiated).async {
             let found = TerminalBinding.activeAgentSessions()
             DispatchQueue.main.async {
+                lastSessions = found
                 guard panel === p else { return }
+                let drawn = children
                 allSessions = found
                 regroup()
-                showSessions()
+                showSessions(relayout: children != drawn)
             }
         }
     }
 
-    /// The sessions as they now stand, onto the rows already drawn: *Active
-    /// Terminals* restyled, each folder row's chevron, an open submenu rebuilt
-    /// where it hangs (or closed, when its owner has nothing left).
-    private static func showSessions() {
+    /// The sessions as they now stand: the lines under the folders laid out
+    /// again when they changed (the top-left corner kept, the clock not
+    /// restarted), *Active Terminals* restyled, its submenu rebuilt where it
+    /// hangs (or closed, when nothing is left).
+    private static func showSessions(relayout changed: Bool) {
+        if changed { relayout(restartClock: false) }
         activeRow?.update(items: active)
-        for (path, row) in folderRows { row.hasChildren = !(children[path] ?? []).isEmpty }
         if subpanel != nil, let owner = submenuOwner { openSubmenu(for: owner) }
     }
 
@@ -515,10 +545,17 @@ enum SpawnFolderMenu {
 
     private static func measure() -> NSSize {
         let all = rendered.pinned + rendered.recent
-        // The ✨ in front and the chevron column behind every folder name.
-        let widest = min(maxNameWidth, all
+        let sessions = all.flatMap { children[$0.path] ?? [] }
+        // The ✨ in front of every folder name; a session line's indent, tick,
+        // icon and name — measured in its own face, and without the star.
+        let folderWidth = all
             .map { ((sparkle + $0.name) as NSString).size(withAttributes: [.font: rowFont]).width }
-            .max() ?? 0) + chevronColumn
+            .max() ?? 0
+        let sessionWidth = sessions
+            .map { (sessionText($0) as NSString).size(withAttributes: [.font: sessionFont]).width
+                   + sessionIndent + checkGutter + iconSize + iconGap - starGap - starSize }
+            .max() ?? 0
+        let widest = min(maxNameWidth, max(folderWidth, sessionWidth))
         let headerWidth = (header as NSString).size(withAttributes: [.font: headerFont]).width
         // **Measured for its longest label**, so the answer arriving
         // (`fillActive`) rewrites the row without resizing the panel under the
@@ -534,6 +571,7 @@ enum SpawnFolderMenu {
         // *Active Terminals* and the line under it.
         let top = rowHeight + separatorHeight
         let height = 2 * pad + top + headerHeight + CGFloat(all.count) * rowHeight + divider
+            + CGFloat(sessions.count) * sessionHeight
         return NSSize(width: ceil(width), height: ceil(height))
     }
 
@@ -609,14 +647,25 @@ enum SpawnFolderMenu {
         return y + headerHeight
     }
 
+    /// A folder row, and under it — bottom-up, so added first — a line per
+    /// session working in it.
     private static func add(_ choice: Choice, at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
+        var y = y
+        for session in (children[choice.path] ?? []).reversed() {
+            let line = FolderRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: sessionHeight),
+                                 choice: session, font: sessionFont)
+            line.indent = sessionIndent
+            line.onClick = { take($0) }
+            line.onEnter = { [weak line] in if let line { SpawnFolderMenu.entered(line) } }
+            root.addSubview(line)
+            y += sessionHeight
+        }
         let row = FolderRow(frame: NSRect(x: pad, y: y,
                                           width: size.width - 2 * pad, height: rowHeight),
                             choice: choice, font: rowFont)
-        row.hasChildren = !(children[choice.path] ?? []).isEmpty
-        // **A click opens a new session, children or not** — the parent of a
-        // submenu is still a folder to start in (2026-10-07, *"clicking the
-        // parent … should start a new one, even if it has children"*).
+        // **A click opens a new session, sessions under it or not** (2026-10-07,
+        // *"clicking the parent … should start a new one, even if it has
+        // children"*).
         row.onClick = { take($0) }
         row.onStar = { starred($0) }
         row.onEnter = { [weak row] in if let row { SpawnFolderMenu.entered(row) } }
@@ -636,16 +685,12 @@ enum SpawnFolderMenu {
         submenuClose?.cancel()
         submenuClose = nil
         guard let p = panel, let window = owner.window else { return }
-        let items: [Choice]?
-        if let folder = owner as? FolderRow {
-            // A folder row opens nothing until its sessions are known.
-            items = children[folder.path]
-            guard items.map({ !$0.isEmpty }) ?? false else { closeSubmenu(); return }
-        } else {
-            items = active
-            // Nothing to offer: the row says so and opens nothing.
-            if let found = items, found.isEmpty { closeSubmenu(); return }
-        }
+        // Only *Active Terminals* has one since 2026-10-09 — a folder's sessions
+        // are lines under it.
+        guard owner is ActiveRow else { closeSubmenu(); return }
+        let items = active
+        // Nothing to offer: the row says so and opens nothing.
+        if let found = items, found.isEmpty { closeSubmenu(); return }
         if submenuOwner !== owner { setOpen(submenuOwner, false) }
         submenuOwner = owner
         setOpen(owner, true)
@@ -669,21 +714,17 @@ enum SpawnFolderMenu {
         subpanel = sub
     }
 
-    /// **The hand arriving on a folder row.** With nothing open, its own
-    /// submenu opens at once (or nothing, when it has no sessions). With
-    /// another submenu up, the switch waits `submenuGrace` — the hand may only
-    /// be crossing this row on its way into the open one — and happens only if
-    /// the hand is still on this row by then.
+    /// **The hand arriving on a folder row or a session line** while the
+    /// *Active Terminals* submenu is up: it closes after `submenuGrace` — the
+    /// hand may only be crossing this row on its way into it — unless the hand
+    /// has reached it by then.
     static func entered(_ row: FolderRow) {
-        guard subpanel != nil, submenuOwner !== row else {
-            if subpanel == nil, row.hasChildren { openSubmenu(for: row) }
-            return
-        }
+        guard subpanel != nil else { return }
         submenuClose?.cancel()
-        let work = DispatchWorkItem { [weak row] in
+        let work = DispatchWorkItem {
             submenuClose = nil
             guard !hoveredSub else { return }
-            if let row, row.hot, row.hasChildren { openSubmenu(for: row) } else { closeSubmenu() }
+            closeSubmenu()
         }
         submenuClose = work
         DispatchQueue.main.asyncAfter(deadline: .now() + submenuGrace, execute: work)
@@ -908,8 +949,9 @@ final class FolderRow: NSView {
     private let font: NSFont
     private(set) var hot = false
     var path: String { choice.path }
-    /// A folder row with live sessions in it: a chevron, and a submenu on hover.
-    var hasChildren = false { didSet { if hasChildren != oldValue { needsDisplay = true } } }
+    /// A session line under its folder: pushed in this far, the ✓ in the room
+    /// it makes (2026-10-09).
+    var indent: CGFloat = 0
     /// Its submenu is up — keeps the highlight after the hand has moved into it.
     var open = false { didSet { if open != oldValue { needsDisplay = true } } }
     /// False only for the submenu's `Looking…` placeholder: drawn dimmed, never
@@ -952,7 +994,7 @@ final class FolderRow: NSView {
         // **A terminal row keeps a tick column** in front of the name, `NSMenu`'s
         // own state column: ✓ on the terminal bound now, blank on the rest, so
         // the names line up whether or not one of them is ticked.
-        var x = SpawnFolderMenu.rowInset
+        var x = SpawnFolderMenu.rowInset + indent
         if choice.tty != nil {
             if choice.bound {
                 let tick = NSAttributedString(string: "✓", attributes: [.font: font, .foregroundColor: ink])
@@ -981,18 +1023,10 @@ final class FolderRow: NSView {
                                                    .paragraphStyle: style])
         let size = text.size()
         let width = bounds.width - x - SpawnFolderMenu.rowInset
-            - (choice.tty == nil ? SpawnFolderMenu.starSize + SpawnFolderMenu.chevronColumn : 0)
+            - (choice.tty == nil ? SpawnFolderMenu.starSize : 0)
         text.draw(with: NSRect(x: x, y: (bounds.height - size.height) / 2,
                                width: width, height: size.height),
                   options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
-        // The chevron, between the name and the star: this folder has sessions
-        // running, one hover away.
-        guard choice.tty == nil, hasChildren, let chevron = ActiveRow.chevron else { return }
-        let c = SpawnFolderMenu.starSize
-        let box = NSRect(x: bounds.width - SpawnFolderMenu.rowInset - SpawnFolderMenu.starSize
-                            - SpawnFolderMenu.chevronColumn + (SpawnFolderMenu.chevronColumn - c) / 2,
-                         y: (bounds.height - c) / 2, width: c, height: c)
-        SpawnFolderMenu.tinted(chevron, ink: ink).draw(in: box)
     }
 
     /// Terminal.app's own icon, drawn once — what a session row stands behind.
@@ -1210,16 +1244,10 @@ extension SpawnFolderMenu {
         let menu = build(size: size)
         var canvas = size
         var submenu: NSView?
-        // **Which submenu is drawn open**: `WT_SHOOT_SUB=<folder name>` names a
-        // folder row; without it, the first folder row with sessions (top
-        // down), else *Active Terminals*.
-        let wanted = ProcessInfo.processInfo.environment["WT_SHOOT_SUB"]
-        let folder = (rendered.pinned + rendered.recent).first {
-            !(children[$0.path] ?? []).isEmpty && (wanted == nil || $0.name == wanted)
-        }
-        let owner: NSView? = folder.flatMap { folderRows[$0.path] }
-            ?? ((active ?? []).isEmpty ? nil : activeRow)
-        let items = folder.map { children[$0.path] } ?? active
+        // The sessions under the folders are lines of the menu itself; only
+        // *Active Terminals* still opens a submenu, drawn open when it has any.
+        let owner: NSView? = (active ?? []).isEmpty ? nil : activeRow
+        let items = active
         if let row = owner, let items {
             setOpen(row, true)
             let sub = buildSubmenu(items)
