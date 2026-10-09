@@ -184,6 +184,14 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   `bringToFront`), binds nothing. **📍** (`Glyphs.mapPin`, drawn) sits left of ☠️, only when Walkie is
   not bound to that tty (`ReplyPanel.isBound`); it binds with the border flight (`onBind` →
   `rebindFromMenu(fly:)`). The bullets below that say the name binds are superseded.
+- **🔼 → over the pop-up answers its sender** (2026-10-09, Victor: *"If I do the gesture for … bound
+  prompting while my mouse is over the tooltip with the reply … close the bubble … first rebind me to
+  the sender terminal, just like if I would press the pin button … an easy way to chat back with the
+  agent"*). `onForwardRight` at rest (nothing listening or recording) with the pointer over the pop-up
+  (`ReplyPanel.ttyUnderPointer`, frame + 8 pt) → `AppDelegate.replyBack`: the pop-up closes, the 📍's
+  bind runs (`rebindFromMenu(fly: true, then:)`; skipped when already bound to that tty) and the bound
+  prompt opens once the bind lands. A sender gone → `⚠️ no terminal on …`, nothing opened.
+  Mid-sentence the gesture keeps its flip. Log `💬 🔼 → over the reply pop-up — …`.
 - **The wrong terminal came forward because AX's focused window was stale**: `raise(pid:)` raised
   `kAXFocusedWindow` right after AppleScript put the tab's window at index 1, which can still be the
   previous key window. `bringToFront` and `presentOnRetina` now answer the window's top-left and

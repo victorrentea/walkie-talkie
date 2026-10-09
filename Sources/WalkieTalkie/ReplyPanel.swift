@@ -46,6 +46,16 @@ enum ReplyPanel {
 
     /// What is on screen — `GET /test/state`.
     static var shown: String?
+    /// The terminal the open pop-up came from.
+    private static var shownTTY: String?
+
+    /// **The sender's tty while the pointer is over its pop-up** — 🔼 → there
+    /// answers that session (`AppDelegate.replyBack`). Main thread.
+    static var ttyUnderPointer: String? {
+        guard let p = panel, let tty = shownTTY,
+              p.frame.insetBy(dx: -8, dy: -8).contains(NSEvent.mouseLocation) else { return nil }
+        return tty
+    }
 
     /// **The 📍 binds that terminal** (2026-10-08, Victor: *"the new icon … next
     /// to the death face … would rebind me, but it only displays if I'm not
@@ -92,6 +102,7 @@ enum ReplyPanel {
     private static func present(_ text: String, from label: String?, tty: String?) {
         allowCursorInBackground
         shown = text
+        shownTTY = tty
         arrivedAt = NSEvent.mouseLocation
 
         let pad: CGFloat = 12
@@ -220,6 +231,7 @@ enum ReplyPanel {
         panel?.orderOut(nil)
         panel = nil
         shown = nil
+        shownTTY = nil
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
         // The next hop, so a click that closed this one is over before the

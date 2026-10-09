@@ -2420,6 +2420,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self else { return }
                 if self.toggleCoalescedByStall() { return }
+                if !self.listening, !self.source.isRecording, let tty = ReplyPanel.ttyUnderPointer {
+                    return self.replyBack(to: tty)
+                }
                 self.toggleDictation(flipsDestination: true)
             }
         }
@@ -5944,7 +5947,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// gives (Victor, 2026-10-08, on the answer panel's link: *"bring the border
     /// of the receiving window zooming into the mouse … the same effect as when I
     /// bind"*). A plain outline, not a picture: the window may be under others.
-    private func rebindFromMenu(tty: String, from origin: String = "the menu", fly: Bool = false) {
+    /// **🔼 → over the reply pop-up answers its sender** (2026-10-09, Victor: *"If
+    /// I do the gesture for … bound prompting while my mouse is over the tooltip
+    /// with the reply, that should … close the bubble … first rebind me to the
+    /// sender terminal, just like if I would press the pin button … an easy way
+    /// to chat back with the agent this way, whatever I'm doing"*). At rest only;
+    /// the pop-up goes, the 📍's bind (flight and all) runs unless that terminal
+    /// is already bound, and the bound prompt opens once the bind has landed.
+    /// A sender that is gone flashes like the 📍 and opens nothing.
+    private func replyBack(to tty: String) {
+        ReplyPanel.close()
+        if ReplyPanel.isBound?(tty) == true {
+            Log.info("💬 🔼 → over the reply pop-up — already bound to \(tty), pop-up closed, dictating at it")
+            return startDictation()
+        }
+        Log.info("💬 🔼 → over the reply pop-up — binding \(tty), pop-up closed, then dictating at it")
+        rebindFromMenu(tty: tty, from: "🔼 → over the reply pop-up", fly: true) { [weak self] in
+            guard let self, !self.listening, !self.source.isRecording else { return }
+            self.startDictation()
+        }
+    }
+
+    private func rebindFromMenu(tty: String, from origin: String = "the menu", fly: Bool = false,
+                                then andThen: (() -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let bound = self.terminal.bind(tty: tty) else {
                 DispatchQueue.main.async { [weak self] in
@@ -5956,6 +5981,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let frame = fly ? (bound.sourceFrame ?? TerminalBinding.terminalWindowFrame(tty: tty)) : nil
             DispatchQueue.main.async { [weak self] in
                 self?.showBound(bound)
+                andThen?()
                 guard let frame else { return }
                 BindFlight.fly(from: frame, to: { [weak self] in
                     self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
