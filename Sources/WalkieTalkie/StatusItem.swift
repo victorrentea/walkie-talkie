@@ -1844,9 +1844,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the newest sentence.
     @objc private func promptPicked(_ sender: NSMenuItem) {
         guard let text = sender.representedObject as? String, !text.isEmpty else { return }
-        let board = NSPasteboard.general
-        board.clearContents()
-        board.setString(text, forType: .string)
+        Clipboard.write(text)
         Log.info("📋 a prompt from the history is on the clipboard (\(text.count) chars)")
     }
 

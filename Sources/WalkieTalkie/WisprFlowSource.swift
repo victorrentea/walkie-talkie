@@ -639,12 +639,13 @@ final class WisprFlowSource: DictationSource {
     /// - **Read once.** Every caller on the delivery path comes here, so a
     ///   delivery costs one read rather than one per branch that wondered.
     static func pasteboardString() -> String? {
-        let board = NSPasteboard.general
-        guard board.types?.contains(.string) == true else { return nil }
-        let before = board.changeCount
-        let text = board.string(forType: .string)
-        guard board.changeCount == before else { return nil }
-        return text
+        Clipboard.with { board in
+            guard board.types?.contains(.string) == true else { return nil }
+            let before = board.changeCount
+            let text = board.string(forType: .string)
+            guard board.changeCount == before else { return nil }
+            return text
+        }
     }
 
     /// The string as it stood the instant the change was first seen — read then
@@ -869,13 +870,13 @@ final class WisprFlowSource: DictationSource {
             DispatchQueue.main.async {
                 guard let self else { return }
                 // Read here, not on the tap thread: the count is an IPC round trip.
-                let count = NSPasteboard.general.changeCount
+                let count = Clipboard.changeCount
                 self.lastForeignRow = max(self.lastForeignRow, row)
                 let front = NSWorkspace.shared.frontmostApplication
                 let own = PasteboardTimeline.lastOwnCount
                 Log.info("🛡️ his ⌘V passed (row \(row)) — front: \(front?.bundleIdentifier ?? "?") pid \(front?.processIdentifier ?? 0); clipboard #\(count)" + (count == own ? " = the relay's own last write (Q17) — NOT Wispr's item" : " (the relay's own last write #\(own))"))
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                    let now = NSPasteboard.general.changeCount
+                    let now = Clipboard.changeCount
                     Log.info("🛡️ 0.7 s after his passed ⌘V: clipboard #\(now)" + (now == count ? " — unchanged (no restore by Wispr)" : " — moved (Wispr's restore)"))
                 }
             }
@@ -2701,7 +2702,7 @@ final class WisprFlowSource: DictationSource {
         // the belt behind the 2026-09-13 clipboard-restore bug — arming at the
         // start chord is what actually fixed that — so it goes, and the change
         // count, which is an integer and cannot fault, stays.
-        clipboardAt = NSPasteboard.general.changeCount
+        clipboardAt = Clipboard.changeCount
         clipboardMoved = nil
         // **Armed whether or not the relay is going to take it.** The probe half
         // — which process posted what key, how long after the microphone shut —
@@ -2740,7 +2741,7 @@ final class WisprFlowSource: DictationSource {
         let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             guard watchesBoard else { return }
             guard let self, self.capturing else { return }
-            guard NSPasteboard.general.changeCount != self.clipboardAt else { return }
+            guard Clipboard.changeCount != self.clipboardAt else { return }
             self.clipboardWatch?.invalidate()
             self.clipboardWatch = nil
             // **Read the string now, not in 250 ms.** Wispr writes the
@@ -3519,7 +3520,7 @@ final class WisprFlowSource: DictationSource {
         var boardRead = false
         let ownCount = PasteboardTimeline.lastOwnCount
         DispatchQueue.global(qos: .userInitiated).async {
-            let count = NSPasteboard.general.changeCount
+            let count = Clipboard.changeCount
             let text = count == ownCount ? nil : Self.pasteboardString()
             DispatchQueue.main.async {
                 board = text?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4132,7 +4133,7 @@ final class WisprFlowSource: DictationSource {
         if !askedForCopy, Self.copyFallbackEnabled {
             askedForCopy = true
             Log.info("no delivery seen — asking Wispr for it with ⌘⌃C (copy_last_text)")
-            clipboardAt = NSPasteboard.general.changeCount
+            clipboardAt = Clipboard.changeCount
             HotkeyTap.postWisprCopyLast()
             let again = DispatchWorkItem { [weak self] in self?.captureExpired() }
             captureDeadline = again
@@ -4151,7 +4152,7 @@ final class WisprFlowSource: DictationSource {
         // row. *A dictation that silently becomes an older one is a sentence he
         // cannot trust* — the rule the fallback was switched off for — and this
         // was the same bug with no fallback switched on at all.
-        if askedForCopy, NSPasteboard.general.changeCount != clipboardAt {
+        if askedForCopy, Clipboard.changeCount != clipboardAt {
             deliver(reason: "copy_last_text", via: "pasteboard",
                     delivery: wrapWispr ? .route : .alreadyInserted)
             return

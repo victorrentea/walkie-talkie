@@ -298,6 +298,8 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   either way.
   → journal: *Restarting keeps the binding, and never interrupts a sentence (2026-09-09)*
 
+- **A Quit or a Dock restart with the microphone open ends the sentence first** (2026-10-09, `closeMicrophoneToLeave`): the words are delivered the ordinary way, then the app goes. Waiting was right for words in flight and wrong for an open microphone, which nothing closes — the deferred quit's ceiling is 10 min. `relay-restart.sh` is unaffected: its gate never lets it ask while anything is busy.
+
 ## A click on the Dock tile is a restart (2026-09-14)
 
 - **`applicationShouldHandleReopen` restarts the app and returns `false`** (Victor: *"When I open

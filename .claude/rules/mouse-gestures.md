@@ -164,6 +164,8 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 - **The menu can start, end and cancel a dictation.** `Start Dictation` / `End Dictation` / `Cancel Dictation` call the same `stopLocalRecording()` a wheel tap does; the rows are always visible and merely disabled, since they are the only lines that say whether the microphone is open, and read `StatusItem.isRecording` on open. The wheel is one button on one specific mouse whose battery goes. → journal: *A cancelled sentence is kept for five minutes (2026-09-10)*
 - **`MicRecorder` records 16 kHz mono 16-bit through `AVAudioConverter`** from the device's native rate; anything under 0.35 s is dropped as a misfire; the microphone is asked for **while the model loads**, not at the first press — the grant dialog is modal and mid-sentence with an agent waiting is the wrong moment. A recording is sent even below the confidence floor; the banner says the score. → journal: *A cancelled sentence is kept for five minutes (2026-09-10)*
 
+- **Right ⌥ ×2 and F5 over an open prompt end it, as 🔼 would** (2026-10-09, `keyboardEndsOpenPrompt`). They used to be refused (*"the relay's own engine is mid-sentence"*) — the opening half of the no-second-engine rule applied to a stop: at 19:28 a forward-button prompt could not be closed from the keyboard and took a Force Quit. Only the keyboard triggers; the 🔽 gestures keep their mid-prompt meanings and their refusal. Log `🎙️ right ⌥ ×2 over an open prompt — its stop`.
+
 ## Do not
 
 - **The numbers are duplicated in two places and must not drift**: Options+'s own custom-gesture screen, and `HotkeyTap`'s `VK_F3…VK_F12`.

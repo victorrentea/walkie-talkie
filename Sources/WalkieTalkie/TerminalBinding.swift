@@ -1877,11 +1877,9 @@ final class TerminalBinding {
     /// The clipboard is restored, because the relay must not cost Victor
     /// whatever he was carrying on it.
     private static func paste(_ text: String, into app: NSRunningApplication) -> Bool {
-        let pasteboard = NSPasteboard.general
-        let saved = pasteboard.string(forType: .string)
+        let saved = Clipboard.with { $0.string(forType: .string) }
 
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        Clipboard.write(text)
         PasteboardTimeline.noteOwnWrite("terminal paste")
 
         let previous = NSWorkspace.shared.frontmostApplication
@@ -1892,7 +1890,7 @@ final class TerminalBinding {
         var waited = 0
         while !app.isActive && waited < 40 { usleep(5_000); waited += 1 }
         guard app.isActive else {
-            if let saved = saved { restore(saved, to: pasteboard) }
+            if let saved = saved { restore(saved) }
             return false
         }
 
@@ -1904,14 +1902,13 @@ final class TerminalBinding {
         // Back where he was, so the relay is not also a window manager.
         if previous?.processIdentifier != app.processIdentifier { previous?.activate(options: []) }
         if let saved = saved {
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) { restore(saved, to: pasteboard) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.4) { restore(saved) }
         }
         return true
     }
 
-    private static func restore(_ text: String, to pasteboard: NSPasteboard) {
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+    private static func restore(_ text: String) {
+        Clipboard.write(text)
         PasteboardTimeline.noteOwnWrite("terminal paste restore")
     }
 

@@ -60,6 +60,9 @@ final class HotkeyTap {
     /// otherwise sit there dimming the screen with the finger long since up.
     /// Measured, on the first run of this gesture.
     var onAreaEnd: (() -> Void)?
+    /// Every swallowed drag of a crop, on main, after the box has moved — the
+    /// corner hint bar's only news of the pointer while the wheel is held.
+    var onAreaMoved: (() -> Void)?
 
     /// The wheel, clicked on its own — **or ⌘⌃D**: start the recording, or end
     /// the one that is open. A toggle and not a push-to-talk — a dictation at an agent runs to a
@@ -1196,6 +1199,10 @@ final class HotkeyTap {
         return CACurrentMediaTime() - ownDictationSince
     }
 
+    /// **The keyboard's plain toggle ends the relay's own open prompt** — see
+    /// `keyboardEndsOpenPrompt`. Raised on the tap thread, so the other end hops.
+    var onKeyboardEndsSentence: (() -> Void)?
+
     /// **A gesture was refused because the other engine is already listening.**
     /// The banner is the overlay's and the tap may not reach for it; this is the
     /// whole of the wiring. Raised on the tap thread, so the other end hops.
@@ -1841,7 +1848,10 @@ final class HotkeyTap {
                 // a box that stops following the hand while the wheel is held is
                 // exactly what that timer looks like when it is starved.
                 let where_ = event.location
-                DispatchQueue.main.async { CropSelectionOverlay.dragMoved(toCG: where_) }
+                DispatchQueue.main.async { [weak self] in
+                    CropSelectionOverlay.dragMoved(toCG: where_)
+                    self?.onAreaMoved?()
+                }
                 return true
             }
             // **A press that has been turned is a dial, not a drag** — see
@@ -2453,6 +2463,27 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
+    /// **Right ⌥ ×2 or F5 over an open prompt ends it, as 🔼 would** (2026-10-09).
+    ///
+    /// 19:28:46 that day: the forward button opened a prompt at the caret, and
+    /// right ⌥ ×2 — the stop he had used for every sentence since 19:13 — was
+    /// refused with *"the relay's own engine is mid-sentence"*. With the mouse
+    /// out of reach nothing else could close the microphone; Quit and the Dock
+    /// restart both waited for words that could not land, and it took a Force
+    /// Quit. The refusal exists so a toggle never opens a second engine over the
+    /// first; this is the other half — *"only the opening half is refused, a
+    /// stop must never be"* — for the keyboard. The 🔽 gestures keep their
+    /// mid-prompt meanings and their refusal.
+    private func keyboardEndsOpenPrompt(_ who: String, _ gesture: String,
+                                        _ type: CGEventType, _ event: CGEvent,
+                                        at now: CFTimeInterval) -> Unmanaged<CGEvent>? {
+        guard !who.hasPrefix("🔽"), ownDictation, ownMicOpen else { return nil }
+        lastBackToggleAt = now
+        Log.info("🎙️ \(who) over an open prompt — its stop: the sentence ends as 🔼 would end it")
+        DispatchQueue.global().async { [weak self] in self?.onKeyboardEndsSentence?() }
+        return swallow(gesture, type, event)
+    }
+
     /// 🔽 →, 🔽 ↓ mid-sentence (2026-10-07), the bare 🔽 at rest (2026-10-05) and
     /// the keyboard's F5 / 🎤 — **start the plain dictation, or stop the one open**
     /// (see the `VK_F5` case for the why of each guard). `gesture` names the
@@ -2498,6 +2529,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // stop must reach whoever is listening.
         if !wisprSentence, backUsesOwnEngine {
             if ownDictation, !ownClean, ownMicOpen || !sentenceQueueAccepts {
+                if let ended = keyboardEndsOpenPrompt(who, gesture, type, event, at: f5Now) { return ended }
                 refuseBackClick(who)
                 lastRefusedPlainStartAt = f5Now
                 return swallow(gesture, type, event)
@@ -2519,6 +2551,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // must never be. Victor: *"E absurd să pornesc două motoare de
         // transcriere simultan. Trebuie exclusiv, ba unu, ba altu."*
         if !closing, ownDictation {
+            if let ended = keyboardEndsOpenPrompt(who, gesture, type, event, at: f5Now) { return ended }
             refuseBackClick(who)
             lastRefusedPlainStartAt = f5Now
             return swallow(gesture, type, event)

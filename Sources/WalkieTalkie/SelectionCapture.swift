@@ -84,9 +84,10 @@ enum SelectionCapture {
     // MARK: - 2. Clipboard probe (Cmd+C, then restore)
 
     private static func readViaClipboardProbe() -> String? {
-        let pb = NSPasteboard.general
-        let before = pb.changeCount
-        let saved = snapshotClipboard(pb)
+        // Each call takes `Clipboard`'s lock on its own — never across the
+        // keystroke or the sleeps (`Clipboard`, the 2026-10-09 crash).
+        let before = Clipboard.changeCount
+        let saved = Clipboard.with(snapshotClipboard)
 
         KeySimulator.cmdC()
 
@@ -95,14 +96,14 @@ enum SelectionCapture {
         // selected" (apps no-op Cmd+C with an empty selection).
         var waited: TimeInterval = 0
         let step: TimeInterval = 0.02
-        while pb.changeCount == before && waited < 0.4 {
+        while Clipboard.changeCount == before && waited < 0.4 {
             Thread.sleep(forTimeInterval: step)
             waited += step
         }
-        guard pb.changeCount != before else { return nil }
+        guard Clipboard.changeCount != before else { return nil }
 
-        let copied = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines)
-        restoreClipboard(pb, saved)
+        let copied = Clipboard.with { $0.string(forType: .string) }?.trimmingCharacters(in: .whitespacesAndNewlines)
+        Clipboard.with { restoreClipboard($0, saved) }
         return (copied?.isEmpty == false) ? copied : nil
     }
 

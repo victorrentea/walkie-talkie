@@ -383,13 +383,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// microfonului in fata, inainte de Dictating/Prompting"*). The text keeps
     /// only the arrow and the recogniser; the device is what breathes in the
     /// orange disc in front of the word (`RelayWindow.setRecordDevice`).
+    ///
+    /// **The device is asked off the main thread** (2026-10-09). `currentGlyph`
+    /// lists the inputs through CoreAudio, a round trip to `coreaudiod`, and at
+    /// 19:05 that day — the wireless receiver dropping in and out — it did not
+    /// answer for 30 s: the sample in `hangs/` is this function under
+    /// `dictationBegan`, and the whole app froze with it. The glyph arrives a
+    /// beat later; the newest ask wins.
     private func pushMicMark() {
         let wispr = wisprHearsThis
-        let device = wispr ? InputDevice.glyph(wisprName: wisprMicName) : InputDevice.currentGlyph()
+        let wisprName = wisprMicName
         // No "to" (2026-09-29, Victor: "Prompting to" -> "Prompting").
         overlay.setMicMark(" → " + Self.engineMark(wispr ? "wispr" : engineId))
-        overlay.setRecordDevice(device)
+        micMarkAsk += 1
+        let ask = micMarkAsk
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let device = wispr ? InputDevice.glyph(wisprName: wisprName) : InputDevice.currentGlyph()
+            DispatchQueue.main.async {
+                guard let self, ask == self.micMarkAsk else { return }
+                self.overlay.setRecordDevice(device)
+            }
+        }
     }
+    /// Main only — see `pushMicMark`.
+    private var micMarkAsk = 0
 
     /// **The prompt panel's last line: which microphone heard this sentence and
     /// which engine wrote it** (2026-10-06, Victor: *"be sure to clearly mention
@@ -2455,6 +2472,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Main, because it touches the overlay's own state; and `async`, because
         // this arrives on the tap thread mid-gesture.
         hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }
+        // **The corner hints get out of a crop's way** (2026-10-09, Victor: *"if
+        // my mouse while dragging gets into the area … occupied by the other
+        // controls like hints … you should just hide those"*). A crop swallows
+        // every drag before any window sees it, so the chip's own mouse monitors
+        // — the hint bar's only news of the pointer — heard nothing, and the bar
+        // sat under the box he was drawing. Already on main.
+        hotkeys.onAreaMoved = { [weak self] in self?.overlay.pointerMovedUnseen() }
         CropSelectionOverlay.onAwaitingDestination = { [weak self] parked in
             self?.hotkeys.areaAwaitingDestination = parked
         }
@@ -2468,7 +2492,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .drawing: hint = .drawing
             case .done: hint = nil
             }
-            self?.overlay.setCropPhase(hint)
+            guard let self else { return }
+            self.overlay.setCropPhase(hint)
+            // The page's `⌘⇧` pill goes too, for the same drag — the page hears
+            // no mouse during a crop either, so its own fade never fires, and it
+            // is in the pixels being cropped. Back after the shutter has fired.
+            if hint != nil {
+                self.music.setPickable(false)
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                    guard let self, self.overlay.cropPhase == nil else { return }
+                    self.music.setPickable(self.picker.dictating)
+                }
+            }
         }
         // ⌘⌃X — the local model, now (2026-09-28). The tap hands it over on main.
         hotkeys.onLocalNow = { [weak self] in self?.transcribeLocallyNow(from: "⌘⌃X") }
@@ -2586,6 +2622,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // already ended. It is a stop, or it is nothing; it is never a start.
         hotkeys.onPasteToggle = { [weak self] in
             DispatchQueue.main.async { self?.forwardClickToggle() }
+        }
+        // Right ⌥ ×2 / F5 over an open prompt (2026-10-09) — a stop and only a
+        // stop: by the time this hop lands the sentence may have ended, and then
+        // nothing starts.
+        hotkeys.onKeyboardEndsSentence = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.listening || self.source.isRecording else { return }
+                self.endDictation()
+            }
         }
         picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
@@ -7110,7 +7155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.dictating = attachable
         // The in-page badge that says ⌘⇧ is live — the chip's old `⌘⇧` row,
         // drawn by the extension since 2026-10-07 (`inspect.js`, `showBadge`).
-        music.setPickable(attachable)
+        music.setPickable(attachable && overlay.cropPhase == nil)
         // The halves as well as the verdict, so a refused ⌘⇧ can name the one
         // that was missing rather than saying an undivided no — see
         // `ElementPicker.listening`.
@@ -10791,6 +10836,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !announced {
             Log.info("↻ a dictation is in flight — the restart waits for it to be delivered")
             overlay.flash("↻ restarting after this sentence", duration: 3)
+            closeMicrophoneToLeave("the Dock restart")
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.restartWhenTheSentenceIsDelivered(announced: true)
@@ -10904,9 +10950,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quitDeferredSince = Date()
             Log.info("⏳ quit deferred — \(why.joined(separator: ", ")); it goes once the words have landed")
             overlay.flash("↻ quitting after this sentence", duration: 3)
+            closeMicrophoneToLeave("the quit")
             quitWhenIdle()
         }
         return .terminateCancel
+    }
+
+    /// **Asking to leave mid-sentence ends the sentence** (2026-10-09). Waiting
+    /// for the words to land is right for words already on their way, and
+    /// wrong for a microphone still open: nothing lands until something closes
+    /// it. 19:30 that day — a prompt nothing on the keyboard could stop, a Quit
+    /// and a Dock restart both waiting on it (the quit's ceiling is ten
+    /// minutes), and a Force Quit that lost the sentence. Closed the ordinary
+    /// way, so the words are delivered where they were going, then it leaves.
+    private func closeMicrophoneToLeave(_ who: String) {
+        guard listening || source.isRecording else { return }
+        Log.info("⏹ \(who) with the microphone open — ending the sentence so its words can land")
+        endDictation()
     }
 
     private func quitWhenIdle() {
@@ -11723,11 +11783,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func holdOnClipboard(_ text: String, why: String) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let write = {
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
+            Clipboard.write(text)
             PasteboardTimeline.noteOwnWrite(why)
-            self.clipboardHeld = (text, pasteboard.changeCount)
+            self.clipboardHeld = (text, Clipboard.changeCount)
         }
         write()
         Log.info("📋 \(text.count) chars on the clipboard — \(why) (Q17)")
@@ -11739,7 +11797,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // fresh write is the crash `WisprFlowSource.pasteboardString`
                 // guards against, and inside 1.6 s of a Wispr sentence the writer
                 // is Wispr's restore, not him.
-                guard NSPasteboard.general.changeCount != held.count else { return }
+                guard Clipboard.changeCount != held.count else { return }
                 Log.info(String(format: "📋 the clipboard moved %.1f s after the sentence (Wispr's restore) — the sentence put back", delay))
                 write()
             }

@@ -4372,6 +4372,12 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// for it (2026-10-07). Nil when none is.
     private(set) var cropPhase: GestureHintBar.CropPhase?
 
+    /// The pointer moved where no monitor of this window could see it — a
+    /// crop's swallowed drag (`HotkeyTap.onAreaMoved`).
+    func pointerMovedUnseen() {
+        hintBar.pointerMoved(NSEvent.mouseLocation)
+    }
+
     func setCropPhase(_ phase: GestureHintBar.CropPhase?) {
         guard cropPhase != phase else { return }
         cropPhase = phase

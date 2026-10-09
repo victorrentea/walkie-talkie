@@ -299,6 +299,8 @@ a disagreement rate, not an error rate. → journal: *What the local model is ac
 
 ## The microphone (`InputDevice.swift`)
 
+- **Never list the inputs on the main thread** (2026-10-09). `InputDevice.inputs()` is a `coreaudiod` round trip; with the wireless receiver dropping in and out it did not answer for 30 s and froze the app (`hangs/hang-2026-10-09-19-05-11.txt`, under `pushMicMark` ← `dictationBegan`). `pushMicMark` asks off main; the newest ask wins.
+
 Five devices Victor names by their picture — 🎙️ Elgato Wave XLR, 🎤 the DJI receiver, 🏛️ the
 room's Stage Speakerphone (2026-09-22), 🎧 Bose, 💻 the built-in — one table (`InputDevice.known`),
 and one resolver every reader shares. **The DJI transmitter over Bluetooth (`tx`, 📡/🎤) had a row

@@ -93,7 +93,7 @@ enum PasteboardTimeline {
 
     /// Right after a write of this app's own, with the reason.
     static func noteOwnWrite(_ why: String) {
-        let count = NSPasteboard.general.changeCount
+        let count = Clipboard.changeCount
         lock.lock(); own[count] = why; ownWriteAt = Date(); ownCount = count; lock.unlock()
     }
 
@@ -117,17 +117,20 @@ enum PasteboardTimeline {
     /// Main thread (the `/test/state` builder).
     static func describe() -> [String: Any] {
         if timer == nil {
-            last = NSPasteboard.general.changeCount
+            last = Clipboard.changeCount
             let t = Timer(timeInterval: 0.05, repeats: true) { _ in tick() }
             RunLoop.main.add(t, forMode: .common)
             timer = t
         }
+        // The count before the lock: `Clipboard`'s lock is always taken first
+        // (`noteOwnWrite` runs inside a held write), never inside this one.
+        let count = Clipboard.changeCount
         lock.lock(); defer { lock.unlock() }
-        return ["changeCount": NSPasteboard.general.changeCount, "events": events]
+        return ["changeCount": count, "events": events]
     }
 
     private static func tick() {
-        let count = NSPasteboard.general.changeCount
+        let count = Clipboard.changeCount
         guard count != last else { return }
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
         lock.lock()
