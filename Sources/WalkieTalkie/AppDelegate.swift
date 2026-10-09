@@ -2038,11 +2038,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let c = body["capturable"] as? Bool { DispatchQueue.main.sync { ReplyPanel.capturable = c } }
             // `close` takes the open reply pop-up down, as its ✕ would.
             if body["close"] as? Bool == true { DispatchQueue.main.sync { ReplyPanel.close() } }
+            // `resize: {w, h}` — what a corner drag to that size does.
+            if let r = body["resize"] as? [String: Double], let w = r["w"], let h = r["h"] {
+                DispatchQueue.main.sync { ReplyPanel.resizeOpen(to: NSSize(width: w, height: h)) }
+            }
             let frame: Any = DispatchQueue.main.sync {
                 ReplyPanel.frame.map { ["x": $0.minX, "y": $0.minY, "w": $0.width, "h": $0.height] } ?? NSNull()
             }
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
-                return body["capturable"] != nil || body["close"] != nil
+                return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil
                     ? (200, ["ok": true, "frame": frame]) : (400, ["ok": false, "error": "text required"])
             }
             let wait = body["wait"] as? Bool == true

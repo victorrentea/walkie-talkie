@@ -33,8 +33,20 @@ enum ReplyPanel {
     private static var queue: [(text: String, label: String?, tty: String?, images: [URL])] = []
     private static var arrivedAt: NSPoint = .zero
 
-    static let maxChars = 400
+    /// 400 until 2026-10-09; with the corners resizable a long answer can be
+    /// read whole, so only a runaway one is cut.
+    static let maxChars = 4000
     private static let width: CGFloat = 380
+    /// **Every corner resizes it** (2026-10-09, Victor: *"make the dialog window
+    /// … resizable by the right or left bottom corner? Actually all the corners
+    /// … in case there's a longer response"*). The size he dragged it to, kept
+    /// while it is open (a streaming ⚡ answer included); nil = fitted to the words.
+    private static var userSize: NSSize?
+    /// Unscrolled, the words take at most this share of the screen's height;
+    /// past it they scroll, and a corner gives them more.
+    private static let bodyShare: CGFloat = 0.45
+    /// The pictures, read once per pop-up — a corner drag rebuilds it per event.
+    private static var pictureCache: [URL: NSImage] = [:]
     private static let font = NSFont.systemFont(ofSize: 15)
     /// 26, up from 20, to carry the 26 pt walkie (2026-10-08, *"make the icon
     /// slightly larger … so I can click it easier"*); the name and the ✕ are
@@ -136,6 +148,9 @@ enum ReplyPanel {
     }
 
     static let maxImages = 8
+    /// The smallest a corner may make it.
+    static let minWidth: CGFloat = 240
+    static let minHeight: CGFloat = 90
     /// One picture: up to this tall, across the pop-up's width. Several: one
     /// row this tall, as many as fit, the last one saying how many did not.
     private static let singleImageMax: CGFloat = 170
@@ -186,7 +201,7 @@ enum ReplyPanel {
         if text.isEmpty { text = "…" }
         if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
         if let p = panel, liveOpen {
-            let root = build(text, from: label, tty: nil)
+            let root = build(text, from: label, tty: nil, size: userSize)
             // The size first: assigning the content view resizes it to the
             // window's old frame, and the answer stayed cut to its first line.
             let size = root.frame.size
@@ -251,9 +266,33 @@ enum ReplyPanel {
         Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars\(images.isEmpty ? "" : ", \(images.count) picture(s)"); up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
     }
 
-    /// The pop-up's content for these words — the header, the body, the buttons.
-    private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
+    /// **A corner was dragged**: the pop-up rebuilt at that size, the edges the
+    /// hand did not move kept where they were (`keepTop`: the top edge, when a
+    /// bottom corner is the one moving).
+    fileprivate static func resize(_ p: NSPanel, to f: NSRect, keepTop: Bool) {
+        guard panel === p, let text = shown else { return }
+        let root = build(text, from: openLabel, tty: shownTTY, images: shownImages, size: f.size)
+        let size = root.frame.size
+        userSize = size
+        let y = keepTop ? f.maxY - size.height : f.minY
+        p.setFrame(NSRect(x: f.minX, y: y, width: size.width, height: size.height), display: false)
+        p.contentView = root
+        p.invalidateShadow()
+    }
+
+    /// Desk route: what a corner drag to this size does, the top edge kept.
+    static func resizeOpen(to size: NSSize) {
+        guard let p = panel else { return }
+        resize(p, to: NSRect(x: p.frame.minX, y: p.frame.maxY - size.height, width: size.width, height: size.height),
+               keepTop: true)
+    }
+
+    /// The pop-up's content for these words — the header, the body, the buttons —
+    /// fitted to them, or at `size` when a corner has been dragged.
+    private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = [],
+                              size: NSSize? = nil) -> ReplyRoot {
         let pad: CGFloat = 12
+        let width = max(minWidth, size?.width ?? Self.width)
         let inner = width - 2 * pad
         // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
         // walkie"*) — `walkie-bound.png`, the menu bar's own picture.
@@ -287,10 +326,22 @@ enum ReplyPanel {
         let bodySize = text.isEmpty ? .zero
             : body.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
         // **The pictures under the words**, as many as fit (2026-10-09).
-        let pictures = images.compactMap { url in NSImage(contentsOf: url).map { (url, $0) } }
+        let pictures = images.compactMap { url -> (URL, NSImage)? in
+            if let hit = pictureCache[url] { return (url, hit) }
+            guard let image = NSImage(contentsOf: url) else { return nil }
+            pictureCache[url] = image
+            return (url, image)
+        }
         let strip = thumbLayout(pictures.map(\.1.size), inner: inner)
         let stripH = strip.height > 0 ? strip.height + (text.isEmpty ? 0 : 8) : 0
-        let height = pad + headerH + 6 + ceil(bodySize.height) + stripH + pad
+        let chrome = pad + headerH + 6 + stripH + pad
+        // The words' room: what the corner left them, or all they need up to
+        // `bodyShare` of the screen. Less than they need → they scroll.
+        let natural = ceil(bodySize.height)
+        let bodyH: CGFloat
+        if let size { bodyH = max(text.isEmpty ? 0 : 22, size.height - chrome) }
+        else { bodyH = min(natural, ((NSScreen.main?.visibleFrame.height ?? 900) * bodyShare).rounded()) }
+        let height = chrome + bodyH
 
         let root = ReplyRoot(frame: NSRect(x: 0, y: 0, width: width, height: height))
         root.wantsLayer = true
@@ -313,9 +364,31 @@ enum ReplyPanel {
         let buttons: CGFloat = tty == nil ? 1 : (pinned ? 3 : 2)
         header.frame = NSRect(x: textX, y: height - pad - headerH + 3,
                               width: inner - (textX - pad) - buttons * (iconSide + 6), height: 20)
-        body.frame = NSRect(x: pad, y: pad + stripH, width: inner - 18, height: ceil(bodySize.height))
         root.addSubview(header)
-        if !text.isEmpty { root.addSubview(body) }
+        if !text.isEmpty {
+            let box = NSRect(x: pad, y: pad + stripH, width: inner - 18, height: bodyH)
+            if natural > bodyH + 1 {
+                // **Scrolls when there is more than the room** — the wheel works on
+                // a panel that is never key; a press still drags (it reaches
+                // `ReplyRoot` through the clip view).
+                body.frame = NSRect(x: 0, y: 0, width: inner - 18, height: natural)
+                let scroll = NSScrollView(frame: box)
+                scroll.frame.size.width += 14
+                scroll.drawsBackground = false
+                scroll.hasVerticalScroller = true
+                scroll.autohidesScrollers = true
+                scroll.scrollerStyle = .overlay
+                scroll.scrollerKnobStyle = .light
+                scroll.documentView = body
+                // The beginning first. A text field is a flipped view: its top is
+                // y 0 — scrolling to `natural - bodyH` opened on the last lines.
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: body.isFlipped ? 0 : natural - bodyH))
+                root.addSubview(scroll)
+            } else {
+                body.frame = NSRect(x: pad, y: pad + stripH + bodyH - natural, width: inner - 18, height: natural)
+                root.addSubview(body)
+            }
+        }
         var thumbs: [NSRect] = []
         for (i, f) in strip.frames.enumerated() {
             let thumb = ReplyThumb(frame: f.offsetBy(dx: pad, dy: pad))
@@ -363,6 +436,7 @@ enum ReplyPanel {
             root.link = (link, { header.onClick?() })
         }
         root.hot = hot
+        root.onResize = { p, f, keepTop in resize(p, to: f, keepTop: keepTop) }
         return root
     }
 
@@ -407,6 +481,8 @@ enum ReplyPanel {
         shown = nil
         shownTTY = nil
         shownImages = []
+        userSize = nil
+        pictureCache = [:]
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
         // The next hop, so a click that closed this one is over before the
@@ -496,11 +572,66 @@ private final class ReplyRoot: NSView {
     /// the `NSTextField` never moved the panel): a press on `link` that does not
     /// move is the name's click, one that moves drags.
     var link: (rect: NSRect, click: () -> Void)?
+    /// A corner dragged to `frame`; `keepTop` when a bottom corner moved.
+    var onResize: ((NSPanel, NSRect, Bool) -> Void)?
     private var press = PressOrDrag()
     private var onLink = false
+
+    /// **The four corners resize it** (2026-10-09): `grip` points in from each.
+    enum Corner { case topLeft, topRight, bottomLeft, bottomRight }
+    private static let grip: CGFloat = 12
+    private func corner(at p: NSPoint) -> Corner? {
+        let g = Self.grip
+        let left = p.x < g, right = p.x > bounds.width - g
+        let bottom = p.y < g, top = p.y > bounds.height - g
+        switch (left, right, top, bottom) {
+        case (true, _, true, _): return .topLeft
+        case (_, true, true, _): return .topRight
+        case (true, _, _, true): return .bottomLeft
+        case (_, true, _, true): return .bottomRight
+        default: return nil
+        }
+    }
+    private func cursor(for c: Corner) -> NSCursor {
+        if #available(macOS 15.0, *) {
+            let pos: NSCursor.FrameResizePosition
+            switch c {
+            case .topLeft: pos = .topLeft
+            case .topRight: pos = .topRight
+            case .bottomLeft: pos = .bottomLeft
+            case .bottomRight: pos = .bottomRight
+            }
+            return NSCursor.frameResize(position: pos, directions: .all)
+        }
+        return .crosshair
+    }
     private func arrow(_ event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
+        if let c = corner(at: p) { cursor(for: c).set(); return }
         if !hot.contains(where: { $0.contains(p) }) { NSCursor.arrow.set() }
+    }
+
+    /// The drag, tracked by the window — the view is replaced at every step.
+    private func resize(from c: Corner) {
+        guard let window = window as? NSPanel else { return }
+        let f0 = window.frame, m0 = NSEvent.mouseLocation
+        let cursor = cursor(for: c)
+        let report = onResize
+        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: .infinity, mode: .eventTracking) { e, stop in
+            guard let e else { return }
+            if e.type == .leftMouseUp { stop.pointee = true; return }
+            cursor.set()
+            let m = NSEvent.mouseLocation
+            let dx = m.x - m0.x, dy = m.y - m0.y
+            var minX = f0.minX, maxX = f0.maxX, minY = f0.minY, maxY = f0.maxY
+            let movesLeft = c == .topLeft || c == .bottomLeft
+            let movesTop = c == .topLeft || c == .topRight
+            if movesLeft { minX = min(f0.minX + dx, maxX - ReplyPanel.minWidth) }
+            else { maxX = max(f0.maxX + dx, minX + ReplyPanel.minWidth) }
+            if movesTop { maxY = max(f0.maxY + dy, minY + ReplyPanel.minHeight) }
+            else { minY = min(f0.minY + dy, maxY - ReplyPanel.minHeight) }
+            report?(window, NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY), !movesTop)
+        }
     }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -513,6 +644,7 @@ private final class ReplyRoot: NSView {
     override func mouseMoved(with event: NSEvent) { arrow(event) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
+        if let c = corner(at: convert(event.locationInWindow, from: nil)) { return resize(from: c) }
         onLink = link?.rect.contains(convert(event.locationInWindow, from: nil)) == true
         if onLink { press.down(window) } else { window?.performDrag(with: event) }
     }

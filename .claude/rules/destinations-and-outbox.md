@@ -220,6 +220,15 @@ me to dismiss it explicitly"*.
   că au terminat … un pic abuz"*. Then, the same night: *"exclusiv când eu întreb ceva. Atât … Niciodată
   să nu fie folosit ca să mă întrebe Claude pe mine ceva"* — **only the answer to his question; never
   a question for him, never a completion notice.**
+- **Every corner resizes it** (2026-10-09, Victor: *"make the dialog window … resizable by the right
+  or left bottom corner? Actually all the corners … in case there's a longer response"*): a press
+  within 12 pt of a corner (`ReplyRoot.Grip`, the system's diagonal resize cursor there — macOS 15's
+  `NSCursor.frameResize`) is tracked by the window (`trackEvents`, the content is rebuilt at every
+  step) and the opposite corner stays put; ≥ 240 × 90 pt. The size is kept while it is open
+  (`userSize` — a streaming ⚡ answer too) and forgotten at the close. **Long answers scroll**: fitted,
+  the words take ≤ 45 % of the screen's height; past what they are given they scroll (overlay
+  scroller, the wheel works on the never-key panel, opened at the beginning — a text field is
+  flipped). `maxChars` 400 → 4000. Desk: `POST /test/quick {"resize": {w, h}}`.
 - **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble should be able to show
   images. As much as they fit that window, small, but when clicked, opened up"*):
   `walkie-reply "<answer>" --image <path>` (repeatable, ≤ 8; text optional with a picture) posts
