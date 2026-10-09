@@ -1,34 +1,40 @@
 import AppKit
 
-/// **🔼 → over the reply pop-up: it bursts to the right** (2026-10-09, Victor:
+/// **🔼 → over the reply pop-up: it dissolves to the right** (2026-10-09, Victor:
 /// *"that panel should swipe to right, fade out, and then in the same time turn
-/// into pieces … a bit of an explosion to the right … something to suggest that I
-/// took my focus and send it to it"*). The pop-up's picture is cut into tiles that
-/// fly right — the far column furthest, each with its own spin and drift — while
-/// they shrink and fade; `seconds` long, then gone.
+/// into pieces … something to suggest that I took my focus and send it to it"*,
+/// then, over the first build's 9-column burst: *"I don't want to make it an
+/// explosion, more of a dissolve effect, in smaller pieces"*). The pop-up's
+/// picture is cut into ~`grain`-point grains; each, at its own moment — the
+/// left edge first, with a random scatter — drifts a little right and up while
+/// it shrinks and fades. `seconds` long, then gone.
 ///
 /// Driven by a timer through `apply(_:)`, like `ReplyPanel.zoom`, so a test can
 /// stop it at any moment and render it (`REPLY_BURST_PNG=<dir> swift test
 /// --filter ReplyBurstTests`). `sharingType = .none` and mouse-transparent, like
 /// the pop-up it replaces.
 final class ReplyBurst {
-    static let seconds = 0.55
-    /// How far right the far column travels, beyond the pop-up's own width.
-    static let reach: CGFloat = 320
-    /// Room above and below for the tiles' drift.
-    static let spread: CGFloat = 110
+    static let seconds = 0.75
+    /// How far right a grain drifts.
+    static let reach: CGFloat = 70
+    /// Room above and below for the grains' drift.
+    static let spread: CGFloat = 30
+    /// A grain's side, in points.
+    static let grain: CGFloat = 8
 
     private struct Tile {
         let layer: CALayer
         let dx: CGFloat, dy: CGFloat, spin: CGFloat
-        /// 0 for the right edge, up to `lag` for the left: the right side goes first.
+        /// When it starts: the left edge first, then a scatter.
         let delay: Double
+        /// How long it takes to go.
+        let span: Double
     }
 
     let host: CALayer
     let size: CGSize
     private var tiles: [Tile] = []
-    private static let lag = 0.12
+    private static let lag = 0.3
 
     /// `image` is the pop-up at `scale` pixels per point; `panel` its size in points.
     init(image: CGImage, scale: CGFloat, panel: CGSize, seed: UInt64 = 0x5eed) {
@@ -36,15 +42,21 @@ final class ReplyBurst {
         host = CALayer()
         host.frame = CGRect(origin: .zero, size: size)
         var rng = SplitMix(seed)
-        let cols = 9
-        let rows = max(3, Int((panel.height / 34).rounded()))
+        let cols = max(1, Int((panel.width / Self.grain).rounded()))
+        let rows = max(1, Int((panel.height / Self.grain).rounded()))
         let w = panel.width / CGFloat(cols), h = panel.height / CGFloat(rows)
         for r in 0..<rows {
             for c in 0..<cols {
                 let fx = (CGFloat(c) + 0.5) / CGFloat(cols)        // 0 left … 1 right
                 let fy = (CGFloat(r) + 0.5) / CGFloat(rows) - 0.5  // −½ bottom … ½ top
                 let l = CALayer()
-                l.frame = CGRect(x: CGFloat(c) * w, y: Self.spread + CGFloat(r) * h, width: w, height: h)
+                // Whole pixels, no edge antialiasing: grains at fractional edges
+                // drew a faint grid over the pop-up before it had moved.
+                func px(_ v: CGFloat) -> CGFloat { (v * scale).rounded() / scale }
+                let x0 = px(CGFloat(c) * w), x1 = px(CGFloat(c + 1) * w)
+                let y0 = px(CGFloat(r) * h), y1 = px(CGFloat(r + 1) * h)
+                l.frame = CGRect(x: x0, y: Self.spread + y0, width: x1 - x0, height: y1 - y0)
+                l.edgeAntialiasingMask = []
                 l.contents = image
                 l.contentsScale = scale
                 // Unit coordinates of the image, bottom-left origin like the layer.
@@ -53,11 +65,13 @@ final class ReplyBurst {
                 l.contentsGravity = .resize
                 l.actions = ["position": NSNull(), "transform": NSNull(), "opacity": NSNull(), "bounds": NSNull()]
                 host.addSublayer(l)
+                let delay = Self.lag * Double(fx) * 0.6 + Double(rng.range(0, CGFloat(Self.lag) * 0.4))
                 tiles.append(Tile(layer: l,
-                                  dx: Self.reach * (0.45 + 0.55 * fx) + rng.range(-40, 40),
-                                  dy: fy * Self.spread * 1.5 + rng.range(-30, 30),
-                                  spin: rng.range(-1.4, 1.4),
-                                  delay: Self.lag * Double(1 - fx)))
+                                  dx: Self.reach * rng.range(0.5, 1),
+                                  dy: fy * Self.spread * 0.6 + rng.range(-12, 18),
+                                  spin: rng.range(-0.5, 0.5),
+                                  delay: delay,
+                                  span: Double(rng.range(0.35, 0.45)) * Self.seconds / 0.75))
             }
         }
     }
@@ -66,14 +80,14 @@ final class ReplyBurst {
     func apply(_ u: Double) {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for t in tiles {
-            let local = max(0, min(1, (u * Self.seconds - t.delay) / (Self.seconds - Self.lag)))
-            let move = CGFloat(1 - pow(1 - local, 3))          // ease-out: a burst, then drift
+            let local = u >= 1 ? 1 : max(0, min(1, (u * Self.seconds - t.delay) / t.span))
+            let move = CGFloat(local * local)                  // ease-in: it lifts off, no burst
             var m = CATransform3DMakeTranslation(t.dx * move, t.dy * move, 0)
             m = CATransform3DRotate(m, t.spin * move, 0, 0, 1)
-            let k = 1 - 0.45 * move
+            let k = 1 - 0.7 * move
             m = CATransform3DScale(m, k, k, 1)
             t.layer.transform = m
-            t.layer.opacity = Float(max(0, 1 - pow(local, 1.6)))
+            t.layer.opacity = Float(max(0, 1 - local))
         }
         CATransaction.commit()
     }

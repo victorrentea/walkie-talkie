@@ -192,14 +192,16 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   bind runs (`rebindFromMenu(fly: true, then:)`; skipped when already bound to that tty) and the bound
   prompt opens once the bind lands. A sender gone → `⚠️ no terminal on …`, nothing opened.
   Mid-sentence the gesture keeps its flip. Log `💬 🔼 → over the reply pop-up — …`.
-- **🔼 → over the pop-up bursts it to the right** (2026-10-09, Victor: *"swipe to right, fade out,
-  and then in the same time turn into pieces … a bit of an explosion to the right … something to
-  suggest that I took my focus and send it to it"*). `ReplyPanel.shatter` renders the pop-up's layer
-  into an image and `ReplyBurst` flies 9 columns of tiles right — the far column furthest
-  (`reach` 320 pt), each with its own spin and drift, shrinking to 0.55 and fading out — over
-  0.55 s, the right edge leaving first. Timer-driven (`apply(u)`), so `REPLY_BURST_PNG=<dir> swift
-  test --filter ReplyBurstTests` renders it at six moments. Only `replyBack` shatters; ✕, ☠️, 📍 and
-  the name still just close.
+- **🔼 → over the pop-up dissolves it to the right** (2026-10-09, Victor: *"swipe to right, fade out,
+  and then in the same time turn into pieces … something to suggest that I took my focus and send it
+  to it"*; then, over a 9-column burst that flew 320 pt with spin: *"I don't want to make it an
+  explosion, more of a dissolve effect, in smaller pieces"*). `ReplyPanel.shatter` renders the
+  pop-up's layer into an image; `ReplyBurst` cuts it into 8 pt grains (pixel-snapped, no edge
+  antialiasing — fractional edges drew a grid), each starting at its own moment (left edge first plus
+  a random scatter, ≤ 0.3 s), easing in, drifting ≤ 70 pt right and a little up, shrinking to 0.3 and
+  fading, 0.75 s in all. Timer-driven (`apply(u)`), so `REPLY_BURST_PNG=<dir> swift test --filter
+  ReplyBurstTests` renders it at six moments. Only `replyBack` dissolves; ✕, ☠️, 📍 and the name still
+  just close.
 - **The wrong terminal came forward because AX's focused window was stale**: `raise(pid:)` raised
   `kAXFocusedWindow` right after AppleScript put the tab's window at index 1, which can still be the
   previous key window. `bringToFront` and `presentOnRetina` now answer the window's top-left and

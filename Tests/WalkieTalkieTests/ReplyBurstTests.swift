@@ -33,7 +33,7 @@ final class ReplyBurstTests: XCTestCase {
         XCTAssertTrue(tiles.allSatisfy { $0.opacity == 1 && CATransform3DIsIdentity($0.transform) })
         b.apply(1)
         XCTAssertTrue(tiles.allSatisfy { $0.opacity == 0 }, "every piece has faded out")
-        XCTAssertTrue(tiles.allSatisfy { $0.transform.m41 > 100 }, "every piece went right")
+        XCTAssertTrue(tiles.allSatisfy { $0.transform.m41 > 20 }, "every grain drifted right")
     }
 
     /// `REPLY_BURST_PNG=<dir> swift test --filter ReplyBurstTests` — the burst at
