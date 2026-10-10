@@ -1290,6 +1290,7 @@ final class CaretHalo {
             // The take is kept until the next rewind replaces it: a ring docked
             // on the prompt panel goes on playing it backwards (2026-10-07).
             if !orbitFading { rewindStart = nil }
+            anchorStart = nil
             Log.info("⏪ the rewind ends")
             // The dress goes back once the ring is out of sight — changing it
             // now would rebuild the panel under the fade. A docked ring is
@@ -1317,13 +1318,15 @@ final class CaretHalo {
         rewindFrom = CFAbsoluteTimeGetCurrent()
         rewindEstimate = predicted
         rewindStart = NSEvent.mouseLocation
+        anchorStart = anchoredFlight ? anchor : nil
         fitApproach(to: rewindAim ?? NSEvent.mouseLocation)
         rewinding = true
         arrow.armed = false
         Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@%@",
                         seconds, rewindSpeed, predicted, DecodeRate.activeEngine, estimate,
-                        flies ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
-                        flies ? " — flying from the pointer to the window" : ""))
+                        flies || anchoredFlight ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
+                        flies ? " — flying from the pointer to the window"
+                            : anchoredFlight ? (destination == .spawn ? " — shrinking onto the pointer" : " — shrinking onto the caret") : ""))
         use(rewindStyle)
         return true
     }
@@ -1400,6 +1403,8 @@ final class CaretHalo {
             // Only the dust (a trail or fluid effect) circles once it is there;
             // Tendrils and the rest go to the centre and stay (2026-10-08).
             guard rewindStyle.hasTrail else {
+                // To the caret when one was found, like the dust (2026-10-10).
+                let to = rewindCaret ?? to
                 let p = RewindTimeline.flight(elapsed: t, predicted: rewindEstimate)
                 return NSPoint(x: from.x + (to.x - from.x) * CGFloat(p), y: from.y + (to.y - from.y) * CGFloat(p))
             }
@@ -1519,7 +1524,7 @@ final class CaretHalo {
     /// of the screen, so no approach and no travel. It does shrink, at the
     /// tunnel's rate (`sparksShrink`, the same evening).
     private var rewindStyle: HaloStyle {
-        if destination == .spawn { return HaloStyle.current(for: .spawn) }
+        if destination == .spawn || anchoredFlight { return HaloStyle.current(for: destination) }
         return flies ? HaloStyle.current(for: destination) : Self.tunnelStyle
     }
     /// **A bound sentence keeps its own effect and flies it to the terminal**
@@ -1556,6 +1561,36 @@ final class CaretHalo {
             && style.preset?.anchored != true && style.preset?.pinnedHorizon == nil
     }
     private static let flightOff = ProcessInfo.processInfo.environment["WT_HALO_FLIGHT"] == "0"
+    /// **The puzzle and the stars shrink onto where the words go** (2026-10-10,
+    /// Victor: *"dictation-ul simplu să se micșoreze … puzzle … să se ducă …
+    /// pe poziția cursorului. Și la fel și stars"*). An anchored dress — the
+    /// plain dictation's Mosaic, a spawn's Sparks — is kept through the
+    /// transcription instead of the Reverse tunnel: its square slides from
+    /// where it stood to the target on `flight`'s clock while it shrinks at the
+    /// tunnel's rate (`sparksShrink`). The target is the receiving window's caret
+    /// (else its middle) for the plain dictation, the pointer latched at the
+    /// close for a spawn — its terminal does not exist yet.
+    private var anchoredFlight: Bool {
+        (destination == .wispr || destination == .spawn) && !Self.flightOff
+            && HaloStyle.current(for: destination).preset?.anchored == true
+            && HaloStyle.current(for: destination).isAvailable
+    }
+    /// The anchored square as the rewind began; `anchor` moves off it.
+    private var anchorStart: NSRect?
+    private var anchoredTarget: NSPoint? {
+        destination == .spawn ? rewindStart : rewindCaret ?? rewindAim
+    }
+    /// Moves an anchored dress's square towards `anchoredTarget` — `anchor`
+    /// itself, so the fade at the end stays where it got to.
+    private func flyAnchor() {
+        guard let panel, let from = anchorStart, let to = anchoredTarget else { return }
+        let p = CGFloat(RewindTimeline.flight(elapsed: CFAbsoluteTimeGetCurrent() - rewindFrom, predicted: rewindEstimate))
+        let c = NSPoint(x: from.midX + (to.x - from.midX) * p, y: from.midY + (to.y - from.midY) * p)
+        let f = NSRect(x: (c.x - from.width / 2).rounded(), y: (c.y - from.height / 2).rounded(),
+                       width: from.width, height: from.height)
+        anchor = f
+        if panel.frame.origin != f.origin { panel.setFrameOrigin(f.origin) }
+    }
     private var rewindApproaches: Bool { rewindStyle == Self.tunnelStyle }
     /// **A spawn's Sparks shrinks through the transcription like the tunnel**
     /// (2026-10-02) — `RewindTimeline.shrink` on the same clock, from its full
@@ -1672,6 +1707,8 @@ final class CaretHalo {
             if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
             // A bound sentence's effect flies to the terminal on its own clock too.
             if (self.rewinding || self.orbitFading) && self.flies { self.follow() }
+            // The puzzle and the stars slide onto the caret / the pointer (2026-10-10).
+            if self.rewinding && self.anchorStart != nil && self.dock == nil { self.flyAnchor() }
             self.under?.feed(samples)
             // The panel being replaced stays on screen until the new one has
             // warmed up (1.7 s for a projectM preset) — fed meanwhile, so the

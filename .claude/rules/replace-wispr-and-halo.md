@@ -441,6 +441,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   the window. A caret outside the window frame is dropped. `CaretHalo.rewindCaret` → the dust's ring
   centre, radius `RewindTimeline.caretOrbitRadius` 70 pt (`WT_CARET_ORBIT`); every other dress keeps
   the window. Log `⏪ the rewind aims at the middle of … — its caret at (x, y)` / `— no caret found in it`.
+- **Tendrils lands on the caret too; the puzzle and the stars shrink onto it** (2026-10-10, Victor:
+  *"și tendrils … să se ducă la poziția carrot-ului similar. Iar dictation-ul simplu să se micșoreze
+  … puzzle … să se ducă … pe poziția cursorului. Și la fel și stars"*). A straight flyer aims at
+  `rewindCaret ?? rewindAim`. An anchored dress (`CaretHalo.anchoredFlight`: destination `.wispr` —
+  the plain dictation's Mosaic — or `.spawn`'s Sparks) is kept through the transcription instead of
+  the Reverse tunnel: `flyAnchor` slides its square (`anchor`, from `anchorStart`) on `flight`'s
+  clock onto the caret, else the window's middle — for a spawn onto the pointer latched at the close
+  (its terminal does not exist yet) — while it shrinks at `sparksShrink`. Log `⏪ the rewind: … —
+  shrinking onto the caret` / `… onto the pointer`. `WT_HALO_FLIGHT=0` brings the tunnel back.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets
