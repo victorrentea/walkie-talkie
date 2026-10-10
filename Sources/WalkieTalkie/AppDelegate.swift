@@ -6207,7 +6207,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 let c = QuickAsk.cited(text)
                 answer = c.text
-                steps = [c.changed ? "🔎 searched ✏️" : "🔎 searched", "🧐 reviewing" + ReplyPanel.dots]
+                // No ✏️ on the search (same day, *"scoate creionul din Search"*).
+                steps = ["🔎 searched", "🧐 reviewing" + ReplyPanel.dots]
                 searched = ReplyPanel.plain(c.text)
             }
             Log.info(String(format: "⚡ 🔎 web answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,

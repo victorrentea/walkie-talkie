@@ -301,9 +301,10 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   aproximativ 396.500 de locuitori … aproape două treimi … Atât"*, *"nu vreau citat verbatim din
   site"*): one sentence plus at most one related fact, no bibliography, no word about the checking.
   The models write `claim [n: "quote"]` + `[n] url` lines + `CHANGED`; `QuickAsk.cited` turns each
-  marker into ` (site)` — **only the name is the link**, not its brackets (`ReplyPanel.link`, markers
+  marker into ` ↗` — **a blue arrow, no underline, no site name** (*"doar o iconiță … săgeată … pe
+  un albastru, fără subliniere"*; it was `(site)` for an hour), a hit area 4 pt wider (`ReplyPanel.link`, markers
   `\u{1}…\u{2}…\u{3}`) — to the page with the quote selected by a **text fragment** (`#:~:text=`,
-  first/last 4 words when longer than 8): the quote lives only in the link. `CHANGED` → ✏️. A
+  first/last 4 words when longer than 8): the quote lives only in the link. `CHANGED` → ✏️ on 🧐 only (*"scoate creionul din Search"*). A
   pop-up with links lays its words out in a `LinkedBody` (a text view, never hit): **hover** shows
   the full URL in a tip drawn by `ReplyRoot` (AppKit tool tips do not show for an app that is not
   frontmost; `refreshHover` puts it back after a repaint), **click** opens it in the browser and

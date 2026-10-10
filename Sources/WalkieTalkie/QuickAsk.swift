@@ -77,7 +77,7 @@ final class QuickAsk {
     /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
     /// URL-urile complete … pune în paranteze rotunde numele site-ului, iar la
     /// hover … URL-ul complet. La click … să mă ducă la acel site, preferabil
-    /// selectând textele"*): every `[n: "quote"]` becomes `(site)`, the name a
+    /// selectând textele"*): every `[n: "quote"]` becomes a blue ↗, a
     /// link (`ReplyPanel.link`) to its page with the quote selected there by a
     /// text fragment (`#:~:text=`) — the quote itself is never shown; the
     /// `[n] url` lines and `CHANGED` go. `changed` says the answer is not the one before it in substance.
@@ -105,10 +105,11 @@ final class QuickAsk {
             out += ns.substring(with: NSRange(location: at, length: m.range.location - at))
             at = m.range.location + m.range.length
             guard let url = urls[ns.substring(with: m.range(at: 1))] else { continue }
-            let site = url.host.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? url.absoluteString
             let quote = m.range(at: 2).location != NSNotFound ? ns.substring(with: m.range(at: 2)) : ""
-            // Only the site's name is the link, not its brackets.
-            out += " (" + ReplyPanel.link(site, quote.isEmpty ? url : fragment(url, quote: quote)) + ")"
+            // **Just a blue ↗** (same day, Victor: *"doar o iconiță care să arate
+            // o săgeată … pe un albastru, fără subliniere"*): the site's name is
+            // the hover's, with the rest of the URL.
+            out += " " + ReplyPanel.link("↗", quote.isEmpty ? url : fragment(url, quote: quote))
         }
         out += ns.substring(from: at)
         text = out.replacingOccurrences(of: " +([.,;:])", with: "$1", options: .regularExpression)

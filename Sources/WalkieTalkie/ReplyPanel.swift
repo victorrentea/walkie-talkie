@@ -437,8 +437,7 @@ enum ReplyPanel {
                 styled.addAttribute(.foregroundColor, value: NSColor.white, range: NSRange(location: r.location + dotPhase % 3, length: 1))
             }
             for l in links {
-                styled.addAttributes([.foregroundColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1, alpha: 1),
-                                      .underlineStyle: NSUnderlineStyle.single.rawValue], range: l.range)
+                styled.addAttribute(.foregroundColor, value: NSColor(calibratedRed: 0.4, green: 0.65, blue: 1, alpha: 1), range: l.range)
             }
             let view = LinkedBody(styled, width: inner - 18)
             view.links = links
@@ -937,7 +936,8 @@ private final class LinkedBody: NSTextView {
     func link(at p: NSPoint) -> (url: URL, rect: NSRect)? {
         guard !links.isEmpty, let lm = layoutManager, let tc = textContainer else { return nil }
         let g = lm.glyphIndex(for: p, in: tc)
-        guard lm.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: tc).insetBy(dx: -1, dy: -1).contains(p)
+        // A few points around the glyph: a lone ↗ is a small target.
+        guard lm.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: tc).insetBy(dx: -4, dy: -2).contains(p)
         else { return nil }
         let c = lm.characterIndexForGlyph(at: g)
         guard let hit = links.first(where: { NSLocationInRange(c, $0.range) }) else { return nil }
@@ -946,7 +946,7 @@ private final class LinkedBody: NSTextView {
         var rect = NSRect.zero
         lm.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
                                    in: tc) { r, stop in
-            if r.insetBy(dx: -1, dy: -1).contains(p) { rect = r; stop.pointee = true }
+            if r.insetBy(dx: -4, dy: -2).contains(p) { rect = r; stop.pointee = true }
         }
         return (hit.url, rect == .zero ? lm.boundingRect(forGlyphRange: glyphs, in: tc) : rect)
     }

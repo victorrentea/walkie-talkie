@@ -1,7 +1,7 @@
 import XCTest
 @testable import WalkieTalkie
 
-/// The 🔎/🧐 answers as shown (2026-10-10): the facts and a `(site)` after each,
+/// The 🔎/🧐 answers as shown (2026-10-10): the facts and a blue ↗ after each,
 /// the quote only in the link — never in the words — and no bibliography.
 final class QuickAskCitedTests: XCTestCase {
     let raw = """
@@ -16,9 +16,9 @@ final class QuickAskCitedTests: XCTestCase {
         let c = QuickAsk.cited(raw)
         XCTAssertTrue(c.changed)
         let (plain, links) = ReplyPanel.parseLinks(c.text)
-        XCTAssertEqual(plain, "Islanda are aproximativ 396.500 de locuitori (statice.is). Capitala e Reykjavík (en.wikipedia.org).")
-        // Only the name is the link, not its brackets.
-        XCTAssertEqual((plain as NSString).substring(with: links[0].range), "statice.is")
+        XCTAssertEqual(plain, "Islanda are aproximativ 396.500 de locuitori ↗. Capitala e Reykjavík ↗.")
+        // The ↗ alone is the link.
+        XCTAssertEqual((plain as NSString).substring(with: links[0].range), "↗")
         XCTAssertEqual(links.count, 2)
     }
 
