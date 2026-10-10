@@ -1983,8 +1983,8 @@ final class HotkeyTap {
     /// **fn + F7 / fn + F9 step the halo** (Victor, 2026-09-20 late: *"F7 și F9 să
     /// schimbe efectul curent"*; **fn only since Q10, 2026-09-26**: *"fn+f7/f9"*
     /// — bare F7/F9 pass through, IntelliJ's Step Into / Resume are back).
-    /// F9 forward, F7 back, outside a dictation too. No ⌃⌥⌘ — those chords are
-    /// Options+'s gestures and stay theirs.
+    /// F9 forward, F7 back, outside a dictation too. **⌘F7 / ⌘F9 as well**
+    /// (2026-10-10). No ⌃⌥⌘ — those chords are Options+'s gestures and stay theirs.
     ///
     /// **The F-key's own `.maskSecondaryFn` says nothing**: macOS stamps it on
     /// every function and arrow key (relay.log, a hardware F1: `flags
@@ -3603,11 +3603,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // **fn + F7 / F9 steps the halo; bare F7 / F9 pass** (Q10, 2026-09-26) — see
         // `onHaloStep` for why the fn key is tracked rather than read off the event.
         if !flags.contains(.maskSecondaryFn), event.getIntegerValueField(.eventSourceUnixProcessID) == 0 { fnKeyHeld = false }
-        if (keyCode == VK_F7 || keyCode == VK_F9) && fnKeyHeld && !cmd && !ctrl && !opt && !flags.contains(.maskShift) {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("fn+F7/F9 halo step (autorepeat)", type, event) }
+        // **⌘F7 / ⌘F9 too** (2026-10-10, Victor: *"să meargă și cmd+f7 și cmd+f9 pt
+        // ciclarea prin efecte"*): ⌘ alone, so ⌃⌥⌘ stays Options+'s.
+        if (keyCode == VK_F7 || keyCode == VK_F9) && (fnKeyHeld != cmd) && !ctrl && !opt && !flags.contains(.maskShift) {
+            let chord = cmd ? "⌘F7/F9" : "fn+F7/F9"
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("\(chord) halo step (autorepeat)", type, event) }
             let step = keyCode == VK_F9 ? 1 : -1
             DispatchQueue.main.async { [weak self] in self?.onHaloStep?(step) }
-            return swallow("fn+F7/F9 halo step", type, event)
+            return swallow("\(chord) halo step", type, event)
         }
 
         if keyCode == VK_B && cmd && ctrl && !opt {

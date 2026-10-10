@@ -2449,7 +2449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let landed = self.caretHalo.cycleStyle(by: step)
             // Logged since 2026-10-09: *"make sure that fn+F7 and F9 look through
             // the gallery"* — until then a step left no trace to check it by.
-            Log.info("✨ fn+F\(step > 0 ? 9 : 7) — the gallery steps to \(landed.rawValue) (\(landed.title))")
+            Log.info("✨ ⌘/fn+F\(step > 0 ? 9 : 7) — the gallery steps to \(landed.rawValue) (\(landed.title))")
             self.overlay.flash("✨ \(landed.menuTitle)", duration: 4)
             // 12 s, not 6 (Victor, 2026-09-23: *"at f7/9 leave the animation 2x longer"*)
             self.caretHalo.preview(seconds: 12)
