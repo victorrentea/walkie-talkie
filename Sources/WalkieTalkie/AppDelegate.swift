@@ -5142,10 +5142,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let screenAim = Self.pointerScreenMiddle()
         caretHalo.rewindOrbitRadius = nil
         caretHalo.rewindCaret = nil
+        caretHalo.spawnLanding = nil
         guard latchedAtCaret || target != nil else {
             Log.info(String(format: "⏪ the rewind aims at the middle of the pointer's screen (%.0f, %.0f) — no window to land in",
                             screenAim.x, screenAim.y))
             settleAim = screenAim
+            // **A spawn's Sparks flies straight onto the window about to open**
+            // (2026-10-10) — `SpawnTerminal.predictedFrame`, the slot its launch
+            // will pick; no lateral display → onto the pointer, as before.
+            if spawnPending {
+                let near = NSEvent.mouseLocation
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    let frame = SpawnTerminal.predictedFrame(near: near)
+                    DispatchQueue.main.async {
+                        guard let self, token == self.rewindAimToken, self.settling else { return }
+                        if let frame {
+                            Log.info(String(format: "⏪ the stars fly to where the new terminal will open — %.0f×%.0f at (%.0f, %.0f)",
+                                            frame.width, frame.height, frame.minX, frame.minY))
+                        }
+                        self.caretHalo.spawnLanding = frame.map { NSPoint(x: $0.midX, y: $0.midY) } ?? near
+                    }
+                }
+            }
             return
         }
         settleAim = nil

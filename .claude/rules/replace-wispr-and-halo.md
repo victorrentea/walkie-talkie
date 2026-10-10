@@ -450,6 +450,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   clock onto the caret, else the window's middle — for a spawn onto the pointer latched at the close
   (its terminal does not exist yet) — while it shrinks at `sparksShrink`. Log `⏪ the rewind: … —
   shrinking onto the caret` / `… onto the pointer`. `WT_HALO_FLIGHT=0` brings the tunnel back.
+- **A spawn's stars fly straight onto the new terminal — one journey** (2026-10-10, Victor: *"am
+  văzut acum două mișcări … vreau să fac o singură mișcare de la unde era către unde se duce la
+  dictarea în terminal nou"*). They shrank onto the pointer, then docked on the prompt panel, and the
+  outline flew on to the window. Now `AppDelegate.aimRewind` asks `SpawnTerminal.predictedFrame(near:)`
+  off main at the close (the same `board` + `slot` the launch uses, against Terminal's windows now —
+  Terminal not launched to ask) and writes its middle to `CaretHalo.spawnLanding` (no lateral display →
+  the pointer); `anchoredTarget` holds still until it lands. The ring is then **not docked** on the
+  panel. Log `⏪ the stars fly to where the new terminal will open — W×H at (x, y)` (Cocoa) beside the
+  launch's `tiled at` (AppleScript), `◯ halo not docked … — the stars end where the new terminal opens`.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets

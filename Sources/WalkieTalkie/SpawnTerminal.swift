@@ -89,6 +89,53 @@ enum SpawnTerminal {
              what: "resumed session \(session.prefix(8))")
     }
 
+    /// **Where the window `launchClaude(near:)` is about to open will be**, in
+    /// Cocoa screen coordinates — asked at the microphone's close, seconds before
+    /// the window exists, so the spawn's Sparks can fly straight onto it
+    /// (2026-10-10, Victor: *"vreau să fac o singură mișcare de la unde era către
+    /// unde se duce la dictarea în terminal nou"*). The same `board` and `slot`
+    /// `open` uses, against the Terminal windows on screen now; nil when there is
+    /// no lateral display (the window opens behind, wherever Terminal puts it).
+    /// A Terminal that is not running is not launched to be asked — nothing is
+    /// in the way then.
+    ///
+    /// Runs a subprocess — call it off the main thread.
+    static func predictedFrame(near: CGPoint?) -> NSRect? {
+        let screens = board(preferring: near)
+        guard !screens.isEmpty else { return nil }
+        var taken: [Box] = []
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal").isEmpty,
+           let reply = run("/usr/bin/osascript", ["-e", """
+            tell application "Terminal"
+                set out to ""
+                repeat with x in windows
+                    try
+                        if visible of x then
+                            set b to bounds of x
+                            set out to out & (item 1 of b as string) & " " & (item 2 of b as string) & " " & (item 3 of b as string) & " " & (item 4 of b as string) & linefeed
+                        end if
+                    end try
+                end repeat
+                return out
+            end tell
+            """]) {
+            for line in reply.components(separatedBy: .newlines) {
+                let n = line.split(separator: " ").compactMap { Int($0) }
+                guard n.count == 4 else { continue }
+                taken.append(Box(x: n[0], y: n[1], w: n[2] - n[0], h: n[3] - n[1]))
+            }
+        }
+        let cell = slot(for: Box(x: 0, y: 0, w: 0, h: 0), on: screens, avoiding: taken)
+        var pivot: CGFloat = 0
+        let read = {
+            let screens = NSScreen.screens
+            pivot = (screens.first { $0.frame.origin == .zero } ?? screens.first)?.frame.maxY ?? 0
+        }
+        if Thread.isMainThread { read() } else { DispatchQueue.main.sync(execute: read) }
+        return NSRect(x: CGFloat(cell.x), y: pivot - CGFloat(cell.y + cell.h),
+                      width: CGFloat(cell.w), height: CGFloat(cell.h))
+    }
+
     private static func stamp() -> String {
         "\(Int(Date().timeIntervalSince1970))-\(UInt32.random(in: 0..<0xFFFF))"
     }

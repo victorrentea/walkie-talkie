@@ -1326,7 +1326,7 @@ final class CaretHalo {
                         seconds, rewindSpeed, predicted, DecodeRate.activeEngine, estimate,
                         flies || anchoredFlight ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
                         flies ? " — flying from the pointer to the window"
-                            : anchoredFlight ? (destination == .spawn ? " — shrinking onto the pointer" : " — shrinking onto the caret") : ""))
+                            : anchoredFlight ? (destination == .spawn ? " — shrinking onto the new terminal" : " — shrinking onto the caret") : ""))
         use(rewindStyle)
         return true
     }
@@ -1578,8 +1578,19 @@ final class CaretHalo {
     /// The anchored square as the rewind began; `anchor` moves off it.
     private var anchorStart: NSRect?
     private var anchoredTarget: NSPoint? {
-        destination == .spawn ? rewindStart : rewindCaret ?? rewindAim
+        guard destination == .spawn else { return rewindCaret ?? rewindAim }
+        // Holds still until the landing is known — a few hundred ms of
+        // AppleScript, a hair of `flight`'s smoothstep.
+        return spawnLanding ?? anchorStart.map { NSPoint(x: $0.midX, y: $0.midY) }
     }
+    /// **Where a spawn's Sparks flies: the middle of the window about to open**
+    /// (2026-10-10, Victor: *"vreau să fac o singură mișcare de la unde era
+    /// către unde se duce la dictarea în terminal nou"*) — it shrank onto the
+    /// pointer, docked on the prompt panel, and the outline flew on from there:
+    /// two journeys. Written by `AppDelegate.aimRewind` from
+    /// `SpawnTerminal.predictedFrame` (the pointer when there is no lateral
+    /// display); a ring that flew there is not docked on the panel.
+    var spawnLanding: NSPoint?
     /// Moves an anchored dress's square towards `anchoredTarget` — `anchor`
     /// itself, so the fade at the end stays where it got to.
     private func flyAnchor() {
@@ -2066,6 +2077,11 @@ final class CaretHalo {
         // **So does a bound sentence's effect that flew there** (2026-10-08).
         if drawn == Self.tunnelStyle || (flies && drawn == rewindStyle), rewinding || fadeAim != nil {
             Log.info("◯ halo not docked on the prompt panel — the \(drawn == Self.tunnelStyle ? "reverse tunnel" : "flight") ends on the window that got the words")
+            return
+        }
+        // **Nor a spawn's Sparks that flew onto the new terminal** (2026-10-10).
+        if destination == .spawn, spawnLanding != nil, anchoredFlight {
+            Log.info("◯ halo not docked on the prompt panel — the stars end where the new terminal opens")
             return
         }
         guard live || closing || now - hiddenAt < Self.dockLate else {
