@@ -90,4 +90,12 @@ final class AutoLocalBudgetTests: XCTestCase {
         XCTAssertEqual(AutoLocal.rowText(loading: true, keys: "⌘⌃X"), "Local now (loading)  ⌘⌃X")
         XCTAssertEqual(AutoLocal.menuTitle, "Backup Local Pre-Transcribe")
     }
+
+    /// 2026-10-10: a clean sentence on Wispr waits ≥ 5 s for the formatted words; nothing else does.
+    func testACleanSentenceOnWisprWaitsForTheFormattedWords() {
+        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: true, wispr: true), AutoLocal.wisprCleanFloor)
+        XCTAssertEqual(AutoLocal.budgetSeconds(7, clean: true, wispr: true), 7)
+        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: false, wispr: true), 1.5)
+        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: true, wispr: false), 1.5)
+    }
 }

@@ -103,6 +103,12 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   so desk runs never teach the real lines. While ON and the engine is not local, the local weights are
   kept up (`keepLocalWarm`: launch +2 s, every engine pick, the checkbox). → journal: *Prepare local
   transcript (p95)*, *The countdown to the local words (2026-10-06)*
+- **A clean sentence on Wispr waits ≥ 5 s for Wispr's formatted words** (2026-10-10, Victor: *"in
+  dictare curata cu wispr ca motor, ia te rog varianta redactata"*): two plain sentences that evening
+  went in as the local model's words — Wispr's row came at 2.4 s, the budget was the 1.5 s floor.
+  `AutoLocal.wisprCleanFloor` raises the budget (`budgetSeconds`) for 🔽 / 🔽 → / right ⌘⌥ on Wispr
+  only; the decode ahead and the hand-over past it are unchanged. Log `⏱ a clean sentence on Wispr
+  Flow — budget … raised to 5.0 s`.
 - **A 🔽 → plain sentence hands its WAV to the countdown too** (2026-10-06, 11:14). `closedTakeAudio`
   answered only `relayStarted`, which the raw chord never sets, so the plain sentence was armed and
   counted down but the decode ahead stayed `planned` (`⏱ … the local decode has not started (no WAV

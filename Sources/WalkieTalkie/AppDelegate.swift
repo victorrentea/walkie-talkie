@@ -4668,6 +4668,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             b = DecodeRate.Budget(seconds: forced, unclamped: forced, samples: b.samples, cap: b.cap,
                                   engine: b.engine, audio: b.audio)
         }
+        // **A clean sentence on Wispr waits for the formatted words** (2026-10-10,
+        // `AutoLocal.wisprCleanFloor`).
+        let floored = AutoLocal.budgetSeconds(b.seconds, clean: cleanSentence, wispr: source === wisprSource)
+        if floored > b.seconds {
+            Log.info(String(format: "⏱ a clean sentence on Wispr Flow — budget %.1f s raised to %.1f s, for Wispr's formatted words", b.seconds, floored))
+            b = DecodeRate.Budget(seconds: floored, unclamped: b.unclamped, samples: b.samples, cap: b.cap,
+                                  engine: b.engine, audio: b.audio)
+        }
         let typical = DecodeRate.typical(for: audio, engine: DecodeRate.whisperLocal)
         let eta = testLocalEta ?? AutoLocal.localEta(typical: typical)
         let now = CFAbsoluteTimeGetCurrent()

@@ -70,6 +70,22 @@ enum AutoLocal {
         return "Local now" + (loading ? " (loading)" : "") + "  " + keys
     }
 
+    /// **A plain sentence on Wispr waits for Wispr's own words** (2026-10-10,
+    /// Victor: *"in dictare curata cu wispr ca motor, ia te rog varianta
+    /// redactata"*). That evening two clean sentences went in as the local
+    /// model's unpunctuated words: Wispr took 2.4 s on a 7 s take, the p95
+    /// budget was the 1.5 s floor, and its formatted row came 0.9 s after the
+    /// local words had landed. A plain sentence is read by a human at the caret,
+    /// where the formatter's rewrite is the point; Wispr's e2e p99 is 4.4 s.
+    /// The local words are still decoded ahead and still go in past this.
+    static let wisprCleanFloor: TimeInterval = 5
+
+    /// The budget for this close: `seconds`, raised to `wisprCleanFloor` for a
+    /// clean sentence on Wispr Flow.
+    static func budgetSeconds(_ seconds: TimeInterval, clean: Bool, wispr: Bool) -> TimeInterval {
+        clean && wispr ? max(seconds, wisprCleanFloor) : seconds
+    }
+
     /// **The budget ran out: are the local words to go in now?** (2026-10-06,
     /// Victor: *"when the timer expires, the local dictation is automatically
     /// injected"* — the 2026-09-29 *offered, never inserted* reversed.) Only
