@@ -465,6 +465,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
     "height" : 46,
+    "image" : "flash-kamikaze-queued.png",
+    "note" : "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. On a sentence held for a bind the flash says `☠️ Kamikaze — goes with it at the bind`; with no prompt anywhere, `☠️ No prompt to kamikaze`.",
+    "shape" : "flash",
+    "slug" : "flash-kamikaze-queued",
+    "title" : "Flash — kamikaze queued on a prompt on its way",
+    "when" : "1.5 s, on 🔼 ↓ after the words are done but before the prompt has landed — a spawn opening, a bound delivery still typing, a caret prompt still pressing Return (2026-10-10).",
+    "width" : 244
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
     "image" : "flash-unguarded.png",
     "note" : "The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.",
     "shape" : "flash",
@@ -620,14 +632,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 584,
+    "height" : 616,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
