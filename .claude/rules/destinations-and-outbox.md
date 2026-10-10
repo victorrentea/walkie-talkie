@@ -295,10 +295,18 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   inteligent decât Haiku … un răspuns imediat, apoi unul căutat, apoi unul criticat … în funcție de
   cât timp îl las"*). **Each stage writes the whole answer again and replaces the one before**, so
   the ✕ at any moment leaves a complete answer: ⚡ from memory → 🔎 searched (corrected/completed,
-  each claim with an inline exact quote „…" [n], `[n] site — url` lines, `✏️ what changed` when it
-  did) → 🧐 reviewed (an adversarial reviewer that opens the cited pages, checks every quote is
-  there and means what is claimed, and writes it again fixed, same format). Footer:
-  `— Opus 5.5 · ⚡ from memory` / `· 🔎 searched` / `· 🔎 searched · 🧐 reviewed`, and under it
+  each claim with an inline exact quote) → 🧐 reviewed (an adversarial reviewer that opens the cited
+  pages, checks every quote is there and means what is claimed, and writes it again fixed). Only
+  the answer, succinct — no bibliography, no word about the checking (same day, *"nu mă
+  interesează să văd URL-urile complete … nici partea asta cu „am verificat citatele"*). The
+  models write `„quote" [n]` + `[n] url` lines + `CHANGED`; `QuickAsk.cited` turns each `[n]` into
+  a **`(site)` link** (`ReplyPanel.link`, markers `\u{1}…\u{2}…\u{3}`) to the page with the quote
+  before it selected by a **text fragment** (`#:~:text=`, first/last 4 words when longer than 8),
+  drops the url lines, and `CHANGED` becomes ✏️ in the footer. A pop-up with links lays its words
+  out in a `LinkedBody` (a text view, never hit): **hover** shows the full URL in a tip drawn by
+  `ReplyRoot` (AppKit tool tips do not show for an app that is not frontmost), **click** opens it
+  in the browser and the pop-up stays, a press that moves still drags. Footer:
+  `— Opus 5.5 · ⚡ from memory` / `· 🔎 searched ✏️` / `· 🔎 searched · 🧐 reviewed`, and under it
   what is running (`🔎 Searching the internet…`, `🧐 Reviewing the quotes…`); a failed stage
   shows `⚠️ why` there and keeps the last good answer. A stage's words are not streamed, only its
   finished answer. Each check is its own lean `claude -p` with `--tools/--allowedTools

@@ -2067,9 +2067,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let r = body["resize"] as? [String: Double], let w = r["w"], let h = r["h"] {
                 DispatchQueue.main.sync { ReplyPanel.resizeOpen(to: NSSize(width: w, height: h)) }
             }
+            // `link: {index, click?}` — the pointer over the open pop-up's
+            // index-th link, through the same handlers as the real one, then
+            // pressed and released when `click` (the opened URL is answered
+            // and, with `open: false`, not opened). The real mouse is not moved.
+            var linkOut: [String: Any]?
+            if let l = body["link"] as? [String: Any], let i = l["index"] as? Int {
+                linkOut = DispatchQueue.main.sync {
+                    ReplyPanel.testLink(i, click: l["click"] as? Bool == true, open: l["open"] as? Bool ?? true)
+                }
+            }
             let frame: Any = DispatchQueue.main.sync {
                 ReplyPanel.frame.map { ["x": $0.minX, "y": $0.minY, "w": $0.width, "h": $0.height] } ?? NSNull()
             }
+            if let linkOut { return (200, linkOut.merging(["frame": frame]) { a, _ in a }) }
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
                 return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil
                     ? (200, ["ok": true, "frame": frame]) : (400, ["ok": false, "error": "text required"])
@@ -6191,9 +6202,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if text.hasPrefix("⚠️") {
                 working = "🔎 \(text)\n🧐 Reviewing…"
             } else {
-                answer = text
-                stage = "🔎 searched"
-                searched = text
+                let c = QuickAsk.cited(text)
+                answer = c.text
+                stage = c.changed ? "🔎 searched ✏️" : "🔎 searched"
+                searched = ReplyPanel.plain(c.text)
                 working = "🧐 Reviewing the quotes…"
             }
             Log.info(String(format: "⚡ 🔎 web answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
@@ -6204,9 +6216,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if text.hasPrefix("⚠️") {
                 working = "🧐 \(text)"
             } else {
-                answer = text
-                stage = searched != nil ? "🔎 searched · 🧐 reviewed" : "🧐 reviewed"
-                reviewed = text
+                let c = QuickAsk.cited(text)
+                answer = c.text
+                stage = (searched != nil ? stage + " · " : "") + (c.changed ? "🧐 reviewed ✏️" : "🧐 reviewed")
+                reviewed = ReplyPanel.plain(c.text)
                 working = nil
             }
             Log.info(String(format: "⚡ 🧐 reviewed answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,

@@ -40,10 +40,12 @@ final class QuickAsk {
     /// it at any moment leaves him with a complete one.
     static let citeFormat = """
         Reply in the language of the question, plain text, no markdown, at most 5 \
-        short sentences. Back each claim with a short exact quote from a page you \
-        actually read, inline: „<quote>" [n]. Then one line per source: \
-        "[n] <site> — <url>". If your answer differs from the one you were given, \
-        end with one line: "✏️ <what changed and why>".
+        short sentences: only the answer itself, succinct and to the point — never \
+        mention the checking, the sources, what you verified or what changed. Back \
+        each claim with a short quote copied character for character from a page \
+        you actually read, inline: „<quote>" [n]. After the answer, one line per \
+        source, nothing else on it: [n] <url>. Last, only if the substance of your \
+        answer differs from the one you were given, a line with just: CHANGED
         """
     static let webPrompt = """
         You were given a spoken question by Victor and a quick answer to it, written \
@@ -63,6 +65,69 @@ final class QuickAsk {
         """ + " " + citeFormat
     /// A question with no answer by then is given up.
     static let timeout: TimeInterval = 45
+    /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
+    /// URL-urile complete … pune în paranteze rotunde numele site-ului, iar la
+    /// hover … URL-ul complet. La click … să mă ducă la acel site, preferabil
+    /// selectând textele"*): every `[n]` becomes a `(site)` link
+    /// (`ReplyPanel.link`) to its page, with the quote just before it selected
+    /// there by a text fragment (`#:~:text=`); the `[n] url` lines and `CHANGED`
+    /// go. `changed` says the answer is not the one before it in substance.
+    static func cited(_ raw: String) -> (text: String, changed: Bool) {
+        var urls: [String: URL] = [:]
+        var lines: [String] = []
+        var changed = false
+        let sourceLine = try! NSRegularExpression(pattern: #"^\s*\[(\d+)\]\s*(?:\S.*?\s)?(https?://\S+?)[).,]?\s*$"#)
+        for line in raw.components(separatedBy: "\n") {
+            let ns = line as NSString
+            if let m = sourceLine.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)),
+               let url = URL(string: ns.substring(with: m.range(at: 2))) {
+                urls[ns.substring(with: m.range(at: 1))] = url
+                continue
+            }
+            if line.trimmingCharacters(in: .whitespaces) == "CHANGED" { changed = true; continue }
+            lines.append(line)
+        }
+        var text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        // „quote" [n] (or "quote" / “quote”), then a bare [n].
+        let marked = try! NSRegularExpression(pattern: #"([„"“])([^"”„“\n]+)([”"“])(\s*)\[(\d+)\]|\[(\d+)\]"#)
+        let ns = text as NSString
+        var out = "", at = 0
+        for m in marked.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
+            out += ns.substring(with: NSRange(location: at, length: m.range.location - at))
+            at = m.range.location + m.range.length
+            let quoted = m.range(at: 2).location != NSNotFound
+            let n = ns.substring(with: m.range(at: quoted ? 5 : 6))
+            if quoted {
+                out += ns.substring(with: m.range(at: 1)) + ns.substring(with: m.range(at: 2)) + ns.substring(with: m.range(at: 3)) + " "
+            }
+            guard let url = urls[n] else { continue }
+            let site = url.host.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? url.absoluteString
+            let target = quoted ? fragment(url, quote: ns.substring(with: m.range(at: 2))) : url
+            out += ReplyPanel.link("(\(site))", target)
+        }
+        out += ns.substring(from: at)
+        text = out.replacingOccurrences(of: " +([.,;:])", with: "$1", options: .regularExpression)
+        return (text, changed)
+    }
+
+    /// `url` with `quote` selected when the page opens: Chrome's text fragment.
+    /// A long quote is matched by its first and last words, which survive the
+    /// small differences a model makes in the middle.
+    static func fragment(_ url: URL, quote: String) -> URL {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "._~!$'()*+;=:@/?")
+        func enc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: allowed) ?? s }
+        let words = quote.split(whereSeparator: \.isWhitespace).map(String.init)
+            .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "…")) }.filter { !$0.isEmpty }
+        guard !words.isEmpty else { return url }
+        let directive = words.count > 8
+            ? "text=" + enc(words.prefix(4).joined(separator: " ")) + "," + enc(words.suffix(4).joined(separator: " "))
+            : "text=" + enc(words.joined(separator: " "))
+        var s = url.absoluteString
+        s += s.contains("#") ? ":~:" + directive : "#:~:" + directive
+        return URL(string: s) ?? url
+    }
+
     /// The web check and the review, each.
     static let checkTimeout: TimeInterval = 120
     static let webTools = "WebSearch,WebFetch"

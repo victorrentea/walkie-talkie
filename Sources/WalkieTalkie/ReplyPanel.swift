@@ -209,7 +209,7 @@ enum ReplyPanel {
                               width: size.width, height: size.height), display: false)
             p.contentView = root
             p.invalidateShadow()
-            shown = text
+            shown = plain(text)
             return
         }
         if let p = panel, let open = shown {
@@ -243,7 +243,7 @@ enum ReplyPanel {
 
     private static func present(_ text: String, from label: String?, tty: String?, images: [URL] = []) {
         allowCursorInBackground
-        shown = text
+        shown = plain(text)
         shownTTY = tty
         shownImages = images
         openLabel = label
@@ -290,6 +290,67 @@ enum ReplyPanel {
                keepTop: true)
     }
 
+    /// **A link in the words** (2026-10-10, `QuickAsk.cited`): `\u{1}(site)\u{2}url\u{3}`
+    /// shows `(site)`, clickable, its URL under the pointer on hover. Characters
+    /// no answer contains, so an agent's text is never read as one.
+    static func link(_ label: String, _ url: URL) -> String { "\u{1}\(label)\u{2}\(url.absoluteString)\u{3}" }
+
+    /// The words with the links' labels only, and where those labels are.
+    static func parseLinks(_ text: String) -> (plain: String, links: [(range: NSRange, url: URL)]) {
+        guard text.contains("\u{1}") else { return (text, []) }
+        var out = "", links: [(NSRange, URL)] = []
+        var rest = Substring(text)
+        while let a = rest.firstIndex(of: "\u{1}"), let b = rest[a...].firstIndex(of: "\u{2}"),
+              let c = rest[b...].firstIndex(of: "\u{3}") {
+            out += rest[..<a]
+            let label = String(rest[rest.index(after: a)..<b])
+            if let url = URL(string: String(rest[rest.index(after: b)..<c])) {
+                links.append((NSRange(location: (out as NSString).length, length: (label as NSString).length), url))
+            }
+            out += label
+            rest = rest[rest.index(after: c)...]
+        }
+        return (out + rest, links)
+    }
+    static func plain(_ text: String) -> String { parseLinks(text).plain }
+
+    /// A link opened from the pop-up — the page in the browser, the quote
+    /// selected on it (`#:~:text=`, `QuickAsk.cited`). The pop-up stays.
+    static func openLink(_ url: URL) {
+        Log.info("💬 the reply pop-up's link clicked — \(url.absoluteString.prefix(160))")
+        lastOpened = url
+        if openLinks { NSWorkspace.shared.open(url) }
+    }
+    private static var lastOpened: URL?
+    private static var openLinks = true
+
+    /// **Desk** (`POST /test/quick {"link": …}`): mouse events at the centre of
+    /// the open pop-up's `index`-th link, sent to its root view as the window
+    /// would — the hover's tip, and with `click` the URL a click opens.
+    static func testLink(_ index: Int, click: Bool, open: Bool) -> [String: Any] {
+        guard let p = panel, let root = p.contentView as? ReplyRoot else { return ["ok": false, "error": "no pop-up"] }
+        guard let rect = root.linkRects.dropFirst(index).first else {
+            return ["ok": false, "error": "no link \(index)", "links": root.linkRects.count]
+        }
+        let at = root.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
+        func event(_ t: NSEvent.EventType) -> NSEvent? {
+            NSEvent.mouseEvent(with: t, location: at, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                               windowNumber: p.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
+        }
+        if let e = event(.mouseMoved) { root.mouseMoved(with: e) }
+        var out: [String: Any] = ["ok": true, "links": root.linkRects.count, "tip": root.tipText ?? NSNull(),
+                                  "rect": ["x": rect.minX, "y": rect.minY, "w": rect.width, "h": rect.height]]
+        if click, let down = event(.leftMouseDown), let up = event(.leftMouseUp) {
+            lastOpened = nil
+            openLinks = open
+            root.mouseDown(with: down)
+            root.mouseUp(with: up)
+            openLinks = true
+            out["opened"] = lastOpened?.absoluteString ?? NSNull()
+        }
+        return out
+    }
+
     /// The pop-up's content for these words — the header, the body, the buttons —
     /// fitted to them, or at `size` when a corner has been dragged.
     private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = [],
@@ -321,13 +382,31 @@ enum ReplyPanel {
         // Victor: *"I should be able to drag the little window … by clicking
         // on the text and the text shouldn't be selectable"*) — the label
         // passes the click through to `ReplyRoot`.
-        let body = InertLabel(wrappingLabelWithString: text)
-        body.isSelectable = false
-        body.font = font
-        body.textColor = .white
-        body.preferredMaxLayoutWidth = inner - 18
-        let bodySize = text.isEmpty ? .zero
-            : body.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
+        // **With links, a text view** — it knows where each word is laid out,
+        // for the hover and the click (`LinkedBody`); otherwise the label.
+        let (words, links) = parseLinks(text)
+        let body: NSView
+        let bodySize: NSSize
+        if links.isEmpty {
+            let label = InertLabel(wrappingLabelWithString: text)
+            label.isSelectable = false
+            label.font = font
+            label.textColor = .white
+            label.preferredMaxLayoutWidth = inner - 18
+            body = label
+            bodySize = text.isEmpty ? .zero
+                : label.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
+        } else {
+            let styled = NSMutableAttributedString(string: words, attributes: [.font: font, .foregroundColor: NSColor.white])
+            for l in links {
+                styled.addAttributes([.foregroundColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1, alpha: 1),
+                                      .underlineStyle: NSUnderlineStyle.single.rawValue], range: l.range)
+            }
+            let view = LinkedBody(styled, width: inner - 18)
+            view.links = links
+            body = view
+            bodySize = NSSize(width: inner - 18, height: view.naturalHeight)
+        }
         // **The pictures under the words**, as many as fit (2026-10-09).
         let pictures = images.compactMap { url -> (URL, NSImage)? in
             if let hit = pictureCache[url] { return (url, hit) }
@@ -439,6 +518,18 @@ enum ReplyPanel {
             root.link = (link, { header.onClick?() })
         }
         root.hot = hot
+        if let linked = body as? LinkedBody {
+            root.bodyLink = { [weak root, weak linked] p in
+                guard let root, let linked, let hit = linked.link(at: linked.convert(p, from: root)) else { return nil }
+                // Not over the part of the words scrolled out of sight.
+                guard linked.visibleRect.contains(linked.convert(p, from: root)) else { return nil }
+                return (hit.url, root.convert(hit.rect, from: linked))
+            }
+            root.linkRectsInRoot = { [weak root, weak linked] in
+                guard let root, let linked else { return [] }
+                return linked.rects().map { root.convert($0, from: linked) }
+            }
+        }
         root.onResize = { p, f, keepTop in resize(p, to: f, keepTop: keepTop) }
         return root
     }
@@ -578,6 +669,16 @@ private final class ReplyRoot: NSView {
     /// the `NSTextField` never moved the panel): a press on `link` that does not
     /// move is the name's click, one that moves drags.
     var link: (rect: NSRect, click: () -> Void)?
+    /// **A link in the words under this point** (2026-10-10, `QuickAsk.cited`):
+    /// its URL and its rect, both in this view.
+    var bodyLink: ((NSPoint) -> (url: URL, rect: NSRect)?)?
+    /// The pressed link in the words, opened on a release that did not drag.
+    private var pressedURL: URL?
+    /// **Its URL under it on hover** (Victor: *"la hover pe acela să apară
+    /// URL-ul complet"*) — drawn here: AppKit's tool tips do not show for an
+    /// app that is not frontmost, and this one never is.
+    private var tip: NSTextField?
+    private var tipFor: URL?
     /// A corner dragged to `frame`; `keepTop` when a bottom corner moved.
     var onResize: ((NSPanel, NSRect, Bool) -> Void)?
     private var press = PressOrDrag()
@@ -613,7 +714,13 @@ private final class ReplyRoot: NSView {
     }
     private func arrow(_ event: NSEvent) {
         let p = convert(event.locationInWindow, from: nil)
-        if let c = corner(at: p) { cursor(for: c).set(); return }
+        if let c = corner(at: p) { hideTip(); cursor(for: c).set(); return }
+        if let hit = bodyLink?(p) {
+            NSCursor.pointingHand.set()
+            showTip(for: hit.url, under: hit.rect)
+            return
+        }
+        hideTip()
         if !hot.contains(where: { $0.contains(p) }) { NSCursor.arrow.set() }
     }
 
@@ -645,20 +752,71 @@ private final class ReplyRoot: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate, .activeAlways, .inVisibleRect],
                                        owner: self))
     }
+    /// The page's address, without the quote's `#:~:text=` and readable.
+    static func shown(_ url: URL) -> String {
+        var s = url.absoluteString
+        if let r = s.range(of: ":~:") { s = String(s[..<r.lowerBound]) }
+        if s.hasSuffix("#") { s.removeLast() }
+        return s.removingPercentEncoding ?? s
+    }
+
+    private func showTip(for url: URL, under rect: NSRect) {
+        guard tipFor != url else { return }
+        hideTip()
+        let t = InertLabel(wrappingLabelWithString: Self.shown(url))
+        t.font = NSFont.systemFont(ofSize: 12)
+        t.textColor = NSColor.white.withAlphaComponent(0.9)
+        t.drawsBackground = true
+        t.backgroundColor = NSColor(white: 0.25, alpha: 1)
+        t.lineBreakMode = .byCharWrapping
+        let maxW = bounds.width - 16
+        t.preferredMaxLayoutWidth = maxW
+        var size = t.sizeThatFits(NSSize(width: maxW, height: .greatestFiniteMagnitude))
+        size.width = min(ceil(size.width) + 2, maxW)
+        // Under the link, or over it when there is no room under.
+        var y = rect.minY - size.height - 3
+        if y < 4 { y = min(rect.maxY + 3, bounds.height - size.height - 4) }
+        let x = min(max(8, rect.minX), bounds.width - 8 - size.width)
+        t.frame = NSRect(x: x, y: y, width: size.width, height: ceil(size.height))
+        t.wantsLayer = true
+        t.layer?.cornerRadius = 4
+        t.layer?.masksToBounds = true
+        addSubview(t)
+        tip = t
+        tipFor = url
+    }
+
+    /// Desk: the tip on screen, and every link's rect in this view.
+    var tipText: String? { tip?.stringValue }
+    var linkRects: [NSRect] { linkRectsInRoot?() ?? [] }
+    var linkRectsInRoot: (() -> [NSRect])?
+
+    private func hideTip() {
+        tip?.removeFromSuperview()
+        tip = nil
+        tipFor = nil
+    }
+
+    override func mouseExited(with event: NSEvent) { hideTip() }
     override func cursorUpdate(with event: NSEvent) { arrow(event) }
     override func mouseEntered(with event: NSEvent) { arrow(event) }
     override func mouseMoved(with event: NSEvent) { arrow(event) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
         if let c = corner(at: convert(event.locationInWindow, from: nil)) { return resize(from: c) }
-        onLink = link?.rect.contains(convert(event.locationInWindow, from: nil)) == true
+        let p = convert(event.locationInWindow, from: nil)
+        pressedURL = bodyLink?(p)?.url
+        onLink = pressedURL != nil || link?.rect.contains(p) == true
         if onLink { press.down(window) } else { window?.performDrag(with: event) }
     }
-    override func mouseDragged(with event: NSEvent) { if onLink { press.dragged(window) } }
+    override func mouseDragged(with event: NSEvent) { if onLink { hideTip(); press.dragged(window) } }
     override func mouseUp(with event: NSEvent) {
         guard onLink else { return }
         onLink = false
-        if press.up() { link?.click() }
+        let url = pressedURL
+        pressedURL = nil
+        guard press.up() else { return }
+        if let url { ReplyPanel.openLink(url) } else { link?.click() }
     }
 }
 
@@ -688,6 +846,66 @@ private struct PressOrDrag {
 
     /// True when the press was a click.
     mutating func up() -> Bool { defer { dragging = false }; return !dragging }
+}
+
+/// **Words with links** (2026-10-10): a text view, never hit like the label, so
+/// a press is still `ReplyRoot`'s — which asks it which link is under it.
+private final class LinkedBody: NSTextView {
+    var links: [(range: NSRange, url: URL)] = []
+
+    convenience init(_ text: NSAttributedString, width: CGFloat) {
+        let storage = NSTextStorage(attributedString: text)
+        let layout = NSLayoutManager()
+        storage.addLayoutManager(layout)
+        let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        self.init(frame: NSRect(x: 0, y: 0, width: width, height: 10), textContainer: container)
+        isEditable = false
+        isSelectable = false
+        drawsBackground = false
+        textContainerInset = .zero
+        isVerticallyResizable = false
+    }
+
+    var naturalHeight: CGFloat {
+        guard let lm = layoutManager, let tc = textContainer else { return 0 }
+        lm.ensureLayout(for: tc)
+        return ceil(lm.usedRect(for: tc).height)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// Each link's first laid-out rect, in order.
+    func rects() -> [NSRect] {
+        guard let lm = layoutManager, let tc = textContainer else { return [] }
+        return links.map { l in
+            var first = NSRect.zero
+            lm.enumerateEnclosingRects(forGlyphRange: lm.glyphRange(forCharacterRange: l.range, actualCharacterRange: nil),
+                                       withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: tc) { r, stop in
+                first = r; stop.pointee = true
+            }
+            return first
+        }
+    }
+
+    /// The link under `p` (this view's points) and its laid-out rect.
+    func link(at p: NSPoint) -> (url: URL, rect: NSRect)? {
+        guard !links.isEmpty, let lm = layoutManager, let tc = textContainer else { return nil }
+        let g = lm.glyphIndex(for: p, in: tc)
+        guard lm.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: tc).insetBy(dx: -1, dy: -1).contains(p)
+        else { return nil }
+        let c = lm.characterIndexForGlyph(at: g)
+        guard let hit = links.first(where: { NSLocationInRange(c, $0.range) }) else { return nil }
+        let glyphs = lm.glyphRange(forCharacterRange: hit.range, actualCharacterRange: nil)
+        // The part of the link on the pointer's line, when it wraps.
+        var rect = NSRect.zero
+        lm.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                                   in: tc) { r, stop in
+            if r.insetBy(dx: -1, dy: -1).contains(p) { rect = r; stop.pointee = true }
+        }
+        return (hit.url, rect == .zero ? lm.boundingRect(forGlyphRange: glyphs, in: tc) : rect)
+    }
 }
 
 /// The answer's words: never the target of a click, so a press on them is
