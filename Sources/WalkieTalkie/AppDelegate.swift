@@ -7442,12 +7442,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // own microphone, so `wisprMicSentence` put it here; on the Engine
             // (`6a34a48`, `c3411de`) it is this app's microphone typing at the
             // caret, and it fell through to `.caret` — the prompt's effect.
-            let destination: HaloDestination = (foreignMic || wisprMicSentence || cleanSentence) ? .wispr
+            let destination: HaloDestination = quickAsk ? .quick
+                : (foreignMic || wisprMicSentence || cleanSentence) ? .wispr
                 : atCaret ? .caret
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret
             caretHalo.setDestination(destination)
-            overlay.prompting = destination != .wispr
+            overlay.prompting = destination != .wispr && destination != .quick
             overlay.asking = quickAsk
         }
         caretHalo.setActive(ringUp,

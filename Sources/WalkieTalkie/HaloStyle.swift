@@ -792,6 +792,9 @@ enum HaloDestination: String, CaseIterable {
     /// sentence none of this app's gestures apply to — no shot, no pick, no
     /// arrow, nothing to hang on it.
     case wispr
+    /// **A ⚡ quick question** (🔼 ←, `QuickAsk`) — its own row since 2026-10-10
+    /// (Victor: *"add menu: question with liquid cursor as default for now"*).
+    case quick
 
     /// The menu row's wording, in the menu's own vocabulary.
     ///
@@ -808,6 +811,7 @@ enum HaloDestination: String, CaseIterable {
         case .bound: return "Prompting bound"
         case .spawn: return "Prompting to new"
         case .wispr: return "Dictating"
+        case .quick: return "Question"
         }
     }
 
@@ -857,6 +861,8 @@ enum HaloDestination: String, CaseIterable {
         // **Mosaic** (*"când am Wispr Flow, dictare să apară mozaic"*) —
         // brought back from the page's `−` list for this one destination.
         case .wispr: return .milkdrop99   // Mosaic
+        // *"for now"* — the sparks on high-contrast edges are meant to take it.
+        case .quick: return .liquidCursor
         }
     }
 
