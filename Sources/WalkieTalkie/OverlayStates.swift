@@ -445,6 +445,14 @@ enum OverlayStates {
                 o.flash("☠️ Kamikaze?", duration: 60)
             },
 
+            Shot(slug: "flash-kamikaze-queued", group: "Flashes", title: "Flash — kamikaze queued on a prompt on its way",
+                 when: "1.5 s, on 🔼 ↓ after the words are done but before the prompt has landed — a spawn opening, a bound delivery still typing, a caret prompt still pressing Return (2026-10-10).",
+                 note: "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. On a sentence held for a bind the flash says `☠️ Kamikaze — goes with it at the bind`; with no prompt anywhere, `☠️ No prompt to kamikaze`.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.flash("☠️ Kamikaze — once it lands", duration: 60)
+            },
+
             Shot(slug: "flash-unguarded", group: "Flashes", title: "Flash — bound to an unguarded shell",
                  when: "At bind, when the target has no shell guard: the flight lands into this.",
                  note: "The one warning that is about a setup rather than a failure — it says the next dictation could be typed at a bare prompt.",

@@ -797,7 +797,8 @@ def unchanged_since(c, sha):
     return f"unchanged since {sha}"
 
 def cleanup():
-    """The relay as it was found: no bind, no override, no faults, nothing held, nothing open."""
+    """The relay as it was found: his binding back (else none), no override, no faults, nothing held,
+    nothing open. The binding is put back since 2026-10-10 — a desk run used to leave him unbound."""
     try:
         s = state()
         if s["listening"] or s["isRecording"] or s["settling"]:
@@ -806,7 +807,9 @@ def cleanup():
         post("/test/eleven", {"clear": True})
         post("/test/mic", {"device": None})
         caption_off()
-        if s.get("bound"):
+        if RUN.get("bound0"):
+            post("/bind", {"tty": RUN["bound0"]})
+        elif s.get("bound"):
             unbind()
     except Exception:
         pass
@@ -952,7 +955,7 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
     for mod in ("cases_lc", "cases_lifecycle", "cases_delivery", "cases_gestures", "cases_audio", "cases_queue",
-                "cases_wispr", "cases_wispr_soak", "cases_wispr_chaos", "cases_localnow", "cases_localauto", "cases_w4real"):
+                "cases_wispr", "cases_wispr_soak", "cases_wispr_chaos", "cases_localnow", "cases_localauto", "cases_w4real", "cases_kamikaze"):
         try:
             importlib.import_module(mod)
         except ModuleNotFoundError as e:
@@ -994,6 +997,11 @@ def main():
     if shutil.which("caffeinate"):
         subprocess.run(["caffeinate", "-u", "-t", "2"])
         subprocess.Popen(["caffeinate", "-dis", "-w", str(os.getpid())])
+    try:
+        t0 = get("/target") or {}
+        RUN["bound0"] = t0.get("address") if t0.get("bound") else None
+    except Exception:
+        RUN["bound0"] = None
     try:
         eleven_setup()
         run(sel, report)

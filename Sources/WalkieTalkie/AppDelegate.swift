@@ -1510,17 +1510,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onGestureKamikaze = { [weak self] in
             DispatchQueue.main.async {
                 guard let self = self else { return }
+                // **Every moment from a sentence's start to the next one's has
+                // an owner for the flick** (2026-10-10, `kamikazeAfterTheWords`).
+                // The words still coming — the microphone, the recogniser, the
+                // local fallback — are the sentence's own, unless it is a plain
+                // one (no kamikaze on plain words): that flick is the newest
+                // prompt's, below.
+                let wordsComing = self.listening || self.settling || self.fallingBack
+                    || self.source.phase.isWaitingForWords
+                let plain = self.cleanSentence && !self.cleanRedirected
                 // **The prompt on the panel is not committed yet** (2026-09-26,
                 // TG16): it may still be marked, and unmarked. A sentence
                 // still being spoken or transcribed outranks it — it is the
                 // newer one, and the one the flick is made during.
-                if !(self.listening || self.settling), self.held != nil {
+                if !(wordsComing && !plain), self.held != nil {
                     self.toggleHeldKamikaze()
                     return
                 }
-                guard self.listening || self.settling else {
-                    if self.takeKamikazeOffer() { return }
-                    Log.info("☠️ kamikaze gesture with no sentence in flight — ignored")
+                guard wordsComing && !plain else {
+                    self.kamikazeAfterTheWords()
                     return
                 }
                 self.kamikaze.toggle()
@@ -8079,6 +8087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard !line.isEmpty else { return clearSpawn() }
         spawnsInFlight += 1
+        let serial = m.kind == "dictation" ? promptLeaves() : nil
 
         // Read on the main thread, before the hop: `NSEvent.mouseLocation` is
         // the fallback for a sentence that never closed a microphone, and
@@ -8098,10 +8107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .opened(let tty):
                     self.adoptSpawnedWindow(tty: tty, session: (m.directory, launched)) { [weak self] bound in
                         guard let self = self else { return }
-                        if m.kind == "dictation", let bound {
-                            self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: "spawn:\(bound.address)") { [weak self] in
+                        if let serial, let bound {
+                            self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: "spawn:\(bound.address)", serial: serial) { [weak self] in
                                 self?.sendKamikazeOnceStarted(to: bound, directory: m.directory, since: launched)
                             }
+                        } else if let serial {
+                            self.promptWentNowhere(serial, why: "the new window on \(tty) could not be bound")
                         }
                         // The window is there (bound, or at least opened with the
                         // prompt in its `argv`): now it is a delivery.
@@ -8115,6 +8126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 case .failed(let why):
                     self.spawnsInFlight -= 1
+                    if let serial { self.promptWentNowhere(serial, why: "the new session never opened") }
                     // Nothing to fly to and nothing to wait for — the dialog goes
                     // now, and the warning below takes the chip.
                     self.overlay.promptFarewell = nil
@@ -8585,18 +8597,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Counted so a restart waits for the keystrokes to finish (`restartBlockers`).
         deliveriesInFlight += 1
+        let serial = m.kind == "dictation" ? promptLeaves() : nil
         deliveryQueue.async { [weak self] in
             guard let self = self else { return }
             let outcome = self.terminal.deliver(line, to: target)
             DispatchQueue.main.async {
                 self.deliveriesInFlight -= 1
+                var delivered = false
+                if case .delivered = outcome { delivered = true }
+                if let serial, !delivered {
+                    self.promptWentNowhere(serial, why: "the prompt never reached \(to)")
+                }
                 switch outcome {
                 case .delivered:
                     let delivery = m.kind == "dictation"
                         ? self.recordDelivery(via: m.via, kind: m.deliveryKind, to: to) : nil
                     self.writeOutbox(m, line: line, delivery: delivery)
-                    if m.kind == "dictation" {
-                        self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: to) { [weak self] in
+                    if let serial {
+                        self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: to, serial: serial) { [weak self] in
                             self?.sendKamikaze(to: target)
                         }
                     }
@@ -9004,6 +9022,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frontIsTarget = pid == nil || pid == front?.processIdentifier
         let bundle = frontIsTarget ? front?.bundleIdentifier : nil
         let frontPid = frontIsTarget ? front?.processIdentifier : nil
+        let serial = promptLeaves()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let tty = TerminalBinding.frontClaudePromptTTY(bundleID: bundle)
             let submitted = tty.map { TerminalBinding.submitPrompt(line, toTTY: $0) } ?? false
@@ -9015,7 +9034,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let vscodeTTY, let frontPid {
                     self.pasteText(line, to: pid, settles: false)
                     self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: line.count)
-                    self.offerKamikaze(already: already, at: "VS Code \(vscodeTTY)") { [weak self] in
+                    // A queued flick waits out the prompt's own Return.
+                    self.offerKamikaze(already: already, at: "VS Code \(vscodeTTY)", serial: serial,
+                                       settle: Self.vscodeReturnDelay + 0.7) { [weak self] in
                         // A late flick (the offer lasts, 2026-10-08) pastes at the
                         // caret, so the caret must still be that same terminal.
                         let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
@@ -9036,11 +9057,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // settle standing now is the next sentence's (Q12) — not ours to end.
                 guard submitted, let tty else {
                     self.pasteText(line, to: pid, settles: false)
+                    self.promptWentNowhere(serial, why: "the prompt went to no Claude Code prompt")
                     return
                 }
                 Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
                 self.lastDictation = line
-                self.offerKamikaze(already: already, at: tty) { [weak self] in
+                self.offerKamikaze(already: already, at: tty, serial: serial) { [weak self] in
                     DispatchQueue.global(qos: .userInitiated).async {
                         // The session may have ended since (the offer lasts):
                         // never the word + Return at a shell.
@@ -9085,32 +9107,128 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// already withdraws it, since the last terminal prompted is then on its way
     /// out. Each route re-checks its terminal at the flick, because by then the
     /// session may have ended (`kamikazeNotSent`).
-    private var kamikazeOffer: (send: () -> Void, destination: String)?
+    private var kamikazeOffer: (send: () -> Void, destination: String, serial: Int)?
     private static let kamikazeOfferSeconds: TimeInterval = 3
 
     private static func endsInKamikaze(_ text: String?) -> Bool {
         (text ?? "").hasSuffix("\n\nkamikaze")
     }
 
-    private func offerKamikaze(already: Bool, at destination: String, send: @escaping () -> Void) {
+    /// `serial` is the prompt's from `promptLeaves`; a flick queued on it while
+    /// it travelled takes the offer at once. `settle`: how long the route still
+    /// needs after arming before the word may follow (VS Code's Return).
+    private func offerKamikaze(already: Bool, at destination: String, serial: Int,
+                               settle: TimeInterval = 0, send: @escaping () -> Void) {
+        if leavingPrompt?.serial == serial { leavingPrompt = nil }
+        let queued = kamikazeQueued.remove(serial) != nil
         guard !already else {
             if let old = kamikazeOffer { Log.info("☠️ kamikaze offer for \(old.destination) withdrawn — the newest prompt carried the word") }
+            if queued { Log.info("☠️ the kamikaze queued on the prompt to \(destination) dropped — the prompt already carried the word") }
             kamikazeOffer = nil
             return
         }
-        kamikazeOffer = (send, destination)
+        kamikazeOffer = (send, destination, serial)
+        if queued {
+            Log.info("☠️ the prompt landed in \(destination) with a kamikaze queued on it while it travelled")
+            _ = takeKamikazeOffer(after: settle)
+            return
+        }
         overlay.flash("☠️ Kamikaze?", duration: Self.kamikazeOfferSeconds)
         Log.info("☠️ kamikaze offered — the prompt landed in \(destination); the flash lasts \(Int(Self.kamikazeOfferSeconds)) s, the offer until the next prompt")
     }
 
     /// True when the flick was the offer's.
-    private func takeKamikazeOffer() -> Bool {
+    private func takeKamikazeOffer(after settle: TimeInterval = 0) -> Bool {
         guard let offer = kamikazeOffer else { return false }
         kamikazeOffer = nil
         Log.info("☠️ kamikaze — sent alone, after the prompt, to \(offer.destination)")
         overlay.flash("☠️ Kamikaze sent", duration: 1.5)
-        offer.send()
+        if settle > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + settle, execute: offer.send)
+        } else {
+            offer.send()
+        }
         return true
+    }
+
+    // MARK: - Kamikaze while the prompt travels (2026-10-10)
+
+    /// **🔼 ↓ is honoured from a sentence's start to the next one's** (2026-10-10).
+    /// Victor: *"în timpul transcrierii am făcut simbolul de kamikaze, dar nu mi
+    /// l-a preluat … de la începutul unei dictări, până la începutul unei alte
+    /// dictări, trebuie să pot să fac semnul de kamikaze."* The flick that was
+    /// lost (17:26:32, a 🔼 ↑) fell between two owners: the panel had gone and
+    /// the words were done, so the sentence no longer took it, and the spawned
+    /// window was not bound yet, so there was no offer — `ignored`. A bound
+    /// delivery's keystrokes, a caret prompt's Return retries (up to ~6 s) and
+    /// a sentence held for a bind were the same hole — and with an older offer
+    /// standing, the flick went to *that* terminal instead.
+    ///
+    /// So every prompt has a serial, and the flick goes to the newest of:
+    /// - **a prompt on its way** (`leavingPrompt`, from the route taking it to
+    ///   the route answering) — queued on it, again = taken back; its offer
+    ///   takes it the moment it lands, so the word goes alone after it;
+    /// - **a prompt held for a bind** — the word goes on its text, as on the
+    ///   panel (`toggleHeldKamikaze`), and travels with it;
+    /// - **the offer** (`takeKamikazeOffer`).
+    private var leavingPrompt: (serial: Int, since: Date)?
+    private var kamikazeQueued: Set<Int> = []
+    private var promptSerial = 0
+    /// A route that never answers must not hold the flick forever.
+    private static let leavingCeiling: TimeInterval = 60
+
+    /// A route has taken a prompt; its serial goes to `offerKamikaze` or to
+    /// `promptWentNowhere`.
+    private func promptLeaves() -> Int {
+        promptSerial += 1
+        leavingPrompt = (promptSerial, Date())
+        return promptSerial
+    }
+
+    /// The route answered with no offer: failed, or landed where the word
+    /// cannot follow (a caret that is not a Claude Code prompt).
+    private func promptWentNowhere(_ serial: Int, why: String) {
+        if leavingPrompt?.serial == serial { leavingPrompt = nil }
+        guard kamikazeQueued.remove(serial) != nil else { return }
+        Log.error("☠️ kamikaze not sent — \(why)")
+        overlay.flash("☠️ Kamikaze not sent — \(why)", duration: 3)
+    }
+
+    /// The flick with no sentence of its own to mark (see the MARK above).
+    private func kamikazeAfterTheWords() {
+        let leaving = leavingPrompt.flatMap { Date().timeIntervalSince($0.since) < Self.leavingCeiling ? $0.serial : nil }
+        let heldSerial = awaitingBind.last?.serial
+        let newest = [leaving, heldSerial, kamikazeOffer?.serial].compactMap { $0 }.max()
+        switch newest {
+        case nil:
+            Log.info("☠️ kamikaze gesture with no sentence in flight — ignored")
+            overlay.flash("☠️ No prompt to kamikaze", duration: 1.5)
+        case leaving:
+            let s = leaving!
+            if kamikazeQueued.remove(s) != nil {
+                Log.info("☠️ kamikaze taken back off the prompt on its way")
+                overlay.flash("☠️ Kamikaze taken back", duration: 1.5)
+            } else {
+                kamikazeQueued.insert(s)
+                Log.info("☠️ kamikaze — queued on the prompt on its way; sent alone once it lands")
+                overlay.flash("☠️ Kamikaze — once it lands", duration: 1.5)
+                DispatchQueue.main.asyncAfter(deadline: .now() + Self.leavingCeiling) { [weak self] in
+                    self?.promptWentNowhere(s, why: "the prompt never landed")
+                }
+            }
+        case heldSerial:
+            let marker = "\n\nkamikaze"
+            var h = awaitingBind[awaitingBind.count - 1]
+            let text = h.m.text ?? ""
+            let on = !text.hasSuffix(marker)
+            h.m.text = on ? text + marker : String(text.dropLast(marker.count))
+            awaitingBind[awaitingBind.count - 1] = h
+            Log.info(on ? "☠️ kamikaze — the sentence held for a bind closes its agent when done"
+                        : "☠️ kamikaze taken back off the sentence held for a bind")
+            overlay.flash(on ? "☠️ Kamikaze — goes with it at the bind" : "☠️ Kamikaze taken back", duration: 1.5)
+        default:
+            _ = takeKamikazeOffer()
+        }
     }
 
     /// A late flick whose session is no longer there to take the word.
@@ -11661,6 +11779,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// arriving in the wrong session is worse than one he has to say again.
     private struct Held {
         let id: Int
+        /// Its place among the prompts, for 🔼 ↓ (`kamikazeAfterTheWords`).
+        let serial: Int
         var m: Message
         let expiry: DispatchWorkItem
     }
@@ -11689,7 +11809,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // is still going to arrive somewhere. ⌘⇧P is the way back to it.
             self.overlay.flash("⏳ held dictation expired — ⌘V to paste it", duration: 4)
         }
-        awaitingBind.append(Held(id: id, m: m, expiry: expiry))
+        promptSerial += 1
+        awaitingBind.append(Held(id: id, serial: promptSerial, m: m, expiry: expiry))
         let words = (m.text ?? "").split(whereSeparator: { $0.isWhitespace }).count
         let n = awaitingBind.count
         Log.info("⏳ nothing bound — holding \(words) words for the next bind, \(Int(Self.bindWait / 60)) min"

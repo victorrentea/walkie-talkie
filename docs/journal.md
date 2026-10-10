@@ -15402,3 +15402,32 @@ which at rest had nothing to do. End to end in the app: 0.55 s to the first word
 
 The same morning, 🔼 → over the reply pop-up (answer its sender) stopped merely closing it: it bursts
 to the right in tiles — *"something to suggest that I took my focus and send it to it"* (`ReplyBurst`).
+
+## 🔼 ↓ from a sentence's start to the next one's (2026-10-10)
+
+Victor, 17:26: *"în timpul transcrierii am făcut simbolul de kamikaze, dar nu mi l-a preluat …
+ori de câte ori, de la începutul unei dictări până la începutul unei alte dictări, trebuie să pot
+să fac semnul de kamikaze."* The log had it: `17:26:32 ☠️ kamikaze gesture with no sentence in
+flight — ignored`, on a 🔼 ↑ whose panel had just gone (17:26:32) and whose window was bound three
+seconds later (17:26:35, `kamikaze offered`). The flick had two owners and fell between them: the
+sentence (`listening || settling`, over once the words landed) and the offer (armed when the
+route answers).
+
+Read adversarially, the hole was everywhere a route takes time: a bound delivery is ~4 s of
+`terminal.deliver` (its Return watch — TK1 measured it), a caret prompt up to ~6 s of Return
+retries, a spawn 3–6 s of launch and bind, a sentence held for a bind up to five minutes. In each,
+an older offer still standing *took* the flick — the word went to the previous terminal, which is
+worse than dropping it. And a flick during a plain sentence toggled the chip's `☠️ Kamikaze` row
+and was dropped silently at `deliver` (`if clean { kamikaze = false }`).
+
+The fix gives every prompt a serial (`promptSerial`) and the flick goes to the newest: the prompt on
+its way is queued on (its offer takes the queued flick the moment it lands, so the word goes alone,
+by the route the prompt took, after it), the sentence held for a bind gets the word on its text,
+otherwise the standing offer. A route that ends with no offer (`promptWentNowhere`) or never answers
+(60 s) says `☠️ Kamikaze not sent — …` instead of keeping the flick. A plain sentence's flick is the
+last prompt's. Desk cases TK1–TK4 (`evals/plan/cases_kamikaze.py`): all four PASS on the installed
+build, TK4 being the 17:26 shape end to end — queued at 17:55:49, the spawn bound at :52, the word
+typed at :55 and the session closed its own window.
+
+The harness's `cleanup()` used to unbind at the end of every run ("no bind" — written for the lab);
+at the desk it left Victor unbound after each one. It now puts back the binding it found.
