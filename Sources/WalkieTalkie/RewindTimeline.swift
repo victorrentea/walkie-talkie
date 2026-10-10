@@ -252,6 +252,12 @@ enum RewindTimeline {
     static func orbitRadius(for size: CGSize) -> CGFloat { min(size.width, size.height) / 4 }
     /// No window to measure (the middle of the screen stands in): a small ring.
     static let orbitRadiusFallback: CGFloat = 50
+    /// Round the caret (2026-10-10): *"a bit smaller"* than the window's ring.
+    /// `WT_CARET_ORBIT` (pt) to try another.
+    static let caretOrbitRadius: CGFloat = {
+        if let v = ProcessInfo.processInfo.environment["WT_CARET_ORBIT"].flatMap(Double.init), v > 0 { return CGFloat(v) }
+        return 70
+    }()
     static let orbitPeriod: TimeInterval = 1.2
 
     /// **Sparks shrinks at the tunnel's own rate** (2026-10-02, Victor: *"dacă

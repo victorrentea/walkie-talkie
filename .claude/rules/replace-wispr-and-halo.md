@@ -431,6 +431,16 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   afternoon's bow (*"a bit elliptical"*, then *"concave"*) is gone. The Reverse tunnel is left only
   for a dress that cannot ride (and the spawn keeps Sparks).
 - **A ⚡ quick question wears Reverse tunnel and nothing else** (2026-10-09, Victor: *"the effect associated during the dictation should be the reverse tunnel … no second effect … then getting smaller until it disappears, fading out around the mouse"*). `CaretHalo.quick` (pushed from `syncBorrowedGestures` as `quickAsk`) makes `setDestination` wear `tunnelStyle`; the same sync keeps `setRewind`, `setCoasting`, `setDelivering` and the arrow off, so the close goes straight to `hide`'s collapse into the pointer — `quickCollapse` 1 s, the ink fading the whole way rather than in its last fifth. The reply pop-up sits above the halo's level and opens on the answer's first words, not before (*"no prompt preview because it's super fast"*).
+- **The dust circles the caret when Accessibility can find one** (2026-10-10, Victor: *"shouldn't go
+  and circle around the window, but should circle around the cursor if we can locate a cursor into
+  the window … the diameter … should be a bit smaller … only for the dust"*). `aimRewind` asks
+  `TerminalBinding.receivingCaret(target, in: frame)` beside the frame: the receiving app's focused
+  element → selected range → bounds of the character **at** the caret (left edge kept; a zero-length
+  range answers 0×0 in Terminal.app, a `\n` answers the rest of the line). Terminal.app gives its real
+  cursor (measured: just after `❯ `); VS Code gives nothing (no `AXManualAccessibility`), so it keeps
+  the window. A caret outside the window frame is dropped. `CaretHalo.rewindCaret` → the dust's ring
+  centre, radius `RewindTimeline.caretOrbitRadius` 70 pt (`WT_CARET_ORBIT`); every other dress keeps
+  the window. Log `⏪ the rewind aims at the middle of … — its caret at (x, y)` / `— no caret found in it`.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets

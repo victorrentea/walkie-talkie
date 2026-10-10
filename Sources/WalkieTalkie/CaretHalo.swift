@@ -1352,6 +1352,13 @@ final class CaretHalo {
     /// shorter side, written by `AppDelegate.aimRewind` with `rewindAim`; nil →
     /// `RewindTimeline.orbitRadiusFallback`.
     var rewindOrbitRadius: CGFloat?
+    /// **The receiving window's caret, when Accessibility can name it**
+    /// (2026-10-10, Victor: *"shouldn't go and circle around the window, but
+    /// should circle around the cursor if we can locate a cursor into the
+    /// window … the diameter … a bit smaller"*). The dust alone circles it, on
+    /// `RewindTimeline.caretOrbitRadius`; every other dress keeps `rewindAim`.
+    /// Written by `AppDelegate.aimRewind` before `rewindAim`.
+    var rewindCaret: NSPoint?
     /// `rewindAim` as it was when the rewind ended, kept until the next ring
     /// comes up — the settle clears the sentence's aim before the 0.15 s fade is
     /// over, and the fade must stay where the tunnel converged.
@@ -1404,7 +1411,10 @@ final class CaretHalo {
             let flightTime = max(rewindEstimate * RewindTimeline.dustArriveShare, RewindTimeline.minimumSpan)
             let span = flightTime
             let p = RewindTimeline.flight(elapsed: t, predicted: flightTime)
-            let r = rewindOrbitRadius ?? RewindTimeline.orbitRadiusFallback
+            // Round the caret when one was found, round the window's middle else (2026-10-10).
+            let to = rewindCaret ?? to
+            let r = rewindCaret != nil ? RewindTimeline.caretOrbitRadius
+                : rewindOrbitRadius ?? RewindTimeline.orbitRadiusFallback
             // Straight to the ring's nearest point, and round from there (2026-10-09).
             let angle = RewindTimeline.entryAngle(around: to, from: from)
             if t < span {

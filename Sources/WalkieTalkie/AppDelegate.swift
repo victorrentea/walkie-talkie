@@ -5141,6 +5141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let target = latch?.target
         let screenAim = Self.pointerScreenMiddle()
         caretHalo.rewindOrbitRadius = nil
+        caretHalo.rewindCaret = nil
         guard latchedAtCaret || target != nil else {
             Log.info(String(format: "⏪ the rewind aims at the middle of the pointer's screen (%.0f, %.0f) — no window to land in",
                             screenAim.x, screenAim.y))
@@ -5150,6 +5151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settleAim = nil
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let frame = TerminalBinding.receivingWindowFrame(target)
+            let caret = frame.flatMap { TerminalBinding.receivingCaret(target, in: $0) }
             DispatchQueue.main.async {
                 guard let self, token == self.rewindAimToken, self.settling else { return }
                 guard let frame else {
@@ -5159,10 +5161,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.caretHalo.rewindAim = screenAim
                     return
                 }
-                Log.info(String(format: "⏪ the rewind aims at the middle of %@ (%.0f, %.0f)",
-                                target?.address ?? "the focused window", frame.midX, frame.midY))
+                Log.info(String(format: "⏪ the rewind aims at the middle of %@ (%.0f, %.0f)%@",
+                                target?.address ?? "the focused window", frame.midX, frame.midY,
+                                caret.map { String(format: " — its caret at (%.0f, %.0f)", $0.x, $0.y) } ?? " — no caret found in it"))
                 self.settleAim = NSPoint(x: frame.midX, y: frame.midY)
                 self.caretHalo.rewindOrbitRadius = RewindTimeline.orbitRadius(for: frame.size)
+                self.caretHalo.rewindCaret = caret
                 self.caretHalo.rewindAim = self.settleAim
             }
         }

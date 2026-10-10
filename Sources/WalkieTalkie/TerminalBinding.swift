@@ -1459,6 +1459,64 @@ final class TerminalBinding {
         }
     }
 
+    /// **Where the next typed character would appear in the receiving app**
+    /// (2026-10-10) — the caret's centre, in Cocoa global space, or nil.
+    ///
+    /// Victor: *"if we can locate a cursor into the window"* the dust circles it
+    /// instead of the window's middle. Read through Accessibility: the app's
+    /// focused element, its selected range, the bounds of the character at that
+    /// range. Terminal.app answers with its real cursor (measured: just after
+    /// `❯ ` in a Claude Code prompt); a zero-length range answers a 0×0 rect
+    /// there, so the character *at* the caret is asked for and only its left
+    /// edge kept (a `\n` comes back as the whole rest of the line). VS Code does
+    /// not answer — its tree is asleep and `AXManualAccessibility` is not
+    /// used (see `focusedWindow`). A caret outside `window` is someone else's
+    /// (another tab, another window) and is dropped.
+    static func receivingCaret(_ target: Target?, in window: CGRect) -> NSPoint? {
+        let pid: pid_t?
+        switch target?.handle {
+        case nil: pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        case .keystroke(let p, _): pid = p
+        default: pid = NSRunningApplication.runningApplications(withBundleIdentifier: target!.bundleID).first?.processIdentifier
+        }
+        guard let pid else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.3)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let f = focused, CFGetTypeID(f) == AXUIElementGetTypeID() else { return nil }
+        let element = unsafeBitCast(f, to: AXUIElement.self)
+        var rangeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rv = rangeRef, CFGetTypeID(rv) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(unsafeBitCast(rv, to: AXValue.self), .cfRange, &range) else { return nil }
+        func bounds(_ location: Int, _ length: Int) -> CGRect? {
+            guard location >= 0 else { return nil }
+            var r = CFRange(location: location, length: length)
+            guard let arg = AXValueCreate(.cfRange, &r) else { return nil }
+            var out: CFTypeRef?
+            guard AXUIElementCopyParameterizedAttributeValue(element, kAXBoundsForRangeParameterizedAttribute as CFString,
+                                                             arg, &out) == .success,
+                  let o = out, CFGetTypeID(o) == AXValueGetTypeID() else { return nil }
+            var rect = CGRect.zero
+            guard AXValueGetValue(unsafeBitCast(o, to: AXValue.self), .cgRect, &rect), rect.height > 0 else { return nil }
+            return rect
+        }
+        // Top-left, y downward — Accessibility's space.
+        let caret: CGPoint
+        if let at = bounds(range.location, 1) {
+            caret = CGPoint(x: at.minX, y: at.midY)
+        } else if let before = bounds(range.location - 1, 1) {
+            caret = CGPoint(x: before.maxX, y: before.midY)
+        } else if let empty = bounds(range.location, 0) {
+            caret = CGPoint(x: empty.minX, y: empty.midY)
+        } else { return nil }
+        guard let primary = NSScreen.screens.first else { return nil }
+        let point = NSPoint(x: caret.x, y: primary.frame.maxY - caret.y)
+        return window.insetBy(dx: -4, dy: -4).contains(point) ? point : nil
+    }
+
     /// The focused window of an app with no scripting surface — VS Code,
     /// IntelliJ — read through Accessibility, which the relay already holds a
     /// grant for.
