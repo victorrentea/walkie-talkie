@@ -197,6 +197,7 @@ enum ReplyPanel {
     static func live(_ raw: String, from label: String?, question token: Int) {
         // ✕'d while it was still coming: the rest of it is not wanted.
         guard token != dismissedLive else { return }
+        animateDots(raw, from: label)
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { text = "…" }
         if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
@@ -209,6 +210,8 @@ enum ReplyPanel {
                               width: size.width, height: size.height), display: false)
             p.contentView = root
             p.invalidateShadow()
+            // The pointer may be on a link: its tip again, on the new view.
+            root.refreshHover()
             shown = plain(text)
             return
         }
@@ -312,7 +315,30 @@ enum ReplyPanel {
         }
         return (out + rest, links)
     }
-    static func plain(_ text: String) -> String { parseLinks(text).plain }
+    static func plain(_ text: String) -> String { parseLinks(text).plain.replacingOccurrences(of: dots, with: "…") }
+
+    /// **Three dots, one lit at a time, for a step still running** (2026-10-10,
+    /// Victor: *"o mică animație subtilă … niște punctulețe"*): `🧐 reviewing` +
+    /// this. Always three, so the line does not move as they pulse; repainted
+    /// by `dotTimer` while the ⚡ pop-up is being written.
+    static let dots = "\u{4}"
+    private static var dotPhase = 0
+    private static var dotTimer: Timer?
+    private static var liveRaw: (text: String, label: String?)?
+
+    private static func animateDots(_ raw: String, from label: String?) {
+        liveRaw = (raw, label)
+        guard raw.contains(dots), dotTimer == nil else { return }
+        dotTimer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: true) { t in
+            guard liveOpen, let r = liveRaw, r.text.contains(dots) else {
+                t.invalidate()
+                dotTimer = nil
+                return
+            }
+            dotPhase += 1
+            live(r.text, from: r.label, question: liveToken)
+        }
+    }
 
     /// A link opened from the pop-up — the page in the browser, the quote
     /// selected on it (`#:~:text=`, `QuickAsk.cited`). The pop-up stays.
@@ -384,10 +410,10 @@ enum ReplyPanel {
         // passes the click through to `ReplyRoot`.
         // **With links, a text view** — it knows where each word is laid out,
         // for the hover and the click (`LinkedBody`); otherwise the label.
-        let (words, links) = parseLinks(text)
+        var (words, links) = parseLinks(text)
         let body: NSView
         let bodySize: NSSize
-        if links.isEmpty {
+        if links.isEmpty && !words.contains(dots) {
             let label = InertLabel(wrappingLabelWithString: text)
             label.isSelectable = false
             label.font = font
@@ -397,7 +423,19 @@ enum ReplyPanel {
             bodySize = text.isEmpty ? .zero
                 : label.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
         } else {
+            // The dots: three, one lit — and the links after them moved by two.
+            var lit: [NSRange] = []
+            while let r = words.range(of: dots) {
+                let at = NSRange(r, in: words).location
+                words.replaceSubrange(r, with: "...")
+                links = links.map { $0.range.location > at ? (NSRange(location: $0.range.location + 2, length: $0.range.length), $0.url) : $0 }
+                lit.append(NSRange(location: at, length: 3))
+            }
             let styled = NSMutableAttributedString(string: words, attributes: [.font: font, .foregroundColor: NSColor.white])
+            for r in lit {
+                styled.addAttribute(.foregroundColor, value: NSColor.white.withAlphaComponent(0.3), range: r)
+                styled.addAttribute(.foregroundColor, value: NSColor.white, range: NSRange(location: r.location + dotPhase % 3, length: 1))
+            }
             for l in links {
                 styled.addAttributes([.foregroundColor: NSColor(calibratedRed: 0.55, green: 0.75, blue: 1, alpha: 1),
                                       .underlineStyle: NSUnderlineStyle.single.rawValue], range: l.range)
@@ -712,8 +750,14 @@ private final class ReplyRoot: NSView {
         }
         return .crosshair
     }
-    private func arrow(_ event: NSEvent) {
-        let p = convert(event.locationInWindow, from: nil)
+    /// After the view replaced its predecessor under a still pointer.
+    func refreshHover() {
+        guard let w = window else { return }
+        let p = convert(w.mouseLocationOutsideOfEventStream, from: nil)
+        if bounds.contains(p) { arrow(at: p) }
+    }
+    private func arrow(_ event: NSEvent) { arrow(at: convert(event.locationInWindow, from: nil)) }
+    private func arrow(at p: NSPoint) {
         if let c = corner(at: p) { hideTip(); cursor(for: c).set(); return }
         if let hit = bodyLink?(p) {
             NSCursor.pointingHand.set()

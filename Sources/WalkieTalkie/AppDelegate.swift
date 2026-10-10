@@ -6172,13 +6172,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // răspuns imediat, apoi unul căutat, apoi unul criticat"*): the 🔎 and 🧐
         // answers each replace the one before; the footer says which one it is
         // and what is still running, so ✕ at any moment keeps a whole answer.
-        var answer = "", signature = "", stage = "", working: String?
+        // **One line, under it** (same day, Victor: *"totul inline, nu pe rânduri
+        // separate"*): `— Opus 5.5 · 🔎 searching…` → `· 🔎 searched · 🧐
+        // reviewing…` → `· 🧐 reviewed`, the running one's dots animated
+        // (`ReplyPanel.dots`); ✏️ after a step that changed the answer.
+        var answer = "", signature = ""
+        var steps: [String] = []
         var searched: String?, reviewed: String?
         func compose() -> String {
-            var s = answer
-            if !signature.isEmpty { s += "\n— \(signature)" + (stage.isEmpty ? "" : " · \(stage)") }
-            if let working { s += "\n\n" + working }
-            return s
+            guard !signature.isEmpty else { return answer }
+            return answer + "\n— " + ([signature] + steps).joined(separator: " · ")
         }
         // **No pop-up until the answer starts** (2026-10-09, Victor: *"there
         // should be no prompt preview because it's super fast"*): it opened at
@@ -6200,13 +6203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let checks = QuickAsk.Checks(web: { text, isDone in
             guard isDone else { return }
             if text.hasPrefix("⚠️") {
-                working = "🔎 \(text)\n🧐 Reviewing…"
+                steps = ["🔎 failed", "🧐 reviewing" + ReplyPanel.dots]
             } else {
                 let c = QuickAsk.cited(text)
                 answer = c.text
-                stage = c.changed ? "🔎 searched ✏️" : "🔎 searched"
+                steps = [c.changed ? "🔎 searched ✏️" : "🔎 searched", "🧐 reviewing" + ReplyPanel.dots]
                 searched = ReplyPanel.plain(c.text)
-                working = "🧐 Reviewing the quotes…"
             }
             Log.info(String(format: "⚡ 🔎 web answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
                             String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
@@ -6214,13 +6216,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }, review: { text, isDone in
             guard isDone else { return }
             if text.hasPrefix("⚠️") {
-                working = "🧐 \(text)"
+                steps[steps.count - 1] = "🧐 failed"
             } else {
                 let c = QuickAsk.cited(text)
                 answer = c.text
-                stage = (searched != nil ? stage + " · " : "") + (c.changed ? "🧐 reviewed ✏️" : "🧐 reviewed")
+                steps[steps.count - 1] = c.changed ? "🧐 reviewed ✏️" : "🧐 reviewed"
                 reviewed = ReplyPanel.plain(c.text)
-                working = nil
             }
             Log.info(String(format: "⚡ 🧐 reviewed answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
                             String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
@@ -6237,8 +6238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             answer = text ?? "⚠️ \(error ?? "no answer")"
             if text != nil {
                 signature = model
-                stage = "⚡ from memory"
-                working = "🔎 Searching the internet…"
+                steps = ["🔎 searching" + ReplyPanel.dots]
             }
             paint(force: true)
             if let text {

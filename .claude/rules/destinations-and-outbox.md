@@ -296,21 +296,23 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   cât timp îl las"*). **Each stage writes the whole answer again and replaces the one before**, so
   the ✕ at any moment leaves a complete answer: ⚡ from memory → 🔎 searched (corrected/completed,
   each claim with an inline exact quote) → 🧐 reviewed (an adversarial reviewer that opens the cited
-  pages, checks every quote is there and means what is claimed, and writes it again fixed). Only
-  the answer, succinct — no bibliography, no word about the checking (same day, *"nu mă
-  interesează să văd URL-urile complete … nici partea asta cu „am verificat citatele"*). The
-  models write `„quote" [n]` + `[n] url` lines + `CHANGED`; `QuickAsk.cited` turns each `[n]` into
-  a **`(site)` link** (`ReplyPanel.link`, markers `\u{1}…\u{2}…\u{3}`) to the page with the quote
-  before it selected by a **text fragment** (`#:~:text=`, first/last 4 words when longer than 8),
-  drops the url lines, and `CHANGED` becomes ✏️ in the footer. A pop-up with links lays its words
-  out in a `LinkedBody` (a text view, never hit): **hover** shows the full URL in a tip drawn by
-  `ReplyRoot` (AppKit tool tips do not show for an app that is not frontmost), **click** opens it
-  in the browser and the pop-up stays, a press that moves still drags. Footer:
-  `— Opus 5.5 · ⚡ from memory` / `· 🔎 searched ✏️` / `· 🔎 searched · 🧐 reviewed`, and under it
-  what is running (`🔎 Searching the internet…`, `🧐 Reviewing the quotes…`); a failed stage
-  shows `⚠️ why` there and keeps the last good answer. A stage's words are not streamed, only its
-  finished answer. Each check is its own lean `claude -p` with `--tools/--allowedTools
+  pages, checks every quote is there and means what is claimed, and writes it again fixed). **Only
+  the proven facts, short, in his language — never a quote in the words** (same day, *"Islanda are
+  aproximativ 396.500 de locuitori … aproape două treimi … Atât"*, *"nu vreau citat verbatim din
+  site"*): one sentence plus at most one related fact, no bibliography, no word about the checking.
+  The models write `claim [n: "quote"]` + `[n] url` lines + `CHANGED`; `QuickAsk.cited` turns each
+  marker into ` (site)` — **only the name is the link**, not its brackets (`ReplyPanel.link`, markers
+  `\u{1}…\u{2}…\u{3}`) — to the page with the quote selected by a **text fragment** (`#:~:text=`,
+  first/last 4 words when longer than 8): the quote lives only in the link. `CHANGED` → ✏️. A
+  pop-up with links lays its words out in a `LinkedBody` (a text view, never hit): **hover** shows
+  the full URL in a tip drawn by `ReplyRoot` (AppKit tool tips do not show for an app that is not
+  frontmost; `refreshHover` puts it back after a repaint), **click** opens it in the browser and
+  the pop-up stays, a press that moves still drags. **The footer is one line** (*"totul inline"*):
+  `— Opus 5.5 · 🔎 searching…` → `· 🔎 searched · 🧐 reviewing…` → `· 🧐 reviewed`, ✏️ after a
+  step that changed the answer, `failed` for one that failed; the running step's dots
+  (`ReplyPanel.dots`, `\u{4}`) are three with one lit, moving every 0.4 s (`dotTimer`), so the
+  line never shifts. Each check is its own lean `claude -p` with `--tools/--allowedTools
   WebSearch,WebFetch` (`QuickAsk.webPrompt`, `reviewPrompt`, `citeFormat`), started while the stage
   before it runs; 120 s each. **The ✕ — or 🔼 ← — stops everything** (`ReplyPanel.onLiveDismissed`
   → `QuickAsk.cancel`); the pop-up stays `liveOpen` until the review is done. Measured: answer
-  ~2 s, 🔎 at ~11–19 s, 🧐 at ~20–29 s.
+  ~2 s, 🔎 at ~11–19 s, 🧐 at ~20–38 s.

@@ -30,22 +30,31 @@ final class QuickAsk {
 
     static let systemPrompt = """
         You answer Victor's spoken questions, dictated by voice, so the words may \
-        contain recognition mistakes: answer what he most likely meant. Be brief: at \
-        most 3 short sentences, plain text, no markdown, no lists unless asked. \
+        contain recognition mistakes: answer what he most likely meant. Be brief: \
+        what was asked in one short sentence, plus at most one closely related fact \
+        worth knowing; plain text, no markdown, no lists unless asked. \
         Answer in the language of the question (Romanian or English).
         """
     /// **Each check writes the whole answer again** (2026-10-10, Victor: *"un
     /// răspuns imediat, apoi unul căutat, apoi unul criticat … în funcție de cât
     /// timp îl las"*): the pop-up always holds the best answer so far, so closing
     /// it at any moment leaves him with a complete one.
+    /// **Only the proven facts, in his language, no quotes** (2026-10-10,
+    /// Victor: *"Islanda are aproximativ 396.500 de locuitori … aproape două
+    /// treimi din ei locuiesc în regiunea capitalei. Atât"*; *"nu vreau citat
+    /// verbatim din site"*): the quote is written only inside the marker, for
+    /// the link to select it on the page.
     static let citeFormat = """
-        Reply in the language of the question, plain text, no markdown, at most 5 \
-        short sentences: only the answer itself, succinct and to the point — never \
-        mention the checking, the sources, what you verified or what changed. Back \
-        each claim with a short quote copied character for character from a page \
-        you actually read, inline: „<quote>" [n]. After the answer, one line per \
-        source, nothing else on it: [n] <url>. Last, only if the substance of your \
-        answer differs from the one you were given, a line with just: CHANGED
+        Reply in the language of the question, plain text, no markdown. As short as \
+        possible: what was asked, in one short sentence, plus at most one closely \
+        related fact worth knowing. Never quote or translate the sources in the \
+        answer, and never mention the checking, the sources or what changed. Right \
+        after each claim put a marker [n: "<quote>"], where the quote is a short \
+        passage (under 15 words) copied character for character, in the page's own \
+        language, from page n that proves the claim — it is never shown, it selects \
+        that passage when the page opens. After the answer, one line per source, \
+        nothing else on it: [n] <url>. Last, only if the substance of your answer \
+        differs from the one you were given, a line with just: CHANGED
         """
     static let webPrompt = """
         You were given a spoken question by Victor and a quick answer to it, written \
@@ -68,10 +77,10 @@ final class QuickAsk {
     /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
     /// URL-urile complete … pune în paranteze rotunde numele site-ului, iar la
     /// hover … URL-ul complet. La click … să mă ducă la acel site, preferabil
-    /// selectând textele"*): every `[n]` becomes a `(site)` link
-    /// (`ReplyPanel.link`) to its page, with the quote just before it selected
-    /// there by a text fragment (`#:~:text=`); the `[n] url` lines and `CHANGED`
-    /// go. `changed` says the answer is not the one before it in substance.
+    /// selectând textele"*): every `[n: "quote"]` becomes `(site)`, the name a
+    /// link (`ReplyPanel.link`) to its page with the quote selected there by a
+    /// text fragment (`#:~:text=`) — the quote itself is never shown; the
+    /// `[n] url` lines and `CHANGED` go. `changed` says the answer is not the one before it in substance.
     static func cited(_ raw: String) -> (text: String, changed: Bool) {
         var urls: [String: URL] = [:]
         var lines: [String] = []
@@ -88,22 +97,18 @@ final class QuickAsk {
             lines.append(line)
         }
         var text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
-        // „quote" [n] (or "quote" / “quote”), then a bare [n].
-        let marked = try! NSRegularExpression(pattern: #"([„"“])([^"”„“\n]+)([”"“])(\s*)\[(\d+)\]|\[(\d+)\]"#)
+        // [n: "quote"] (any of „" “” quotes), or a bare [n].
+        let marked = try! NSRegularExpression(pattern: #"\s*\[(\d+)(?::\s*[„"“](.*?)[”"“]\s*)?\]"#)
         let ns = text as NSString
         var out = "", at = 0
         for m in marked.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             out += ns.substring(with: NSRange(location: at, length: m.range.location - at))
             at = m.range.location + m.range.length
-            let quoted = m.range(at: 2).location != NSNotFound
-            let n = ns.substring(with: m.range(at: quoted ? 5 : 6))
-            if quoted {
-                out += ns.substring(with: m.range(at: 1)) + ns.substring(with: m.range(at: 2)) + ns.substring(with: m.range(at: 3)) + " "
-            }
-            guard let url = urls[n] else { continue }
+            guard let url = urls[ns.substring(with: m.range(at: 1))] else { continue }
             let site = url.host.map { $0.hasPrefix("www.") ? String($0.dropFirst(4)) : $0 } ?? url.absoluteString
-            let target = quoted ? fragment(url, quote: ns.substring(with: m.range(at: 2))) : url
-            out += ReplyPanel.link("(\(site))", target)
+            let quote = m.range(at: 2).location != NSNotFound ? ns.substring(with: m.range(at: 2)) : ""
+            // Only the site's name is the link, not its brackets.
+            out += " (" + ReplyPanel.link(site, quote.isEmpty ? url : fragment(url, quote: quote)) + ")"
         }
         out += ns.substring(from: at)
         text = out.replacingOccurrences(of: " +([.,;:])", with: "$1", options: .regularExpression)
