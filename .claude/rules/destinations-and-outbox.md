@@ -272,7 +272,7 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   sentence (`startDictation(paste: true, clean: true, quick: true)` — words only, no picture, no
   attachment) whose `deliver` sends the words to `askQuick` **before** any caret or terminal route:
   nothing is typed anywhere, no outbox line, the question goes on the clipboard (Q17),
-  `lastDelivery.to = "quick"`. The chip's destination row says `⚡ quick answer — haiku`.
+  `lastDelivery.to = "quick"`. The chip's destination row says `⚡ quick answer — opus`.
   `quickAsk` is an `Envelope` field.
 - **The answer streams into the reply pop-up** (`ReplyPanel.live`), header `⚡ <the question>` so
   he sees what was heard, no tty, so only the ✕. It opens at once — an agent's open pop-up steps
@@ -282,11 +282,22 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   answered, started at launch: Victor, *"a conversation history over the day … will make it slower
   after a while"*. Lean: its own system prompt (≤ 3 short sentences, plain text, the question's
   language, mind the recognition mistakes), `--tools ""`, `--strict-mcp-config`,
-  `--setting-sources ""`, cwd `~/.walkie-talkie/quick/`. `WT_QUICK_MODEL` (default `haiku`) and
+  `--setting-sources ""`, cwd `~/.walkie-talkie/quick/`. `WT_QUICK_MODEL` (default `opus` since 2026-10-10, was `haiku`) and
   `WT_QUICK_EFFORT` (`low`), env or `elevenlabs.env`. `--bare` loses the subscription login. 45 s
   timeout; an idle process that dies is restarted, three times at most.
 - **Measured** (`evals/quick-ask/`): in the app, first word **0.55 s** median, whole answer
   **1.03 s**; a cold `claude -p` 1.40 / 2.51 s; warm with Claude Code's own ~104k-token prompt
   1.52 / 3.15 s. Opus warm and lean reaches its first word as fast (0.58 s), finishes 0.5 s later.
 - **Desk route:** `POST /test/quick {"text", "wait": true}` → `{answer, error, firstWordMs, totalMs,
-  model}`. Log: `⚡ quick answer (haiku) — first word 0.55 s, whole 1.03 s, N chars`.
+  model}`; **`wait: "all"`** also waits for the checks → `web`, `review`, `shown` (the pop-up's words).
+  Log: `⚡ quick answer (Opus 5.5) — first word 0.73 s, whole 1.39 s, N chars`.
+- **Opus, signed, then checked twice** (2026-10-10, Victor: *"n-aș putea folosi ceva mai inteligent
+  decât Haiku … după ce termină de scris, trebuie să înceapă să caute pe net dovezi … ridici un
+  subagent adversarial care să critice. Asta e rețeta"*). The pop-up, in order: the answer,
+  `— Opus 5.5` (the model id from the process's init line, `QuickAsk.displayName`), `🔎 Searching the
+  internet…` → `✅ Confirmed.` or `✏️ Corrected: …` plus `• site — url` lines, then `🧐 Reviewing…` →
+  `👍 …` or `⚠️ …`. Each check is its own lean `claude -p` with `--tools/--allowedTools
+  WebSearch,WebFetch` (`QuickAsk.webPrompt`, `reviewPrompt`), started while the stage before it runs;
+  120 s each. Only the finished verdict is shown, not the search's words as they come. **The ✕ — or
+  🔼 ← — stops everything** (`ReplyPanel.onLiveDismissed` → `QuickAsk.cancel`); the pop-up stays
+  `liveOpen` until the review is done. Measured: answer 1.4–2 s, 🔎 at ~11 s, 🧐 at ~20 s.

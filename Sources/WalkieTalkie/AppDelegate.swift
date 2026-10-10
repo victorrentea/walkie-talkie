@@ -2074,20 +2074,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil
                     ? (200, ["ok": true, "frame": frame]) : (400, ["ok": false, "error": "text required"])
             }
-            let wait = body["wait"] as? Bool == true
+            // `wait: "all"` waits for the 🔎 web check and the 🧐 review too.
+            let waitAll = body["wait"] as? String == "all"
+            let wait = body["wait"] as? Bool == true || waitAll
             let done = DispatchSemaphore(value: 0)
             var out: [String: Any] = ["ok": true]
             DispatchQueue.main.async {
-                self.askQuick(text) { answer, error, first, total in
+                self.askQuick(text, done: { answer, error, first, total in
                     out = ["ok": answer != nil, "answer": answer ?? NSNull(), "error": error ?? NSNull(),
                            "firstWordMs": first.map { Int($0 * 1000) } ?? NSNull(), "totalMs": Int(total * 1000),
                            "model": QuickAsk.shared.model,
                            "frame": ReplyPanel.frame.map { ["x": $0.minX, "y": $0.minY, "w": $0.width, "h": $0.height] } ?? NSNull()]
+                    if !waitAll { done.signal() }
+                }, checked: { web, review in
+                    guard waitAll else { return }
+                    out["web"] = web ?? NSNull()
+                    out["review"] = review ?? NSNull()
+                    out["shown"] = ReplyPanel.shown ?? NSNull()
                     done.signal()
-                }
+                })
             }
             guard wait else { return (200, ["ok": true, "asked": text]) }
-            guard done.wait(timeout: .now() + QuickAsk.timeout + 5) == .success else {
+            let limit = QuickAsk.timeout + (waitAll ? 2 * QuickAsk.checkTimeout : 0) + 5
+            guard done.wait(timeout: .now() + limit) == .success else {
                 return (504, ["ok": false, "error": "no answer"])
             }
             return (200, out)
@@ -6136,35 +6145,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **⚡ The question goes to `QuickAsk`, the answer streams into the reply
     /// pop-up** (2026-10-09) — the header is the question, so he sees what was
     /// heard. `done` is the desk route's: the answer, or why not, and the clocks.
+    /// **Signed, then checked** (2026-10-10): `— Opus 5.5` under the answer, then
+    /// `🔎 Searching the internet…` → the web's verdict and sources, then
+    /// `🧐 Reviewing…` → an adversarial reviewer's, all in the same pop-up; its ✕
+    /// stops them. `checked` is the desk route's too, once everything is over.
     private var quickToken = 0
     private func askQuick(_ question: String,
-                          done: ((String?, String?, TimeInterval?, TimeInterval) -> Void)? = nil) {
+                          done: ((String?, String?, TimeInterval?, TimeInterval) -> Void)? = nil,
+                          checked: ((_ web: String?, _ review: String?) -> Void)? = nil) {
         quickToken += 1
         let token = quickToken
         let label = ReplyPanel.quickMark + question
         let started = CFAbsoluteTimeGetCurrent()
+        var answer = "", signature = "", web: String?, review: String?
+        var webDone = false, reviewDone = false
+        func compose() -> String {
+            var s = answer
+            if !signature.isEmpty { s += "\n— \(signature)" }
+            if let web { s += "\n\n🔎 " + (webDone ? web : "Searching the internet…") }
+            if let review { s += "\n\n🧐 " + (reviewDone ? review : "Reviewing…") }
+            return s
+        }
         // **No pop-up until the answer starts** (2026-10-09, Victor: *"there
         // should be no prompt preview because it's super fast"*): it opened at
         // once with the question alone, a preview of his own words for the
         // second before the model's arrived. The first words open it.
         var painted: CFAbsoluteTime = 0
-        QuickAsk.shared.ask(question, onText: { text in
-            // ≤ 20 repaints a second; the last words come with `onDone`.
+        func paint(force: Bool = false) {
+            // ≤ 20 repaints a second; the last words of each stage are forced.
             let now = CFAbsoluteTimeGetCurrent()
-            guard now - painted > 0.05 else { return }
+            guard force || now - painted > 0.05 else { return }
             painted = now
-            ReplyPanel.live(text, from: label, question: token)
-        }, onDone: { answer, error, first in
-            let total = CFAbsoluteTimeGetCurrent() - started
-            ReplyPanel.live(answer ?? "⚠️ \(error ?? "no answer")", from: label, question: token)
+            ReplyPanel.live(compose(), from: label, question: token)
+        }
+        ReplyPanel.onLiveDismissed = {
+            if QuickAsk.shared.cancel() { Log.info("⚡ ✕ on the quick answer — the checks are stopped") }
+        }
+        let checks = QuickAsk.Checks(web: { text, isDone in
+            // The search's own words are not shown as it goes: only the verdict.
+            web = text
+            webDone = isDone
+            if isDone {
+                review = ""
+                Log.info(String(format: "⚡ 🔎 web check done at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
+                                String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+            }
+            paint(force: isDone)
+        }, review: { text, isDone in
+            review = text
+            reviewDone = isDone
+            if isDone {
+                Log.info(String(format: "⚡ 🧐 review done at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
+                                String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+            }
+            paint(force: isDone)
+        }, end: {
             ReplyPanel.finishLive(question: token)
-            if let answer {
+            checked?(webDone ? web : nil, reviewDone ? review : nil)
+        })
+        QuickAsk.shared.ask(question, checks: checks, onText: { text in
+            answer = text
+            paint()
+        }, onDone: { text, error, first, model in
+            let total = CFAbsoluteTimeGetCurrent() - started
+            answer = text ?? "⚠️ \(error ?? "no answer")"
+            if text != nil {
+                signature = model
+                web = ""
+            }
+            paint(force: true)
+            if let text {
                 Log.info(String(format: "⚡ quick answer (%@) — first word %@, whole %.2f s, %d chars",
-                                QuickAsk.shared.model, first.map { String(format: "%.2f s", $0) } ?? "–", total, answer.count))
+                                model, first.map { String(format: "%.2f s", $0) } ?? "–", total, text.count))
             } else {
                 Log.error("⚡ quick answer failed: \(error ?? "?")")
             }
-            done?(answer, error, first, total)
+            done?(text, error, first, total)
         })
     }
 

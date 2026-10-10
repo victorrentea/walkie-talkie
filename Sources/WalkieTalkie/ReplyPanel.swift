@@ -230,6 +230,9 @@ enum ReplyPanel {
     /// The quick answer is complete: the pop-up stays, as any other.
     static func finishLive(question token: Int) { if liveToken == token { liveOpen = false } }
 
+    /// The ✕ took down a ⚡ pop-up still being written — its checks stop (`QuickAsk.cancel`).
+    static var onLiveDismissed: (() -> Void)?
+
     /// The header of every ⚡ quick answer starts with it (`AppDelegate.askQuick`).
     static let quickMark = "⚡ "
 
@@ -476,7 +479,10 @@ enum ReplyPanel {
     static func close() {
         panel?.orderOut(nil)
         panel = nil
-        if liveOpen { dismissedLive = liveToken }
+        if liveOpen {
+            dismissedLive = liveToken
+            onLiveDismissed?()
+        }
         liveOpen = false
         shown = nil
         shownTTY = nil
