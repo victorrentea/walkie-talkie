@@ -289,15 +289,20 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   **1.03 s**; a cold `claude -p` 1.40 / 2.51 s; warm with Claude Code's own ~104k-token prompt
   1.52 / 3.15 s. Opus warm and lean reaches its first word as fast (0.58 s), finishes 0.5 s later.
 - **Desk route:** `POST /test/quick {"text", "wait": true}` → `{answer, error, firstWordMs, totalMs,
-  model}`; **`wait: "all"`** also waits for the checks → `web`, `review`, `shown` (the pop-up's words).
+  model}`; **`wait: "all"`** also waits for the checks → `web` and `review` (the 🔎 and 🧐 answers), `shown` (the pop-up's words).
   Log: `⚡ quick answer (Opus 5.5) — first word 0.73 s, whole 1.39 s, N chars`.
-- **Opus, signed, then checked twice** (2026-10-10, Victor: *"n-aș putea folosi ceva mai inteligent
-  decât Haiku … după ce termină de scris, trebuie să înceapă să caute pe net dovezi … ridici un
-  subagent adversarial care să critice. Asta e rețeta"*). The pop-up, in order: the answer,
-  `— Opus 5.5` (the model id from the process's init line, `QuickAsk.displayName`), `🔎 Searching the
-  internet…` → `✅ Confirmed.` or `✏️ Corrected: …` plus `• site — url` lines, then `🧐 Reviewing…` →
-  `👍 …` or `⚠️ …`. Each check is its own lean `claude -p` with `--tools/--allowedTools
-  WebSearch,WebFetch` (`QuickAsk.webPrompt`, `reviewPrompt`), started while the stage before it runs;
-  120 s each. Only the finished verdict is shown, not the search's words as they come. **The ✕ — or
-  🔼 ← — stops everything** (`ReplyPanel.onLiveDismissed` → `QuickAsk.cancel`); the pop-up stays
-  `liveOpen` until the review is done. Measured: answer 1.4–2 s, 🔎 at ~11 s, 🧐 at ~20 s.
+- **Opus, signed, then answered again twice** (2026-10-10, Victor: *"n-aș putea folosi ceva mai
+  inteligent decât Haiku … un răspuns imediat, apoi unul căutat, apoi unul criticat … în funcție de
+  cât timp îl las"*). **Each stage writes the whole answer again and replaces the one before**, so
+  the ✕ at any moment leaves a complete answer: ⚡ from memory → 🔎 searched (corrected/completed,
+  each claim with an inline exact quote „…" [n], `[n] site — url` lines, `✏️ what changed` when it
+  did) → 🧐 reviewed (an adversarial reviewer that opens the cited pages, checks every quote is
+  there and means what is claimed, and writes it again fixed, same format). Footer:
+  `— Opus 5.5 · ⚡ from memory` / `· 🔎 searched` / `· 🔎 searched · 🧐 reviewed`, and under it
+  what is running (`🔎 Searching the internet…`, `🧐 Reviewing the quotes…`); a failed stage
+  shows `⚠️ why` there and keeps the last good answer. A stage's words are not streamed, only its
+  finished answer. Each check is its own lean `claude -p` with `--tools/--allowedTools
+  WebSearch,WebFetch` (`QuickAsk.webPrompt`, `reviewPrompt`, `citeFormat`), started while the stage
+  before it runs; 120 s each. **The ✕ — or 🔼 ← — stops everything** (`ReplyPanel.onLiveDismissed`
+  → `QuickAsk.cancel`); the pop-up stays `liveOpen` until the review is done. Measured: answer
+  ~2 s, 🔎 at ~11–19 s, 🧐 at ~20–29 s.

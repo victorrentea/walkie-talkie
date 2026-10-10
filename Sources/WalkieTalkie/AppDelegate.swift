@@ -6157,13 +6157,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let token = quickToken
         let label = ReplyPanel.quickMark + question
         let started = CFAbsoluteTimeGetCurrent()
-        var answer = "", signature = "", web: String?, review: String?
-        var webDone = false, reviewDone = false
+        // **The pop-up holds the best answer so far** (2026-10-10, Victor: *"un
+        // răspuns imediat, apoi unul căutat, apoi unul criticat"*): the 🔎 and 🧐
+        // answers each replace the one before; the footer says which one it is
+        // and what is still running, so ✕ at any moment keeps a whole answer.
+        var answer = "", signature = "", stage = "", working: String?
+        var searched: String?, reviewed: String?
         func compose() -> String {
             var s = answer
-            if !signature.isEmpty { s += "\n— \(signature)" }
-            if let web { s += "\n\n🔎 " + (webDone ? web : "Searching the internet…") }
-            if let review { s += "\n\n🧐 " + (reviewDone ? review : "Reviewing…") }
+            if !signature.isEmpty { s += "\n— \(signature)" + (stage.isEmpty ? "" : " · \(stage)") }
+            if let working { s += "\n\n" + working }
             return s
         }
         // **No pop-up until the answer starts** (2026-10-09, Victor: *"there
@@ -6181,27 +6184,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ReplyPanel.onLiveDismissed = {
             if QuickAsk.shared.cancel() { Log.info("⚡ ✕ on the quick answer — the checks are stopped") }
         }
+        // A stage's words are not shown as they come — the search narrates —
+        // only its finished answer, or that it failed under the last good one.
         let checks = QuickAsk.Checks(web: { text, isDone in
-            // The search's own words are not shown as it goes: only the verdict.
-            web = text
-            webDone = isDone
-            if isDone {
-                review = ""
-                Log.info(String(format: "⚡ 🔎 web check done at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
-                                String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+            guard isDone else { return }
+            if text.hasPrefix("⚠️") {
+                working = "🔎 \(text)\n🧐 Reviewing…"
+            } else {
+                answer = text
+                stage = "🔎 searched"
+                searched = text
+                working = "🧐 Reviewing the quotes…"
             }
-            paint(force: isDone)
+            Log.info(String(format: "⚡ 🔎 web answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
+                            String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+            paint(force: true)
         }, review: { text, isDone in
-            review = text
-            reviewDone = isDone
-            if isDone {
-                Log.info(String(format: "⚡ 🧐 review done at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
-                                String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+            guard isDone else { return }
+            if text.hasPrefix("⚠️") {
+                working = "🧐 \(text)"
+            } else {
+                answer = text
+                stage = searched != nil ? "🔎 searched · 🧐 reviewed" : "🧐 reviewed"
+                reviewed = text
+                working = nil
             }
-            paint(force: isDone)
+            Log.info(String(format: "⚡ 🧐 reviewed answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
+                            String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+            paint(force: true)
         }, end: {
             ReplyPanel.finishLive(question: token)
-            checked?(webDone ? web : nil, reviewDone ? review : nil)
+            checked?(searched, reviewed)
         })
         QuickAsk.shared.ask(question, checks: checks, onText: { text in
             answer = text
@@ -6211,7 +6224,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             answer = text ?? "⚠️ \(error ?? "no answer")"
             if text != nil {
                 signature = model
-                web = ""
+                stage = "⚡ from memory"
+                working = "🔎 Searching the internet…"
             }
             paint(force: true)
             if let text {

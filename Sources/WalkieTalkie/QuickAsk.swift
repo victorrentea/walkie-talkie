@@ -34,24 +34,33 @@ final class QuickAsk {
         most 3 short sentences, plain text, no markdown, no lists unless asked. \
         Answer in the language of the question (Romanian or English).
         """
+    /// **Each check writes the whole answer again** (2026-10-10, Victor: *"un
+    /// răspuns imediat, apoi unul căutat, apoi unul criticat … în funcție de cât
+    /// timp îl las"*): the pop-up always holds the best answer so far, so closing
+    /// it at any moment leaves him with a complete one.
+    static let citeFormat = """
+        Reply in the language of the question, plain text, no markdown, at most 5 \
+        short sentences. Back each claim with a short exact quote from a page you \
+        actually read, inline: „<quote>" [n]. Then one line per source: \
+        "[n] <site> — <url>". If your answer differs from the one you were given, \
+        end with one line: "✏️ <what changed and why>".
+        """
     static let webPrompt = """
-        You check a short answer that was just given, without any checking, to \
-        Victor's spoken question. Search the web for evidence, writing nothing \
-        before your searches are done. Reply in the language \
-        of the question, plain text, no markdown. First line: "✅ Confirmed." plus at \
-        most one sentence of what the sources add, or "✏️ Corrected:" followed by the \
-        right answer in at most 3 short sentences. Then up to 3 lines, one per \
-        source you actually read: "• <site> — <url>".
-        """
+        You were given a spoken question by Victor and a quick answer to it, written \
+        from memory without any checking. Search the web for evidence, writing \
+        nothing before your searches are done, and write the answer again: \
+        corrected where the sources say otherwise, completed where they add \
+        something that matters.
+        """ + " " + citeFormat
     static let reviewPrompt = """
-        You are an adversarial reviewer. Below are a spoken question, a quick answer, \
-        and a web check of it with sources. Try to break them: a wrong or outdated \
-        claim, something missing that changes the answer, a source that does not say \
-        what is claimed or is weak. You may search the web; write nothing before \
-        your searches are done. Reply in the language of \
-        the question, plain text, no markdown, at most 3 short sentences, starting \
-        with "👍" when it holds or "⚠️" followed by the problem.
-        """
+        You are an adversarial reviewer. You get a spoken question by Victor and an \
+        answer to it with quotes and sources. Assume it is wrong somewhere and try \
+        to prove it: open the cited pages and check that each quote is really \
+        there and really means what the answer says (out of context, outdated, \
+        about something else, a weak source); look for what is missing and \
+        changes the answer. Write nothing before your checks are done, then write \
+        the answer again, fixed.
+        """ + " " + citeFormat
     /// A question with no answer by then is given up.
     static let timeout: TimeInterval = 45
     /// The web check and the review, each.
@@ -185,7 +194,7 @@ final class QuickAsk {
         }
         // The reviewer starts while the web is searched.
         let reviewer = start(run, prompt: Self.reviewPrompt, tools: Self.webTools)
-        let asked = "Question: \(question)\n\nQuick answer: \(answer)"
+        let asked = "Question: \(question)\n\nQuick answer, from memory: \(answer)"
         stage(run, web, asked, timeout: Self.checkTimeout, onText: { text in
             DispatchQueue.main.async { checks.web(text, false) }
         }, onDone: { found, error in
@@ -194,7 +203,10 @@ final class QuickAsk {
                 DispatchQueue.main.async { checks.review("⚠️ the reviewer did not start", true) }
                 return self.endLocked(run)
             }
-            let all = asked + "\n\nWeb check:\n" + (found ?? "(failed: \(error ?? "?"))")
+            // The reviewer criticises the searched answer — or, when the
+            // search failed, the quick one.
+            let all = found.map { "Question: \(question)\n\nAnswer, checked on the web:\n\($0)" }
+                ?? asked + "\n\n(The web check failed: \(error ?? "?"). Search yourself.)"
             self.stage(run, reviewer, all, timeout: Self.checkTimeout, onText: { text in
                 DispatchQueue.main.async { checks.review(text, false) }
             }, onDone: { verdict, error in
