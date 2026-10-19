@@ -89,7 +89,9 @@ final class GestureHintBar {
         case .locked:
             return MouseHint(wheel: "⬆️ let go", right: "↩️ unlock", body: "Esc cancel")
         case .parked:
-            return MouseHint(wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
+            // A left click drops the half-transparent copy riding the pointer
+            // (2026-10-19, `CropSelectionOverlay.leftClicked`).
+            return MouseHint(left: "📍 drop", wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
         case .drawing:
             return MouseHint(wheel: "🎯 drag there", body: "Esc cancel")
         }

@@ -53,6 +53,7 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .selecting))?.right, "➡️ move to")
         XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .locked))?.right, "↩️ unlock")
         XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .parked))?.right, "🗑️ cancel")
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .parked))?.left, "📍 drop")
         XCTAssertNil(GestureHintBar.mouse(for: .init(listening: true, held: true, crop: .selecting)))
     }
 
