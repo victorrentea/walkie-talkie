@@ -477,6 +477,10 @@ yields to `--label`).
   **The cut wears the same red ring** (2026-10-16, Victor: *"the large image picked also surrounded
   by a red rectangle … the small box on the big screen becomes the large box at the side of it"*):
   `ringWidth` 2 pt, inside the cut's edge so the lines still leave from its outer corners.
+  **No caption over an area** (2026-10-20, Victor: *"you don't need to specify the text part showing
+  the crop … It's enough to show the images … Don't put that square bracket. Doesn't help."*): the
+  `[📸N✂️…]` token is not written above the callout; other pictured tokens keep theirs. Panel only —
+  the agent's words keep the token.
   Shots `prompt-area-context`, `prompt-move-context`; `AREA_CONTEXT_PNG=<dir> swift test --filter
   AreaContextTests` renders both drawings.
 - **A screen recording rides the strip, last, as a picture** (2026-10-08, Victor: *"when I send the

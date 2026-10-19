@@ -632,7 +632,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 591,
+    "height" : 581,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
@@ -680,7 +680,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 331,
+    "height" : 321,
     "image" : "prompt-area-context.png",
     "note" : "2026-10-15, Victor: after the cut-out, the whole screen that goes with it — greyed outside the box, the box lit and ringed red — so it is plain that the entire screen is sent too. Drawn by `AreaContext`, never written to disk.",
     "shape" : "panel",
@@ -692,7 +692,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 358,
+    "height" : 348,
     "image" : "prompt-move-context.png",
     "note" : "2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.",
     "shape" : "panel",

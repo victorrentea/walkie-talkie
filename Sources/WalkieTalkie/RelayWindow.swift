@@ -3028,8 +3028,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// I can visually check the quality of your annotation"*).
     ///
     /// - A `[📸N…]` token with a picture ends the paragraph: the token on a line
-    ///   of its own as the picture's caption, the picture under it, left-aligned,
-    ///   then the words carry on in a new paragraph.
+    ///   of its own as the picture's caption (none for a ✂️ area since
+    ///   2026-10-20), the picture under it, left-aligned, then the words carry
+    ///   on in a new paragraph.
     /// - A highlight (`[selected: …]`), a copy (`[copied: …]`, 2026-10-17) and a
     ///   picked element (`[chrome-selection-N: …]`) are their own indented
     ///   paragraph, in the token colour.
@@ -3072,7 +3073,12 @@ private let heardLabel = NSTextField(labelWithString: "")
             if let n = shot, let path = promptInlineShots[n], let image = NSImage(contentsOfFile: path),
                image.size.width > 0, image.size.height > 0 {
                 breakParagraph()
-                out.append(NSAttributedString(string: Self.withoutPointer(raw) + "\n", attributes: token))
+                // A ✂️ area has no caption (2026-10-20, Victor: *"you don't need to
+                // specify the text part showing the crop … It's enough to show the
+                // images"*): the cut and its ringed screen say where it came from.
+                if !raw.contains("✂️") {
+                    out.append(NSAttributedString(string: Self.withoutPointer(raw) + "\n", attributes: token))
+                }
                 let scale = min(1, width * Self.inlineShotMaxWidthShare / image.size.width, Self.inlineShotMaxHeight / image.size.height)
                 let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
                 var drawn = image
