@@ -81,8 +81,7 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
 - **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D dictate, **⌘⌃X = the local model now** (recording or
   waiting on the cloud: this Mac transcribes the take, `via: local-forced`; 2026-09-28). All three
   swallowed. ⌘⌃⌥D and ⌘⌃L belong to Victor Addons, ⌘⌃W to Wispr Flow.
-  Right ⌘⌥ held = Walkie's clean dictation (`54+61`); right ⌥⇧ held = **Wispr's own** ptt (`61+60`,
-  Q23), left alone.
+  Right ⌘⌥ held = Walkie's clean dictation (`54+61`); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
 - **The clipboard always holds the finished sentence** (Q17, 2026-09-28): the envelope for a prompt,
   the clean words for a plain one, whatever the engine or destination; never restored. ⌘V re-pastes.
 - **Side buttons** (Options+ → ⌃⌥⌘F3…F12, duplicated in `HotkeyTap`, must not drift;

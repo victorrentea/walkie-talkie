@@ -168,7 +168,9 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
 - **Right ⌘⌥ is never Wispr's push-to-talk any more** (Q9 step 2, 2026-09-28): `onWisprPushToTalkReleased`,
   `WisprStart.pushToTalk`, `startedByHeldPair`, `heldPairIsTheEngines` are deleted; the pair is
   `onCleanHold` whatever the Engine (on Engine = Wispr it posts Wispr's F19 shortcut — below). Wispr's
-  own ptt is **right ⌥⇧ `61+60`** (Q23), watched only to start the bridge's feed, never taken.
+  own ptt was **right ⌥⇧ `61+60`** (Q23) — **removed from its `config.json` on 2026-10-19** (Victor:
+  *"the right option and shift should not cause the microphone to stay open"*); Wispr has no ptt now
+  and the tap watches no right ⌥⇧ (`onWisprPushToTalk` deleted).
 - **A Wispr sentence names Wispr's microphone** — `History.micDevice` → `InputDevice.glyph(wisprName:)`,
   read from Wispr, never written; `🎓 TO Wispr` maps to the relay's own device.
 
@@ -234,8 +236,8 @@ He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-
   `HotkeyTap.noteForeignWisprRow` and his ⌘V **passes** (`⌘V from Wispr Flow passed — row N is
   newer than the relay's…`). A ⌘V still dropped with no capture open asks the rows
   (`claimForeignPaste(floor:)`): his row → pasted at the caret (Q19), the relay's → *the relay's own
-  late ⌘V*, logged — never *nothing delivered* in silence. Pure half + tests: `WisprOwnership`. Wispr's ptt is
-  `61+60` (right ⌥⇧, Q23); `GET /engine.wisprPttCoherent` is false if it is ever `54+61` again.
+  late ⌘V*, logged — never *nothing delivered* in silence. Pure half + tests: `WisprOwnership`. Wispr has no ptt
+  since 2026-10-19 (was `61+60`, Q23); `GET /engine.wisprPttCoherent` is null with none, false if it is ever `54+61` again.
 
 ## Catching Wispr's words
 
@@ -634,7 +636,7 @@ name `Wispr Feed`); his microphone is `InputDevice.resolve()`, for Wispr too.
   the bridge is still holding (≤ 2.5 s, `stopWaitsForInput`; past it the chord goes and Q14 carries
   the take).
 - **His own Wispr sentences get a feed too** (`Feed.own`): Wispr listens to From Walkie, so without
-  one it hears silence. Started by right ⌥⇧ (`HotkeyTap.onWisprPushToTalk`, watched never taken), his
+  one it hears silence. Started by his
   fn ⌃ Space (`gestureSeen`, relay: false), or Wispr's input seen running with no feed (200 ms idle
   sample, for his Wispr-window starts). Metering only — nothing written, Q9 unchanged; ends 0.3 s
   after Wispr's input closes, or 3 s with no input. Its tail is Wispr's to cut: a released
@@ -686,7 +688,7 @@ was a blip); `wispr history: row R recorded X s, the relay closed its take at Y 
 - **A relay stop over a start Wispr never took** (no row, no microphone, > 1 s) posts no chord and
   goes to the local model at once (`ownTakeOnly`) — W6's `!isRecording` never held for a relay start.
 - **The raw toggle's stop asks W6 too** (2026-10-02, `HotkeyTap.onWisprRawStop` →
-  `WisprFlowSource.rawStop`): 🔽 →, F5 and the back click used to post the stop straight from the tap,
+  `WisprFlowSource.rawStop`): 🔽 →, F5 (bare F5 is macOS Dictation's since 2026-10-19) and the back click used to post the stop straight from the tap,
   past `stop()`. At 11:07:00 F5's start was lost and the stop chord *started* Wispr (row 18220, written
   at the stop, left listening). Now the tap hands the stop to the source on main, which posts no chord
   for a lost start. Net under it: W2 (NULL row, no microphone seen, 3 s after the close) dismisses

@@ -38,6 +38,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *Every plain dictation ends in a Return* (2026-10-05) for 🔽 →'s stop — superseded 2026-10-07 by *Only the bare 🔽 submits*: 🔽 → and 🔽 ↓ stop a plain dictation with the words alone
 - *🔼 → ends the one open* for a sentence aimed at the bound terminal — superseded 2026-10-05 by *🔼 → mid-sentence flips bound ⇄ caret*: it goes to the caret, and back on the next flick; 🔼 is the stop, ⌘⌃D keeps its own
 - Q9's *Wispr's push-to-talk moves to right ⌘ + right ⇧* (`54+60`, 2026-09-26) — superseded 2026-09-28 by Q23: right ⌥ + right ⇧, `61+60`
+- Q23's *right ⌥ + right ⇧ = Wispr's ptt* (2026-09-28) and *F5 on the keyboard, bare — the plain dictation's toggle* (2026-10-02) — superseded 2026-10-19 by *Right ⌥⇧ and bare F5 let go*: Wispr has no ptt, F5 is macOS Dictation's
 - *Auto fallback to local (p98): ⌘⌃X pressed by the clock* (2026-09-28, 22:25) — superseded 2026-09-29 by *Prepare local transcript (p95)*: p95, not p98; the local words are decoded **ahead** and **offered** (`💻 Use local  ⌘⌃X`), never inserted on a clock — `via: local-auto`, the countdown row and the over-budget flash are gone; the checkbox is *Prepare local transcript (p95)*. Q14 (hard failures) stays automatic
 - *Prepare local transcript (p95)*'s **offered, never inserted** (2026-09-29), `Use local  ⌘⌃X — <engine> over budget`, and the `  🤔⏱️` overdue note on the Transcribing row (2026-09-22/23) — superseded 2026-10-06 by *The countdown to the local words*: the ⌘⌃X row counts down to the budget (`Fallback to local in 3s  ⌘⌃X`, no engine name) and **at zero the local words go in** (`via: local-auto`)
 - *One folder per dictation* (2026-09-20, `shots/<session>/<HH-mm-ss>/`) — superseded 2026-10-01 by *The dictation folder moves up a level*: `shots/<yyyy-MM-dd-HH-mm-ss>/`, flat; the session folder keeps only what has no sentence around it (stray shutters, WAVs, films)
@@ -15631,3 +15632,19 @@ shows and draws a yellow dot (ringed dark, so it survives a yellow or white scre
 was — on the inline frame and on every strip thumbnail, the automatic 📸0 included. The position
 travels as a fraction of the frame (`shotMice` / `shotSizes`), so it lands the same on the 800 px copy
 and the 65 pt thumbnail. Display only: the agent's envelope keeps the numbers, the JPEGs stay clean.
+
+## Right ⌥⇧ and bare F5 let go (2026-10-19)
+
+Victor: *"The right option and shift should not cause the microphone to stay open. Option and command
+from the right side of the space key should, as they currently do. Then also release the F5 from
+starting the mic in the walkie-talkie so I can use the Mac dictation on F5."*
+
+- **Right ⌥⇧ was two layers**: Wispr Flow's own `"61+60": "ptt"` (Q23, written into its
+  `config.json` by us) and the tap's watch of it (`onWisprPushToTalk` → `feedOwnSentence`), which
+  opened his microphone to carry it to From Walkie (`mic: metering …` at 22:36:19). The watch is
+  deleted and the `ptt` key removed from Wispr's config (with Wispr quit, as for Q23). Wispr's
+  `"54+61+80": "popo"` stays — it is what the right ⌘⌥ hold posts on Engine = Wispr. Wispr still
+  opening its input on its own is fed by the idle sample, as before.
+- **Bare F5 passes to macOS** (22:36:00 it had started Wispr's hands-free toggle through
+  `plainToggle`). Only that branch went: ⌃⌥⌘F5 is 🔽 →, and right ⌥ ×2 is still the keyboard's plain
+  toggle (and its stop over an open prompt).

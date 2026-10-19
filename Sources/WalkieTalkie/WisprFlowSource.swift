@@ -873,11 +873,6 @@ final class WisprFlowSource: DictationSource {
                 self?.gestureSeen(start.why, confident: start.isConfident, relay: false)
             }
         }
-        // His own push-to-talk: Wispr listens to From Walkie, so the relay has to
-        // carry his voice there — from the key, not from Wispr's input.
-        hotkeys.onWisprPushToTalk = { [weak self] in
-            self?.feedOwnSentence("right ⌥⇧ — Wispr's push-to-talk")
-        }
         startFeedWatch()
         hotkeys.onWisprMaybeCancelling = { [weak self] in
             DispatchQueue.main.async { self?.dismissSeen() }

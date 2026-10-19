@@ -120,7 +120,7 @@ final class HotkeyTap {
     /// | shortcut | code | what |
     /// |---|---|---|
     /// | `49+59+63` | `popo` | fn ⌃ Space — the hands-free toggle (`postWisprHandsFree` posts exactly this) |
-    /// | `61+60` | `ptt` | right ⌥ + right ⇧ held — Wispr's own push-to-talk (Q23, 2026-09-28; `54+60` on 09-27, `54+61` before). **Never watched**: a sentence he starts with it is Wispr's alone (Q9) |
+    /// | ~~`61+60`~~ | ~~`ptt`~~ | right ⌥ + right ⇧ held — Wispr's own push-to-talk (Q23, 2026-09-28) — **removed from Wispr's config 2026-10-19**: right ⌥⇧ opens no microphone |
     ///
     /// Only `popo` is watched here now (Q9 step 2, 2026-09-28: the right ⌘⌥
     /// pair — `54+61` — is Walkie's own clean dictation, `onCleanHold`).
@@ -220,7 +220,7 @@ final class HotkeyTap {
     /// `.press` starts it, `.release` ends it, `.shortcut` — a real key pressed
     /// while the pair is down — says the ⌘⌥ was a shortcut and the sentence is
     /// thrown away. **Whatever the Engine** since Q9 (2026-09-26/28): Wispr's
-    /// own push-to-talk is right ⌥⇧ (`61+60`), and on Engine = Wispr the hold
+    /// own push-to-talk was right ⌥⇧ (`61+60`, removed 2026-10-19), and on Engine = Wispr the hold
     /// uses the local model (Q21). The two
     /// modifiers are **watched, never taken**: swallowing half a modifier pair
     /// is the stale-⌘ bug by another door. Hops to main on the other side.
@@ -275,8 +275,8 @@ final class HotkeyTap {
     /// Only the hands-free toggle is left (Q9 step 2, 2026-09-28): the
     /// `pushToTalk` case — right ⌘⌥ read as Wispr's hold — and its release
     /// callback (`onWisprPushToTalkReleased`) are gone with the adoption of
-    /// hand-started Wispr sentences. Wispr's push-to-talk is right ⌥⇧ (`61+60`)
-    /// and nothing here watches it.
+    /// hand-started Wispr sentences. Wispr has no push-to-talk since 2026-10-19
+    /// (right ⌥⇧, `61+60`, removed from its config) and nothing here watches one.
     enum WisprStart {
         /// `49+59+63` — fn ⌃ Space, Wispr's hands-free toggle. `postWisprHandsFree`
         /// posts exactly this.
@@ -298,14 +298,6 @@ final class HotkeyTap {
     /// own `postWisprCancel` carries `backButtonStamp` and is not reported —
     /// the source already knows about that one.
     var onWisprMaybeCancelling: (() -> Void)?
-
-    /// **Right ⌥⇧ pressed — Wispr's own push-to-talk (`61+60`) is starting**
-    /// (2026-09-29). Watched, never taken, and nothing of Q9 changes: the only
-    /// reason to know is that Wispr's microphone is From Walkie while the relay
-    /// runs, so the relay must start carrying his voice there — from the key,
-    /// before Wispr's input is even open. Raised on the press edge only.
-    var onWisprPushToTalk: (() -> Void)?
-    private var wisprPttDown = false
 
     /// Whether the right ⌘⌥ pair is currently held, so `onCleanHold` is told
     /// on the edge rather than on every `flagsChanged` while it is down.
@@ -2469,7 +2461,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
-    /// **Right ⌥ ×2 or F5 over an open prompt ends it, as 🔼 would** (2026-10-09).
+    /// **Right ⌥ ×2 over an open prompt ends it, as 🔼 would** (2026-10-09; F5 too until 2026-10-19).
     ///
     /// 19:28:46 that day: the forward button opened a prompt at the caret, and
     /// right ⌥ ×2 — the stop he had used for every sentence since 19:13 — was
@@ -2491,7 +2483,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     }
 
     /// 🔽 →, 🔽 ↓ mid-sentence (2026-10-07), the bare 🔽 at rest (2026-10-05) and
-    /// the keyboard's F5 / 🎤 — **start the plain dictation, or stop the one open**
+    /// right ⌥ ×2 (the keyboard's F5 until 2026-10-19) — **start the plain dictation, or stop the one open**
     /// (see the `VK_F5` case for the why of each guard). `gesture` names the
     /// trigger in the log and the trace. **A stop here inserts the words and
     /// nothing else** (2026-10-07) — Victor: *"when I dictate cleanly with back
@@ -3254,16 +3246,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     rightOptTapUpAt = 0
                 }
             }
-            let ptt = (raw & Self.deviceRightOption) != 0 && (raw & Self.deviceRightShift) != 0
-            if !ownPost, ptt != wisprPttDown {
-                wisprPttDown = ptt
-                if ptt { DispatchQueue.global().async { [weak self] in self?.onWisprPushToTalk?() } }
-            }
             if !ownPost, pair != cleanPairDown {
                 cleanPairDown = pair
                 Self.notePairHeld(pair)
                 // **The pair is Walkie's alone, whatever the Engine** (Q9, and its
-                // step 2 on 2026-09-28): Wispr listens on right ⌥⇧ (`61+60`).
+                // step 2 on 2026-09-28); right ⌥⇧ opens nothing since 2026-10-19.
                 stateLock.lock()
                 let was = enginePairHeld
                 enginePairHeld = pair
@@ -3685,15 +3672,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // **Autorepeat, and the re-fire guard, before the switch.** Six of the
         // ten had no re-fire guard at all (`lastFlickAt`); F10 and F5 keep
         // their own, which also feed their dwell and settle checks.
-        // **F5 on the keyboard, bare — the plain dictation's toggle** (2026-10-02,
-        // Victor: *"la f5 să facă toggle la dictare curată (adică să rămână
-        // pornită până apăs iarăși pe f5)"*). Arrives as key 96 with only the
-        // function-key flag (trace, 08:55). Same start/stop as 🔽 →, guards and
-        // all; the right ⌘⌥ pair stays the hold-to-talk one.
-        if keyCode == VK_F5, !ctrl, !opt, !cmd, !flags.contains(.maskShift) {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("F5 (autorepeat)", type, event) }
-            return plainToggle("F5", type, event)
-        }
+        // **F5 on the keyboard, bare, is macOS Dictation's** (2026-10-19, Victor:
+        // *"release the F5 from starting the mic in the walkie-talkie so I can use
+        // the Mac dictation on F5"*) — it was the plain dictation's toggle from
+        // 2026-10-02; right ⌥ ×2 still is. Only ⌃⌥⌘F5 (🔽 →) is taken below.
 
         if useLogiGestures && ctrl && opt && cmd, let gesture = Self.gestureNames[keyCode] {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
@@ -4834,7 +4816,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// dropped and its words are not delivered by the relay; right ⌘⌥ held is
     /// Walkie's clean dictation only. It was a flag (`WT_WISPR_STANDALONE`,
     /// `wisprStandalone`) until 2026-09-28; the old adoption path is deleted and
-    /// this is the only behaviour. Wispr's own ptt is right ⌥⇧ (`61+60`, Q23).
+    /// this is the only behaviour. Wispr has no ptt since 2026-10-19 (right ⌥⇧ was Q23's).
     ///
     /// **Standalone only: a Wispr sentence the relay started is in flight**, so
     /// the firewall applies to its ⌘V. Set by `WisprFlowSource` at the relay's
@@ -5230,8 +5212,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// on `.maskCommand` instead would start it on every ⌘⌥ in the day.
     private static let deviceRightCommand: UInt64 = 0x000010
     private static let deviceRightOption: UInt64 = 0x000040
-    /// `NX_DEVICERSHIFTKEYMASK`.
-    private static let deviceRightShift: UInt64 = 0x000004
 
     /// **What his hands are holding, as far as the tap has seen** (W1,
     /// 2026-09-28) — the right ⌘⌥ pair, from unstamped events only. The
