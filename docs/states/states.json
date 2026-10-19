@@ -512,7 +512,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
-    "height" : 94,
+    "height" : 46,
     "image" : "flash-model-failed.png",
     "note" : "The longest flash there is, because it is the only one that means the next thing he tries will not work at all. This is the only recogniser the relay has.",
     "shape" : "flash",
@@ -632,14 +632,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 616,
+    "height" : 591,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -668,14 +668,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 427,
+    "height" : 411,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own indented paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said.",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -747,7 +747,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,

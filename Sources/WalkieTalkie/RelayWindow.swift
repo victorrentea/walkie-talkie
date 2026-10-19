@@ -3098,7 +3098,11 @@ private let heardLabel = NSTextField(labelWithString: "")
                 pic.addAttribute(.paragraphStyle, value: picture, range: NSRange(location: 0, length: pic.length))
                 out.append(pic)
                 startParagraph = true
-            } else if raw.hasPrefix("[selected:") || raw.hasPrefix("[copied:") || raw.hasPrefix("[chrome-selection-") {
+            } else if let quote = Self.selectionQuote(raw) {
+                breakParagraph()
+                out.append(quotedSelection(quote.text, app: quote.app))
+                startParagraph = true
+            } else if raw.hasPrefix("[copied:") || raw.hasPrefix("[chrome-selection-") {
                 breakParagraph()
                 var attrs = token
                 attrs[.paragraphStyle] = block
@@ -3114,6 +3118,40 @@ private let heardLabel = NSTextField(labelWithString: "")
         // A token as the last thing leaves a newline under it: one empty line of panel.
         while out.string.last == "\n" { out.deleteCharacters(in: NSRange(location: out.length - 1, length: 1)) }
         return out
+    }
+
+    /// The highlighted text and its app out of a `[selected: "…" from app X]` token —
+    /// nil for any other token.
+    static func selectionQuote(_ token: String) -> (text: String, app: String?)? {
+        let whole = NSRange(token.startIndex..., in: token)
+        guard let m = selectionPattern?.firstMatch(in: token, range: whole),
+              let text = Range(m.range(at: 1), in: token) else { return nil }
+        return (String(token[text]), Range(m.range(at: 2), in: token).map { String(token[$0]) })
+    }
+    private static let selectionPattern = try? NSRegularExpression(
+        pattern: #"^\[selected: "([\s\S]*)"(?: from app ([^\]\n]*))?\]$"#)
+
+    /// **A highlight reads as a quote, not as a token** (2026-10-19, Victor: *"the
+    /// selected text should be without selected in a square bracket, same font size
+    /// as the rest, grayed out italic and prefixed by a double quote that reads like
+    /// a quote … and a bit indented to the right"*). `“` then the words, in
+    /// `promptFont`'s italic and secondary ink, indented past the other blocks, the
+    /// wrapped lines hanging under the words rather than under the mark; the app
+    /// trails as the quote's attribution. Panel only: the agent's words keep the token.
+    private func quotedSelection(_ text: String, app: String?) -> NSAttributedString {
+        let italic = NSFontManager.shared.convert(promptFont, toHaveTrait: .italicFontMask)
+        let attrs: [NSAttributedString.Key: Any] = [.font: italic, .foregroundColor: NSColor.secondaryLabelColor]
+        let mark = "“ "
+        let style = NSMutableParagraphStyle()
+        style.firstLineHeadIndent = 28
+        style.headIndent = 28 + (mark as NSString).size(withAttributes: attrs).width
+        style.paragraphSpacing = 4
+        style.paragraphSpacingBefore = 4
+        var line = mark + text
+        if let app, !app.isEmpty { line += " — \(app)" }
+        var paragraph = attrs
+        paragraph[.paragraphStyle] = style
+        return NSAttributedString(string: line + "\n", attributes: paragraph)
     }
 
     /// The whole-screen thumbnail for a ✂️ token, capped like every picture in

@@ -444,7 +444,11 @@ yields to `--label`).
   ≤ 30 % of the panel's width — `inlineShotMaxWidthShare`, 2026-10-07) — the ✂️ cut-out, else the 800 px frame (`AppDelegate` hands `inlineShots:
   [N: path]`). `[selected: …]`, `[copied: …]` (2026-10-17 — it ran on as plain words until then;
   a copied image is already a `[📸N 📋 copied]` picture) and `[chrome-selection-N: …]` are their own
-  indented paragraph; other tokens are coloured in place. Shot `prompt-copied`. A frame drawn in the words leaves the strip (`stripShots`, matched by **shot number** since
+  indented paragraph; other tokens are coloured in place. **A highlight reads as a quote**
+  (2026-10-19, Victor: *"without selected in a square bracket, same font size as the rest, grayed out
+  italic and prefixed by a double quote … a bit indented"*): `RelayWindow.quotedSelection` draws
+  `“ <words> — <app>` in `promptFont` italic, `secondaryLabelColor`, indented 28 with the wrap hanging
+  under the words; `[copied: …]` and `[chrome-selection-N: …]` keep the teal token. Shot `prompt-copied`. A frame drawn in the words leaves the strip (`stripShots`, matched by **shot number** since
   2026-10-07 — by path the cut-out never equalled the frame, so every inlined picture came back in the strip); the
   automatic 📸0 is not in the preview's words, so it stays there. Editing swaps back to the plain
   words. Shot `prompt-inline`.
