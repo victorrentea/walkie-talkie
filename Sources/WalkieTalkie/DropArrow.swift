@@ -135,13 +135,45 @@ final class DropArrow {
     var isVisible: Bool { panel?.isVisible ?? false }
     var alpha: CGFloat { panel?.alphaValue ?? 0 }
     var report: [String: Any] {
-        ["visible": isVisible, "alpha": Double(alpha), "shine": Double(shine), "crossed": crossed,
-         "armed": armed, "holding": holding, "fading": fading]
+        var r: [String: Any] = ["visible": isVisible, "alpha": Double(alpha), "shine": Double(shine), "crossed": crossed,
+                                "armed": armed, "holding": holding, "fading": fading]
+        if let f = panel?.frame { r["frame"] = [f.minX, f.minY, f.width, f.height] }
+        if let t = panel?.contentView?.layer?.sublayerTransform { r["shift"] = [t.m41, t.m42] }
+        return r
     }
 
     /// Moved by `CaretHalo`, on every caret reading and every pointer event.
     func place(at origin: NSPoint) {
-        panel?.setFrameOrigin(origin)
+        if let p = panel { move(p, to: origin) }
+    }
+
+    /// **The window stays on the caret's display, the pin on the caret**
+    /// (2026-10-20, Victor: *"the pin pointing to where the cursor is
+    /// flickering between two terminals"*). The box is the ring's, 422 pt,
+    /// centred on the caret; for a terminal tiled against the ASUS's left edge
+    /// (caret x ≈ 1757, the edge at 1728) it hung ~180 pt onto the Retina, and
+    /// with *Displays have separate Spaces* on, a window across two displays is
+    /// drawn on one of them at a time — the pin flickered while the reading
+    /// under it stood still (`focusFrame.caret` polled at 10 Hz: one value per
+    /// click). Measured on his four tiles: only the two at x = 1730 flickered.
+    /// So the window is slid inside the caret's screen and its content slid
+    /// back by the same amount; a pin within its own half-width of an edge is
+    /// clipped there, never split.
+    private func move(_ p: RelayPanel, to origin: NSPoint) {
+        let side = CaretHalo.side
+        let caret = NSPoint(x: origin.x + side / 2, y: origin.y + side / 2)
+        var o = origin
+        if let screen = NSScreen.screens.first(where: { $0.frame.contains(caret) })?.frame {
+            o.x = min(max(o.x, screen.minX), screen.maxX - side)
+            o.y = min(max(o.y, screen.minY), screen.maxY - side)
+        }
+        p.setFrameOrigin(o)
+        let back = CATransform3DMakeTranslation(origin.x - o.x, origin.y - o.y, 0)
+        guard let layer = p.contentView?.layer, !CATransform3DEqualToTransform(layer.sublayerTransform, back) else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.sublayerTransform = back
+        CATransaction.commit()
     }
 
     /// **The words are on their way to the caret — the pin grows and shines at
@@ -149,7 +181,7 @@ final class DropArrow {
     /// cursorul de acolo"*). Idempotent: called from every `follow()`.
     func hold(at origin: NSPoint) {
         let p = panel ?? makePanel()
-        p.setFrameOrigin(origin)
+        move(p, to: origin)
         guard !holding else { return }
         holding = true
         setScale(Self.holdScale)
@@ -165,7 +197,7 @@ final class DropArrow {
         guard armed, !holding else { return }
         let p = panel ?? makePanel()
         setScale(1)
-        p.setFrameOrigin(origin)
+        move(p, to: origin)
         let t = Float(max(0, min(1, (quiet - CaretHalo.patience) / CaretHalo.swell)))
         // Talking again: the shine goes softly, once; the ramp itself is set
         // straight, it is already a 20 Hz curve.

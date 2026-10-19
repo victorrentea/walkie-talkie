@@ -329,6 +329,15 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
   `halo.heads.crossed` / `.shine`.
 - `WT_SHOOT_HALO`'s `…-arrow.png` has four columns: `quiet + pin`, `words in flight`, `full voice`
   (plain), `no caret`.
+- **The pin's window stays on the caret's display** (2026-10-20, *"the pin … is flickering between
+  two terminals"*). Its box is the ring's (`CaretHalo.side`, 422 pt) centred on the caret; for the
+  two terminals tiled at x = 1730 (the ASUS starts at 1728) ~180 pt of it hung onto the Retina, and
+  with separate Spaces per display a window across two displays is drawn on one at a time — the
+  pin flickered while `focusFrame.caret` (polled at 10 Hz) and Terminal's key window (an AX
+  observer) each changed once per click. `DropArrow.move` slides the window inside the caret's
+  screen and shifts the content back with the content layer's `sublayerTransform`; a pin closer to
+  an edge than its half-width is clipped there. `GET /test/state.halo.heads.frame` / `.shift`.
+  The ring itself (pointer-riding, same box) still straddles near an edge — untouched.
 
 ## VS Code's caret is its focused element's own frame (2026-10-16)
 
