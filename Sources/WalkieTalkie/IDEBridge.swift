@@ -55,6 +55,9 @@ enum IDEBridge {
         let app: String       // "vscode" / "intellij"
         let port: Int
         let token: String
+        /// The IDE's own pid — IntelliJ publishes it (its plugin runs in the app's
+        /// process); VS Code's is an extension host's, never the app's.
+        let pid: pid_t?
     }
 
     /// A terminal the relay has been pointed at, inside an editor window.
@@ -115,7 +118,7 @@ enum IDEBridge {
                   let port = obj["port"] as? Int,
                   let token = obj["token"] as? String
             else { return nil }
-            return Endpoint(app: app, port: port, token: token)
+            return Endpoint(app: app, port: port, token: token, pid: (obj["pid"] as? Int).map { pid_t($0) })
         }
     }
 
@@ -207,6 +210,24 @@ enum IDEBridge {
         return handle.shellPID
     }
 
+    /// **The caret inside an IntelliJ window**, top-left space, `nil` + why when
+    /// there is none (2026-10-19). Accessibility finds it in the editor but not
+    /// in the terminal tool window (a focused element with no role and no
+    /// bounds), so `TerminalBinding.caretReading` asks the plugin itself —
+    /// `live-coding`'s `/caret`, which reads JediTerm's cursor cell. Found by the
+    /// published pid, no `/ping`: `FocusFrame` asks ~5 times a second.
+    static func caret(pid: pid_t) -> (rect: CGRect?, miss: String?) {
+        guard let endpoint = endpoints(kind: "intellij").first(where: { $0.pid == pid }) else {
+            return (nil, "no live-coding bridge for pid \(pid)")
+        }
+        var why: String?
+        guard let obj = request("GET", "/caret", on: endpoint, timeout: 0.4, error: &why),
+              let x = obj["x"] as? Double, let y = obj["y"] as? Double,
+              let w = obj["w"] as? Double, let h = obj["h"] as? Double, h > 0
+        else { return (nil, "live-coding /caret: \(why ?? "no caret")") }
+        return (CGRect(x: x, y: y, width: w, height: h), nil)
+    }
+
     static func release(_ handle: Handle) {
         _ = request("POST", "/unbind?id=\(handle.id)", on: handle.endpoint)
     }
@@ -217,8 +238,16 @@ enum IDEBridge {
     /// reason about when it simply returns.
     private static func request(_ method: String, _ path: String, on endpoint: Endpoint,
                                 body: [String: Any]? = nil) -> [String: Any]? {
+        var ignored: String?
+        return request(method, path, on: endpoint, body: body, timeout: 3, error: &ignored)
+    }
+
+    /// `error`: the refusal's own `error` field, or the status, for the log.
+    private static func request(_ method: String, _ path: String, on endpoint: Endpoint,
+                                body: [String: Any]? = nil, timeout: TimeInterval,
+                                error: inout String?) -> [String: Any]? {
         guard let url = URL(string: "http://127.0.0.1:\(endpoint.port)\(path)") else { return nil }
-        var req = URLRequest(url: url, timeoutInterval: 3)
+        var req = URLRequest(url: url, timeoutInterval: timeout)
         req.httpMethod = method
         req.setValue(endpoint.token, forHTTPHeaderField: "x-relay-token")
         if let body = body {
@@ -227,16 +256,21 @@ enum IDEBridge {
         }
 
         var result: [String: Any]?
+        var failure: String?
         let done = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: req) { data, response, _ in
+        URLSession.shared.dataTask(with: req) { data, response, err in
             defer { done.signal() }
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-                  let data = data,
-                  let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            else { return }
+            let obj = data.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), let obj else {
+                failure = (obj?["error"] as? String)
+                    ?? (response as? HTTPURLResponse).map { "HTTP \($0.statusCode)" }
+                    ?? err?.localizedDescription ?? "no answer"
+                return
+            }
             result = obj
         }.resume()
-        _ = done.wait(timeout: .now() + 4)
+        if done.wait(timeout: .now() + timeout + 1) == .timedOut { failure = "no answer in \(timeout) s" }
+        error = failure
         return result
     }
 }

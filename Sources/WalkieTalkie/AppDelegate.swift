@@ -1656,6 +1656,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The local transcript's weights, warm from the launch** (2026-09-28) —
         // a couple of seconds in, off the launch's own critical path.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.keepLocalWarm("launch") }
+        // **Offline → a Wispr sentence is the local model's** (2026-10-19, `Connectivity`).
+        Connectivity.shared.start()
         // The same call `POST /unbind` makes: the words go back to the outbox and
         // the relay keeps running, which is the difference between this and ⌘⌃B
         // on the bound target.
@@ -2331,6 +2333,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if body.keys.contains("budget") { self.testBudget = (body["budget"] as? NSNumber)?.doubleValue }
             if body.keys.contains("localEta") { self.testLocalEta = (body["localEta"] as? NSNumber)?.doubleValue }
             if let down = body["wisprDown"] as? Bool { self.testWisprDown = down }
+            // 2026-10-19: read as offline / online; null = the real network again.
+            if body.keys.contains("offline") { Connectivity.shared.forced = body["offline"] as? Bool }
             // Item 4 (batch 4): Wispr's process read as this many seconds old; null clears.
             if body.keys.contains("wisprAge") { self.testWisprAge = (body["wisprAge"] as? NSNumber)?.doubleValue }
             if let fake = body["fakeLaunch"] as? Bool {
@@ -5062,6 +5066,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         "notUp": wisprNotUpForAutoLocal() ?? NSNull(),
                         "launchedAgo": wisprLaunchedAt.map { CFAbsoluteTimeGetCurrent() - $0 } ?? NSNull()] as [String: Any]
         out["localReady"] = whisperSource.isReady
+        out["network"] = Connectivity.shared.json().merging(["offline": Connectivity.shared.offlineReason ?? NSNull()]) { a, _ in a }
         return out
     }
 
@@ -5820,6 +5825,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (2026-10-06): it would ignore the chord, and the sentence found out 12 s
         // in. Same engine for every gesture — this is the hard-failure borrow,
         // decided here, once, for all four (bound, caret, new session, clean).
+        // **Nor offline** (2026-10-19, Victor: *"walkie talkie should default to
+        // local when wisprflow is selected without internet"*): Wispr transcribes
+        // in the cloud, takes the sentence, and fails it after its own *Is your
+        // internet connected?*. The Engine stays Wispr; the next sentence online
+        // is Wispr's again.
+        if source === wisprSource, !borrowedForWispr, let offline = Connectivity.shared.offlineReason {
+            borrowEngine(whisperSource, for: "Wispr Flow needs the internet — \(offline)")
+            if source === whisperSource {
+                borrowedForWispr = true
+                Connectivity.shared.recheck()
+                overlay.flash(AutoLocal.wisprOfflineFlash, duration: 3)
+            }
+        }
         if source === wisprSource, !borrowedForWispr, let row = wisprSource.stillFinishingAbandonedRow {
             borrowEngine(whisperSource, for: "Wispr Flow is still finishing row \(row), the take handed to this Mac — it would ignore the chord")
             if source === whisperSource {

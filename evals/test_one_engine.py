@@ -38,6 +38,7 @@ BORROWS = {
     "right ⌘⌥ held on Engine = Wispr (Q21": "Wispr has no right ⌘⌥ + F19 hands-free shortcut",
     "Wispr Flow \\(down) — auto fallback": "Wispr Flow is not running or still starting",
     "Wispr Flow is still finishing row": "Wispr Flow is still on the take handed to this Mac",
+    "Wispr Flow needs the internet": "no internet — Wispr transcribes in the cloud (2026-10-19)",
 }
 
 

@@ -121,6 +121,16 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   `watchLateRow` owns, read live, nil once terminal/dead) → `startDictation` borrows the local model
   **at the start**, flash `💻 Local — the last take is still being transcribed`. With the clock
   handing over at the budget this is the common case after a slow row, not a rarity.
+- **Offline, a Wispr sentence is the local model's from the first word** (2026-10-19, Victor: *"walkie
+  talkie should default to local when wisprflow is selected without internet"* — his screenshots:
+  Wispr's own *Is your internet connected?* then *Transcript failed to load*). `Connectivity` =
+  `NWPathMonitor` (no route → offline at once) + a `HEAD` to apple.com's captive page every 30 s and
+  at every path change, **two failures in a row** = offline (Wi-Fi with no uplink still reads
+  `.satisfied`); unknown counts as online. `startDictation` borrows the local model
+  (`Wispr Flow needs the internet — …`, flash `💻 Local — no internet for Wispr Flow`) and re-probes;
+  the Engine stays Wispr. Log `🌐 offline — …` / `🌐 online again`. Desk: `POST /test/local-auto
+  {"offline": true｜false｜null}`, `localAuto.network`. Not done for ElevenLabs — `borrowEngine`
+  always returns to Wispr.
 - **One engine for every gesture** (2026-10-06, Victor: *"the model that is used for transcribing
   should be the same for all four, always. Make sure in the code that this never drifts"*): bound,
   caret, new session and clean all open the microphone through `startDictation`, the only caller of

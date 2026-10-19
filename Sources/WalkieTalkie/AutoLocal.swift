@@ -266,6 +266,9 @@ enum AutoLocal {
     /// The flash when a Wispr sentence starts with Wispr Flow down (or just launched).
     static let wisprStartingFlash = "💻 Local — Wispr Flow is starting"
 
+    /// The flash when a Wispr sentence starts with no internet (2026-10-19, `Connectivity`).
+    static let wisprOfflineFlash = "💻 Local — no internet for Wispr Flow"
+
     /// A Wispr Flow the relay launched itself counts as *starting* this long —
     /// Victor: *"10 s startup time is killing"*. The process is up well before
     /// its microphone answers a chord.

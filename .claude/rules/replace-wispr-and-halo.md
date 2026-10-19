@@ -350,6 +350,14 @@ pin`, and it was **not** the asleep tree: with VS Code in front `kAXFocusedUIEle
   why a caret was missed — `no caret found in it (no focused element (-25212))`, `(focused AXTextArea
   1569×840, no bounds for its caret)`, `(its caret … is outside the window)` — read it from his next
   IntelliJ terminal sentence before building anything (a `/caret` on `live-coding` is the fallback).
+- **IntelliJ's terminal is measured** (2026-10-19): `focused no role, no bounds for its caret` on
+  every sentence (classic engine, JediTerm). `caretReading` now asks the `live-coding` plugin when AX
+  finds nothing in a JetBrains app — `IDEBridge.caret(pid:)` → `GET /caret` (endpoint found by the
+  pid it publishes, 0.4 s timeout), which answers the focus owner's caret in AWT screen space (= AX's
+  top-left space): an editor's `visualPositionToXY` (also the reworked terminal), JediTerm's IME
+  location (the cursor cell's bottom-left) minus `myCharSize.height`, or a `JTextComponent`'s
+  `modelToView2D`; 404 when the IDE does not hold the keyboard or the caret is scrolled out. A miss
+  logs both reasons (`…; live-coding /caret: HTTP 404`) — an old plugin answers that.
 - `AXManualAccessibility` is still not set by the app (`terminal-binding.md`) — nothing here needs it.
 
 ## The heads stay up while the words travel to the caret (2026-09-15)

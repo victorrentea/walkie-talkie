@@ -1543,6 +1543,25 @@ final class TerminalBinding {
     /// `caret`, and when there is none, **why** — for the `🟧 … no caret found`
     /// line, so the next app that hides its caret says how (2026-10-16).
     static func caretReading(pid: pid_t, in window: CGRect) -> (point: NSPoint?, miss: String?) {
+        let ax = axCaretReading(pid: pid, in: window)
+        guard ax.point == nil,
+              let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+              IDEBridge.kind(bundleID: bundle) == "intellij" else { return ax }
+        // **IntelliJ's terminal has no caret to Accessibility** (2026-10-19 —
+        // `focused no role, no bounds for its caret` on every sentence there):
+        // the plugin reads JediTerm's cursor cell. Its line's middle, like a
+        // range's `midY` above.
+        let ide = IDEBridge.caret(pid: pid)
+        guard let r = ide.rect, let primary = NSScreen.screens.first else {
+            return (nil, [ax.miss, ide.miss].compactMap { $0 }.joined(separator: "; "))
+        }
+        let point = NSPoint(x: r.minX, y: primary.frame.maxY - r.midY)
+        return window.insetBy(dx: -4, dy: -4).contains(point)
+            ? (point, nil)
+            : (nil, String(format: "its caret (%.0f, %.0f) from live-coding is outside the window", point.x, point.y))
+    }
+
+    private static func axCaretReading(pid: pid_t, in window: CGRect) -> (point: NSPoint?, miss: String?) {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.3)
         var focused: CFTypeRef?
