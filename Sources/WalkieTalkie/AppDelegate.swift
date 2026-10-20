@@ -2715,7 +2715,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onPasteToggle = { [weak self] in
             DispatchQueue.main.async { self?.forwardClickToggle() }
         }
-        // Right ⌥ ×2 over an open prompt (2026-10-09) — a stop and only a
+        // Right ⌘ ×2 over an open prompt (2026-10-09; right ⌥ ×2 until 10-20) — a stop and only a
         // stop: by the time this hop lands the sentence may have ended, and then
         // nothing starts.
         hotkeys.onKeyboardEndsSentence = { [weak self] in

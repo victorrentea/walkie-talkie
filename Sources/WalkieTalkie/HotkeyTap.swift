@@ -1546,15 +1546,16 @@ final class HotkeyTap {
     private var lastF10ActedAt: CFTimeInterval = 0
     /// The last 🔽 → (F5, the plain dictation's toggle), for the same re-trigger guard.
     private var lastF5At: CFTimeInterval = 0
-    /// **Right ⌥ tapped twice, alone — the plain dictation's toggle too**
-    /// (2026-10-02). When the lone right ⌥ went down (0 = not down, or not alone
-    /// any more), and when the last clean tap of it ended (0 = none pending).
-    private var rightOptTapDownAt: CFTimeInterval = 0
-    private var rightOptTapUpAt: CFTimeInterval = 0
+    /// **Right ⌘ tapped twice, alone — the plain dictation's toggle too**
+    /// (right ⌥ from 2026-10-02, right ⌘ since 2026-10-20). When the lone right ⌘
+    /// went down (0 = not down, or not alone any more), and when the last clean
+    /// tap of it ended (0 = none pending).
+    private var rightCmdTapDownAt: CFTimeInterval = 0
+    private var rightCmdTapUpAt: CFTimeInterval = 0
     /// Down to up, and release to the second press — longer is a hold or two
     /// separate presses, not a double tap.
-    private static let rightOptTapSeconds: CFTimeInterval = 0.35
-    private static let rightOptGapSeconds: CFTimeInterval = 0.45
+    private static let rightCmdTapSeconds: CFTimeInterval = 0.35
+    private static let rightCmdGapSeconds: CFTimeInterval = 0.45
     /// The last toggle of a plain dictation (🔽 →'s start or stop, 🔽's stop) —
     /// see the F5 case.
     private var lastBackToggleAt: CFTimeInterval = 0
@@ -2437,7 +2438,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         let ctrl = flags.contains(.maskControl), opt = flags.contains(.maskAlternate), cmd = flags.contains(.maskCommand)
         let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         if ctrl && opt && cmd { return Self.gestureNames[code] != nil }
+        if Self.isRightCommandSpace(code, flags) { return true }
         return ctrl && cmd && !opt && (code == VK_B || code == VK_D || code == VK_X)
+    }
+
+    /// Space under the **right** ⌘ and nothing else — not the left ⌘ (Spotlight's).
+    private static func isRightCommandSpace(_ code: CGKeyCode, _ flags: CGEventFlags) -> Bool {
+        let others: CGEventFlags = [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
+        return code == VK_SPACE && flags.contains(.maskCommand) && flags.intersection(others).isEmpty
+            && (flags.rawValue & deviceRightCommand) != 0 && (flags.rawValue & deviceLeftCommand) == 0
     }
 
     /// **The freeze photographs itself.** The 17:12 one was only understood
@@ -2461,7 +2470,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
     }
 
-    /// **Right ⌥ ×2 over an open prompt ends it, as 🔼 would** (2026-10-09; F5 too until 2026-10-19).
+    /// **Right ⌘ ×2 (right ⌥ ×2 until 2026-10-20) over an open prompt ends it, as 🔼 would** (2026-10-09; F5 too until 2026-10-19).
     ///
     /// 19:28:46 that day: the forward button opened a prompt at the caret, and
     /// right ⌥ ×2 — the stop he had used for every sentence since 19:13 — was
@@ -2483,7 +2492,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     }
 
     /// 🔽 →, 🔽 ↓ mid-sentence (2026-10-07), the bare 🔽 at rest (2026-10-05) and
-    /// right ⌥ ×2 (the keyboard's F5 until 2026-10-19) — **start the plain dictation, or stop the one open**
+    /// right ⌘ ×2 (right ⌥ ×2 until 2026-10-20; the keyboard's F5 until 2026-10-19) — **start the plain dictation, or stop the one open**
     /// (see the `VK_F5` case for the why of each guard). `gesture` names the
     /// trigger in the log and the trace. **A stop here inserts the words and
     /// nothing else** (2026-10-07) — Victor: *"when I dictate cleanly with back
@@ -2604,7 +2613,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if isOwnChordWhileFrozen(type, event) {
                 chordsDroppedWhileOpen += 1
                 let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                Log.info("🧊 \(Self.gestureNames[code] ?? (code == VK_B ? "⌘⌃B" : code == VK_X ? "⌘⌃X" : "⌘⌃D")) dropped — the main thread is frozen; a gesture made now is not acted on, and never reaches the front app")
+                Log.info("🧊 \(Self.gestureNames[code] ?? (code == VK_B ? "⌘⌃B" : code == VK_X ? "⌘⌃X" : code == Self.VK_SPACE ? "right ⌘ Space" : "⌘⌃D")) dropped — the main thread is frozen; a gesture made now is not acted on, and never reaches the front app")
                 return nil
             }
             return Unmanaged.passUnretained(event)
@@ -3214,36 +3223,41 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // ~0.25 s into a hold — the sentence cancelled as "too short". Only
             // unstamped events move the pair.
             let ownPost = event.getIntegerValueField(.eventSourceUserData) == Self.backButtonStamp
-            // **Right ⌥ twice, alone, quickly = F5** (2026-10-02, Victor: *"să pot
-            // să apăs și de două ori repede tasta Option din partea dreaptă, ca să
-            // tot comute dictarea on și off"*). Only the right ⌥ with nothing else
-            // held counts; any other modifier, a key in between (keyDown below) or
-            // a slow press breaks the pair. The event itself always goes through —
-            // swallowing a modifier edge would leave ⌥ stuck in the app underneath.
+            // **Right ⌘ twice, alone, quickly = F5** (right ⌥ from 2026-10-02 —
+            // Victor: *"să pot să apăs și de două ori repede tasta Option din
+            // partea dreaptă, ca să tot comute dictarea on și off"* — moved to
+            // right ⌘ on 2026-10-20: *"instead of right opt-opt, right cmd-cmd
+            // should open clean dictation"*, right ⌥ ×2 going to Victor Addons'
+            // emoji picker). Only the right ⌘ with nothing else held counts — the
+            // left ⌘ included; any other modifier, a key in between (keyDown below,
+            // right ⌘ + Space among them) or a slow press breaks the pair. The
+            // event itself always goes through — swallowing a modifier edge would
+            // leave ⌘ stuck in the app underneath.
             if !ownPost {
                 let now = CACurrentMediaTime()
                 let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                let others: CGEventFlags = [.maskCommand, .maskControl, .maskShift, .maskSecondaryFn, .maskAlphaShift]
-                let loneRightOpt = keyCode == Self.VK_RIGHT_OPTION
-                    && (raw & Self.deviceRightOption) != 0
-                    && event.flags.intersection(others).isEmpty
-                if loneRightOpt {
-                    rightOptTapDownAt = now
-                    if rightOptTapUpAt > 0, now - rightOptTapUpAt > Self.rightOptGapSeconds { rightOptTapUpAt = 0 }
-                } else if keyCode == Self.VK_RIGHT_OPTION, rightOptTapDownAt > 0,
-                          (raw & Self.deviceRightOption) == 0, event.flags.intersection(others).isEmpty,
-                          now - rightOptTapDownAt <= Self.rightOptTapSeconds {
-                    rightOptTapDownAt = 0
-                    if rightOptTapUpAt > 0 {
-                        rightOptTapUpAt = 0
-                        Log.info("🎙️ right ⌥ double-tapped — the plain dictation's toggle (as F5)")
-                        _ = plainToggle("right ⌥ ×2", type, event)
+                let others: CGEventFlags = [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn, .maskAlphaShift]
+                let alone = event.flags.intersection(others).isEmpty && (raw & Self.deviceLeftCommand) == 0
+                let loneRightCmd = keyCode == Self.VK_RIGHT_COMMAND
+                    && (raw & Self.deviceRightCommand) != 0 && alone
+                if loneRightCmd {
+                    rightCmdTapDownAt = now
+                    if rightCmdTapUpAt > 0, now - rightCmdTapUpAt > Self.rightCmdGapSeconds { rightCmdTapUpAt = 0 }
+                } else if keyCode == Self.VK_RIGHT_COMMAND, rightCmdTapDownAt > 0,
+                          (raw & Self.deviceRightCommand) == 0, alone,
+                          !event.flags.contains(.maskCommand),
+                          now - rightCmdTapDownAt <= Self.rightCmdTapSeconds {
+                    rightCmdTapDownAt = 0
+                    if rightCmdTapUpAt > 0 {
+                        rightCmdTapUpAt = 0
+                        Log.info("🎙️ right ⌘ double-tapped — the plain dictation's toggle (as F5)")
+                        _ = plainToggle("right ⌘ ×2", type, event)
                     } else {
-                        rightOptTapUpAt = now
+                        rightCmdTapUpAt = now
                     }
                 } else {
-                    rightOptTapDownAt = 0
-                    rightOptTapUpAt = 0
+                    rightCmdTapDownAt = 0
+                    rightCmdTapUpAt = 0
                 }
             }
             if !ownPost, pair != cleanPairDown {
@@ -3264,8 +3278,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 return Unmanaged.passUnretained(event)
             }
         }
-        // A key between or under the right ⌥ taps is ⌥ used as a modifier.
-        if type == .keyDown { rightOptTapDownAt = 0; rightOptTapUpAt = 0 }
+        // A key between or under the right ⌘ taps is ⌘ used as a modifier.
+        if type == .keyDown { rightCmdTapDownAt = 0; rightCmdTapUpAt = 0 }
         // **A key under the held pair makes it a shortcut, not a dictation**
         // (2026-09-25, `onCleanHold`). Right ⌘⌥ + a letter is a chord somebody
         // else owns; the sentence opened at the press is thrown away and the
@@ -3634,6 +3648,17 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             return swallow("⌘⌃D dictate", type, event)
         }
 
+        // **Right ⌘ + Space — ⌘⌃D under one thumb** (2026-10-20, Victor: *"right
+        // cmd + space = toggle on/off hands free dictation"*). The right ⌘ alone
+        // (device bit, no left ⌘, nothing else held), so Spotlight stays on the
+        // left ⌘ + Space. Swallowed always, autorepeat included, like ⌘⌃D.
+        if Self.isRightCommandSpace(keyCode, flags) {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("right ⌘ Space (autorepeat)", type, event) }
+            queueToggle()
+            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
+            return swallow("right ⌘ Space dictate", type, event)
+        }
+
         // ⌘⌃X — **the local model, now** (2026-09-28): see `onLocalNow`. Swallowed
         // always, like the two above — at rest too, where the relay flashes
         // *Nothing to transcribe locally* rather than let ⌘⌃X through to the
@@ -3675,7 +3700,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // **F5 on the keyboard, bare, is macOS Dictation's** (2026-10-19, Victor:
         // *"release the F5 from starting the mic in the walkie-talkie so I can use
         // the Mac dictation on F5"*) — it was the plain dictation's toggle from
-        // 2026-10-02; right ⌥ ×2 still is. Only ⌃⌥⌘F5 (🔽 →) is taken below.
+        // 2026-10-02; right ⌘ ×2 still is. Only ⌃⌥⌘F5 (🔽 →) is taken below.
 
         if useLogiGestures && ctrl && opt && cmd, let gesture = Self.gestureNames[keyCode] {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
@@ -5212,6 +5237,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// on `.maskCommand` instead would start it on every ⌘⌥ in the day.
     private static let deviceRightCommand: UInt64 = 0x000010
     private static let deviceRightOption: UInt64 = 0x000040
+    /// `NX_DEVICELCMDKEYMASK` — the left ⌘, so right ⌘ ×2 and right ⌘ Space
+    /// are the right ⌘ alone, not ⌘ held on both sides.
+    private static let deviceLeftCommand: UInt64 = 0x000008
 
     /// **What his hands are holding, as far as the tap has seen** (W1,
     /// 2026-09-28) — the right ⌘⌥ pair, from unstamped events only. The
@@ -5239,6 +5267,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private static let VK_ESC:     CGKeyCode = 53
     private static let VK_SPACE:   CGKeyCode = 49
     private static let VK_RIGHT_OPTION: CGKeyCode = 61
+    private static let VK_RIGHT_COMMAND: CGKeyCode = 54
     private static let VK_CONTROL: CGKeyCode = 59
     private static let VK_FN:      CGKeyCode = 63
 }

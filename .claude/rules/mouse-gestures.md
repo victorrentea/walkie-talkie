@@ -12,6 +12,7 @@ What `HotkeyTap` may and may not do with the two keyboard chords and with the mo
 |---|---|---|
 | **⌘⌃B** | `onBindHotkey` → `bindFrontmostTerminal` | was ⌘⌃D until 2026-09-01 |
 | **⌘⌃D** | `onLocalToggle` → `toggleLocalRecording` | new — the wheel's click, from the keyboard |
+| **right ⌘ + Space** | `onLocalToggle` — the same call as ⌘⌃D | 2026-10-20, Victor: *"right cmd + space = toggle on/off hands free dictation"*. Right ⌘ only (device bit `0x10`, left ⌘ `0x08` absent, no ⌃⌥⇧fn), so Spotlight keeps left ⌘ + Space; swallowed always, dropped while frozen |
 
 - **Swallow both unconditionally, autorepeat included.** A held ⌘⌃D would open the microphone and shut it again on the next repeat; a held ⌘⌃B would bind and then immediately stop the session it started. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
 - **⌘⌃D is ungated at the tap.** A key that sometimes falls through to macOS's "look up in dictionary" would be worse than one that never does; with nothing bound the sentence is held for five minutes and delivered when a bind lands (`awaitingBind`, 2026-09-11), so the press costs nothing. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
@@ -167,10 +168,11 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 
 - **Bare F5 on the keyboard is macOS Dictation's, not Walkie's** (2026-10-19). Victor: *"release the F5
   from starting the mic in the walkie-talkie so I can use the Mac dictation on F5"*. The tap's bare-F5
-  branch (2026-10-02, the plain dictation's toggle) is gone; right ⌥ ×2 stays the keyboard's plain
+  branch (2026-10-02, the plain dictation's toggle) is gone; right ⌥ ×2 (right ⌘ ×2 since 2026-10-20) stays the keyboard's plain
   toggle, ⌃⌥⌘F5 (🔽 →) the mouse's. **Right ⌥⇧ opens nothing** the same day: Wispr's `61+60` ptt is
   out of its config and `onWisprPushToTalk` out of the tap (`dictation-source.md`).
-- **Right ⌥ ×2 (and F5, until 2026-10-19) over an open prompt end it, as 🔼 would** (2026-10-09, `keyboardEndsOpenPrompt`). They used to be refused (*"the relay's own engine is mid-sentence"*) — the opening half of the no-second-engine rule applied to a stop: at 19:28 a forward-button prompt could not be closed from the keyboard and took a Force Quit. Only the keyboard triggers; the 🔽 gestures keep their mid-prompt meanings and their refusal. Log `🎙️ right ⌥ ×2 over an open prompt — its stop`.
+- **Right ⌘ ×2 moved from right ⌥ ×2** (2026-10-20, Victor: *"instead of right opt-opt, right cmd-cmd should open clean dictation"*) — same `plainToggle`, same 0.35 s tap / 0.45 s gap; right ⌘ alone (left ⌘ or any other modifier breaks it, a key between resets it). Right ⌥ ×2 is free for Victor Addons' emoji picker. Log `🎙️ right ⌘ double-tapped — the plain dictation's toggle (as F5)`.
+- **Right ⌘ ×2 (right ⌥ ×2 until 2026-10-20; F5 until 2026-10-19) over an open prompt end it, as 🔼 would** (2026-10-09, `keyboardEndsOpenPrompt`). They used to be refused (*"the relay's own engine is mid-sentence"*) — the opening half of the no-second-engine rule applied to a stop: at 19:28 a forward-button prompt could not be closed from the keyboard and took a Force Quit. Only the keyboard triggers; the 🔽 gestures keep their mid-prompt meanings and their refusal. Log `🎙️ right ⌘ ×2 over an open prompt — its stop`.
 
 - **A quick question is `Asking`, and its 🔽 stop says `⚡ ask`** — *since 2026-10-15 it is a prompt: 🔼 says `⚡ ask`, 🔽 `📸 shot`, 🔽 ↓ `⌨️ type`, no ✨ / ☠️ / video (`GestureHintBar`, `destinations-and-outbox.md`)* (2026-10-09, Victor: *"let's call it quick question … asking in the tooltip"*). The chip's row reads `❓ Asking → …` (`RelayWindow.asking`; the ❓ is a still of the halo's gold electric question mark, playing the film's 4 s loop at 12 fps on `RelayWindow.questionView` over a transparent hole in the words (same day, *"este și animat? Mi-ar plăcea"*) — 48 cells in `assets/question-mark-icon-8x6.png`, `tools/build-question-icon.py`; the states page and the `Transcribing...` row get the first cell, still; a ⚡ until 2026-10-12, Victor: *"în loc de fulger din fața Asking … un semnul întrebării … galben"*), and the corner hint bar's 🔽 click and 🔽 → read `⚡ ask` instead of the plain dictation's `⏹️ + ⏎` / `⏹️` — the stop asks the model and no Return follows (`GestureHintBar.Stage.quick`).
 ## Do not
