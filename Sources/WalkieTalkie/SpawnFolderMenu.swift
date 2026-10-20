@@ -225,6 +225,15 @@ enum SpawnFolderMenu {
     /// The line itself: a hairline, inset to the rows' own edges so it reads as
     /// dividing the list rather than crossing the panel.
     private static let separatorHeight: CGFloat = 9
+    /// *Workspace ›*'s section titles: centred between two 2 pt lines, in a
+    /// band taller than a row so the sections stand apart at a glance.
+    private static let sectionFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    private static let sectionHeight: CGFloat = 30
+    private static let sectionLineWeight: CGFloat = 2
+    private static let sectionLineGap: CGFloat = 8
+    /// The shortest a line beside the title may get, so a narrow column still
+    /// draws both.
+    private static let sectionLineMin: CGFloat = 24
     private static let radius: CGFloat = 10
     /// How far off the pointer the corner sits — `RelayWindow.anchorGap`'s width,
     /// mirrored, since this hangs off the other side of the cursor.
@@ -847,11 +856,11 @@ enum SpawnFolderMenu {
             .map { ((sparkle + $0.name) as NSString).size(withAttributes: [.font: sessionFont]).width }
             .max() ?? 0)
         let titles = sections
-            .map { ($0.title as NSString).size(withAttributes: [.font: headerFont]).width }
+            .map { ($0.title as NSString).size(withAttributes: [.font: sectionFont]).width }
             .max() ?? 0
-        let column = ceil(max(widest + starGap + starSize, titles) + 2 * rowInset)
+        let column = ceil(max(widest + starGap + starSize, titles + 2 * sectionLineMin) + 2 * rowInset)
         let full = ceil(2 * pad + sections.reduce(0) {
-            $0 + headerHeight + CGFloat($1.rows.count) * sessionHeight
+            $0 + sectionHeight + CGFloat($1.rows.count) * sessionHeight
         })
         let shown = min(full, floor(maxHeight - 2 * gap))
         let scrolls = full > shown
@@ -867,14 +876,8 @@ enum SpawnFolderMenu {
         // Top-down: the most recent section first.
         var top = full - pad
         for section in sections {
-            let label = NSTextField(labelWithString: section.title)
-            label.font = headerFont
-            label.textColor = .secondaryLabelColor
-            let h = label.intrinsicContentSize.height
-            label.frame = NSRect(x: pad + rowInset, y: top - headerHeight + (headerHeight - h) / 2,
-                                 width: column - 2 * rowInset, height: h)
-            list.addSubview(label)
-            top -= headerHeight
+            top -= sectionHeight
+            addSectionTitle(section.title, at: top, x: pad + rowInset, width: column - 2 * rowInset, to: list)
             for choice in section.rows {
                 top -= sessionHeight
                 let row = FolderRow(frame: NSRect(x: pad, y: top, width: column, height: sessionHeight),
@@ -900,6 +903,31 @@ enum SpawnFolderMenu {
         scroll.reflectScrolledClipView(scroll.contentView)
         root.addSubview(scroll)
         return root
+    }
+
+    /// **A section's title, centred between two thick lines** (2026-10-20,
+    /// Victor: *"a thicker line between the three sections so I can quickly
+    /// spot them … center align … the labels of the separators"*) — the small
+    /// left-aligned grey title read as one more row in a forty-row column.
+    private static func addSectionTitle(_ text: String, at y: CGFloat, x: CGFloat, width: CGFloat,
+                                        to view: NSView) {
+        let label = NSTextField(labelWithString: text)
+        label.font = sectionFont
+        label.textColor = .secondaryLabelColor
+        let s = label.intrinsicContentSize
+        let labelX = x + ((width - s.width) / 2).rounded()
+        label.frame = NSRect(x: labelX, y: y + ((sectionHeight - s.height) / 2).rounded(),
+                             width: ceil(s.width), height: s.height)
+        view.addSubview(label)
+        let lineY = y + ((sectionHeight - sectionLineWeight) / 2).rounded()
+        for (from, to) in [(x, labelX - sectionLineGap), (labelX + ceil(s.width) + sectionLineGap, x + width)]
+        where to > from {
+            let line = NSView(frame: NSRect(x: from, y: lineY, width: to - from, height: sectionLineWeight))
+            line.wantsLayer = true
+            line.layer?.cornerRadius = sectionLineWeight / 2
+            line.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+            view.addSubview(line)
+        }
     }
 
     /// A borderless, non-activating panel above everything — see `show` for
