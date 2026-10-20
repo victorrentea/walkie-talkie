@@ -1973,9 +1973,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// right after the engine's name in the top-level row's title — `ElevenLabs ☁️
     /// + Live`, `Local 💻 (1.5 GB)` (after the name since 2026-09-30, as in the list).
     func engineBannerTitle(_ id: String) -> String {
-        // **`Wispr`, not `Wispr Flow`, on the tab** (2026-10-06, Victor: *"numește
-        // Wispr în loc de „Wispr Flow" în overlay-ul care se ridică pe jumătate"*).
-        if id == "wispr" { return "\(Self.cloud) Wispr" }
+        // **`Wispr Flow` on the tab, as in the Engine menu** (2026-10-20, Victor:
+        // *"instead of just Whisper in the badge popping from below, put the
+        // name of the full product"*) — reverses 2026-10-06's `Wispr`.
+        if id == "wispr" { return "\(Self.cloud) Wispr Flow" }
         // **No RAM on the tab** (2026-10-14, Victor: *"I don't want to see the
         // gigabytes"*) — the footprint stays in the menu's Engine row.
         if id == "eleven" || id == "eleven-live" { return engineShortTitle(id) }

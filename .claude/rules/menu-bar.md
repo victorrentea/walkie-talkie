@@ -69,7 +69,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `Gestures: Logi` / `: Wheel` (`Mouse Gestures` until 2026-09-22) | `computermouse` | `>` — a two-row submenu |
 | `𝓯𝔁` (`Halo 𝓯𝔁 when…` until 2026-09-28 — *"no ellipses, no other words, just the FX stylish font"*; plain `Halo fx` until 2026-09-22; destination rows `Prompt at caret` / `Prompt to bounded` / `Prompt to new Claude` / `Plain dictation`, pre-process `Bass (kick per syllable)` → `Syllable beat`) | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Engine: projectM｜Web` and `Pre-process: <chain>` (`Fx engine` / `Fx voice` until 2026-09-22 — *"doar «projectM», că deja știu cine e"*, and the parentheses shortened so the open list fits at the right edge of the screen) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
-| `Auto-attach` (2026-10-15) | `paperclip` | `>` — `Selected Text`, `Screenshot at Start`, `Everything I Copy`, each a tick (`checkmark` / blank), all on by default (`AutoAttach`, `screenshots-and-selection.md`) |
+| `Auto-attach` (2026-10-15) | `paperclip` | `>` — `Anything I Select`, `Anything I Copy`, `Screenshot at Start` (2026-10-20), each a tick (`checkmark` / blank), all on by default (`AutoAttach`, `screenshots-and-selection.md`) |
 | `Prompt Log` | 📜 | |
 | `Victor's Walkie Talkie (<build>)` | ℹ️ | | |
 | `Quit` | `power` | | |
@@ -220,7 +220,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `StatusItem.cloud` / `StatusItem.local`: the Engine list (`☁️ ElevenLabs + Live 💸x3`,
   `☁️ ElevenLabs`, `💻 v3-turbo`, `💻 v3-turbo-victor`, `☁️ Wispr Flow`), the top row
   (`Engine: 💻 v3-turbo-victor 1.5 GB`), the launch and green tabs (`☁️ ElevenLabs + Live`,
-  `☁️ Wispr`), and the prompt panel's `Engine: ☁️ ElevenLabs Scribe (scribe_v2)` /
+  `☁️ Wispr Flow` — the full name since 2026-10-20, `☁️ Wispr` before), and the prompt panel's `Engine: ☁️ ElevenLabs Scribe (scribe_v2)` /
   `Engine: 💻 Local Whisper (…)` (`AppDelegate.heardLine`).
 - **The local engine is one row per model, siblings of the cloud engines** (2026-10-03; nested
   under `Local 💻` for one build the same day — Victor: *one radio group, one checkmark, short

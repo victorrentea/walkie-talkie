@@ -18,17 +18,20 @@ enum AutoAttach {
         /// The highlight he made ≤ 5 s before the prompt, the 1 s watcher, the
         /// drag-release probe, the read at the close.
         case selection
-        /// 📸0, the frame taken when a prompt opens.
-        case screenshot
         /// Whatever lands on the pasteboard while a prompt records — text, an
         /// image, files copied in Finder.
         case clipboard
+        /// 📸0, the frame taken when a prompt opens.
+        case screenshot
 
+        /// **`Anything I Select`, `Anything I Copy`, `Screenshot at Start`, in
+        /// that order** (2026-10-20, Victor: *"Anything I select. Anything I
+        /// copy. And a screenshot at start"*) — the case order is the menu's.
         var title: String {
             switch self {
-            case .selection: return "Selected Text"
+            case .selection: return "Anything I Select"
+            case .clipboard: return "Anything I Copy"
             case .screenshot: return "Screenshot at Start"
-            case .clipboard: return "Everything I Copy"
             }
         }
 
