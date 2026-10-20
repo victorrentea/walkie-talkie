@@ -3392,11 +3392,16 @@ final class WisprFlowSource: DictationSource {
     /// chord posted while row 18414 (handed to the local model by ⌘⌃X six seconds
     /// before) was still `processing` was ignored, and the sentence learnt so only
     /// 12 s later (`holdOwnTake`) — the local model by the back door. Read live
-    /// off `History`: a row gone terminal or dead is not busy.
+    /// off `History`: a row gone terminal or dead is not busy. **A cancelled
+    /// row still in flight counts too** (2026-10-20, the Wispr hang audit): the
+    /// discarded capture's (`discardOnArrival`) and the retired one's
+    /// (`retiredDiscardRow`) — Wispr is just as busy finishing a row he threw away.
     var stillFinishingAbandonedRow: Int64? {
-        guard let row = lateRow, let e = WisprHistory.entry(rowid: row),
-              !WisprState.isTerminal(e.status) else { return nil }
-        return row
+        let rows = [lateRow, retiredDiscardRow, discardOnArrival ? historyRow : nil]
+        for row in rows.compactMap({ $0 }) {
+            if let e = WisprHistory.entry(rowid: row), !WisprState.isTerminal(e.status) { return row }
+        }
+        return nil
     }
 
     /// **A cancelled Wispr sentence keeps the relay's recording for Recover**

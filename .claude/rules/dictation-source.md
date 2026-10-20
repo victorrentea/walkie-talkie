@@ -131,6 +131,22 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   the Engine stays Wispr. Log `🌐 offline — …` / `🌐 online again`. Desk: `POST /test/local-auto
   {"offline": true｜false｜null}`, `localAuto.network`. Not done for ElevenLabs — `borrowEngine`
   always returns to Wispr.
+- **Every Wispr path falls back to the local model when Wispr hangs** (2026-10-20, Victor: *"every
+  time Wispr Flow hangs, we fall back to the local model as a backup in any path we ever use Wispr
+  Flow"*; audit of that day, incidents 10-18 20:39:36, 10-19 22:54:27, 10-20 12:14:52):
+  - **The plain toggle (🔽 →, 🔽, right ⌘ ×2) is a relay sentence on Wispr too** —
+    `hotkeys.backUsesOwnEngine = true` on every Engine, so it goes through `onCleanToggle` →
+    `startDictation(clean:)` and gets the start borrows (not up, offline, still finishing), the 3 s mic
+    watch, `holdOwnTake`, `verifyStopTook` and the countdown. The raw hands-free toggle threw its WAV
+    away at 12 s with no row. `plainToggle`'s Wispr-chord branch is left for stopping a sentence
+    started on Wispr's own chord (Q9 — no audio of the relay's, no fallback possible).
+  - **Offline after the close** → the local model at once (`syncLocalNow`, `offlineHandOverAt`, log
+    `🌐 offline while Wispr Flow has the words`); the start's offline borrow covered only a sentence
+    begun offline.
+  - **A cancelled row still in flight makes Wispr busy** for the next start
+    (`stillFinishingAbandonedRow` reads `retiredDiscardRow` and the discarding capture's row too).
+  - **Not changed, on purpose:** the 1.5 s voiced floor (Q8/Q13) — a take under it still waits for
+    Wispr's verdict and goes to Recover.
 - **One engine for every gesture** (2026-10-06, Victor: *"the model that is used for transcribing
   should be the same for all four, always. Make sure in the code that this never drifts"*): bound,
   caret, new session and clean all open the microphone through `startDictation`, the only caller of

@@ -191,10 +191,11 @@ final class HotkeyTap {
     /// when the open sentence is this one. Hops to main on the other side.
     var onCleanToggle: (() -> Void)?
 
-    /// **Is the Engine something other than Wispr Flow?** Written by
-    /// `AppDelegate.wireDictationSource` at launch and on every Engine pick;
-    /// read by the back click to choose between Wispr's chord and
-    /// `onCleanToggle`.
+    /// **Does the plain toggle start the relay's own sentence?** Written by
+    /// `AppDelegate.wireDictationSource`; true on every Engine since 2026-10-20
+    /// (Wispr included — a relay sentence has the hang guards and the local
+    /// fallback). The Wispr-chord branch of `plainToggle` is left for a stop of
+    /// a sentence started on Wispr's own chord.
     var backUsesOwnEngine: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return backUsesOwnEngineFlag }
         set { stateLock.lock(); backUsesOwnEngineFlag = newValue; stateLock.unlock() }

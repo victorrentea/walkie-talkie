@@ -3573,8 +3573,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         source.prepare()
         // The back click follows the Engine (2026-09-25) — see
-        // `HotkeyTap.onCleanToggle`.
-        hotkeys.backUsesOwnEngine = source !== wisprSource
+        // `HotkeyTap.onCleanToggle`. **On Wispr too since 2026-10-20** (Victor:
+        // *"every time Wispr Flow hangs, we fall back to the local model … in any
+        // path we ever use Wispr Flow"*): the raw hands-free toggle was a sentence
+        // the relay did not own — no start gates, no 3 s mic watch, no
+        // `holdOwnTake`, no `verifyStopTook`, and at 12 s with no row its WAV was
+        // thrown away (10-18 20:39:36, 10-20 12:14:52). As a relay sentence it has
+        // every one of them. A sentence on Wispr's own chord still stops with it.
+        hotkeys.backUsesOwnEngine = true
         // **Wispr Flow is wired whichever engine is picked** (2026-09-22): the
         // firewall in `HotkeyTap` drops its paste for every sentence, including
         // one Victor starts with Wispr's own chord while the engine is
@@ -4601,6 +4607,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             localNowWaitingSince = nil
         }
         let pastDelay = waiting && now - (localNowWaitingSince ?? now) >= Self.localNowRowDelay - 0.05
+        // **Offline after the close, Wispr cannot answer: the local model takes
+        // it now** (2026-10-20, the Wispr hang audit — 10-19 22:54:27 went offline
+        // 6 s into a sentence and waited 27 s for Wispr's `error`). The start's
+        // offline borrow (`startDictation`) only covers a sentence begun offline.
+        if waiting, source === wisprSource, offlineHandOverAt < settlingFrom,
+           let offline = Connectivity.shared.offlineReason {
+            offlineHandOverAt = now
+            Log.info("🌐 offline while Wispr Flow has the words (\(offline)) — the local model takes the take now")
+            DispatchQueue.main.async { [weak self] in _ = self?.transcribeLocallyNow(from: "🌐 offline mid-sentence") }
+        }
         // **The speculative decode's clock** (2026-09-29): started at
         // `budget − localEta`, held when done. **The budget running out puts the
         // local words in** (2026-10-06), and the row counts down to it.
@@ -4675,6 +4691,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     private var localNowTick: Timer?
+    /// When the last offline hand-over fired — once per sentence (`settlingFrom`).
+    private var offlineHandOverAt: CFAbsoluteTime = 0
 
     /// **The budget ran out and the local words are in hand: they go in**
     /// (2026-10-06) — ⌘⌃X pressed by the clock, `via: local-auto`. Only for the

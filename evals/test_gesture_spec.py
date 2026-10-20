@@ -239,12 +239,14 @@ def spec(src: dict):
             # Victor, 2026-09-25: "changing the transcription engine from wispr to
             # elevenlabs should change it as well for «clean dictation»" — the
             # gesture is 🔽 → since 2026-09-28.
-            "row": ("🔽 back", "drag right, Engine not Wispr"),
-            "does": "the same CLEAN dictation, heard by the Engine (ElevenLabs / local), not Wispr",
+            # 2026-10-20: every Engine, Wispr included — a relay sentence has the
+            # hang guards and the local fallback the raw toggle lacked.
+            "row": ("🔽 back", "drag right, any Engine"),
+            "does": "the same CLEAN dictation, a relay sentence on the Engine (Wispr behind the firewall included)",
             "checks": [
                 ("the tap knows which Engine is live", "AppDelegate `wireDictationSource`",
                  lambda: has(function(src, ad, "wireDictationSource"),
-                             r"hotkeys\.backUsesOwnEngine = source !== wisprSource")),
+                             r"hotkeys\.backUsesOwnEngine = true")),
                 ("the toggle starts the Engine's clean sentence instead of posting Wispr's chord",
                  "HotkeyTap `plainToggle`",
                  lambda: before(plain_toggle(src), r"if !wisprSentence, backUsesOwnEngine \{.*?onCleanToggle",
