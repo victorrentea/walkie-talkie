@@ -831,9 +831,14 @@ enum SpawnFolderMenu {
 
     /// **`WorkspaceFolders`' sections**, each under a small title, its rows a
     /// folder with ✨ and a star — the menu's own folder rows in the session
-    /// lines' smaller face, since a month can hold forty of them. One column
-    /// while it fits on the screen (`maxHeight`), a column per section once it
-    /// does not. `Looking…` until the first scan has landed.
+    /// lines' smaller face, since a month can hold forty of them. `Looking…`
+    /// until the first scan has landed.
+    ///
+    /// **One column, always; it scrolls once it is taller than the screen**
+    /// (2026-10-20, Victor: *"Put them as a single column that I can scroll
+    /// through … last day, last month, scrolling from the most recent downwards.
+    /// It takes too much of the screen, the three columns"*) — a column per
+    /// section from 2026-10-15 until then. Opened at the top, the last day.
     private static func buildWorkspaceSubmenu(_ sections: [(title: String, rows: [Choice])]?,
                                               maxHeight: CGFloat) -> NSView {
         guard let sections, !sections.isEmpty else { return buildSubmenu(nil) }
@@ -845,40 +850,55 @@ enum SpawnFolderMenu {
             .map { ($0.title as NSString).size(withAttributes: [.font: headerFont]).width }
             .max() ?? 0
         let column = ceil(max(widest + starGap + starSize, titles) + 2 * rowInset)
-        func height(_ group: [(title: String, rows: [Choice])]) -> CGFloat {
-            group.reduce(0) { $0 + headerHeight + CGFloat($1.rows.count) * sessionHeight }
-        }
-        let stacked = height(sections) + 2 * pad <= maxHeight - 2 * gap
-        let columns = stacked ? [sections] : sections.map { [$0] }
-        let size = NSSize(width: 2 * pad + CGFloat(columns.count) * column,
-                          height: ceil(2 * pad + (columns.map(height).max() ?? 0)))
+        let full = ceil(2 * pad + sections.reduce(0) {
+            $0 + headerHeight + CGFloat($1.rows.count) * sessionHeight
+        })
+        let shown = min(full, floor(maxHeight - 2 * gap))
+        let scrolls = full > shown
+        // The scroller overlays the rows' right edge, where the star is — a
+        // few points more keep the star clear of it.
+        let scrollerRoom: CGFloat = scrolls ? 8 : 0
+        let size = NSSize(width: 2 * pad + column + scrollerRoom, height: shown)
         let root = HoverRoot(frame: NSRect(origin: .zero, size: size))
         root.onHover = { SpawnFolderMenu.setHovered($0, submenu: true) }
         addSurface(to: root)
-        // Top-down this time: the columns are of different heights and all
-        // start under the top edge.
-        for (i, group) in columns.enumerated() {
-            let x = pad + CGFloat(i) * column
-            var top = size.height - pad
-            for section in group {
-                let label = NSTextField(labelWithString: section.title)
-                label.font = headerFont
-                label.textColor = .secondaryLabelColor
-                let h = label.intrinsicContentSize.height
-                label.frame = NSRect(x: x + rowInset, y: top - headerHeight + (headerHeight - h) / 2,
-                                     width: column - 2 * rowInset, height: h)
-                root.addSubview(label)
-                top -= headerHeight
-                for choice in section.rows {
-                    top -= sessionHeight
-                    let row = FolderRow(frame: NSRect(x: x, y: top, width: column, height: sessionHeight),
-                                        choice: choice, font: sessionFont)
-                    row.onClick = { take($0) }
-                    row.onStar = { starred($0, fromWorkspace: true) }
-                    root.addSubview(row)
-                }
+
+        let list = NSView(frame: NSRect(x: 0, y: 0, width: size.width, height: full))
+        // Top-down: the most recent section first.
+        var top = full - pad
+        for section in sections {
+            let label = NSTextField(labelWithString: section.title)
+            label.font = headerFont
+            label.textColor = .secondaryLabelColor
+            let h = label.intrinsicContentSize.height
+            label.frame = NSRect(x: pad + rowInset, y: top - headerHeight + (headerHeight - h) / 2,
+                                 width: column - 2 * rowInset, height: h)
+            list.addSubview(label)
+            top -= headerHeight
+            for choice in section.rows {
+                top -= sessionHeight
+                let row = FolderRow(frame: NSRect(x: pad, y: top, width: column, height: sessionHeight),
+                                    choice: choice, font: sessionFont)
+                row.onClick = { take($0) }
+                row.onStar = { starred($0, fromWorkspace: true) }
+                list.addSubview(row)
             }
         }
+        guard scrolls else {
+            root.addSubview(list)
+            return root
+        }
+        let scroll = NSScrollView(frame: root.bounds)
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
+        scroll.verticalScrollElasticity = .none
+        scroll.documentView = list
+        // Unflipped, so the top of the list is its highest y.
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: full - shown))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        root.addSubview(scroll)
         return root
     }
 

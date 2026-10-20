@@ -228,8 +228,11 @@ star to get them onto the main list"*.
   `refreshIfStale` at launch and at every opening, redone when older than 5 min, on a utility
   queue, kept in memory; the submenu shows the last answer and is rebuilt in place if the new one
   lands while it is open. Before the first scan lands it says `Looking…`.
-- **The submenu is one column while it fits the screen, a column per section once it does not**
-  (a month is ~45 folders); rows in the session lines' face (15 pt / 24 pt), ✨ + name + star.
+- **The submenu is one column, always, and scrolls once taller than the screen** (2026-10-20,
+  Victor: *"Put them as a single column that I can scroll through … last day, last month, scrolling
+  from the most recent downwards. It takes too much of the screen the three columns"* — a column per
+  section from 10-15 until then; a month is ~45 folders). An overlay-scroller `NSScrollView`, opened
+  at the top (*Last day*), 8 pt wider so the scroller clears the stars; rows in the session lines' face (15 pt / 24 pt), ✨ + name + star.
   A click opens a session there; **its star pins it and the submenu stays open**.
 - `WT_SHOOT_WORKSPACE=1` with `WT_SHOOT_MENU` draws it open (the scan is waited for).
 
