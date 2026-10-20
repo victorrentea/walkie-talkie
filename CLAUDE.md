@@ -84,8 +84,10 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   Right ⌘⌥ held = Walkie's clean dictation (`54+61`); **right ⌘ ×2 = the plain dictation's toggle** (right ⌥ ×2 until 2026-10-20 — that one is Victor Addons' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
 - **Trackpad, under left ⌃⌥⌘** (2026-10-20): one finger (its travel, its click) is 🔼, two fingers
   (scroll, secondary click) are 🔽 — the same F-key branches; held 0.3 s, the corner bar shows both
-  crosses with ☝️ / ✌️ and a `right ⌘ ×2` footer — and with no Logitech mouse attached, every
-  sentence's bar is that one (`mouse-gestures.md`, *The trackpad*).
+  crosses with ☝️ / ✌️ in the corner and `⌘⌘` / `⌃P` in the badges — and with no Logitech mouse
+  attached, every sentence's bar is that one; the pointer stands still under the chord
+  (`mouse-gestures.md`, *The trackpad*). **⌃P is the shutter while a prompt records** (Victor
+  Addons' ⌃P steps aside on `~/.walkie-talkie/prompting`).
 - **The clipboard always holds the finished sentence** (Q17, 2026-09-28): the envelope for a prompt,
   the clean words for a plain one, whatever the engine or destination; never restored. ⌘V re-pastes.
 - **Side buttons** (Options+ → ⌃⌥⌘F3…F12, duplicated in `HotkeyTap`, must not drift;

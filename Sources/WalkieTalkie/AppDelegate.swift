@@ -1419,6 +1419,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that has just been stood down being the likeliest poster of the last
         // event — is behind it as well. See `clearStaleModifiersAtLaunch`.
         HotkeyTap.clearStaleModifiersAtLaunch()
+        // A prompt mark left by the last instance is not a prompt (Victor Addons' ⌃P).
+        HotkeyTap.markPrompting(false)
         Self.startAtLogin()
         FromWalkieDevice.set(true, reason: "launch")
         Outbox.prepare()

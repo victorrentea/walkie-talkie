@@ -111,6 +111,10 @@ final class GestureHintBar {
         var down: String? = ""
         var left: String? = ""
         var right: String? = ""
+        /// Drawn big and boxless in the top-left cell — the trackpad's finger
+        /// (2026-10-20, Victor: *"just move the emoji showing how many fingers …
+        /// out of any other badge … left top"*).
+        var corner: String? = nil
     }
 
     /// The two crosses for a stage — 🔼 first, 🔽 second. Pure, so the wording
@@ -161,25 +165,23 @@ final class GestureHintBar {
         if s.listening && !s.held {
             c = crosses(for: Stage(listening: true, prompting: s.prompting, filming: s.filming,
                                    kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
+            // **The keyboard's way beside the gesture it stands for** (same day,
+            // *"suggest [⌃P] in the button … Put command command next to the
+            // flag"*): right ⌘ ×2 ends a prompt (and stops a plain sentence
+            // without a Return), ⌃P is the shutter while a prompt records.
+            if s.prompting || s.quick { c[0].click = (c[0].click ?? "") + " ⌘⌘" }
+            if c[1].click == "📸 shot" { c[1].click = "📸 shot ⌃P" }
+            if !s.prompting && !s.quick { c[1].right = "⏹️ ⌘⌘" }
         } else {
             c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
-                 Cross(click: "🎙️ dictate", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
+                 Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
         }
-        for (i, finger) in [oneFinger, twoFingers].enumerated() {
-            let click = c[i].click ?? ""
-            c[i].click = click.isEmpty ? finger : "\(finger) \(click)"
-        }
+        c[0].corner = oneFinger
+        c[1].corner = twoFingers
         return c
     }
 
-    /// The keyboard's way, under the trackpad's crosses (2026-10-20, Victor: *"the
-    /// dictation can end by pressing twice command. That should be displayed as
-    /// well"*): right ⌘ ×2 starts the plain dictation, and ends any sentence.
-    static func keyboardFooter(for s: Stage) -> String {
-        s.listening ? "right ⌘ ×2   ⏹️ end" : "right ⌘ ×2   🎙️ dictate"
-    }
-
-    /// The centre badges; a bare one is drawn larger than a label (`Board.drawBox`).
+    /// The fingers, in each cross's top-left cell (`Cross.corner`).
     static let oneFinger = "☝️"
     static let twoFingers = "✌️"
 
@@ -226,7 +228,7 @@ final class GestureHintBar {
         shown = stage
         guard visible else { hide(); return }
         if trackpad {
-            show(Self.fingerCrosses(for: stage), footer: Self.keyboardFooter(for: stage))
+            show(Self.fingerCrosses(for: stage))
             return
         }
         let mouse = Self.mouse(for: stage)
@@ -240,7 +242,7 @@ final class GestureHintBar {
         place(board.crosses, mouse: board.mouse, pointer: pointer)
     }
 
-    private func show(_ crosses: [Cross], mouse: MouseHint? = nil, footer: String? = nil) {
+    private func show(_ crosses: [Cross], mouse: MouseHint? = nil) {
         displays = NSScreen.screens.map { s -> Display in
             let id = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             return Display(frame: s.frame, visible: s.visibleFrame,
@@ -249,12 +251,11 @@ final class GestureHintBar {
         if let board {
             board.crosses = crosses
             board.mouse = mouse
-            board.footer = footer
             placed = nil
             place(crosses, mouse: mouse, pointer: NSEvent.mouseLocation)
             return
         }
-        guard let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse, footer: footer), on: displays,
+        guard let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays,
                                    pointer: NSEvent.mouseLocation) else { return }
         Log.info("⌨️ hint bar ×\(Int(spot.scale)) α\(spot.opacity): \(crosses.map(Self.describe).joined(separator: " / "))")
         let p = NSPanel(contentRect: spot.rect, styleMask: [.borderless, .nonactivatingPanel],
@@ -273,7 +274,6 @@ final class GestureHintBar {
         b.opacity = spot.opacity > 0 ? spot.opacity : Self.aloneOpacity
         b.crosses = crosses
         b.mouse = mouse
-        b.footer = footer
         b.autoresizingMask = [.width, .height]
         p.contentView = b
         p.alphaValue = 0
@@ -288,7 +288,7 @@ final class GestureHintBar {
 
     private func place(_ crosses: [Cross], mouse: MouseHint? = nil, pointer: NSPoint) {
         guard let panel, let board,
-              let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse, footer: board.footer), on: displays, pointer: pointer),
+              let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays, pointer: pointer),
               spot != placed else { return }
         let dodged = spot.opacity == 0, wasDodged = placed?.opacity == 0, first = placed == nil
         if placed == nil {
@@ -438,8 +438,6 @@ final class GestureHintBar {
         var crosses: [Cross] = [] { didSet { needsDisplay = true } }
         /// Set during a crop, in place of the crosses.
         var mouse: MouseHint? { didSet { needsDisplay = true } }
-        /// One full-width box under the crosses — the keyboard's way (2026-10-20).
-        var footer: String? { didSet { needsDisplay = true } }
         /// Drawn at `size(for:)` × this; the frame is already that big.
         var scale: CGFloat = 1 { didSet { needsDisplay = true } }
         /// The whole board's alpha; at 1 the boxes are solid too ("fully opaque").
@@ -462,12 +460,8 @@ final class GestureHintBar {
 
         /// The mouse: three buttons side by side, as tall as two boxes, over a
         /// body as tall as two more.
-        static func size(for crosses: [Cross], mouse: MouseHint?, footer: String? = nil) -> NSSize {
-            guard let mouse else {
-                var s = size(for: crosses)
-                if footer != nil { s.height += GestureHintBar.crossGap + GestureHintBar.boxHeight }
-                return s
-            }
+        static func size(for crosses: [Cross], mouse: MouseHint?) -> NSSize {
+            guard let mouse else { return size(for: crosses) }
             let h = GestureHintBar.boxHeight, gap = GestureHintBar.gap
             return NSSize(width: mouseBoxWidth(for: mouse) * 3 + gap * 2, height: h * 4 + gap)
         }
@@ -506,10 +500,13 @@ final class GestureHintBar {
                 box(c.click, col: 1, row: 1)
                 box(c.right, col: 2, row: 1)
                 box(c.down, col: 1, row: 2)
-            }
-            if let footer {
-                let top = CGFloat(crosses.count) * (crossHeight + GestureHintBar.crossGap)
-                drawBox(footer, in: NSRect(x: 0, y: top, width: w * 3 + gap * 2, height: h))
+                if let corner = c.corner {
+                    // The top-left cell alone, clear of the ← box under it.
+                    let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: h * 0.8)]
+                    let size = (corner as NSString).size(withAttributes: attrs)
+                    (corner as NSString).draw(at: NSPoint(x: (w - size.width) / 2, y: top + (h - size.height) / 2),
+                                              withAttributes: attrs)
+                }
             }
         }
 
@@ -575,11 +572,8 @@ final class GestureHintBar {
             let style = NSMutableParagraphStyle()
             style.alignment = .center
             style.lineBreakMode = .byClipping
-            // A finger badge is the centre's whole label: drawn big enough to
-            // read as a hand, not as a word.
-            let badge = text == GestureHintBar.oneFinger || text == GestureHintBar.twoFingers
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: badge ? NSFont.systemFont(ofSize: GestureHintBar.boxHeight * 0.72) : GestureHintBar.font,
+                .font: GestureHintBar.font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.92),
                 .paragraphStyle: style,
             ]

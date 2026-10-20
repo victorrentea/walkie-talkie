@@ -242,7 +242,26 @@ final class HotkeyTap {
     /// attachment stayed refused after the switch (2026-10-08).
     var relayPromptOpen: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return relayPromptOpenFlag }
-        set { stateLock.lock(); relayPromptOpenFlag = newValue; stateLock.unlock() }
+        set {
+            stateLock.lock(); let was = relayPromptOpenFlag; relayPromptOpenFlag = newValue; stateLock.unlock()
+            if was != newValue { Self.markPrompting(newValue) }
+        }
+    }
+
+    /// **`~/.walkie-talkie/prompting` exists, holding this pid, while a prompt
+    /// records** (2026-10-20) — Victor Addons reads it on ⌃P and lets the key
+    /// through instead of taking its own screenshot (Victor: *"take over the
+    /// shortcut and block the addon … If I am dictating, it's I'm telling you
+    /// first"*). The pid lets a file left by a crash be told from a live prompt.
+    static let promptingMark = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".walkie-talkie/prompting")
+
+    static func markPrompting(_ on: Bool) {
+        if on {
+            try? "\(getpid())\n".write(to: promptingMark, atomically: true, encoding: .utf8)
+        } else {
+            try? FileManager.default.removeItem(at: promptingMark)
+        }
     }
     private var relayPromptOpenFlag = false
     /// **The app's own sentence is open and still plain** — pushed beside
@@ -2321,6 +2340,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     // on 2026-09-09, and the two halves must not drift: change one here and the
     // gesture goes to whatever app claims that chord instead. They are written
     // down in CLAUDE.md under *The side buttons speak in function keys*.
+    private let VK_P:   CGKeyCode = 0x23
+    /// A ⌃P the shutter took — its release is swallowed with it.
+    private var ctrlPTaken = false
     private let VK_F3:  CGKeyCode = 0x63
     private let VK_F4:  CGKeyCode = 0x76
     private let VK_F5:  CGKeyCode = 0x60
@@ -3712,6 +3734,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if code == VK_ESCAPE { panelEscapeHeld = false }
         }
 
+        // The release of a ⌃P the shutter took is the shutter's too.
+        if type == .keyUp, ctrlPTaken, CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == VK_P {
+            ctrlPTaken = false
+            return swallow("⌃P shutter (release)", type, event)
+        }
         guard type == .keyDown else {
             if Self.keyTrace, type == .keyUp || type == .flagsChanged {
                 trace("passed (not a keyDown)", type, event)
@@ -3892,6 +3919,22 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             queueToggle()
             DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
             return swallow("⌘⌃D dictate", type, event)
+        }
+
+        // ⌃P — **the shutter while a prompt records** (2026-10-20, Victor: *"when
+        // I'm prompting with trackpad, also allow control P as a way to take the
+        // screenshot, just as if I would [make the 🔽 click]"*). Bare ⌃ only, the
+        // 🔽 click's own gate; Victor Addons owns ⌃P at every other moment and
+        // steps aside while `promptingMark` names a live Walkie. Its release and
+        // autorepeat go with it — a held ⌃P is not Addons' crop mid-prompt.
+        if keyCode == VK_P, ctrl, !cmd, !opt, !flags.contains(.maskShift),
+           relayPromptOpen, ownDictation, ownMicOpen {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌃P shutter (autorepeat)", type, event) }
+            ctrlPTaken = true
+            let cursor = NSEvent.mouseLocation
+            Log.info("📸 ⌃P while a prompt records — the shutter")
+            DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
+            return swallow("⌃P shutter", type, event)
         }
 
         // ⌘⌃X — **the local model, now** (2026-09-28): see `onLocalNow`. Swallowed

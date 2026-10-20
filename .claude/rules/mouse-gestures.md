@@ -160,9 +160,18 @@ fingers. So let's go back to one finger movement and clicks … and two fingers 
   re-fire, dwell and frozen-main guards are the button's own, in either gesture mode. Log
   `🖐️ ☝️ one finger up under left ⌃⌥⌘ — as 🔼 ↑ ⌃⌥⌘F8`.
 - **The bar**: `onTrackpadHints` 0.3 s after the chord → `RelayWindow.setTrackpadHints` →
-  `GestureHintBar.Stage.fingers` → `fingerCrosses`, at rest too and without the Logi gate; the finger
-  before the click's label (`☝️ 💬 prompt`, `✌️ 🎙️ dictate`; mid-sentence the side buttons' own
-  crosses), and a full-width footer `right ⌘ ×2   ⏹️ end` / `🎙️ dictate` (`keyboardFooter`).
+  `GestureHintBar.Stage.fingers` → `fingerCrosses`, at rest too and without the Logi gate. **The finger
+  is drawn boxless in each cross's empty top-left cell** (`Cross.corner`, Victor: *"move the emoji
+  showing how many fingers … out of any other badge … left top"*), and **the keyboard's way sits in
+  the badge it stands for**: `🏁 end ⌘⌘`, `📸 shot ⌃P`, a plain sentence's `⏹️ ⌘⌘`, at rest
+  `🎙️ dictate ⌘⌘` (the footer of the same morning is gone).
+- **⌃P is the shutter while a prompt records** (Victor: *"also allow control P as a way to take the
+  screenshot … take over the shortcut and block the addon"*): bare ⌃, `relayPromptOpen && ownDictation
+  && ownMicOpen`, press, release and autorepeat swallowed → `onScreenshot` (the 🔽 click's call).
+  **Victor Addons owns ⌃P at every other moment and steps aside on a mark**: `HotkeyTap.relayPromptOpen`
+  writes `~/.walkie-talkie/prompting` (this pid) on its rising edge and removes it on the falling one
+  (and at launch); Addons' `EventTapManager.walkieIsPrompting` passes ⌃P on when the file names a live
+  pid — whichever tap is first. Log `📸 ⌃P while a prompt records — the shutter`.
 - **No Logitech mouse attached → every sentence's bar is the trackpad's** (*"once you don't see the
   Logitech mouse attached … should be usable for trackpad only"*): `MouseDevices` polls the IOKit
   registry every 3 s for a HID device of primary usage mouse with vendor 0x046D (no `IOHIDManager`, no
