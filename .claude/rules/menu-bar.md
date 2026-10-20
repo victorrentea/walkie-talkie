@@ -342,6 +342,14 @@ and source should be selectable via menu too. those unavailable disabled"* — a
 
 ## The Halo row (2026-09-20, three destinations since 2026-09-21)
 
+- **`Disable on Battery` is the first row under `𝓯𝔁`, ticked by default** (2026-10-20, Victor: *"On
+  the battery I should not see any animation on my desktop. It eats the battery."*). `BatteryFx`:
+  `UserDefaults` `fxOffOnBattery`, the power source read at launch and on IOKit's
+  `IOPSNotificationCreateRunLoopSource` (never per sync). While held, `syncBorrowedGestures` keeps the
+  ring, rewind, coast, pin, dial and dock down — the chip, the orange outline and delivery are
+  untouched; an F7/F9 preview still plays. Plug in mid-sentence and the ring comes up on the spot.
+  `GET /test/state.fxOnBattery {on, onBattery, held}`.
+
 - **`Halo fx`, the shape `Engine` and `Mouse Gestures` have** — a readout with the
   list under the arrow, the tick drawn as an icon on the chosen row. The first row is today's
   film and the default; under a separator, the nine effects ported from the `voice-halo` page at

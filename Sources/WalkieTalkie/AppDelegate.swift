@@ -1581,6 +1581,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             else { self.caretHalo.setStyleEverywhere(style) }
         }
         status.onPickHaloEngine = { [weak self] engine in self?.caretHalo.setEngine(engine) }
+        // Plugged in or out mid-sentence: the ring follows on the spot.
+        BatteryFx.watch { [weak self] in self?.syncBorrowedGestures() }
         status.onPickHaloVoice = { voice in
             UserDefaults.standard.set(voice.rawValue, forKey: HaloVoice.defaultsKey)
             VoicePrep.shared.refresh()
@@ -7616,19 +7618,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // while he asks, then the collapse into the pointer — no rewind, no
         // coast, no heads (`CaretHalo.quick`). Its words are typed nowhere.
         caretHalo.quick = quickAsk
-        caretHalo.setRewind(settling && !listening && !speculative && !quickAsk,
+        // **No 𝓯𝔁 on battery** (2026-10-20, `BatteryFx`): the ring, the rewind,
+        // the coast and the pin all stay down; the chip and the outline do not.
+        let fxHeld = BatteryFx.holdsEffects
+        caretHalo.setRewind(settling && !listening && !speculative && !quickAsk && !fxHeld,
                             take: settleTake, estimate: settleEstimate)
-        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk, estimate: settleEstimate)
+        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk && !fxHeld, estimate: settleEstimate)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
         // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,
         // like `setDelivering`, so the ring is told to fade rather than to go.
-        let coasting = settling && !listening && !speculative && !quickAsk
+        let coasting = settling && !listening && !speculative && !quickAsk && !fxHeld
         caretHalo.setCoasting(coasting, estimate: settleEstimate)
         // **The halo dial listens exactly while the ring is up** (2026-09-20)
         // — the same expression, pushed into the tap here so the gesture and
         // the ring cannot come to mean two different things by *dictating*.
-        hotkeys.haloUp = listening || speculative || wisprHearing || coasting
+        hotkeys.haloUp = !fxHeld && (listening || speculative || wisprHearing || coasting)
         // **Which effect this sentence wears** (2026-09-21) — Tunnel at the
         // caret, Tendrils bound, Sparks into a new claude, Cauldron for a
         // dictation Wispr Flow is running on its own, each of the four his own
@@ -7648,8 +7653,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // said does not quietly pull an F7 preview off the screen; and on
         // every sync while it is up, so a ⌘⌃B made mid-sentence changes the
         // dress the way it changes the arrow.
-        let ringUp = listening || speculative || wisprHearing || coasting
-        if ringUp {
+        let ringWanted = listening || speculative || wisprHearing || coasting
+        let ringUp = ringWanted && !fxHeld
+        if ringWanted {
             // **`cleanSentence` wears the clean dictation's dress too** (2026-09-25,
             // Victor: *"you did not preserve the effect that happened when it's a
             // clean dictation"*). On Wispr the back click's sentence was Wispr's
@@ -7661,7 +7667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : atCaret ? .caret
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret
-            caretHalo.setDestination(destination)
+            if ringUp { caretHalo.setDestination(destination) }
             overlay.prompting = destination != .wispr && destination != .quick
             overlay.asking = quickAsk
         }
@@ -7672,7 +7678,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The showing is five seconds (`PasteHint.hold`), so this
         // fires only when he starts again straight after a delivery — and then
         // the ring is going up at the same pointer the hint is hanging under.
-        if ringUp { pasteHint.hide() }
+        if ringWanted { pasteHint.hide() }
         // **The music pauses for every dictation, and so reads `listening`, not
         // `live`.** It hung off `live` until 2026-09-03, on the argument that an
         // unbound dictation is Victor talking into some other app and none of the
@@ -8348,6 +8354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["wisprLive"] = wisprSource.testDescribe()
         out["pasteboard"] = PasteboardTimeline.describe()
         out["autoAttach"] = AutoAttach.describe
+        out["fxOnBattery"] = BatteryFx.describe
         return out
     }
 
@@ -12001,7 +12008,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.hotkeys.promptHeld = true
                 // **The effect flies into the panel and stays over it,
                 // see-through, until it goes** (2026-10-07) — `CaretHalo.dock`.
-                self.caretHalo.dock { [weak self] in self?.overlay.sentPromptFrame }
+                if !BatteryFx.holdsEffects { self.caretHalo.dock { [weak self] in self?.overlay.sentPromptFrame } }
             } else {
                 self.commit(message)
             }

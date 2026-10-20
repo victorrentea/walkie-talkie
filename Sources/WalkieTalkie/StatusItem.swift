@@ -672,6 +672,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         haloItem.title = Self.haloFx
         haloSubmenu.removeAllItems()
         haloSubmenu.autoenablesItems = false
+        // **`Disable on Battery`, first and ticked by default** (2026-10-20,
+        // Victor: *"On the battery I should not see any animation on my
+        // desktop. It eats the battery."*) — `BatteryFx`. The tooltip says
+        // whether it is holding them right now.
+        let battery = NSMenuItem(title: "Disable on Battery", action: #selector(batteryFxClicked), keyEquivalent: "")
+        battery.target = self
+        battery.image = BatteryFx.isOn ? Self.symbolIcon("checkmark") : Self.blankIcon
+        battery.toolTip = BatteryFx.holdsEffects
+            ? "On battery now — no effects are drawn until the Mac is plugged in."
+            : "No effects are drawn while the Mac runs on battery\(BatteryFx.onBattery ? " (it is on battery now)" : "")."
+        haloSubmenu.addItem(battery)
+        haloSubmenu.addItem(.separator())
         for (destination, pick) in zip(HaloDestination.allCases, picks) {
             let row = NSMenuItem(title: "\(destination.title): \(pick.menuTitle)", action: nil, keyEquivalent: "")
             let list = NSMenu()
@@ -782,6 +794,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
             row.image = voice == current ? Self.symbolIcon("checkmark") : Self.blankIcon
             haloVoiceSubmenu.addItem(row)
         }
+    }
+
+    @objc private func batteryFxClicked() {
+        BatteryFx.set(!BatteryFx.isOn)
+        applyHaloRow()
     }
 
     @objc private func haloVoicePicked(_ sender: NSMenuItem) {
