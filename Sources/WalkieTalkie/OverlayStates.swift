@@ -559,7 +559,7 @@ enum OverlayStates {
                 let frames = mockShots(3)
                 o.showSentPrompt(transcript, hold: 6, shots: Array(frames.prefix(2)),
                                  stamps: ["", "0:38"], words: transcript, heard: heard,
-                                 films: [(poster: frames[2], seconds: 4.2)])
+                                 films: [(poster: frames[2], seconds: 4.2, frames: 21)])
             },
 
             Shot(slug: "prompt-inline", group: "The held prompt", title: "The prompt, with its pictures where they were taken",

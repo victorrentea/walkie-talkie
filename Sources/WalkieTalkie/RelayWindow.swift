@@ -439,7 +439,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// it … at the end, just like a picture, but with a red dot visible and a
     /// length displayed on top of it"*): each one's poster frame and its length,
     /// drawn after the screenshots in the strip.
-    private var promptFilms: [(poster: String, seconds: TimeInterval)] = []
+    private var promptFilms: [(poster: String, seconds: TimeInterval, frames: Int)] = []
     /// Shown above the words rather than folded into them — see `layoutContent`.
     private var promptSelection: String?
     /// **Which microphone heard it and which engine wrote it** (2026-10-06,
@@ -2992,11 +2992,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// the paths never agreed and every inlined picture came back in the strip.
     /// The recordings come last, newest last, as they were made after the
     /// screenshots they ride with or at least after the context shot.
-    private var stripShots: [(path: String, stamp: String, film: TimeInterval?, number: Int?)] {
+    private var stripShots: [(path: String, stamp: String, film: (seconds: TimeInterval, frames: Int)?, number: Int?)] {
         let drawn = Set(inlineShotNumbers(in: sentPrompt ?? ""))
         return promptShots.filter { ScreenCapture.number(of: $0.path).map { !drawn.contains($0) } ?? true }
             .map { (path: $0.path, stamp: $0.stamp, film: nil, number: ScreenCapture.number(of: $0.path)) }
-            + promptFilms.map { (path: $0.poster, stamp: "", film: $0.seconds, number: nil) }
+            + promptFilms.map { (path: $0.poster, stamp: "", film: (seconds: $0.seconds, frames: $0.frames), number: nil) }
     }
 
     /// `[📸N…]`, `[selected: "…"…]`, `[copied: "…"…]`, `[chrome-selection-N: …]`,
@@ -3224,11 +3224,11 @@ private let heardLabel = NSTextField(labelWithString: "")
             view.layer?.masksToBounds = true
             view.layer?.borderWidth = 1
             view.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.35).cgColor
-            if let seconds = shot.film {
+            if let film = shot.film {
                 // A film reads as a film by its red rim and the ● + length on
                 // it, where a screenshot carries its m:ss.
                 view.layer?.borderColor = NSColor.systemRed.cgColor
-                let badge = Self.filmBadge(seconds)
+                let badge = Self.filmBadge(film.seconds, frames: film.frames)
                 badge.frame.origin = NSPoint(x: Self.stampInset, y: Self.stampInset)
                 view.addSubview(badge)
             } else if let badge = Self.stampBadge(shot.stamp) {
@@ -3293,11 +3293,20 @@ private let heardLabel = NSTextField(labelWithString: "")
         return pill
     }
 
-    /// The film's pill: a red ● and its length (`3.2s`), on the same dark
-    /// ground as a screenshot's m:ss so the two read as one family.
-    private static func filmBadge(_ seconds: TimeInterval) -> NSView {
-        let label = NSTextField(labelWithString: String(format: "%.1fs", seconds))
-        label.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
+    /// The film's pill: a red ● and its length over its frame count
+    /// (`3.2s / 16 frames`), on the same dark ground as a screenshot's m:ss so
+    /// the two read as one family. The count joined the length on 2026-10-20
+    /// (Victor: *"the video should display the length slash the number of
+    /// frames … and then say frames"*).
+    static func filmBadgeText(_ seconds: TimeInterval, frames: Int) -> String {
+        String(format: "%.1fs / %d frames", seconds, frames)
+    }
+
+    private static func filmBadge(_ seconds: TimeInterval, frames: Int) -> NSView {
+        let label = NSTextField(labelWithString: filmBadgeText(seconds, frames: frames))
+        // 9 pt, a point under the m:ss: the longer text still fits a 65 pt-high
+        // poster of the Retina display (100 pt wide) with the dot beside it.
+        label.font = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
         label.textColor = .white
         label.sizeToFit()
         let dot: CGFloat = 7
@@ -5040,7 +5049,7 @@ private let heardLabel = NSTextField(labelWithString: "")
                         inlineShots: [Int: String] = [:],
                         inlineFrames: [Int: (path: String, pixels: CGSize)] = [:],
                         pointers: [Int: CGPoint] = [:],
-                        films: [(poster: String, seconds: TimeInterval)] = [],
+                        films: [(poster: String, seconds: TimeInterval, frames: Int)] = [],
                         buttons: Bool = true, spawning: Bool = false) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty

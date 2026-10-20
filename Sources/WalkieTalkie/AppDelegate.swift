@@ -7220,6 +7220,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash(Self.plainAttachesNothing, duration: 3)
             return
         }
+        // A click on any of the four `● REC` badges is the stop (2026-10-20) —
+        // the gesture is the one he forgets, the badge is the one he sees.
+        FilmBorder.onClick = { [weak self] in
+            guard let self, self.film != nil else { return }
+            self.toggleFilm()
+        }
         guard let started = ScreenFilm.start() else {
             overlay.flash("⚠️ could not start the recording", duration: 5)
             return
@@ -11955,7 +11961,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            inlineFrames: inlineFrames,
                                            pointers: pointers,
                                            films: message.films.compactMap { f in
-                                               f.poster.map { (poster: $0.path, seconds: f.duration) }
+                                               f.poster.map { (poster: $0.path, seconds: f.duration, frames: f.frames.count) }
                                            },
                                            buttons: !self.autosend,
                                            // Consumed above, so the panel is told

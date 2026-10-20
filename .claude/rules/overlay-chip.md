@@ -488,11 +488,15 @@ yields to `--label`).
   with a red dot visible and a length displayed on top of it"*). `ScreenFilm.stop` writes
   `poster.jpg` (the middle frame, 800 px, `FilmSheet.poster`); `AppDelegate` hands `films: [(poster,
   seconds)]` to `showSentPrompt`; `stripShots` appends them after the screenshots. Red 1 pt rim and a
-  `● 4.2s` pill (`filmBadge`) where a screenshot carries its m:ss. Shot `prompt-film`. While
-  recording, `FilmBorder` draws one camcorder `● REC` in the top-right corner (2026-10-13 — four
-  corner dots until then): a 42 pt dot blinking slowly (1 s lit, 1 s dark), `REC` steady, both out
-  of the frames (`sharingType = .none`; a 2026-10-08 film
-  checked: no red in any frame).
+  `● 4.2s / 21 frames` pill (`filmBadge`, 9 pt; the frame count since 2026-10-20) where a screenshot
+  carries its m:ss. Shot `prompt-film`. While recording, `FilmBorder` draws a camcorder `● REC` **in
+  all four corners** (2026-10-20; top-right only from 10-13): a 75 pt dot blinking slowly (1 s lit,
+  1 s dark), `REC` 72 pt steady, all out of the frames (`sharingType = .none`; a 2026-10-08 film
+  checked: no red in any frame). **A left click on any badge stops the recording** (2026-10-20,
+  Victor: *"I always forget how to stop it"*): each badge is its own small non-activating panel
+  (`RecBadgeView`, `FilmBorder.onClick` → `AppDelegate.toggleFilm`), the border stays click-through;
+  under the pointer the dot stops blinking and the cursor is a hand. `FILM_BORDER_PNG=<dir> swift
+  test --filter FilmBorderTests` renders the four.
 - **Dictating is not a panel state.** The panel is for what the model heard while Cancel can still
   stop it; the shot receipt is a number in the recording row, not a `flash(_:)`, because a flash
   takes the chip over for 1.5 s and the count has to keep climbing.

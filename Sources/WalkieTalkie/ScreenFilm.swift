@@ -356,33 +356,69 @@ final class ScreenFilm {
 /// **The dot and `REC` 20 % larger** (2026-10-16, Victor: *"the red dot next to
 /// the record in the top corner and the text should be 20% larger"*): 42 → 50 pt
 /// dot, 40 → 48 pt text.
+///
+/// **50 % larger again, in all four corners, and a click on any of them stops
+/// the recording** (2026-10-20, Victor: *"the rec label … should be 50% larger
+/// … displayed in all four corners. Any clicking the red text or red bubble
+/// should stop the recording. I always forget how to stop it … they shouldn't
+/// show up in the frames, but they should stay on screen so I can hover them
+/// and click them"*): 50 → 75 pt dot, 48 → 72 pt text. Each badge is its own
+/// small panel that takes the left click (`RecBadgeView`) — the border stays
+/// click-through, it covers the whole display — and every one keeps
+/// `sharingType = .none`, so none is in a frame. Under the pointer the dot stops
+/// blinking and the pointer becomes a hand, so the thing he aims at is there.
 enum FilmBorder {
     private static var panel: NSPanel?
+    private static var badges: [NSPanel] = []
+    /// What a click on a badge does — `AppDelegate` stops the film. Main thread.
+    static var onClick: (() -> Void)?
     static let width: CGFloat = 5
-    static let dot: CGFloat = 50
+    static let dot: CGFloat = 75
+    static let textSize: CGFloat = 72
+    /// Between the dot and `REC`, and from the screen's edge (inside the border).
+    private static let gap: CGFloat = 18
+    private static let margin: CGFloat = width + 16
     /// The dot's whole cycle, half lit, half dark.
     static let slowBlink: CFTimeInterval = 2.0
-    private static let ink = NSColor.systemRed
+    fileprivate static let ink = NSColor.systemRed
 
     static func show(on screen: NSScreen) {
         guard Thread.isMainThread else { DispatchQueue.main.async { show(on: screen) }; return }
         hide()
-        let p = NSPanel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel],
+        let p = overlayPanel(frame: screen.frame)
+        p.ignoresMouseEvents = true
+        p.contentView = borderView(size: screen.frame.size)
+        p.setFrame(screen.frame, display: true)
+        p.orderFrontRegardless()
+        panel = p
+
+        let size = badgeSize()
+        let menuBar = screen.frame.maxY - screen.visibleFrame.maxY
+        for origin in badgeOrigins(size: screen.frame.size, menuBar: menuBar) {
+            let frame = NSRect(origin: NSPoint(x: screen.frame.minX + origin.x,
+                                               y: screen.frame.minY + origin.y), size: size)
+            let b = overlayPanel(frame: frame)
+            b.ignoresMouseEvents = false
+            b.becomesKeyOnlyIfNeeded = true
+            b.contentView = RecBadgeView(frame: NSRect(origin: .zero, size: size),
+                                         scale: screen.backingScaleFactor)
+            b.setFrame(frame, display: true)
+            b.orderFrontRegardless()
+            badges.append(b)
+        }
+    }
+
+    private static func overlayPanel(frame: NSRect) -> NSPanel {
+        let p = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = false
-        p.ignoresMouseEvents = true
         p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         p.sharingType = .none
         p.hidesOnDeactivate = false
-        p.contentView = content(size: screen.frame.size,
-                                menuBar: screen.frame.maxY - screen.visibleFrame.maxY,
-                                scale: screen.backingScaleFactor)
-        p.setFrame(screen.frame, display: true)
-        p.orderFrontRegardless()
-        panel = p
+        return p
     }
 
     /// The border follows the film to another display — but only while it is
@@ -392,9 +428,21 @@ enum FilmBorder {
         show(on: screen)
     }
 
-    /// The drawing, also rendered by `FilmBorderTests` (`FILM_BORDER_PNG=<dir>`)
-    /// — the panel is out of every screenshot.
+    /// The whole drawing — border and the four badges — for `FilmBorderTests`
+    /// (`FILM_BORDER_PNG=<dir>`); the panels are out of every screenshot.
     static func content(size: CGSize, menuBar: CGFloat, scale: CGFloat) -> NSView {
+        let v = borderView(size: size)
+        for origin in badgeOrigins(size: size, menuBar: menuBar) {
+            // Layers, not `RecBadgeView`s: a subview's layer joins its parent's
+            // only once the view is in a window, and this one never is.
+            let badge = badgeLayer(scale: scale)
+            badge.frame.origin = origin
+            v.layer?.addSublayer(badge)
+        }
+        return v
+    }
+
+    private static func borderView(size: CGSize) -> NSView {
         let v = NSView(frame: NSRect(origin: .zero, size: size))
         v.wantsLayer = true
         let border = CALayer()
@@ -403,33 +451,60 @@ enum FilmBorder {
         border.borderColor = ink.cgColor
         border.add(blink(values: [1.0, 0.5], duration: 1.0), forKey: "blink")
         v.layer?.addSublayer(border)
+        return v
+    }
 
-        let font = NSFont.monospacedSystemFont(ofSize: 48, weight: .heavy)
-        let text = NSAttributedString(string: "REC", attributes: [.font: font, .foregroundColor: ink])
+    static func recText() -> NSAttributedString {
+        NSAttributedString(string: "REC", attributes: [
+            .font: NSFont.monospacedSystemFont(ofSize: textSize, weight: .heavy),
+            .foregroundColor: ink,
+        ])
+    }
+
+    /// `● REC`, with room for the halo.
+    static func badgeSize() -> CGSize {
+        let text = recText().size()
+        return CGSize(width: dot + gap + ceil(text.width), height: max(dot, ceil(text.height)))
+    }
+
+    /// One `● REC`: the dot (the first sublayer) blinking slowly, `REC` steady
+    /// beside it, a dark halo so the red reads on a white page as well as on a
+    /// terminal.
+    static func badgeLayer(scale: CGFloat) -> CALayer {
+        let size = badgeSize()
+        let badge = CALayer()
+        badge.frame = CGRect(origin: .zero, size: size)
+        let text = recText()
         let textSize = text.size()
-        let gap: CGFloat = 12
-        let margin = width + 16
-        let top = size.height - menuBar - margin
-        let textX = size.width - margin - ceil(textSize.width)
         let rec = CATextLayer()
         rec.string = text
         rec.contentsScale = scale
-        rec.frame = CGRect(x: textX, y: top - dot + (dot - ceil(textSize.height)) / 2,
+        rec.frame = CGRect(x: size.width - ceil(textSize.width),
+                           y: (size.height - ceil(textSize.height)) / 2,
                            width: ceil(textSize.width), height: ceil(textSize.height))
         let d = CALayer()
-        d.frame = CGRect(x: textX - gap - dot, y: top - dot, width: dot, height: dot)
+        d.frame = CGRect(x: 0, y: (size.height - dot) / 2, width: dot, height: dot)
         d.cornerRadius = dot / 2
         d.backgroundColor = ink.cgColor
         d.add(blink(values: [1.0, 0.0], duration: slowBlink), forKey: "blink")
-        // A dark halo so the red reads on a white page as well as on a terminal.
         for layer in [d, rec] {
             layer.shadowColor = NSColor.black.cgColor
             layer.shadowOpacity = 0.6
             layer.shadowRadius = 3
             layer.shadowOffset = .zero
-            v.layer?.addSublayer(layer)
+            badge.addSublayer(layer)
         }
-        return v
+        return badge
+    }
+
+    /// Bottom-left origins of the four badges, in the screen's own points: the
+    /// top two under the menu bar, which would otherwise draw over them.
+    static func badgeOrigins(size: CGSize, menuBar: CGFloat) -> [CGPoint] {
+        let b = badgeSize()
+        let left = margin, right = size.width - margin - b.width
+        let bottom = margin, top = size.height - menuBar - margin - b.height
+        return [CGPoint(x: left, y: top), CGPoint(x: right, y: top),
+                CGPoint(x: left, y: bottom), CGPoint(x: right, y: bottom)]
     }
 
     /// A hard step, no ease: the first value for the first half, the second after.
@@ -452,5 +527,47 @@ enum FilmBorder {
         guard Thread.isMainThread else { DispatchQueue.main.async { hide() }; return }
         panel?.orderOut(nil)
         panel = nil
+        badges.forEach { $0.orderOut(nil) }
+        badges = []
+    }
+}
+
+/// A badge's panel: `FilmBorder.badgeLayer`, and a left click anywhere on it
+/// is `FilmBorder.onClick`.
+final class RecBadgeView: NSView {
+    private let badge: CALayer
+    private var dotLayer: CALayer? { badge.sublayers?.first }
+
+    init(frame: NSRect, scale: CGFloat) {
+        badge = FilmBorder.badgeLayer(scale: scale)
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.addSublayer(badge)
+        addTrackingArea(NSTrackingArea(rect: .zero,
+                                       options: [.mouseEnteredAndExited, .cursorUpdate,
+                                                 .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        Log.info("🎬 ● REC clicked — stopping the recording")
+        FilmBorder.onClick?()
+    }
+
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+
+    override func mouseEntered(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+        dotLayer?.removeAnimation(forKey: "blink")
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        NSCursor.arrow.set()
+        dotLayer?.add(FilmBorder.blink(values: [1.0, 0.0], duration: FilmBorder.slowBlink),
+                      forKey: "blink")
     }
 }
