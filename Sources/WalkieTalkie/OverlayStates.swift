@@ -587,11 +587,9 @@ enum OverlayStates {
 
             Shot(slug: "prompt-spawn", group: "The held prompt", title: "…and a new session, in the folder he picked",
                  when: "🔼 ↑ mid-sentence, then a folder clicked in the session list.",
-                 note: "2026-10-17, Victor: *\"if it's a new session, not only the stars … similar to what I've picked in the session list\"*. The ✨ is the icon, the picked folder as its menu row spells it, then `new session`; the green button says `Start New`. Unpicked, the folder is `workspace`.",
+                 note: "2026-10-17, Victor: *\"if it's a new session, not only the stars … similar to what I've picked in the session list\"*. The ✨ is the icon, the picked folder as its menu row spells it, then `new session`; the green button says `Start New`. Unpicked, the folder is `workspace`. 2026-10-20, Victor: *\"it displayed a robot icon and a slash\"* — the folder now rides in with the prompt (`spawnFolder:`), because the chip has already let its spawn label go by the time the panel is up; this shot sets no spawn label, as in the app.",
                  shape: "panel", alpha: 1.0) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ Fix the tax rounding", icon: terminal)
-                o.setSpawnDestination("victor-macos-addons", mark: "✨", icon: RelayWindow.sparkleGlyph)
-                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard, spawning: true)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard, spawnFolder: "victor-macos-addons")
             },
 
             Shot(slug: "prompt-copied", group: "The held prompt", title: "The prompt, with what he copied where he copied it",

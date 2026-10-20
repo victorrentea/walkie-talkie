@@ -429,7 +429,10 @@ yields to `--label`).
   icon either way — `panelSpawning`), a bound terminal `<folder@branch> — <task>` (`ActiveTerminals.task`
   off the tab title, the reply pop-up's header wording; the folder alone with no task). Caret, ⚡ and
   *bind to send* keep their rows. The chip beside the pointer is unchanged. Shots `prompt-recipient`,
-  `prompt-spawn`.
+  `prompt-spawn`. **The spawn's folder is handed to `showSentPrompt(spawnFolder:)`, never read off
+  `spawnLabel`** (2026-10-20, Victor: *"a robot icon and a slash that made no sense"*): the spawn is
+  consumed as the words leave, the chip lets its label go, and the panel fell through to the
+  unbound `🤖 /`. The shot sets no spawn label, as in the app.
 - **Every dictated prompt panel ends with `Mic: <glyph> <device>` over `Engine: <name>`** (2026-10-06,
   Victor: *"clearly mention the engine that was used and the microphone that was used"*), right above
   the buttons. `AppDelegate.heardLine` builds it from the sentence's `via` (a local fallback, ⌘⌃X or

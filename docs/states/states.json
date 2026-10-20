@@ -658,7 +658,7 @@
     "group" : "The held prompt",
     "height" : 136,
     "image" : "prompt-spawn.png",
-    "note" : "2026-10-17, Victor: *\"if it's a new session, not only the stars … similar to what I've picked in the session list\"*. The ✨ is the icon, the picked folder as its menu row spells it, then `new session`; the green button says `Start New`. Unpicked, the folder is `workspace`.",
+    "note" : "2026-10-17, Victor: *\"if it's a new session, not only the stars … similar to what I've picked in the session list\"*. The ✨ is the icon, the picked folder as its menu row spells it, then `new session`; the green button says `Start New`. Unpicked, the folder is `workspace`. 2026-10-20, Victor: *\"it displayed a robot icon and a slash\"* — the folder now rides in with the prompt (`spawnFolder:`), because the chip has already let its spawn label go by the time the panel is up; this shot sets no spawn label, as in the app.",
     "shape" : "panel",
     "slug" : "prompt-spawn",
     "title" : "…and a new session, in the folder he picked",

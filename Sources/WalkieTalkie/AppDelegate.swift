@@ -11965,8 +11965,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            },
                                            buttons: !self.autosend,
                                            // Consumed above, so the panel is told
-                                           // rather than left to re-derive it.
-                                           spawning: spawn) {
+                                           // rather than left to re-derive it —
+                                           // the folder too, for its first line.
+                                           spawnFolder: spawn ? (directory as NSString).lastPathComponent : nil) {
                 self.held = message
                 self.hotkeys.promptHeld = true
                 // **The effect flies into the panel and stays over it,

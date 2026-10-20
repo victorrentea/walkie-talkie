@@ -4123,7 +4123,14 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// (`ActiveTerminals.task`): the title alone (`✳ Fix the tax rounding`) did
     /// not say which folder the session started in. Nil for every other
     /// destination (caret, ⚡, bind to send), which keeps its own row.
+    ///
+    /// **A spawn's folder comes with the prompt, not off the chip** (2026-10-20,
+    /// Victor: *"it displayed a robot icon and a slash that made no sense"*): the
+    /// spawn is consumed as the words leave the microphone and the chip's label
+    /// goes with it, so the panel read `spawnLabel` as nil and fell through to
+    /// the unbound `🤖 /`.
     private var panelRecipient: String? {
+        if let folder = promptSpawnFolder { return "\(folder) — new session" }
         if let spawn = spawnLabel {
             guard spawnMark == "✨" else { return nil }
             let folder = spawn.hasPrefix("✨ ") ? String(spawn.dropFirst(2)) : spawn
@@ -4137,7 +4144,7 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// The panel's spawn wears the ✨ as its icon, picked folder or not — on the
     /// chip an unpicked one rides as a mark in front of `Listening...` instead.
-    private var panelSpawning: Bool { sentPrompt != nil && spawnLabel != nil && spawnMark == "✨" }
+    private var panelSpawning: Bool { sentPrompt != nil && promptSpawning }
 
     // The title used to be borrowable for a moment (`flashTitle`, for the "+1 📸"
     // receipt). Nothing needs it now that F3 reports itself in the recording row,
@@ -5050,7 +5057,7 @@ private let heardLabel = NSTextField(labelWithString: "")
                         inlineFrames: [Int: (path: String, pixels: CGSize)] = [:],
                         pointers: [Int: CGPoint] = [:],
                         films: [(poster: String, seconds: TimeInterval, frames: Int)] = [],
-                        buttons: Bool = true, spawning: Bool = false) -> Bool {
+                        buttons: Bool = true, spawnFolder: String? = nil) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let quoted = selection?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         // **A selection with no words is still worth holding.** It stopped being
@@ -5092,7 +5099,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         }
         promptHold = hold
         promptButtons = buttons
-        promptSpawning = spawning
+        promptSpawnFolder = spawnFolder
         // Zipped here rather than taken as one list, so the caller keeps handing
         // over the paths it already had. A short `stamps` — the documentation
         // shots, an older call — simply leaves the tail unstamped instead of
@@ -5268,7 +5275,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     ///
     /// Handed in with the prompt rather than read off `spawnLabel`, which is the
     /// chip's business and is also what the paste-at-the-caret mode borrows.
-    private var promptSpawning = false
+    /// It is the folder's name, not a flag, for the first line's sake
+    /// (`panelRecipient`): by the time the panel is up the chip has already
+    /// let its spawn label go.
+    private var promptSpawnFolder: String?
+    private var promptSpawning: Bool { promptSpawnFolder != nil }
     private var editingPrompt = false
 
     /// Click on the words → they become a text field, and the countdown stops
@@ -5450,7 +5461,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         sentPrompt = nil
         promptWords = nil
         promptExtras = ""
-        promptSpawning = false
+        promptSpawnFolder = nil
         promptShots = []
         promptInlineShots = [:]
         promptInlineFrames = [:]
