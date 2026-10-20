@@ -12,7 +12,6 @@ What `HotkeyTap` may and may not do with the two keyboard chords and with the mo
 |---|---|---|
 | **⌘⌃B** | `onBindHotkey` → `bindFrontmostTerminal` | was ⌘⌃D until 2026-09-01 |
 | **⌘⌃D** | `onLocalToggle` → `toggleLocalRecording` | new — the wheel's click, from the keyboard |
-| **right ⌘ + Space** | `onLocalToggle` — the same call as ⌘⌃D | 2026-10-20, Victor: *"right cmd + space = toggle on/off hands free dictation"*. Right ⌘ only (device bit `0x10`, left ⌘ `0x08` absent, no ⌃⌥⇧fn), so Spotlight keeps left ⌘ + Space; swallowed always, dropped while frozen |
 
 - **Swallow both unconditionally, autorepeat included.** A held ⌘⌃D would open the microphone and shut it again on the next repeat; a held ⌘⌃B would bind and then immediately stop the session it started. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
 - **⌘⌃D is ungated at the tap.** A key that sometimes falls through to macOS's "look up in dictionary" would be worse than one that never does; with nothing bound the sentence is held for five minutes and delivered when a bind lands (`awaitingBind`, 2026-09-11), so the press costs nothing. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
@@ -119,6 +118,42 @@ In this mode the app takes **no mouse button at all**. Every mouse event is hand
 - **The menu legend column carries both legends and picks one.** `restyleGestures` runs on the toggle as well as on every open, and the tab stop is measured against the wider of the two sets so the column cannot resize under the pointer. → journal: *Use Logi Gestures — the tick that chooses between the two sets*
 - **Keep the wheel set compiled in, not commented out.** The Logi gestures live in an Options+ profile on *this* Mac; a fresh install or a training-room machine has no side buttons until that profile is rebuilt, and the wheel path needs nothing but the app. → journal: *Use Logi Gestures — the tick that chooses between the two sets*
 
+## The trackpad under left ⌃⌥⌘ (2026-10-20)
+
+Victor: *"intercept the scroll up on trackpad with one [finger] or two … while control option command
+[are] pressed down … another option to trigger this Walkie Talkie without a mouse"*, then *"if I'm
+pressing down Control Option Command from left side of the keyboard, I should see the same tooltips in
+the bottom right corner to suggest what actions I can do with one finger and two fingers … add a finger
+somehow to the center badge … while I hold this 300 millis"*.
+
+| swipe | is | | swipe | is |
+|---|---|---|---|---|
+| ☝️ ↑ | 🔼 ↑ F8 | | ✌️ ↑ | 🔽 ↑ F4 |
+| ☝️ ↓ | 🔼 ↓ F9 | | ✌️ ↓ | 🔽 ↓ F12 |
+| ☝️ ← | 🔼 ← F11 | | ✌️ ← | 🔽 ← F3 |
+| ☝️ → | 🔼 → F10 | | ✌️ → | 🔽 → F5 |
+
+- **The chord is the left ⌃⌥⌘ by hand**: all three device bits (`0x01`, `0x20`, `0x08`), no ⇧/fn,
+  unstamped `flagsChanged` (`HotkeyTap.padChord`). A key typed under it is a ⌃⌥⌘ shortcut: the bar goes.
+- **One finger = the pointer's travel** (`.mouseMoved` joined the tap mask for this alone, read only
+  while the chord is down, never swallowed, before `noteInput`): 80 pt along one axis and 1.5× the
+  other (`padDirection`); a 0.3 s pause re-arms it in the same hold. **Two fingers = a continuous
+  scroll**, swallowed whole while the chord is down and for the rest of a scroll that began under it
+  (momentum included); 50 scroll points, one swipe per scroll; *Natural scrolling* undone through
+  `isDirectionInvertedFromDevice` so ↑ is the fingers going up. A mouse wheel's notches pass.
+- **A swipe is the side button's chord, not a copy of its branch** (`padFire`): a ⌃⌥⌘F-key event
+  stamped `trackpadStamp` (`0x7774_5041_4400_0000`) handed to `handle` and never posted — the re-fire,
+  dwell and frozen-main guards are the button's own, in either gesture mode. Log
+  `🖐️ ☝️ one finger up under left ⌃⌥⌘ — as 🔼 ↑ ⌃⌥⌘F8`.
+- **No click on the trackpad** — nothing in this file swallows a left or right button — so the two
+  clicks (🔼 prompt at the caret / its stop, 🔽 plain dictation / shutter) stay on the mouse, ⌘⌃D and
+  right ⌘ ×2. The centre box shows the finger instead.
+- **The bar**: `onTrackpadHints` 0.3 s after the chord → `RelayWindow.setTrackpadHints` →
+  `GestureHintBar.Stage.fingers` → `fingerCrosses`, at rest too and without the Logi gate; at rest it
+  says what each swipe starts (`🎙️ prompt`, `⚡ ask`, `✨ new`, `☠️`, `🎙️ plain`, `⏎`, `🔌 unbind`),
+  mid-sentence the side buttons' own crosses. `HINT_BAR_PNG=<dir> swift test --filter
+  GestureHintBarTests` renders `fingers` and `fingers-prompt`.
+
 ## Wheel mode (unticked): still live code
 
 Off by default since 2026-09-09. Everything in this section is what the menu's *Use Logi Gestures* turns back on when unticked; with it ticked the wheel is untouched and the side buttons arrive as chords instead. Middle-click-to-close-a-tab is what the default mode exists to protect (*"ideea e sa evit sa emit middle click, caci folosesc middle click sa inchid de ex taburi chrome/vsc"*).
@@ -171,6 +206,7 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
   branch (2026-10-02, the plain dictation's toggle) is gone; right ⌥ ×2 (right ⌘ ×2 since 2026-10-20) stays the keyboard's plain
   toggle, ⌃⌥⌘F5 (🔽 →) the mouse's. **Right ⌥⇧ opens nothing** the same day: Wispr's `61+60` ptt is
   out of its config and `onWisprPushToTalk` out of the tap (`dictation-source.md`).
+- **Right ⌘ + Space is gone** (2026-10-20, the same day it came — Victor: *"I don't get the difference between command command on the right side and the command space. They both start hands free dictation. Give up on the command space"*). Right ⌘ ×2 is the keyboard's one toggle; Space under the right ⌘ passes to the front app again.
 - **Right ⌘ ×2 moved from right ⌥ ×2** (2026-10-20, Victor: *"instead of right opt-opt, right cmd-cmd should open clean dictation"*) — same `plainToggle`, same 0.35 s tap / 0.45 s gap; right ⌘ alone (left ⌘ or any other modifier breaks it, a key between resets it). Right ⌥ ×2 is free for Victor Addons' emoji picker. Log `🎙️ right ⌘ double-tapped — the plain dictation's toggle (as F5)`.
 - **Right ⌘ ×2 (right ⌥ ×2 until 2026-10-20; F5 until 2026-10-19) over an open prompt end it, as 🔼 would** (2026-10-09, `keyboardEndsOpenPrompt`). They used to be refused (*"the relay's own engine is mid-sentence"*) — the opening half of the no-second-engine rule applied to a stop: at 19:28 a forward-button prompt could not be closed from the keyboard and took a Force Quit. Only the keyboard triggers; the 🔽 gestures keep their mid-prompt meanings and their refusal. Log `🎙️ right ⌘ ×2 over an open prompt — its stop`.
 

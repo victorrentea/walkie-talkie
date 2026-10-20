@@ -4649,6 +4649,16 @@ private let heardLabel = NSTextField(labelWithString: "")
         hintBar.pointerMoved(NSEvent.mouseLocation)
     }
 
+    /// Left ⌃⌥⌘ is held for the trackpad's swipes — the corner bar shows them
+    /// (2026-10-20, `HotkeyTap.onTrackpadHints`).
+    private(set) var trackpadHints = false
+
+    func setTrackpadHints(_ on: Bool) {
+        guard trackpadHints != on else { return }
+        trackpadHints = on
+        updateHintBar()
+    }
+
     func setCropPhase(_ phase: GestureHintBar.CropPhase?) {
         guard cropPhase != phase else { return }
         cropPhase = phase
@@ -4659,7 +4669,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
         hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
                              kamikaze: kamikaze, spawn: spawnMarked, held: heldPair, crop: cropPhase,
-                             quick: asking))
+                             quick: asking, fingers: trackpadHints))
     }
 
     func setHeldPair(_ on: Bool) {

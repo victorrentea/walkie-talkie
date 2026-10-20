@@ -641,6 +641,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// chip's bar and the ring's fade (`CaretHalo.setCoasting`) read this one
     /// number, so they cannot count down two different waits.
     private var settleEstimate: TimeInterval = 0
+    /// The engine's *typical* round trip for the same take — what the caret
+    /// pin's ring reaches 90 % at (2026-10-20, `DropArrow.progress`); the
+    /// estimate above is the near-worst the chip's bar is drawn against.
+    private var settleTypical: TimeInterval = 0
     /// **What he has just said, kept for the halo's rewind** (2026-09-23) —
     /// taken at the close, played backwards round the pointer while a caret
     /// sentence is transcribed (`CaretHalo.setRewind`). Emptied when the
@@ -2568,6 +2572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // — the hint bar's only news of the pointer — heard nothing, and the bar
         // sat under the box he was drawing. Already on main.
         hotkeys.onAreaMoved = { [weak self] in self?.overlay.pointerMovedUnseen() }
+        hotkeys.onTrackpadHints = { [weak self] on in self?.overlay.setTrackpadHints(on) }
         CropSelectionOverlay.onAwaitingDestination = { [weak self] parked in
             self?.hotkeys.areaAwaitingDestination = parked
         }
@@ -5346,6 +5351,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let spokenFor = dictationStartedAt.map { Date().timeIntervalSince($0) } ?? 0
         stateLock.unlock()
         settleEstimate = DecodeRate.seconds(for: max(0, spokenFor))
+        settleTypical = DecodeRate.typical(for: max(0, spokenFor), engine: DecodeRate.activeEngine)
         syncBorrowedGestures()
         // The tap's back click reads `sentenceQueueAccepts`, which the same-click
         // window keeps false for 0.8 s after the stop (Q12): pushed again after it.
@@ -7589,7 +7595,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.quick = quickAsk
         caretHalo.setRewind(settling && !listening && !speculative && !quickAsk,
                             take: settleTake, estimate: settleEstimate)
-        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk)
+        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk, estimate: settleTypical)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
         // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,

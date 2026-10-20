@@ -46,6 +46,46 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, held: true)), [])
     }
 
+    /// Left ⌃⌥⌘ held: the trackpad's crosses, a finger in each centre — at rest
+    /// what each swipe starts, mid-sentence the side buttons' own (2026-10-20).
+    func testTheTrackpadsCrossesCarryAFinger() {
+        XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(fingers: true)), [
+            Cross(click: "☝️", up: "✨ new", down: "☠️", left: "⚡ ask", right: "🎙️ prompt"),
+            Cross(click: "✌️", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ plain"),
+        ])
+        XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
+            Cross(click: "☝️", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
+            Cross(click: "✌️", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
+        ])
+    }
+
+    /// One finger is 🔼, two are 🔽, and each direction is the chord with the
+    /// same arrow in its name (`HotkeyTap.gestureNames`).
+    func testEverySwipeIsTheSideButtonsChord() {
+        let arrows: [HotkeyTap.PadDirection: String] = [.up: "↑", .down: "↓", .left: "←", .right: "→"]
+        for fingers in [1, 2] {
+            for (d, arrow) in arrows {
+                let name = HotkeyTap.gestureNames[HotkeyTap.padChordKey(fingers: fingers, d)] ?? ""
+                XCTAssertTrue(name.hasPrefix((fingers == 1 ? "🔼 " : "🔽 ") + arrow), "\(fingers) \(d) → \(name)")
+            }
+        }
+    }
+
+    func testASwipeIsOneAxisPastTheDistance() {
+        XCTAssertNil(HotkeyTap.padDirection(CGPoint(x: 0, y: 79), distance: 80))
+        XCTAssertEqual(HotkeyTap.padDirection(CGPoint(x: 10, y: 80), distance: 80), .up)
+        XCTAssertEqual(HotkeyTap.padDirection(CGPoint(x: -90, y: 20), distance: 80), .left)
+        XCTAssertNil(HotkeyTap.padDirection(CGPoint(x: 90, y: 80), distance: 80), "a diagonal is no swipe")
+    }
+
+    /// The pin's ring: 90 % at the typical round trip, never full (2026-10-20).
+    func testThePinsRingNeverFills() {
+        XCTAssertEqual(DropArrow.progress(elapsed: 0, estimate: 2), 0)
+        XCTAssertEqual(DropArrow.progress(elapsed: 2, estimate: 2), 0.9, accuracy: 0.005)
+        XCTAssertLessThan(DropArrow.progress(elapsed: 60, estimate: 2), DropArrow.progressCeiling + 0.0001)
+        XCTAssertEqual(DropArrow.progress(elapsed: 5, estimate: 0), 0)
+    }
+
     /// A crop draws the mouse, and its right button says what one click does
     /// right now (2026-10-07).
     func testCropDrawsTheMouse() {
@@ -68,11 +108,14 @@ final class GestureHintBarTests: XCTestCase {
             ("crop", .init(listening: true, prompting: true, crop: .selecting)),
             ("crop-locked", .init(listening: true, prompting: true, crop: .locked)),
             ("crop-parked", .init(listening: true, prompting: true, crop: .parked)),
+            ("fingers", .init(fingers: true)),
+            ("fingers-prompt", .init(listening: true, prompting: true, fingers: true)),
         ]
         for (name, stage) in stages {
             for (bgName, bg) in [("dark", NSColor(white: 0.12, alpha: 1)), ("light", NSColor(white: 0.93, alpha: 1))] {
-                let mouse = GestureHintBar.mouse(for: stage)
-                let crosses = mouse == nil ? GestureHintBar.crosses(for: stage) : []
+                let mouse = stage.fingers ? nil : GestureHintBar.mouse(for: stage)
+                let crosses = stage.fingers ? GestureHintBar.fingerCrosses(for: stage)
+                    : mouse == nil ? GestureHintBar.crosses(for: stage) : []
                 let size = GestureHintBar.Board.size(for: crosses, mouse: mouse)
                 let board = GestureHintBar.Board(frame: NSRect(x: 20, y: 20, width: size.width, height: size.height))
                 board.crosses = crosses

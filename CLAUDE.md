@@ -78,10 +78,13 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
 
 ## Gestures, in one screen
 
-- **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D dictate (**right ⌘ + Space** too, 2026-10-20), **⌘⌃X = the local model now** (recording or
+- **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D dictate, **⌘⌃X = the local model now** (recording or
   waiting on the cloud: this Mac transcribes the take, `via: local-forced`; 2026-09-28). All three
   swallowed. ⌘⌃⌥D and ⌘⌃L belong to Victor Addons, ⌘⌃W to Wispr Flow.
   Right ⌘⌥ held = Walkie's clean dictation (`54+61`); **right ⌘ ×2 = the plain dictation's toggle** (right ⌥ ×2 until 2026-10-20 — that one is Victor Addons' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
+- **Trackpad, under left ⌃⌥⌘** (2026-10-20): a one-finger swipe is 🔼 + that direction, a
+  two-finger swipe 🔽 + that direction (the same F-key branches, no clicks); held 0.3 s, the corner
+  bar shows both crosses with ☝️ / ✌️ in the centre (`mouse-gestures.md`, *The trackpad*).
 - **The clipboard always holds the finished sentence** (Q17, 2026-09-28): the envelope for a prompt,
   the clean words for a plain one, whatever the engine or destination; never restored. ⌘V re-pastes.
 - **Side buttons** (Options+ → ⌃⌥⌘F3…F12, duplicated in `HotkeyTap`, must not drift;

@@ -63,6 +63,10 @@ final class GestureHintBar {
         /// A ⚡ quick question: its stop asks the model, nothing is typed and
         /// no Return follows (2026-10-09); a prompt's gestures since 2026-10-15.
         var quick = false
+        /// Left ⌃⌥⌘ held past `HotkeyTap.trackpadHintDelay`: the crosses are the
+        /// trackpad's — ☝️ one finger for 🔼, ✌️ two for 🔽 — at rest too
+        /// (2026-10-20, `fingerCrosses`).
+        var fingers = false
     }
 
     /// Where the wheel crop is — `CropSelectionOverlay.Phase`, without `done`.
@@ -142,6 +146,30 @@ final class GestureHintBar {
         return [front, back]
     }
 
+    /// **The trackpad's crosses, under left ⌃⌥⌘** (2026-10-20, Victor: *"I should
+    /// see the same tooltips in the bottom right corner to suggest what actions I
+    /// can do with one finger and two fingers … add a finger somehow to the
+    /// center badge"*). The side buttons' crosses with the finger where the click
+    /// was — a swipe has no click (`HotkeyTap.padFire`). At rest they say what
+    /// each swipe starts. Pure, like `crosses`.
+    static func fingerCrosses(for s: Stage) -> [Cross] {
+        var c: [Cross]
+        if s.listening && !s.held {
+            c = crosses(for: Stage(listening: true, prompting: s.prompting, filming: s.filming,
+                                   kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
+        } else {
+            c = [Cross(click: "", up: "✨ new", down: "☠️", left: "⚡ ask", right: "🎙️ prompt"),
+                 Cross(click: "", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ plain")]
+        }
+        c[0].click = oneFinger
+        c[1].click = twoFingers
+        return c
+    }
+
+    /// The centre badges, drawn larger than a label (`Board.drawBox`).
+    static let oneFinger = "☝️"
+    static let twoFingers = "✌️"
+
     /// A label starting with this is drawn crossed out, without it.
     static let struck = "~"
 
@@ -178,10 +206,15 @@ final class GestureHintBar {
     static let offRetinaScale: CGFloat = 3
 
     func update(_ stage: Stage) {
-        let visible = stage.listening && !stage.held && AboutWindow.logiGesturesOn
+        // The trackpad's crosses need no Options+ profile, so no Logi gate.
+        let visible = stage.fingers || (stage.listening && !stage.held && AboutWindow.logiGesturesOn)
         guard stage != shown || (panel != nil) != visible else { return }
         shown = stage
         guard visible else { hide(); return }
+        if stage.fingers {
+            show(Self.fingerCrosses(for: stage))
+            return
+        }
         let mouse = Self.mouse(for: stage)
         show(mouse == nil ? Self.crosses(for: stage) : [], mouse: mouse)
     }
@@ -516,8 +549,11 @@ final class GestureHintBar {
             let style = NSMutableParagraphStyle()
             style.alignment = .center
             style.lineBreakMode = .byClipping
+            // A finger badge is the centre's whole label: drawn big enough to
+            // read as a hand, not as a word.
+            let badge = text == GestureHintBar.oneFinger || text == GestureHintBar.twoFingers
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: GestureHintBar.font,
+                .font: badge ? NSFont.systemFont(ofSize: GestureHintBar.boxHeight * 0.72) : GestureHintBar.font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.92),
                 .paragraphStyle: style,
             ]

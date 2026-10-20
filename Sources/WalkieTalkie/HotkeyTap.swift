@@ -2054,6 +2054,157 @@ final class HotkeyTap {
         return true
     }
 
+    // ── The trackpad under left ⌃⌥⌘ (2026-10-20) ─────────────────────────────
+
+    /// **Left ⌃⌥⌘ held + a swipe on the trackpad = a side-button gesture**
+    /// (2026-10-20, Victor: *"intercept the scroll up on trackpad with one
+    /// [finger] or two … while control option command [are] pressed down … another
+    /// option to trigger this Walkie Talkie without a mouse"*). **One finger is
+    /// 🔼, two fingers are 🔽**, each in its four directions: one finger is the
+    /// pointer's own travel (`mouseMoved`), two fingers the trackpad's scroll.
+    /// A swipe is handed to the branch its ⌃⌥⌘F-key reaches, as a key event
+    /// stamped `trackpadStamp` and never posted (`padFire`), so every guard on
+    /// the way — re-fire, dwell, frozen main — is the side button's own.
+    /// **No click**: nothing in this file swallows a left or right button.
+    /// Held `trackpadHintDelay`, the corner bar shows both crosses with the
+    /// finger in the centre (`onTrackpadHints`, *"while I hold this 300 millis"*).
+    var onTrackpadHints: ((Bool) -> Void)?
+    /// Tap thread only, like the rest of the chord bookkeeping.
+    private var padChordDown = false
+    private var padHint: DispatchWorkItem?
+    private var padMove = CGPoint.zero
+    private var padMoveAt: CFTimeInterval = 0
+    private var padMoveFired = false
+    private var padScroll = CGPoint.zero
+    private var padScrollFired = false
+    /// The scroll began under the chord: its tail (momentum included) is ours
+    /// too, even once the keys are up — a page must not coast on a swipe.
+    private var padScrollOwned = false
+    static let trackpadHintDelay: TimeInterval = 0.3
+    /// One finger: pointer points along the dominant axis. Two fingers: scroll
+    /// points, before any momentum.
+    static let padMoveDistance: CGFloat = 80
+    static let padScrollDistance: CGFloat = 50
+    /// A pause this long between pointer moves ends a one-finger swipe, so the
+    /// next one in the same hold counts.
+    private static let padMoveRest: CFTimeInterval = 0.3
+    static let trackpadStamp: Int64 = 0x7774_5041_4400_0000   // "wtPAD"
+    /// `NX_DEVICELCTLKEYMASK` / `NX_DEVICELALTKEYMASK` — the left ⌃ and ⌥, with
+    /// `deviceLeftCommand` the chord *"from left side of the keyboard"*.
+    private static let deviceLeftControl: UInt64 = 0x000001
+    private static let deviceLeftOption: UInt64 = 0x000020
+
+    enum PadDirection: String { case up, down, left, right }
+
+    /// The swipe the travel so far amounts to — `distance` along one axis and
+    /// half again the other — or nil while it is still nothing. Up is +y.
+    static func padDirection(_ travel: CGPoint, distance: CGFloat) -> PadDirection? {
+        let ax = abs(travel.x), ay = abs(travel.y)
+        if ay >= distance, ay > ax * 1.5 { return travel.y > 0 ? .up : .down }
+        if ax >= distance, ax > ay * 1.5 { return travel.x > 0 ? .right : .left }
+        return nil
+    }
+
+    /// The chord a swipe stands for: one finger 🔼 (F8 ↑ F9 ↓ F11 ← F10 →), two
+    /// fingers 🔽 (F4 ↑ F12 ↓ F3 ← F5 →).
+    static func padChordKey(fingers: Int, _ d: PadDirection) -> CGKeyCode {
+        switch (fingers, d) {
+        case (1, .up): return 0x64
+        case (1, .down): return 0x65
+        case (1, .left): return 0x67
+        case (1, .right): return 0x6D
+        case (_, .up): return 0x76
+        case (_, .down): return 0x6F
+        case (_, .left): return 0x63
+        case (_, .right): return 0x60
+        }
+    }
+
+    /// Every `flagsChanged`: is left ⌃⌥⌘ — and nothing else — down by his hand?
+    private func padChord(_ event: CGEvent) {
+        guard event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp else { return }
+        let f = event.flags, raw = f.rawValue
+        let down = f.contains(.maskControl) && f.contains(.maskAlternate) && f.contains(.maskCommand)
+            && !f.contains(.maskShift) && !f.contains(.maskSecondaryFn)
+            && raw & Self.deviceLeftControl != 0 && raw & Self.deviceLeftOption != 0
+            && raw & Self.deviceLeftCommand != 0
+        guard down != padChordDown else { return }
+        padChordDown = down
+        padMove = .zero
+        padMoveFired = false
+        padScroll = .zero
+        padScrollFired = false
+        padHint?.cancel()
+        padHint = nil
+        if down {
+            let hint = DispatchWorkItem { [weak self] in self?.onTrackpadHints?(true) }
+            padHint = hint
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.trackpadHintDelay, execute: hint)
+        } else {
+            DispatchQueue.main.async { [weak self] in self?.onTrackpadHints?(false) }
+        }
+    }
+
+    /// A key typed under the chord: a ⌃⌥⌘ shortcut, not a swipe — the bar goes.
+    private func padChordUsedAsShortcut() {
+        guard padChordDown else { return }
+        padHint?.cancel()
+        padHint = nil
+        DispatchQueue.main.async { [weak self] in self?.onTrackpadHints?(false) }
+    }
+
+    /// One finger: the pointer's travel under the chord. The move itself
+    /// always goes through — the pointer is his.
+    private func padPointerMoved(_ event: CGEvent) {
+        let now = CACurrentMediaTime()
+        if now - padMoveAt > Self.padMoveRest { padMove = .zero; padMoveFired = false }
+        padMoveAt = now
+        guard !padMoveFired else { return }
+        // Screen y grows downward; up is +y here.
+        padMove.x += CGFloat(event.getDoubleValueField(.mouseEventDeltaX))
+        padMove.y -= CGFloat(event.getDoubleValueField(.mouseEventDeltaY))
+        guard let d = Self.padDirection(padMove, distance: Self.padMoveDistance) else { return }
+        padMoveFired = true
+        padFire(fingers: 1, d)
+    }
+
+    /// Two fingers: a trackpad scroll under the chord — swallowed whole, one
+    /// swipe per scroll. A mouse wheel's notches (not continuous) pass.
+    private func padScrolled(_ event: CGEvent) -> Bool {
+        guard event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0 else { return false }
+        // kCGScrollPhaseBegan
+        if event.getIntegerValueField(.scrollWheelEventScrollPhase) == 1 {
+            padScrollOwned = padChordDown
+            padScroll = .zero
+            padScrollFired = false
+        }
+        guard padChordDown || padScrollOwned else { return false }
+        guard padChordDown, !padScrollFired,
+              event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0 else { return true }
+        let dy = CGFloat(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1))
+        let dx = CGFloat(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2))
+        // The fingers' own direction, whatever *Natural scrolling* says: with it
+        // on, fingers up scroll the content up and the deltas come out negative.
+        let natural = NSEvent(cgEvent: event)?.isDirectionInvertedFromDevice ?? true
+        padScroll.y += natural ? -dy : dy
+        padScroll.x += natural ? dx : -dx
+        guard let d = Self.padDirection(padScroll, distance: Self.padScrollDistance) else { return true }
+        padScrollFired = true
+        padFire(fingers: 2, d)
+        return true
+    }
+
+    /// The swipe, as the chord the side button would have sent — through
+    /// `handle`, never posted, so no app sees it and every guard is the same.
+    private func padFire(fingers: Int, _ d: PadDirection) {
+        let code = Self.padChordKey(fingers: fingers, d)
+        guard let key = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true) else { return }
+        key.flags = [.maskControl, .maskAlternate, .maskCommand]
+        key.setIntegerValueField(.eventSourceUserData, value: Self.trackpadStamp)
+        Log.info("🖐️ \(fingers == 1 ? "☝️ one finger" : "✌️ two fingers") \(d.rawValue) under left ⌃⌥⌘ — as \(Self.gestureNames[code] ?? "key \(code)")")
+        _ = handle(type: .keyDown, event: key)
+    }
+
     /// **Is the forward button physically down, according to the window server?**
     ///
     /// The event stream cannot answer this. Something between the mouse and this
@@ -2293,6 +2444,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // here and goes straight back out unless the middle button is
             // down while the ring is up; see `haloDial`.
             .scrollWheel,
+            // **The pointer's travel, for the one-finger swipe under left
+            // ⌃⌥⌘** (2026-10-20, `padPointerMoved`). Read only while the
+            // chord is down; every move goes straight back out.
+            .mouseMoved,
             .leftMouseDown,
             .leftMouseUp,
             .rightMouseDown,
@@ -2438,15 +2593,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         let ctrl = flags.contains(.maskControl), opt = flags.contains(.maskAlternate), cmd = flags.contains(.maskCommand)
         let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         if ctrl && opt && cmd { return Self.gestureNames[code] != nil }
-        if Self.isRightCommandSpace(code, flags) { return true }
         return ctrl && cmd && !opt && (code == VK_B || code == VK_D || code == VK_X)
-    }
-
-    /// Space under the **right** ⌘ and nothing else — not the left ⌘ (Spotlight's).
-    private static func isRightCommandSpace(_ code: CGKeyCode, _ flags: CGEventFlags) -> Bool {
-        let others: CGEventFlags = [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
-        return code == VK_SPACE && flags.contains(.maskCommand) && flags.intersection(others).isEmpty
-            && (flags.rawValue & deviceRightCommand) != 0 && (flags.rawValue & deviceLeftCommand) == 0
     }
 
     /// **The freeze photographs itself.** The 17:12 one was only understood
@@ -2607,13 +2754,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             canaryLock.lock(); canarySeenAt = HotkeyTap.uptime(); canarySeenFrozen = frozen; canaryLock.unlock()
             return nil
         }
+        // **A pointer move is read for the trackpad's one-finger swipe and goes
+        // out** — before the input clock, which it never was part of.
+        if type == .mouseMoved {
+            if padChordDown, !frozen { padPointerMoved(event) }
+            return Unmanaged.passUnretained(event)
+        }
         // Anything past the canary is someone's input — the restart gate's clock.
         HotkeyTap.noteInput()
         if frozen {
             if isOwnChordWhileFrozen(type, event) {
                 chordsDroppedWhileOpen += 1
                 let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                Log.info("🧊 \(Self.gestureNames[code] ?? (code == VK_B ? "⌘⌃B" : code == VK_X ? "⌘⌃X" : code == Self.VK_SPACE ? "right ⌘ Space" : "⌘⌃D")) dropped — the main thread is frozen; a gesture made now is not acted on, and never reaches the front app")
+                Log.info("🧊 \(Self.gestureNames[code] ?? (code == VK_B ? "⌘⌃B" : code == VK_X ? "⌘⌃X" : "⌘⌃D")) dropped — the main thread is frozen; a gesture made now is not acted on, and never reaches the front app")
                 return nil
             }
             return Unmanaged.passUnretained(event)
@@ -2623,7 +2776,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // before either mode's wiring because neither reads a scroll — this is
         // the only branch that does, and everything it does not take goes out
         // untouched.
+        // A trackpad scroll under left ⌃⌥⌘ is a two-finger swipe first.
         if type == .scrollWheel {
+            if padScrolled(event) { return nil }
             return haloDial(event) ? nil : Unmanaged.passUnretained(event)
         }
 
@@ -3211,6 +3366,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == VK_FUNCTION {
                 fnKeyHeld = event.flags.contains(.maskSecondaryFn)
             }
+            padChord(event)
             let raw = event.flags.rawValue
             // Device-dependent bits, because the pair is specifically the **right**
             // ⌘ and the **right** ⌥: `.maskCommand` alone would fire on every ⌘ in
@@ -3230,7 +3386,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // should open clean dictation"*, right ⌥ ×2 going to Victor Addons'
             // emoji picker). Only the right ⌘ with nothing else held counts — the
             // left ⌘ included; any other modifier, a key in between (keyDown below,
-            // right ⌘ + Space among them) or a slow press breaks the pair. The
+            // any key at all) or a slow press breaks the pair. The
             // event itself always goes through — swallowing a modifier edge would
             // leave ⌘ stuck in the app underneath.
             if !ownPost {
@@ -3280,6 +3436,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         // A key between or under the right ⌘ taps is ⌘ used as a modifier.
         if type == .keyDown { rightCmdTapDownAt = 0; rightCmdTapUpAt = 0 }
+        if type == .keyDown, event.getIntegerValueField(.eventSourceUserData) != Self.trackpadStamp {
+            padChordUsedAsShortcut()
+        }
         // **A key under the held pair makes it a shortcut, not a dictation**
         // (2026-09-25, `onCleanHold`). Right ⌘⌥ + a letter is a chord somebody
         // else owns; the sentence opened at the press is thrown away and the
@@ -3648,17 +3807,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             return swallow("⌘⌃D dictate", type, event)
         }
 
-        // **Right ⌘ + Space — ⌘⌃D under one thumb** (2026-10-20, Victor: *"right
-        // cmd + space = toggle on/off hands free dictation"*). The right ⌘ alone
-        // (device bit, no left ⌘, nothing else held), so Spotlight stays on the
-        // left ⌘ + Space. Swallowed always, autorepeat included, like ⌘⌃D.
-        if Self.isRightCommandSpace(keyCode, flags) {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("right ⌘ Space (autorepeat)", type, event) }
-            queueToggle()
-            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-            return swallow("right ⌘ Space dictate", type, event)
-        }
-
         // ⌘⌃X — **the local model, now** (2026-09-28): see `onLocalNow`. Swallowed
         // always, like the two above — at rest too, where the relay flashes
         // *Nothing to transcribe locally* rather than let ⌘⌃X through to the
@@ -3702,7 +3850,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // the Mac dictation on F5"*) — it was the plain dictation's toggle from
         // 2026-10-02; right ⌘ ×2 still is. Only ⌃⌥⌘F5 (🔽 →) is taken below.
 
-        if useLogiGestures && ctrl && opt && cmd, let gesture = Self.gestureNames[keyCode] {
+        // A trackpad swipe (`padFire`) reaches these in either gesture mode.
+        let fromTrackpad = event.getIntegerValueField(.eventSourceUserData) == Self.trackpadStamp
+        if (useLogiGestures || fromTrackpad) && ctrl && opt && cmd, let gesture = Self.gestureNames[keyCode] {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
                 return swallow("\(gesture) (autorepeat)", type, event)
             }
@@ -5237,7 +5387,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// on `.maskCommand` instead would start it on every ⌘⌥ in the day.
     private static let deviceRightCommand: UInt64 = 0x000010
     private static let deviceRightOption: UInt64 = 0x000040
-    /// `NX_DEVICELCMDKEYMASK` — the left ⌘, so right ⌘ ×2 and right ⌘ Space
+    /// `NX_DEVICELCMDKEYMASK` — the left ⌘, so right ⌘ ×2
     /// are the right ⌘ alone, not ⌘ held on both sides.
     private static let deviceLeftCommand: UInt64 = 0x000008
 

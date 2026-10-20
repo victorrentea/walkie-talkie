@@ -1235,9 +1235,11 @@ final class CaretHalo {
     /// **before** `setActive`, so the collapse that follows knows to leave them
     /// standing. It ends at `endSettling` — which for this mode is the ⌘V — and
     /// they go in a cut, because what replaces them is the words.
-    func setDelivering(_ on: Bool) {
+    func setDelivering(_ on: Bool, estimate: TimeInterval = 0) {
         guard delivering != on else { return }
         delivering = on
+        // The pin's ring fills off it (2026-10-20, `DropArrow.progress`).
+        deliverEstimate = on ? estimate : 0
         Log.info(on ? "⬇︎ the pin stays up while the words travel to the caret"
                     : "⬇︎ the pin goes — the words landed")
         guard on else {
@@ -1255,8 +1257,10 @@ final class CaretHalo {
         // Placed from here as well as from `follow`: the pointer may not move
         // again between the stop gesture and the delivery, and the heads have to
         // be up either way.
-        arrow.hold(at: o)
+        arrow.hold(at: o, estimate: deliverEstimate)
     }
+    /// The decode estimate of the words in flight, for the pin's ring.
+    private var deliverEstimate: TimeInterval = 0
 
     // MARK: - The rewind (2026-09-23)
 
@@ -2514,7 +2518,7 @@ final class CaretHalo {
     /// idempotent after the first call and it is also what raises them again.
     private func placeHeads() {
         guard let o = headsOrigin else { return }
-        delivering ? arrow.hold(at: o) : arrow.place(at: o)
+        delivering ? arrow.hold(at: o, estimate: deliverEstimate) : arrow.place(at: o)
     }
 
     private static func origin() -> NSPoint {
@@ -3820,7 +3824,9 @@ extension CaretHalo {
                 if arrowScale > 0 {
                     let arrowHost = NSView(frame: NSRect(origin: .zero, size: cell))
                     arrowHost.wantsLayer = true
-                    arrowHost.layer?.addSublayer(DropArrow.picture(scale: arrowScale, shining: shining, crossed: crossed))
+                    arrowHost.layer?.addSublayer(DropArrow.picture(scale: arrowScale, shining: shining, crossed: crossed,
+                                                                        // In flight, the ring two thirds full (2026-10-20).
+                                                                        progress: arrowScale == DropArrow.holdScale ? 0.66 : 0))
                     if let rep = arrowHost.bitmapImageRepForCachingDisplay(in: arrowHost.bounds) {
                         arrowHost.cacheDisplay(in: arrowHost.bounds, to: rep)
                         NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }

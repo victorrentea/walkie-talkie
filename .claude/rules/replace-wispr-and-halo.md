@@ -318,6 +318,16 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
 - **Words in flight: ×1.3 (`holdScale`, about the tip — a doubled pin is in the way), shine at full**;
   a cut at the ⌘V as before. **It stays through the rewind** (`rewindHidesHeads` is gone): the
   effect says which window, the pin where in it.
+- **In flight it breathes and its hole fills** (2026-10-20, Victor: *"once I end the dictation, it
+  gets bigger … pulsates smaller bigger … during the transcription. Shining as well"*, then *"the
+  [shine] should be something continuous … a progress bar inside the hole, on that pin"*): ×1.4
+  (`holdScale`, 1.3 until then) pulsing to ×1.15 of that over 0.9 s (`transform.scale` on the pin,
+  the model value untouched), the glint sweeping with no rest between sweeps, and a white ring in the
+  hole on a dark well, clockwise from twelve. The ring fills off `DecodeRate.typical` for the take
+  (`AppDelegate.settleTypical` → `setDelivering(_:estimate:)` → `hold(at:estimate:)`): 90 % there,
+  creeping toward 97 %, never full (`DropArrow.progress`, 30 Hz timer); none when crossed or with no
+  estimate. `halo.heads.progress` / `.estimate` in `GET /test/state`; `WT_SHOOT_HALO`'s
+  `words in flight` column draws it at two thirds.
 - **Nowhere to type → grey pin, red ✕, no shine** (`DropArrow.crossed`, `CaretHalo.noCaretAt`):
   `FocusFrame` finds no caret **and** `TerminalBinding.focusTakesNoText` — the focused element is
   an `AXWebArea` with no `AXEditableAncestor` (a page with no field focused: Chrome, Safari,
