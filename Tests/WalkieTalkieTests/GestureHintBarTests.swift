@@ -46,35 +46,30 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, held: true)), [])
     }
 
-    /// Left ⌃⌥⌘ held: the trackpad's crosses — ✌️ with its click, 🤟 alone — at
-    /// rest what each gesture starts, mid-sentence the side buttons' own (2026-10-20).
+    /// Left ⌃⌥⌘ held: the trackpad's crosses — ☝️ and ✌️ before their clicks —
+    /// at rest what each gesture starts, mid-sentence the side buttons' own (2026-10-20).
     func testTheTrackpadsCrossesCarryTheFingers() {
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(fingers: true)), [
-            Cross(click: "✌️ 💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
-            Cross(click: "🤟", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate"),
+            Cross(click: "☝️ 💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
+            Cross(click: "✌️ 🎙️ dictate", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
-            Cross(click: "✌️ 🏁 end", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
-            Cross(click: "🤟", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "☝️ 🏁 end", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
+            Cross(click: "✌️ 📸 shot", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
         ])
+        XCTAssertEqual(GestureHintBar.keyboardFooter(for: .init(listening: true)), "right ⌘ ×2   ⏹️ end")
     }
 
-    /// Two fingers are 🔼, three are 🔽, and each direction is the chord with
-    /// the same arrow in its name (`HotkeyTap.gestureNames`).
+    /// One finger is 🔼, two are 🔽, and each direction is the chord with the
+    /// same arrow in its name (`HotkeyTap.gestureNames`).
     func testEverySwipeIsTheSideButtonsChord() {
         let arrows: [HotkeyTap.PadDirection: String] = [.up: "↑", .down: "↓", .left: "←", .right: "→"]
-        for fingers in [2, 3] {
+        for fingers in [1, 2] {
             for (d, arrow) in arrows {
                 let name = HotkeyTap.gestureNames[HotkeyTap.padChordKey(fingers: fingers, d)] ?? ""
-                XCTAssertTrue(name.hasPrefix((fingers == 2 ? "🔼 " : "🔽 ") + arrow), "\(fingers) \(d) → \(name)")
+                XCTAssertTrue(name.hasPrefix((fingers == 1 ? "🔼 " : "🔽 ") + arrow), "\(fingers) \(d) → \(name)")
             }
         }
-    }
-
-    /// MultitouchSupport's `Finger` is 96 bytes; a drifted layout reads garbage.
-    func testTheTouchRecordIsMultitouchSupportsLayout() {
-        XCTAssertEqual(MemoryLayout<Multitouch.Finger>.stride, 96)
-        XCTAssertEqual(MemoryLayout<Multitouch.Finger>.offset(of: \.normalized), 32)
     }
 
     /// The pin's ring: linear to the local hand-over, full there, and it stays full.
@@ -116,16 +111,20 @@ final class GestureHintBarTests: XCTestCase {
             ("crop-parked", .init(listening: true, prompting: true, crop: .parked)),
             ("fingers", .init(fingers: true)),
             ("fingers-prompt", .init(listening: true, prompting: true, fingers: true)),
+            ("no-mouse-plain", .init(listening: true, prompting: false, noMouse: true)),
         ]
         for (name, stage) in stages {
             for (bgName, bg) in [("dark", NSColor(white: 0.12, alpha: 1)), ("light", NSColor(white: 0.93, alpha: 1))] {
                 let mouse = stage.fingers ? nil : GestureHintBar.mouse(for: stage)
-                let crosses = stage.fingers ? GestureHintBar.fingerCrosses(for: stage)
+                let trackpad = stage.fingers || stage.noMouse
+                let crosses = trackpad ? GestureHintBar.fingerCrosses(for: stage)
                     : mouse == nil ? GestureHintBar.crosses(for: stage) : []
-                let size = GestureHintBar.Board.size(for: crosses, mouse: mouse)
+                let footer = trackpad ? GestureHintBar.keyboardFooter(for: stage) : nil
+                let size = GestureHintBar.Board.size(for: crosses, mouse: mouse, footer: footer)
                 let board = GestureHintBar.Board(frame: NSRect(x: 20, y: 20, width: size.width, height: size.height))
                 board.crosses = crosses
                 board.mouse = mouse
+                board.footer = footer
                 let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 40, height: size.height + 40))
                 host.wantsLayer = true
                 host.layer?.backgroundColor = bg.cgColor

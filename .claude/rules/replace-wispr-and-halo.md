@@ -326,7 +326,8 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
   glow on the inside of the hole's rim, sweeping round it** (*"an interior wide border … no space
   between the pin margin and that progress bar … a glow … Something subtle"*): eight overlapping 9 %
   bands flush with the rim, clipped to the hole, ~53 % at the rim fading a third of the way in, the
-  middle clear — clockwise from twelve,
+  middle clear — clockwise from twelve, **and the only light in the hole**: the outer glow's breath is
+  masked out of it (*"I can't tell if it's progress bar or the glow"*),
   **from zero to full at the moment the local model would take the sentence anyway** (same day:
   *"complete when the local model would [deliver] … anyway"*, *"you tend to constantly underestimate
   the time"*): linear over the AutoLocal budget from the close (`AppDelegate.syncLocalNow` →

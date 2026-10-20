@@ -455,6 +455,18 @@ final class DropArrow {
         let breath = CALayer()
         breath.frame = group.bounds
         breath.addSublayer(glow)
+        // **Outside only** (2026-10-20, Victor: *"the outside glow should be there,
+        // but the inside glow should be the one that expresses the progress … I
+        // can't tell if it's progress bar or the glow"*): the hole is cut out of
+        // the breath, so all that lights it is the progress (`ring`).
+        let outsideOnly = CAShapeLayer()
+        outsideOnly.frame = group.bounds
+        let keep = CGMutablePath()
+        keep.addRect(group.bounds.insetBy(dx: -60, dy: -60))
+        keep.addEllipse(in: shape.hole)
+        outsideOnly.path = keep
+        outsideOnly.fillRule = .evenOdd
+        breath.mask = outsideOnly
         if !posed {
             let a = CABasicAnimation(keyPath: "opacity")
             a.fromValue = 0.35

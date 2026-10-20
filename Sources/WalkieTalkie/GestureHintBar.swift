@@ -64,9 +64,12 @@ final class GestureHintBar {
         /// no Return follows (2026-10-09); a prompt's gestures since 2026-10-15.
         var quick = false
         /// Left ⌃⌥⌘ held past `HotkeyTap.trackpadHintDelay`: the crosses are the
-        /// trackpad's — ✌️ two fingers for 🔼, 🤟 three for 🔽 — at rest too
+        /// trackpad's — ☝️ one finger for 🔼, ✌️ two for 🔽 — at rest too
         /// (2026-10-20, `fingerCrosses`).
         var fingers = false
+        /// No Logitech mouse attached (`MouseDevices`): a sentence's bar is the
+        /// trackpad's, under the chord or not — the side buttons are not there.
+        var noMouse = false
     }
 
     /// Where the wheel crop is — `CropSelectionOverlay.Phase`, without `done`.
@@ -149,11 +152,10 @@ final class GestureHintBar {
     /// **The trackpad's crosses, under left ⌃⌥⌘** (2026-10-20, Victor: *"I should
     /// see the same tooltips in the bottom right corner to suggest what actions I
     /// can do with one finger and two fingers … add a finger somehow to the
-    /// center badge"*, then two and three fingers, the two-finger click a prompt,
-    /// and *"instead of [plain] … show dictate"*). The side buttons' crosses with
-    /// the fingers in the centre: ✌️ and what its click does, 🤟 alone (no
-    /// three-finger click, `HotkeyTap.padClick`). At rest they say what each
-    /// gesture starts. Pure, like `crosses`.
+    /// center badge"*, then *"instead of [plain] … show dictate"*). The side
+    /// buttons' crosses with the finger before the click's label (☝️ 🔼, ✌️ 🔽 —
+    /// `HotkeyTap.padClick`). At rest they say what each gesture starts. Pure,
+    /// like `crosses`.
     static func fingerCrosses(for s: Stage) -> [Cross] {
         var c: [Cross]
         if s.listening && !s.held {
@@ -161,17 +163,25 @@ final class GestureHintBar {
                                    kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
         } else {
             c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
-                 Cross(click: "", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
+                 Cross(click: "🎙️ dictate", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
         }
-        let click = c[0].click ?? ""
-        c[0].click = click.isEmpty ? twoFingers : "\(twoFingers) \(click)"
-        c[1].click = threeFingers
+        for (i, finger) in [oneFinger, twoFingers].enumerated() {
+            let click = c[i].click ?? ""
+            c[i].click = click.isEmpty ? finger : "\(finger) \(click)"
+        }
         return c
     }
 
+    /// The keyboard's way, under the trackpad's crosses (2026-10-20, Victor: *"the
+    /// dictation can end by pressing twice command. That should be displayed as
+    /// well"*): right ⌘ ×2 starts the plain dictation, and ends any sentence.
+    static func keyboardFooter(for s: Stage) -> String {
+        s.listening ? "right ⌘ ×2   ⏹️ end" : "right ⌘ ×2   🎙️ dictate"
+    }
+
     /// The centre badges; a bare one is drawn larger than a label (`Board.drawBox`).
+    static let oneFinger = "☝️"
     static let twoFingers = "✌️"
-    static let threeFingers = "🤟"
 
     /// A label starting with this is drawn crossed out, without it.
     static let struck = "~"
@@ -210,12 +220,13 @@ final class GestureHintBar {
 
     func update(_ stage: Stage) {
         // The trackpad's crosses need no Options+ profile, so no Logi gate.
-        let visible = stage.fingers || (stage.listening && !stage.held && AboutWindow.logiGesturesOn)
+        let trackpad = stage.fingers || (stage.noMouse && stage.listening && !stage.held && stage.crop == nil)
+        let visible = trackpad || (stage.listening && !stage.held && AboutWindow.logiGesturesOn)
         guard stage != shown || (panel != nil) != visible else { return }
         shown = stage
         guard visible else { hide(); return }
-        if stage.fingers {
-            show(Self.fingerCrosses(for: stage))
+        if trackpad {
+            show(Self.fingerCrosses(for: stage), footer: Self.keyboardFooter(for: stage))
             return
         }
         let mouse = Self.mouse(for: stage)
@@ -229,7 +240,7 @@ final class GestureHintBar {
         place(board.crosses, mouse: board.mouse, pointer: pointer)
     }
 
-    private func show(_ crosses: [Cross], mouse: MouseHint? = nil) {
+    private func show(_ crosses: [Cross], mouse: MouseHint? = nil, footer: String? = nil) {
         displays = NSScreen.screens.map { s -> Display in
             let id = s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID
             return Display(frame: s.frame, visible: s.visibleFrame,
@@ -238,11 +249,12 @@ final class GestureHintBar {
         if let board {
             board.crosses = crosses
             board.mouse = mouse
+            board.footer = footer
             placed = nil
             place(crosses, mouse: mouse, pointer: NSEvent.mouseLocation)
             return
         }
-        guard let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays,
+        guard let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse, footer: footer), on: displays,
                                    pointer: NSEvent.mouseLocation) else { return }
         Log.info("⌨️ hint bar ×\(Int(spot.scale)) α\(spot.opacity): \(crosses.map(Self.describe).joined(separator: " / "))")
         let p = NSPanel(contentRect: spot.rect, styleMask: [.borderless, .nonactivatingPanel],
@@ -261,6 +273,7 @@ final class GestureHintBar {
         b.opacity = spot.opacity > 0 ? spot.opacity : Self.aloneOpacity
         b.crosses = crosses
         b.mouse = mouse
+        b.footer = footer
         b.autoresizingMask = [.width, .height]
         p.contentView = b
         p.alphaValue = 0
@@ -275,7 +288,7 @@ final class GestureHintBar {
 
     private func place(_ crosses: [Cross], mouse: MouseHint? = nil, pointer: NSPoint) {
         guard let panel, let board,
-              let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse), on: displays, pointer: pointer),
+              let spot = Self.spot(base: Board.size(for: crosses, mouse: mouse, footer: board.footer), on: displays, pointer: pointer),
               spot != placed else { return }
         let dodged = spot.opacity == 0, wasDodged = placed?.opacity == 0, first = placed == nil
         if placed == nil {
@@ -425,6 +438,8 @@ final class GestureHintBar {
         var crosses: [Cross] = [] { didSet { needsDisplay = true } }
         /// Set during a crop, in place of the crosses.
         var mouse: MouseHint? { didSet { needsDisplay = true } }
+        /// One full-width box under the crosses — the keyboard's way (2026-10-20).
+        var footer: String? { didSet { needsDisplay = true } }
         /// Drawn at `size(for:)` × this; the frame is already that big.
         var scale: CGFloat = 1 { didSet { needsDisplay = true } }
         /// The whole board's alpha; at 1 the boxes are solid too ("fully opaque").
@@ -447,8 +462,12 @@ final class GestureHintBar {
 
         /// The mouse: three buttons side by side, as tall as two boxes, over a
         /// body as tall as two more.
-        static func size(for crosses: [Cross], mouse: MouseHint?) -> NSSize {
-            guard let mouse else { return size(for: crosses) }
+        static func size(for crosses: [Cross], mouse: MouseHint?, footer: String? = nil) -> NSSize {
+            guard let mouse else {
+                var s = size(for: crosses)
+                if footer != nil { s.height += GestureHintBar.crossGap + GestureHintBar.boxHeight }
+                return s
+            }
             let h = GestureHintBar.boxHeight, gap = GestureHintBar.gap
             return NSSize(width: mouseBoxWidth(for: mouse) * 3 + gap * 2, height: h * 4 + gap)
         }
@@ -487,6 +506,10 @@ final class GestureHintBar {
                 box(c.click, col: 1, row: 1)
                 box(c.right, col: 2, row: 1)
                 box(c.down, col: 1, row: 2)
+            }
+            if let footer {
+                let top = CGFloat(crosses.count) * (crossHeight + GestureHintBar.crossGap)
+                drawBox(footer, in: NSRect(x: 0, y: top, width: w * 3 + gap * 2, height: h))
             }
         }
 
@@ -554,7 +577,7 @@ final class GestureHintBar {
             style.lineBreakMode = .byClipping
             // A finger badge is the centre's whole label: drawn big enough to
             // read as a hand, not as a word.
-            let badge = text == GestureHintBar.twoFingers || text == GestureHintBar.threeFingers
+            let badge = text == GestureHintBar.oneFinger || text == GestureHintBar.twoFingers
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: badge ? NSFont.systemFont(ofSize: GestureHintBar.boxHeight * 0.72) : GestureHintBar.font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.92),

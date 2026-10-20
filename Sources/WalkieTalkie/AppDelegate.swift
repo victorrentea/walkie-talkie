@@ -2569,6 +2569,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sat under the box he was drawing. Already on main.
         hotkeys.onAreaMoved = { [weak self] in self?.overlay.pointerMovedUnseen() }
         hotkeys.onTrackpadHints = { [weak self] on in self?.overlay.setTrackpadHints(on) }
+        // With no Logitech mouse the corner bar speaks trackpad (2026-10-20).
+        MouseDevices.watch { [weak self] logi in self?.overlay.setNoMouse(!logi) }
         CropSelectionOverlay.onAwaitingDestination = { [weak self] parked in
             self?.hotkeys.areaAwaitingDestination = parked
         }

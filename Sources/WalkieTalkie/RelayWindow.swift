@@ -4659,6 +4659,16 @@ private let heardLabel = NSTextField(labelWithString: "")
         updateHintBar()
     }
 
+    /// No Logitech mouse attached — a sentence's corner bar is the trackpad's
+    /// (2026-10-20, `MouseDevices`).
+    private(set) var noMouse = false
+
+    func setNoMouse(_ on: Bool) {
+        guard noMouse != on else { return }
+        noMouse = on
+        updateHintBar()
+    }
+
     func setCropPhase(_ phase: GestureHintBar.CropPhase?) {
         guard cropPhase != phase else { return }
         cropPhase = phase
@@ -4669,7 +4679,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
         hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
                              kamikaze: kamikaze, spawn: spawnMarked, held: heldPair, crop: cropPhase,
-                             quick: asking, fingers: trackpadHints))
+                             quick: asking, fingers: trackpadHints, noMouse: noMouse))
     }
 
     func setHeldPair(_ on: Bool) {
