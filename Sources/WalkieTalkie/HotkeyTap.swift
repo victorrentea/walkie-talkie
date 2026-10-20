@@ -2138,6 +2138,7 @@ final class HotkeyTap {
             && raw & Self.deviceLeftCommand != 0
         guard down != padChordDown else { return }
         padChordDown = down
+        holdCursor(down)
         padMove = .zero
         padMoveFired = false
         padScroll = .zero
@@ -2151,6 +2152,30 @@ final class HotkeyTap {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.trackpadHintDelay, execute: hint)
         } else {
             DispatchQueue.main.async { [weak self] in self?.onTrackpadHints?(false) }
+        }
+    }
+
+    /// **The pointer stands still while the chord is down** (2026-10-20, Victor:
+    /// *"block the move of the mouse if I keep these three keys down … This is
+    /// exactly how it feels on the mouse, on the Logi … prevent the move and
+    /// instead just [do] the gesture"*). The cursor is unhooked from the hardware
+    /// (`CGAssociateMouseAndMouseCursorPosition`), so the finger's deltas still
+    /// arrive and the pointer does not follow; each move under the chord is also
+    /// taken and the cursor put back where it was, in case the unhooking does
+    /// not hold for an app that is never frontmost. Released with the chord —
+    /// also while main is frozen (`handle` follows the chord's edges there).
+    private var cursorHeldAt: CGPoint?
+    /// The unhooking did not hold this hold — logged once.
+    private var cursorHoldLeaked = false
+
+    private func holdCursor(_ on: Bool) {
+        if on {
+            cursorHeldAt = CGEvent(source: nil)?.location
+            cursorHoldLeaked = false
+            CGAssociateMouseAndMouseCursorPosition(0)
+        } else if cursorHeldAt != nil {
+            cursorHeldAt = nil
+            CGAssociateMouseAndMouseCursorPosition(1)
         }
     }
 
@@ -2803,13 +2828,25 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         // **A pointer move is read for the trackpad's one-finger swipe and goes
         // out** — before the input clock, which it never was part of.
+        // **Under the chord the pointer does not move** (2026-10-20, `holdCursor`):
+        // the travel is read for the swipe and the move itself is taken.
         if type == .mouseMoved {
-            if padChordDown, !frozen { padPointerMoved(event) }
-            return Unmanaged.passUnretained(event)
+            guard padChordDown, !frozen else { return Unmanaged.passUnretained(event) }
+            padPointerMoved(event)
+            // A warp only if the unhooking did not hold — a warp mutes the
+            // hardware's moves for a beat, and the swipe lives on them.
+            if let at = cursorHeldAt, hypot(event.location.x - at.x, event.location.y - at.y) > 1 {
+                if !cursorHoldLeaked { cursorHoldLeaked = true; Log.info("🖐️ the pointer moved under left ⌃⌥⌘ though unhooked — warped back each move") }
+                CGWarpMouseCursorPosition(at)
+            }
+            return nil
         }
         // Anything past the canary is someone's input — the restart gate's clock.
         HotkeyTap.noteInput()
         if frozen {
+            // The chord's edges are still followed, so a release while main is
+            // frozen gives the pointer back (`holdCursor`).
+            if type == .flagsChanged { padChord(event) }
             if isOwnChordWhileFrozen(type, event) {
                 chordsDroppedWhileOpen += 1
                 let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))

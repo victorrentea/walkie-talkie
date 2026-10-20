@@ -139,8 +139,15 @@ fingers. So let's go back to one finger movement and clicks … and two fingers 
 - **The chord is the left ⌃⌥⌘ by hand**: all three device bits (`0x01`, `0x20`, `0x08`), no ⇧/fn,
   unstamped `flagsChanged` (`HotkeyTap.padChord`). A key typed under it is a ⌃⌥⌘ shortcut: the bar goes.
 - **One finger = the pointer's travel** (`.mouseMoved` joined the tap mask for this alone, read only
-  while the chord is down, never swallowed, before `noteInput`): 80 pt along one axis and 1.5× the
-  other (`padDirection`); a 0.3 s pause re-arms it in the same hold.
+  while the chord is down, before `noteInput`): 80 pt along one axis and 1.5× the other
+  (`padDirection`); a 0.3 s pause re-arms it in the same hold.
+- **The pointer stands still under the chord** (same day, Victor: *"block the move of the mouse if I
+  keep these three keys down … exactly how it feels on the mouse, on the Logi"*): `holdCursor` unhooks
+  the cursor from the hardware at the chord's press (`CGAssociateMouseAndMouseCursorPosition(0)` — the
+  deltas keep coming) and hooks it back at the release, also while main is frozen (the frozen branch
+  still follows the chord's edges). Every move under the chord is swallowed; only if the cursor
+  moved anyway is it warped back (log once, `the pointer moved … though unhooked`) — a warp mutes the
+  hardware's moves for a beat. Unmeasured with his hand at the time of writing.
 - **Two fingers = a continuous scroll**, swallowed whole while the chord is down and for the rest of
   a scroll that began under it (momentum included); 50 scroll points, one swipe per scroll; *Natural
   scrolling* undone through `isDirectionInvertedFromDevice` so ↑ is the fingers going up. A mouse
