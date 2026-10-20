@@ -46,29 +46,43 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, held: true)), [])
     }
 
-    /// Left ⌃⌥⌘ held: the trackpad's crosses, a finger in each centre — at rest
-    /// what each swipe starts, mid-sentence the side buttons' own (2026-10-20).
-    func testTheTrackpadsCrossesCarryAFinger() {
+    /// Left ⌃⌥⌘ held: the trackpad's crosses — ✌️ with its click, 🤟 alone — at
+    /// rest what each gesture starts, mid-sentence the side buttons' own (2026-10-20).
+    func testTheTrackpadsCrossesCarryTheFingers() {
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(fingers: true)), [
-            Cross(click: "☝️", up: "✨ new", down: "☠️", left: "⚡ ask", right: "🎙️ prompt"),
-            Cross(click: "✌️", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ plain"),
+            Cross(click: "✌️ 💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
+            Cross(click: "🤟", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
-            Cross(click: "☝️", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
-            Cross(click: "✌️", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "✌️ 🏁 end", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
+            Cross(click: "🤟", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
         ])
     }
 
-    /// One finger is 🔼, two are 🔽, and each direction is the chord with the
-    /// same arrow in its name (`HotkeyTap.gestureNames`).
+    /// Two fingers are 🔼, three are 🔽, and each direction is the chord with
+    /// the same arrow in its name (`HotkeyTap.gestureNames`).
     func testEverySwipeIsTheSideButtonsChord() {
         let arrows: [HotkeyTap.PadDirection: String] = [.up: "↑", .down: "↓", .left: "←", .right: "→"]
-        for fingers in [1, 2] {
+        for fingers in [2, 3] {
             for (d, arrow) in arrows {
                 let name = HotkeyTap.gestureNames[HotkeyTap.padChordKey(fingers: fingers, d)] ?? ""
-                XCTAssertTrue(name.hasPrefix((fingers == 1 ? "🔼 " : "🔽 ") + arrow), "\(fingers) \(d) → \(name)")
+                XCTAssertTrue(name.hasPrefix((fingers == 2 ? "🔼 " : "🔽 ") + arrow), "\(fingers) \(d) → \(name)")
             }
         }
+    }
+
+    /// MultitouchSupport's `Finger` is 96 bytes; a drifted layout reads garbage.
+    func testTheTouchRecordIsMultitouchSupportsLayout() {
+        XCTAssertEqual(MemoryLayout<Multitouch.Finger>.stride, 96)
+        XCTAssertEqual(MemoryLayout<Multitouch.Finger>.offset(of: \.normalized), 32)
+    }
+
+    /// The pin's ring: linear to the local hand-over, full there, and it stays full.
+    func testThePinsRingFillsToTheHandOver() {
+        XCTAssertEqual(DropArrow.progress(elapsed: 0, span: 5), 0)
+        XCTAssertEqual(DropArrow.progress(elapsed: 2.5, span: 5), 0.5, accuracy: 0.0001)
+        XCTAssertEqual(DropArrow.progress(elapsed: 60, span: 5), 1)
+        XCTAssertEqual(DropArrow.progress(elapsed: 5, span: 0), 0)
     }
 
     func testASwipeIsOneAxisPastTheDistance() {
@@ -76,14 +90,6 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(HotkeyTap.padDirection(CGPoint(x: 10, y: 80), distance: 80), .up)
         XCTAssertEqual(HotkeyTap.padDirection(CGPoint(x: -90, y: 20), distance: 80), .left)
         XCTAssertNil(HotkeyTap.padDirection(CGPoint(x: 90, y: 80), distance: 80), "a diagonal is no swipe")
-    }
-
-    /// The pin's ring: 90 % at the typical round trip, never full (2026-10-20).
-    func testThePinsRingNeverFills() {
-        XCTAssertEqual(DropArrow.progress(elapsed: 0, estimate: 2), 0)
-        XCTAssertEqual(DropArrow.progress(elapsed: 2, estimate: 2), 0.9, accuracy: 0.005)
-        XCTAssertLessThan(DropArrow.progress(elapsed: 60, estimate: 2), DropArrow.progressCeiling + 0.0001)
-        XCTAssertEqual(DropArrow.progress(elapsed: 5, estimate: 0), 0)
     }
 
     /// A crop draws the mouse, and its right button says what one click does

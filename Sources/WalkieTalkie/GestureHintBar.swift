@@ -64,7 +64,7 @@ final class GestureHintBar {
         /// no Return follows (2026-10-09); a prompt's gestures since 2026-10-15.
         var quick = false
         /// Left ⌃⌥⌘ held past `HotkeyTap.trackpadHintDelay`: the crosses are the
-        /// trackpad's — ☝️ one finger for 🔼, ✌️ two for 🔽 — at rest too
+        /// trackpad's — ✌️ two fingers for 🔼, 🤟 three for 🔽 — at rest too
         /// (2026-10-20, `fingerCrosses`).
         var fingers = false
     }
@@ -149,26 +149,29 @@ final class GestureHintBar {
     /// **The trackpad's crosses, under left ⌃⌥⌘** (2026-10-20, Victor: *"I should
     /// see the same tooltips in the bottom right corner to suggest what actions I
     /// can do with one finger and two fingers … add a finger somehow to the
-    /// center badge"*). The side buttons' crosses with the finger where the click
-    /// was — a swipe has no click (`HotkeyTap.padFire`). At rest they say what
-    /// each swipe starts. Pure, like `crosses`.
+    /// center badge"*, then two and three fingers, the two-finger click a prompt,
+    /// and *"instead of [plain] … show dictate"*). The side buttons' crosses with
+    /// the fingers in the centre: ✌️ and what its click does, 🤟 alone (no
+    /// three-finger click, `HotkeyTap.padClick`). At rest they say what each
+    /// gesture starts. Pure, like `crosses`.
     static func fingerCrosses(for s: Stage) -> [Cross] {
         var c: [Cross]
         if s.listening && !s.held {
             c = crosses(for: Stage(listening: true, prompting: s.prompting, filming: s.filming,
                                    kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
         } else {
-            c = [Cross(click: "", up: "✨ new", down: "☠️", left: "⚡ ask", right: "🎙️ prompt"),
-                 Cross(click: "", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ plain")]
+            c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
+                 Cross(click: "", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
         }
-        c[0].click = oneFinger
-        c[1].click = twoFingers
+        let click = c[0].click ?? ""
+        c[0].click = click.isEmpty ? twoFingers : "\(twoFingers) \(click)"
+        c[1].click = threeFingers
         return c
     }
 
-    /// The centre badges, drawn larger than a label (`Board.drawBox`).
-    static let oneFinger = "☝️"
+    /// The centre badges; a bare one is drawn larger than a label (`Board.drawBox`).
     static let twoFingers = "✌️"
+    static let threeFingers = "🤟"
 
     /// A label starting with this is drawn crossed out, without it.
     static let struck = "~"
@@ -551,7 +554,7 @@ final class GestureHintBar {
             style.lineBreakMode = .byClipping
             // A finger badge is the centre's whole label: drawn big enough to
             // read as a hand, not as a word.
-            let badge = text == GestureHintBar.oneFinger || text == GestureHintBar.twoFingers
+            let badge = text == GestureHintBar.twoFingers || text == GestureHintBar.threeFingers
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: badge ? NSFont.systemFont(ofSize: GestureHintBar.boxHeight * 0.72) : GestureHintBar.font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.92),

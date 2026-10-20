@@ -1238,7 +1238,7 @@ final class CaretHalo {
     func setDelivering(_ on: Bool, estimate: TimeInterval = 0) {
         guard delivering != on else { return }
         delivering = on
-        // The pin's ring fills off it (2026-10-20, `DropArrow.progress`).
+        // The pin's ring falls back on it with no AutoLocal budget running.
         deliverEstimate = on ? estimate : 0
         Log.info(on ? "⬇︎ the pin stays up while the words travel to the caret"
                     : "⬇︎ the pin goes — the words landed")
@@ -1259,8 +1259,12 @@ final class CaretHalo {
         // be up either way.
         arrow.hold(at: o, estimate: deliverEstimate)
     }
-    /// The decode estimate of the words in flight, for the pin's ring.
     private var deliverEstimate: TimeInterval = 0
+
+    /// **The AutoLocal budget, for the pin's ring** (2026-10-20) — the close
+    /// and its length while a budget is running, nil otherwise.
+    func setLocalClock(since: CFAbsoluteTime, seconds: TimeInterval) { arrow.localClock = (since, seconds) }
+    func clearLocalClock() { arrow.localClock = nil }
 
     // MARK: - The rewind (2026-09-23)
 

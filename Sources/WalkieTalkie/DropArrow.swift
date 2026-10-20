@@ -22,7 +22,7 @@ import QuartzCore
 /// |---|---|---|
 /// | talking | nothing | the pin, plain |
 /// | `patience` of quiet, then `swell` | the heads fade in | the glint and the glow fade in |
-/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, pulsing, shine at full and unbroken, the hole filling |
+/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, pulsing, shine at full and unbroken, a ring filling in the hole |
 /// | the ⌘V | cut | cut |
 ///
 /// **Always up while he talks**, because the pin answers *where*, and that is
@@ -85,21 +85,22 @@ final class DropArrow {
     /// One breath, out and back.
     private static let pulsePeriod: CFTimeInterval = 0.9
 
-    /// **A progress ring in the pin's hole while the words are transcribed**
-    /// (2026-10-20, Victor: *"the [shine] should be something continuous … I'd
-    /// like to have a progress bar inside the hole, on that pin, that would show
-    /// that it's transcribing right now"*). Off the engine's typical round trip
-    /// for this take (`DecodeRate.typical`, handed in by `hold` — the chip's bar
-    /// uses the near-worst, which a ring would rarely get past half of): 90 % at
-    /// it, then creeping toward `progressCeiling` — never full before the words
-    /// land, never at rest while they are late (the rewind's rule).
-    static func progress(elapsed: TimeInterval, estimate: TimeInterval) -> CGFloat {
-        guard estimate > 0 else { return 0 }
-        // 1 − e^(−k) = 0.9 / 0.97 at the estimate.
-        let k = 2.63
-        return progressCeiling * CGFloat(1 - exp(-k * max(0, elapsed) / estimate))
+    /// **A thin ring round the pin's hole fills until the local model would
+    /// take the sentence anyway** (2026-10-20, Victor: *"a progress bar inside
+    /// the hole, on that pin"*, then *"make … that circle progress bar complete
+    /// when the local model would [deliver] the [transcription] anyway … a
+    /// transparent center … a bit thinner overall"*). Linear over the AutoLocal
+    /// budget, from the close (`localClock`, pushed by `AppDelegate.syncLocalNow`
+    /// — the clock the chip's `💻 local in 3s` counts down); with no budget
+    /// running (AutoLocal off), over the decode estimate `hold` was given. Full
+    /// is the hand-over, and it stays full.
+    static func progress(elapsed: TimeInterval, span: TimeInterval) -> CGFloat {
+        guard span > 0 else { return 0 }
+        return CGFloat(min(1, max(0, elapsed / span)))
     }
-    static let progressCeiling: CGFloat = 0.97
+
+    /// The AutoLocal budget for the words in flight: the close, and its length.
+    var localClock: (since: CFAbsoluteTime, seconds: TimeInterval)?
 
     /// The heads' amber.
     private static let ink = NSColor(srgbRed: 1.0, green: 0.82, blue: 0.25, alpha: 1)
@@ -145,9 +146,9 @@ final class DropArrow {
     private var body: CAShapeLayer?
     private var cross: CALayer?
     private var glint: CAGradientLayer?
-    /// The ring in the hole: its track and the arc that fills.
+    /// The ring round the hole, and its arc.
     private var ring: CALayer?
-    private var arc: CAShapeLayer?
+    private var arcs: [CAShapeLayer] = []
     private var progressTimer: Timer?
     private var holdFrom: CFAbsoluteTime = 0
     private var holdEstimate: TimeInterval = 0
@@ -167,7 +168,8 @@ final class DropArrow {
     var report: [String: Any] {
         var r: [String: Any] = ["visible": isVisible, "alpha": Double(alpha), "shine": Double(shine), "crossed": crossed,
                                 "armed": armed, "holding": holding, "fading": fading,
-                                "progress": Double(progressShown), "estimate": holdEstimate]
+                                "progress": Double(progressShown), "estimate": holdEstimate,
+                                "localBudget": localClock?.seconds ?? 0]
         if let f = panel?.frame { r["frame"] = [f.minX, f.minY, f.width, f.height] }
         if let t = panel?.contentView?.layer?.sublayerTransform { r["shift"] = [t.m41, t.m42] }
         return r
@@ -208,10 +210,11 @@ final class DropArrow {
     }
 
     /// **The words are on their way to the caret — the pin grows, breathes and
-    /// shines at full until they land, its hole filling** (the heads' 2026-09-15
-    /// rule: *"să nu plec cu cursorul de acolo"*; the pulse and the ring
-    /// 2026-10-20). Idempotent: called from every `follow()`; `estimate` is read
-    /// on the first call only.
+    /// shines at full until they land, a ring filling round its hole** (the
+    /// heads' 2026-09-15 rule: *"să nu plec cu cursorul de acolo"*; the pulse and
+    /// the ring 2026-10-20). Idempotent: called from every `follow()`;
+    /// `estimate` is read on the first call only, and only stands in for a
+    /// `localClock` that is not running.
     func hold(at origin: NSPoint, estimate: TimeInterval = 0) {
         let p = panel ?? makePanel()
         move(p, to: origin)
@@ -247,9 +250,9 @@ final class DropArrow {
         }
         if let glint { Self.sweep(glint, rest: on ? 0 : Self.glintRest) }
         // Crossed means nowhere to land: nothing is filling.
-        let ringed = on && !crossed && estimate > 0
+        let ringed = on && !crossed
         ring?.isHidden = !ringed
-        arc?.strokeEnd = 0
+        for arc in arcs { arc.strokeEnd = 0 }
         CATransaction.commit()
         guard ringed else { return }
         holdFrom = CFAbsoluteTimeGetCurrent()
@@ -260,12 +263,14 @@ final class DropArrow {
     }
 
     private func tickProgress() {
-        let v = Self.progress(elapsed: CFAbsoluteTimeGetCurrent() - holdFrom, estimate: holdEstimate)
+        let now = CFAbsoluteTimeGetCurrent()
+        let v = localClock.map { Self.progress(elapsed: now - $0.since, span: $0.seconds) }
+            ?? Self.progress(elapsed: now - holdFrom, span: holdEstimate)
         guard abs(v - progressShown) > 0.002 else { return }
         progressShown = v
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        arc?.strokeEnd = v
+        for arc in arcs { arc.strokeEnd = v }
         CATransaction.commit()
     }
 
@@ -290,6 +295,7 @@ final class DropArrow {
     func hide() {
         fading = false
         if holding { setInFlight(false) }
+        localClock = nil
         holding = false
         panel?.orderOut(nil)
         panel?.alphaValue = 0
@@ -366,7 +372,7 @@ final class DropArrow {
         cross = built.cross
         glint = built.glint
         ring = built.ring
-        arc = built.arc
+        arcs = built.arcs
         scale = 1
         shine = 0
         for layer in shineLayers { layer.opacity = 0 }
@@ -400,13 +406,13 @@ final class DropArrow {
     /// animated** (`ChipWipe.shoot`'s rule): the glint halfway across and the
     /// glow at full, the one frame that shows what the shine is doing.
     /// `scale` 0 is never asked; `holdScale` draws the words-in-flight pose.
-    /// `progress` > 0 draws the ring in the hole at that fill — the
+    /// `progress` > 0 draws the ring round the hole at that fill — the
     /// words-in-flight pose.
     static func picture(scale: CGFloat = 1, shining: Bool = true, crossed: Bool = false,
                         progress: CGFloat = 0) -> CALayer {
         let built = DropArrow().build(posed: true)
         built.ring.isHidden = progress <= 0 || crossed
-        built.arc.strokeEnd = progress
+        for arc in built.arcs { arc.strokeEnd = progress }
         for layer in built.shine { layer.opacity = shining && !crossed ? 1 : 0 }
         built.body.fillColor = (crossed ? deadFill : NSColor.systemRed).cgColor
         built.body.strokeColor = (crossed ? deadRim : rim).cgColor
@@ -421,7 +427,7 @@ final class DropArrow {
     /// The pin in a layer whose anchor is its tip, placed with the tip
     /// `tipLift` above the box's centre (which is the caret).
     private func build(posed: Bool = false) -> (pin: CALayer, shine: [CALayer], body: CAShapeLayer, cross: CALayer,
-                                                glint: CAGradientLayer, ring: CALayer, arc: CAShapeLayer) {
+                                                glint: CAGradientLayer, ring: CALayer, arcs: [CAShapeLayer]) {
         let side = CaretHalo.side
         let height = Self.pinHeight
         let width = height * 0.696
@@ -499,40 +505,43 @@ final class DropArrow {
         }
         group.addSublayer(glint)
 
-        // The progress ring, inside the hole: a faint track and a white arc
-        // from twelve o'clock, clockwise. The hole is punched out of the body,
-        // so the ring reads as drawn in the window onto the page.
+        // **A glow on the inside of the hole's rim, sweeping round it** (2026-10-20,
+        // Victor: *"an interior wide border … of the pinhole … no space between the
+        // pin margin and that progress bar … a glow interior to that hole, which
+        // progresses the same way … Something subtle"*). An amber band flush with
+        // the rim, blurred by its own shadow and clipped to the hole, so it only
+        // bleeds inward; clockwise from twelve; the middle stays clear. The
+        // falloff is bands flush with the rim, each wider than the last — a
+        // radial gradient a stroke can carry.
         let hole = shape.hole
-        let ringWidth = hole.width * 0.2
-        let ringRadius = hole.width / 2 - ringWidth / 2 - hole.width * 0.06
+        let rim = hole.width / 2
         let centre = CGPoint(x: hole.midX, y: hole.midY)
-        // Start at the top, go clockwise: in a y-up layer that is decreasing angle.
-        let circle = CGMutablePath()
-        circle.addArc(center: centre, radius: ringRadius, startAngle: .pi / 2,
-                      endAngle: .pi / 2 - 2 * .pi, clockwise: true)
         let ring = CALayer()
         ring.frame = group.bounds
-        let well = CAShapeLayer()
-        well.frame = group.bounds
-        well.path = CGPath(ellipseIn: hole.insetBy(dx: hole.width * 0.03, dy: hole.width * 0.03), transform: nil)
-        well.fillColor = NSColor(white: 0, alpha: 0.45).cgColor
-        ring.addSublayer(well)
-        let track = CAShapeLayer()
-        track.frame = group.bounds
-        track.path = circle
-        track.fillColor = nil
-        track.strokeColor = NSColor(white: 1, alpha: 0.25).cgColor
-        track.lineWidth = ringWidth
-        ring.addSublayer(track)
-        let arc = CAShapeLayer()
-        arc.frame = group.bounds
-        arc.path = circle
-        arc.fillColor = nil
-        arc.strokeColor = NSColor.white.cgColor
-        arc.lineWidth = ringWidth
-        arc.lineCap = .round
-        arc.strokeEnd = 0
-        ring.addSublayer(arc)
+        let clip = CAShapeLayer()
+        clip.frame = group.bounds
+        clip.path = CGPath(ellipseIn: hole, transform: nil)
+        ring.mask = clip
+        var arcs: [CAShapeLayer] = []
+        // Eight overlapping bands of 9 %: ~53 % at the rim, fading to 9 % a
+        // third of the way in.
+        for i in 1...8 {
+            let w = rim * 0.08 * CGFloat(i)
+            let alpha: CGFloat = 0.09
+            // Start at the top, go clockwise: in a y-up layer that is decreasing angle.
+            let circle = CGMutablePath()
+            circle.addArc(center: centre, radius: rim - w / 2, startAngle: .pi / 2,
+                          endAngle: .pi / 2 - 2 * .pi, clockwise: true)
+            let arc = CAShapeLayer()
+            arc.frame = group.bounds
+            arc.path = circle
+            arc.fillColor = nil
+            arc.strokeColor = Self.ink.withAlphaComponent(alpha).cgColor
+            arc.lineWidth = w
+            arc.strokeEnd = 0
+            ring.addSublayer(arc)
+            arcs.append(arc)
+        }
         ring.isHidden = true
         group.addSublayer(ring)
 
@@ -560,7 +569,7 @@ final class DropArrow {
         cross.isHidden = true
         group.addSublayer(cross)
 
-        return (group, [breath, glint], body, cross, glint, ring, arc)
+        return (group, [breath, glint], body, cross, glint, ring, arcs)
     }
 
     private static let glintBefore: [NSNumber] = [-0.3, -0.15, 0]

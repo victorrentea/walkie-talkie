@@ -2059,40 +2059,55 @@ final class HotkeyTap {
     /// **Left ⌃⌥⌘ held + a swipe on the trackpad = a side-button gesture**
     /// (2026-10-20, Victor: *"intercept the scroll up on trackpad with one
     /// [finger] or two … while control option command [are] pressed down … another
-    /// option to trigger this Walkie Talkie without a mouse"*). **One finger is
-    /// 🔼, two fingers are 🔽**, each in its four directions: one finger is the
-    /// pointer's own travel (`mouseMoved`), two fingers the trackpad's scroll.
-    /// A swipe is handed to the branch its ⌃⌥⌘F-key reaches, as a key event
-    /// stamped `trackpadStamp` and never posted (`padFire`), so every guard on
-    /// the way — re-fire, dwell, frozen main — is the side button's own.
-    /// **No click**: nothing in this file swallows a left or right button.
-    /// Held `trackpadHintDelay`, the corner bar shows both crosses with the
-    /// finger in the centre (`onTrackpadHints`, *"while I hold this 300 millis"*).
+    /// option to trigger this Walkie Talkie without a mouse"*, then *"make it two
+    /// fingers instead of one and three fingers instead of two … straight
+    /// prompting by … clicking with two fingers"*). **Two fingers are 🔼, three
+    /// are 🔽**, each in its four directions, and **a two-finger click is the 🔼
+    /// click** — the prompt at the caret, or its stop. Two fingers are the
+    /// trackpad's scroll; three are read off `Multitouch` (the event stream has
+    /// none), with the Dock's own gesture events held back for the length of the
+    /// chord (`padHoldsDockGesture`). A swipe is handed to the branch its
+    /// ⌃⌥⌘F-key reaches, as a key event stamped `trackpadStamp` and never
+    /// posted (`padFire`), so every guard on the way — re-fire, dwell, frozen
+    /// main — is the side button's own. Held `trackpadHintDelay`, the corner bar
+    /// shows both crosses with the fingers in the centre (`onTrackpadHints`,
+    /// *"while I hold this 300 millis"*).
     var onTrackpadHints: ((Bool) -> Void)?
-    /// Tap thread only, like the rest of the chord bookkeeping.
+    /// Tap thread only, like the rest of the chord bookkeeping…
     private var padChordDown = false
+    /// …and its copy for `Multitouch`'s thread.
+    private let padLock = NSLock()
+    private var padChordShared = false
     private var padHint: DispatchWorkItem?
-    private var padMove = CGPoint.zero
-    private var padMoveAt: CFTimeInterval = 0
-    private var padMoveFired = false
     private var padScroll = CGPoint.zero
     private var padScrollFired = false
     /// The scroll began under the chord: its tail (momentum included) is ours
     /// too, even once the keys are up — a page must not coast on a swipe.
     private var padScrollOwned = false
+    /// The first scroll of each hold is logged with its fields — the one way
+    /// to see what a trackpad (or a posted scroll) hands this tap.
+    private var padScrollLogged = false
+    /// The two-finger click's press was taken, so its release is too.
+    private var padClickTaken = false
+    /// A Dock gesture was held back this hold — logged once.
+    private var padDockLogged = false
+    /// `Multitouch`'s thread only: where three fingers came down, and whether
+    /// that touch has fired.
+    private var threeFrom: (x: Float, y: Float)?
+    private var threeFired = false
     static let trackpadHintDelay: TimeInterval = 0.3
-    /// One finger: pointer points along the dominant axis. Two fingers: scroll
-    /// points, before any momentum.
-    static let padMoveDistance: CGFloat = 80
+    /// Two fingers: scroll points, before any momentum. Three: a share of the
+    /// trackpad's width or height.
     static let padScrollDistance: CGFloat = 50
-    /// A pause this long between pointer moves ends a one-finger swipe, so the
-    /// next one in the same hold counts.
-    private static let padMoveRest: CFTimeInterval = 0.3
+    static let padThreeDistance: CGFloat = 0.12
     static let trackpadStamp: Int64 = 0x7774_5041_4400_0000   // "wtPAD"
     /// `NX_DEVICELCTLKEYMASK` / `NX_DEVICELALTKEYMASK` — the left ⌃ and ⌥, with
     /// `deviceLeftCommand` the chord *"from left side of the keyboard"*.
     private static let deviceLeftControl: UInt64 = 0x000001
     private static let deviceLeftOption: UInt64 = 0x000020
+    /// `NSEventTypeGesture` and the Dock's swipe (`kCGSEventDockControl`) — not
+    /// in `CGEventType`, asked for by number.
+    private static let gestureEventTypes: [UInt32] = [29, 30]
 
     enum PadDirection: String { case up, down, left, right }
 
@@ -2105,14 +2120,14 @@ final class HotkeyTap {
         return nil
     }
 
-    /// The chord a swipe stands for: one finger 🔼 (F8 ↑ F9 ↓ F11 ← F10 →), two
-    /// fingers 🔽 (F4 ↑ F12 ↓ F3 ← F5 →).
+    /// The chord a swipe stands for: two fingers 🔼 (F8 ↑ F9 ↓ F11 ← F10 →),
+    /// three fingers 🔽 (F4 ↑ F12 ↓ F3 ← F5 →).
     static func padChordKey(fingers: Int, _ d: PadDirection) -> CGKeyCode {
         switch (fingers, d) {
-        case (1, .up): return 0x64
-        case (1, .down): return 0x65
-        case (1, .left): return 0x67
-        case (1, .right): return 0x6D
+        case (2, .up): return 0x64
+        case (2, .down): return 0x65
+        case (2, .left): return 0x67
+        case (2, .right): return 0x6D
         case (_, .up): return 0x76
         case (_, .down): return 0x6F
         case (_, .left): return 0x63
@@ -2130,10 +2145,11 @@ final class HotkeyTap {
             && raw & Self.deviceLeftCommand != 0
         guard down != padChordDown else { return }
         padChordDown = down
-        padMove = .zero
-        padMoveFired = false
+        padLock.lock(); padChordShared = down; padLock.unlock()
+        padDockLogged = false
         padScroll = .zero
         padScrollFired = false
+        padScrollLogged = false
         padHint?.cancel()
         padHint = nil
         if down {
@@ -2153,24 +2169,68 @@ final class HotkeyTap {
         DispatchQueue.main.async { [weak self] in self?.onTrackpadHints?(false) }
     }
 
-    /// One finger: the pointer's travel under the chord. The move itself
-    /// always goes through — the pointer is his.
-    private func padPointerMoved(_ event: CGEvent) {
-        let now = CACurrentMediaTime()
-        if now - padMoveAt > Self.padMoveRest { padMove = .zero; padMoveFired = false }
-        padMoveAt = now
-        guard !padMoveFired else { return }
-        // Screen y grows downward; up is +y here.
-        padMove.x += CGFloat(event.getDoubleValueField(.mouseEventDeltaX))
-        padMove.y -= CGFloat(event.getDoubleValueField(.mouseEventDeltaY))
-        guard let d = Self.padDirection(padMove, distance: Self.padMoveDistance) else { return }
-        padMoveFired = true
-        padFire(fingers: 1, d)
+    /// Three fingers: `Multitouch`'s frames, on its thread. One swipe per
+    /// touch — the count leaving three ends it.
+    private func padTouches(_ count: Int, _ x: Float, _ y: Float) {
+        padLock.lock(); let held = padChordShared; padLock.unlock()
+        guard held, count == 3 else { threeFrom = nil; threeFired = false; return }
+        guard let from = threeFrom else { threeFrom = (x, y); return }
+        guard !threeFired,
+              let d = Self.padDirection(CGPoint(x: CGFloat(x - from.x), y: CGFloat(y - from.y)),
+                                        distance: Self.padThreeDistance) else { return }
+        threeFired = true
+        padOnTapThread { [weak self] in self?.padFire(fingers: 3, d) }
+    }
+
+    /// `handle` belongs to the tap's thread; a touch frame is not on it. Not
+    /// `onTapThread`, which waits for the answer — a touch frame must not.
+    private func padOnTapThread(_ work: @escaping () -> Void) {
+        guard let loop = tapRunLoop else { return }
+        CFRunLoopPerformBlock(loop, CFRunLoopMode.commonModes.rawValue, work)
+        CFRunLoopWakeUp(loop)
+    }
+
+    /// Starts reading the trackpad's touches — once, from `start`.
+    private func startTouches() {
+        Multitouch.onFrame = { [weak self] n, x, y in self?.padTouches(n, x, y) }
+        let devices = Multitouch.start()
+        Log.info("🖐️ \(devices) trackpad\(devices == 1 ? "" : "s") read for the three-finger swipe under left ⌃⌥⌘")
+    }
+
+    /// **The two-finger click under the chord: the 🔼 click** — press and
+    /// release both taken, so no context menu opens. The one right button this
+    /// file takes outside a crop, and only under left ⌃⌥⌘ held by hand.
+    private func padClick(_ type: CGEventType) -> Bool {
+        if type == .rightMouseUp {
+            guard padClickTaken else { return false }
+            padClickTaken = false
+            return true
+        }
+        guard type == .rightMouseDown, padChordDown else { return false }
+        padClickTaken = true
+        Log.info("🖐️ ✌️ two-finger click under left ⌃⌥⌘ — as 🔼 ⌃⌥⌘F7")
+        dispatchChord(VK_F7)
+        return true
+    }
+
+    /// The Dock's swipe while the chord is down is a three-finger swipe of
+    /// ours, not Mission Control.
+    private func padHoldsDockGesture(_ type: CGEventType) -> Bool {
+        guard Self.gestureEventTypes.contains(type.rawValue), padChordDown else { return false }
+        if !padDockLogged {
+            padDockLogged = true
+            Log.info("🖐️ a trackpad gesture (type \(type.rawValue)) under left ⌃⌥⌘ — held back from the system")
+        }
+        return true
     }
 
     /// Two fingers: a trackpad scroll under the chord — swallowed whole, one
     /// swipe per scroll. A mouse wheel's notches (not continuous) pass.
     private func padScrolled(_ event: CGEvent) -> Bool {
+        if padChordDown, !padScrollLogged {
+            padScrollLogged = true
+            Log.info("🖐️ a scroll under left ⌃⌥⌘ — continuous=\(event.getIntegerValueField(.scrollWheelEventIsContinuous)) phase=\(event.getIntegerValueField(.scrollWheelEventScrollPhase)) momentum=\(event.getIntegerValueField(.scrollWheelEventMomentumPhase)) dy=\(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)) dx=\(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2))")
+        }
         guard event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0 else { return false }
         // kCGScrollPhaseBegan
         if event.getIntegerValueField(.scrollWheelEventScrollPhase) == 1 {
@@ -2198,10 +2258,14 @@ final class HotkeyTap {
     /// `handle`, never posted, so no app sees it and every guard is the same.
     private func padFire(fingers: Int, _ d: PadDirection) {
         let code = Self.padChordKey(fingers: fingers, d)
+        Log.info("🖐️ \(fingers == 2 ? "✌️ two fingers" : "🤟 three fingers") \(d.rawValue) under left ⌃⌥⌘ — as \(Self.gestureNames[code] ?? "key \(code)")")
+        dispatchChord(code)
+    }
+
+    private func dispatchChord(_ code: CGKeyCode) {
         guard let key = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true) else { return }
         key.flags = [.maskControl, .maskAlternate, .maskCommand]
         key.setIntegerValueField(.eventSourceUserData, value: Self.trackpadStamp)
-        Log.info("🖐️ \(fingers == 1 ? "☝️ one finger" : "✌️ two fingers") \(d.rawValue) under left ⌃⌥⌘ — as \(Self.gestureNames[code] ?? "key \(code)")")
         _ = handle(type: .keyDown, event: key)
     }
 
@@ -2444,10 +2508,6 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // here and goes straight back out unless the middle button is
             // down while the ring is up; see `haloDial`.
             .scrollWheel,
-            // **The pointer's travel, for the one-finger swipe under left
-            // ⌃⌥⌘** (2026-10-20, `padPointerMoved`). Read only while the
-            // chord is down; every move goes straight back out.
-            .mouseMoved,
             .leftMouseDown,
             .leftMouseUp,
             .rightMouseDown,
@@ -2456,7 +2516,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // One `|` chain of eleven `CGEventMask(1 << …)` was too much for Swift 6.1's
         // type checker ("unable to type-check this expression in reasonable time",
         // issue #2, on the stock Command Line Tools); a fold over a typed array asks it nothing.
+        // **The trackpad's gesture events** (2026-10-20, `padHoldsDockGesture`),
+        // by number — `CGEventType` has no names for them.
         let mask = types.reduce(CGEventMask(0)) { $0 | CGEventMask(1 << $1.rawValue) }
+            | Self.gestureEventTypes.reduce(CGEventMask(0)) { $0 | CGEventMask(1) << CGEventMask($1) }
 
         tapMask = mask
         guard let tap = makeTap() else {
@@ -2481,6 +2544,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         thread.name = "WalkieTalkieEventTap"
         thread.start()
         startMainHeartbeat()
+        startTouches()
         return true
     }
 
@@ -2754,11 +2818,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             canaryLock.lock(); canarySeenAt = HotkeyTap.uptime(); canarySeenFrozen = frozen; canaryLock.unlock()
             return nil
         }
-        // **A pointer move is read for the trackpad's one-finger swipe and goes
-        // out** — before the input clock, which it never was part of.
-        if type == .mouseMoved {
-            if padChordDown, !frozen { padPointerMoved(event) }
-            return Unmanaged.passUnretained(event)
+        // **A trackpad gesture goes out, unless left ⌃⌥⌘ is down** — before
+        // the input clock, which it never was part of.
+        if Self.gestureEventTypes.contains(type.rawValue) {
+            return !frozen && padHoldsDockGesture(type) ? nil : Unmanaged.passUnretained(event)
         }
         // Anything past the canary is someone's input — the restart gate's clock.
         HotkeyTap.noteInput()
@@ -2797,6 +2860,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // clicked, this mode needs the same one fact the wheel's chord needed:
         // *when did the left button go down*. The event is handed straight back
         // either way — nothing in this file may ever swallow one.
+        // (The right button's one exception besides a crop: the trackpad's
+        // two-finger click under left ⌃⌥⌘, 2026-10-20 — `padClick`.)
+        if type == .rightMouseDown || type == .rightMouseUp, padClick(type) { return nil }
         if useLogiGestures {
             switch type {
             case .leftMouseDown:

@@ -123,36 +123,43 @@ In this mode the app takes **no mouse button at all**. Every mouse event is hand
 Victor: *"intercept the scroll up on trackpad with one [finger] or two … while control option command
 [are] pressed down … another option to trigger this Walkie Talkie without a mouse"*, then *"if I'm
 pressing down Control Option Command from left side of the keyboard, I should see the same tooltips in
-the bottom right corner to suggest what actions I can do with one finger and two fingers … add a finger
-somehow to the center badge … while I hold this 300 millis"*.
+the bottom right corner … add a finger somehow to the center badge … while I hold this 300 millis"*,
+then *"make it two fingers instead of one and three fingers instead of two … straight prompting by …
+clicking with two fingers … show dictate"*.
 
-| swipe | is | | swipe | is |
+| gesture | is | | gesture | is |
 |---|---|---|---|---|
-| ☝️ ↑ | 🔼 ↑ F8 | | ✌️ ↑ | 🔽 ↑ F4 |
-| ☝️ ↓ | 🔼 ↓ F9 | | ✌️ ↓ | 🔽 ↓ F12 |
-| ☝️ ← | 🔼 ← F11 | | ✌️ ← | 🔽 ← F3 |
-| ☝️ → | 🔼 → F10 | | ✌️ → | 🔽 → F5 |
+| ✌️ click | 🔼 F7 (prompt at the caret / its stop) | | 🤟 click | — |
+| ✌️ ↑ | 🔼 ↑ F8 | | 🤟 ↑ | 🔽 ↑ F4 |
+| ✌️ ↓ | 🔼 ↓ F9 | | 🤟 ↓ | 🔽 ↓ F12 |
+| ✌️ ← | 🔼 ← F11 | | 🤟 ← | 🔽 ← F3 |
+| ✌️ → | 🔼 → F10 | | 🤟 → | 🔽 → F5 |
 
 - **The chord is the left ⌃⌥⌘ by hand**: all three device bits (`0x01`, `0x20`, `0x08`), no ⇧/fn,
   unstamped `flagsChanged` (`HotkeyTap.padChord`). A key typed under it is a ⌃⌥⌘ shortcut: the bar goes.
-- **One finger = the pointer's travel** (`.mouseMoved` joined the tap mask for this alone, read only
-  while the chord is down, never swallowed, before `noteInput`): 80 pt along one axis and 1.5× the
-  other (`padDirection`); a 0.3 s pause re-arms it in the same hold. **Two fingers = a continuous
-  scroll**, swallowed whole while the chord is down and for the rest of a scroll that began under it
-  (momentum included); 50 scroll points, one swipe per scroll; *Natural scrolling* undone through
-  `isDirectionInvertedFromDevice` so ↑ is the fingers going up. A mouse wheel's notches pass.
-- **A swipe is the side button's chord, not a copy of its branch** (`padFire`): a ⌃⌥⌘F-key event
-  stamped `trackpadStamp` (`0x7774_5041_4400_0000`) handed to `handle` and never posted — the re-fire,
-  dwell and frozen-main guards are the button's own, in either gesture mode. Log
-  `🖐️ ☝️ one finger up under left ⌃⌥⌘ — as 🔼 ↑ ⌃⌥⌘F8`.
-- **No click on the trackpad** — nothing in this file swallows a left or right button — so the two
-  clicks (🔼 prompt at the caret / its stop, 🔽 plain dictation / shutter) stay on the mouse, ⌘⌃D and
-  right ⌘ ×2. The centre box shows the finger instead.
+- **Two fingers = a continuous scroll**, swallowed whole while the chord is down and for the rest of a
+  scroll that began under it (momentum included); 50 scroll points along one axis and 1.5× the other
+  (`padDirection`), one swipe per scroll; *Natural scrolling* undone through
+  `isDirectionInvertedFromDevice` so ↑ is the fingers going up. A mouse wheel's notches pass. The
+  first scroll of each hold is logged with its fields (`🖐️ a scroll under left ⌃⌥⌘ — continuous=1 …`).
+- **Three fingers = `Multitouch`** (Apple's private MultitouchSupport, `dlopen`ed; the event stream has
+  no three-finger swipe — on his Mac three fingers are Mission Control and spaces): the touches'
+  centroid travels 0.12 of the pad along one axis, one swipe per touch, fired on the tap's run loop
+  (`padOnTapThread`). **The system's gesture events (types 29, 30) are held back while the chord is
+  down** (`padHoldsDockGesture`, logged once a hold) — unverified whether that stops the Dock; if
+  Mission Control still answers, set *Trackpad › More Gestures* to four fingers (four fingers already
+  do the same). `MultitouchTests`' stride check (96 bytes) guards the record's layout.
+- **The two-finger click is the 🔼 click** (`padClick`): press and release both taken, so no
+  context menu — the one right button this file takes besides a crop's, and only under the chord.
+- **A gesture is the side button's chord, not a copy of its branch** (`dispatchChord`): a ⌃⌥⌘F-key
+  event stamped `trackpadStamp` (`0x7774_5041_4400_0000`) handed to `handle` and never posted — the
+  re-fire, dwell and frozen-main guards are the button's own, in either gesture mode. Log
+  `🖐️ ✌️ two fingers up under left ⌃⌥⌘ — as 🔼 ↑ ⌃⌥⌘F8`.
 - **The bar**: `onTrackpadHints` 0.3 s after the chord → `RelayWindow.setTrackpadHints` →
-  `GestureHintBar.Stage.fingers` → `fingerCrosses`, at rest too and without the Logi gate; at rest it
-  says what each swipe starts (`🎙️ prompt`, `⚡ ask`, `✨ new`, `☠️`, `🎙️ plain`, `⏎`, `🔌 unbind`),
-  mid-sentence the side buttons' own crosses. `HINT_BAR_PNG=<dir> swift test --filter
-  GestureHintBarTests` renders `fingers` and `fingers-prompt`.
+  `GestureHintBar.Stage.fingers` → `fingerCrosses`, at rest too and without the Logi gate; at rest
+  `✌️ 💬 prompt`, `💻 terminal`, `⚡ ask`, `✨ new`, `☠️` / `🤟`, `🎙️ dictate`, `⏎`, `🔌 unbind`;
+  mid-sentence the side buttons' own crosses with ✌️ before the click's label. `HINT_BAR_PNG=<dir>
+  swift test --filter GestureHintBarTests` renders `fingers` and `fingers-prompt`.
 
 ## Wheel mode (unticked): still live code
 

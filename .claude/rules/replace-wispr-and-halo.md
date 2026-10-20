@@ -322,12 +322,19 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
   gets bigger … pulsates smaller bigger … during the transcription. Shining as well"*, then *"the
   [shine] should be something continuous … a progress bar inside the hole, on that pin"*): ×1.4
   (`holdScale`, 1.3 until then) pulsing to ×1.15 of that over 0.9 s (`transform.scale` on the pin,
-  the model value untouched), the glint sweeping with no rest between sweeps, and a white ring in the
-  hole on a dark well, clockwise from twelve. The ring fills off `DecodeRate.typical` for the take
-  (`AppDelegate.settleTypical` → `setDelivering(_:estimate:)` → `hold(at:estimate:)`): 90 % there,
-  creeping toward 97 %, never full (`DropArrow.progress`, 30 Hz timer); none when crossed or with no
-  estimate. `halo.heads.progress` / `.estimate` in `GET /test/state`; `WT_SHOOT_HALO`'s
-  `words in flight` column draws it at two thirds.
+  the model value untouched), the glint sweeping with no rest between sweeps, and **a subtle amber
+  glow on the inside of the hole's rim, sweeping round it** (*"an interior wide border … no space
+  between the pin margin and that progress bar … a glow … Something subtle"*): eight overlapping 9 %
+  bands flush with the rim, clipped to the hole, ~53 % at the rim fading a third of the way in, the
+  middle clear — clockwise from twelve,
+  **from zero to full at the moment the local model would take the sentence anyway** (same day:
+  *"complete when the local model would [deliver] … anyway"*, *"you tend to constantly underestimate
+  the time"*): linear over the AutoLocal budget from the close (`AppDelegate.syncLocalNow` →
+  `CaretHalo.setLocalClock` → `DropArrow.localClock`), over the decode estimate when no budget runs
+  (`setDelivering(_:estimate:)`); full stays full (`DropArrow.progress`, 30 Hz timer); none when
+  crossed. A spinner, a creeping 97 % ring and a thin white arc were all tried that day and dropped.
+  `halo.heads.progress` / `.localBudget` in `GET /test/state`; `WT_SHOOT_HALO`'s `words in flight`
+  column draws it at two thirds.
 - **Nowhere to type → grey pin, red ✕, no shine** (`DropArrow.crossed`, `CaretHalo.noCaretAt`):
   `FocusFrame` finds no caret **and** `TerminalBinding.focusTakesNoText` — the focused element is
   an `AXWebArea` with no `AXEditableAncestor` (a page with no field focused: Chrome, Safari,
