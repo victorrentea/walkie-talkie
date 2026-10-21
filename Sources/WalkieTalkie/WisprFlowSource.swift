@@ -386,6 +386,11 @@ final class WisprFlowSource: DictationSource {
     /// A deferred take's release waits this long after the sentence before it is
     /// over — past Wispr's own paste of that row (wave 5).
     static let pasteSettle: CFAbsoluteTime = 0.7
+    /// A take longer than this is not replayed after an input blip — the local
+    /// model takes it (wave 6).
+    static let replayCeiling: TimeInterval = 20
+    /// One give-up hop in flight from the feed watch (feedQueue → main).
+    private var givingUpForBlip = false
     /// **The stop chord of a take that waited went out** — Wispr can start
     /// answering it now: `(take, its seconds of audio, seconds since his stop)`.
     /// The relay starts the take's countdown here (`AppDelegate.armAutoLocal`).
@@ -1554,21 +1559,7 @@ final class WisprFlowSource: DictationSource {
         // carries it to the local model (Q14), no chord.
         if stopReholdBase < 0 { stopReholdBase = bridge.reholdCount }
         if ownTakeOnly == nil, bridge.reholdCount - stopReholdBase >= Self.maxStopReholds {
-            // The row is kept and the dismissal stamped before the capture ends
-            // (wave 5): `watchLateRow` holds its late ⌘V, and the dead-row verdict
-            // lets it go 1 s after the ⌃Escape — a deferred take waits for that.
-            ownTakeRow = historyRow
-            if holdOwnTake("Wispr Flow's input dropped \(bridge.reholdCount - stopReholdBase) times while it heard the take") {
-                // Wispr is recording this take (its start went out): dismissed,
-                // as ⌘⌃X does — no chord will ever stop it otherwise (wave 4).
-                relayDismissedAt = CFAbsoluteTimeGetCurrent()
-                // Unix time — what `endWithRecording` / `deadRow` compare with (wave 6:
-                // CF time read as a dismissal 978 307 200 s old).
-                ownTakeDismissedAt = Date().timeIntervalSince1970
-                HotkeyTap.postWisprCancel()
-            } else {
-                ownTakeRow = nil
-            }
+            giveUpOnWispr("Wispr Flow's input dropped \(bridge.reholdCount - stopReholdBase) times while it heard the take")
         }
         // **A hold restarts the drain's clock** (review wave 2): after a re-hold
         // mid-replay the whole take is queued again, above the last `drainSeen`,
@@ -2864,8 +2855,25 @@ final class WisprFlowSource: DictationSource {
         // the reopen** (2026-10-21, row 19484 lost its first 2.4 s to six such
         // blips) — the bridge holds again and replays the whole take then. Two
         // ticks (≥ 50 ms) off, so one odd sample is not an edge.
-        if feed == .relay, saw, !open, now - last >= 0.05, !bridge.isHolding {
-            bridge.rehold(String(format: "Wispr's input went off %.0f ms ago", (now - last) * 1000))
+        // Only where a re-hold would act (the bridge still takes buffers): after a
+        // normal stop's `closeInput` an input going off is Wispr's own end.
+        if feed == .relay, saw, !open, now - last >= 0.05, bridge.canRehold {
+            let archived = bridge.archivedSeconds
+            if archived > Self.replayCeiling {
+                // **Too long to say again** (wave 6): replaying 20+ s at 1.25× holds
+                // his stop for most of the take; the local model has the same WAV.
+                if !givingUpForBlip {
+                    givingUpForBlip = true
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self else { return }
+                        self.giveUpOnWispr(String(format: "Wispr Flow's input went off %.0f s into the take — "
+                                                  + "too long to replay", archived))
+                        self.givingUpForBlip = false
+                    }
+                }
+            } else {
+                bridge.rehold(String(format: "Wispr's input went off %.0f ms ago", (now - last) * 1000))
+            }
         }
         guard feed == .own else { return }
         if saw ? now - last >= 0.3 : now - since >= Self.ownFeedNoShow {
@@ -3629,6 +3637,23 @@ final class WisprFlowSource: DictationSource {
         // A released take he already stopped (Q12): no *stop as usual* on the
         // chip — the stop under way closes it on the relay's recording.
         if !stopRelayed { onOwnTake?(why) }
+        return true
+    }
+
+    /// **Wispr is recording a take it will not hear whole: dismiss it, and the
+    /// relay's own recording carries the take** (`holdOwnTake`, Q14). The row is
+    /// kept and the dismissal stamped before the capture ends (wave 5):
+    /// `watchLateRow` holds its late ⌘V, and the dead-row verdict lets it go 1 s
+    /// after the ⌃Escape — a deferred take waits for that.
+    @discardableResult
+    private func giveUpOnWispr(_ why: String) -> Bool {
+        ownTakeRow = historyRow
+        guard holdOwnTake(why) else { ownTakeRow = nil; return false }
+        relayDismissedAt = CFAbsoluteTimeGetCurrent()
+        // Unix time — what `endWithRecording` / `deadRow` compare with (wave 6).
+        ownTakeDismissedAt = Date().timeIntervalSince1970
+        // No chord will ever stop it otherwise (wave 4), as ⌘⌃X does.
+        HotkeyTap.postWisprCancel()
         return true
     }
     /// The Wispr-side close (poll, CoreAudio edge) of any sentence waits up
@@ -4838,6 +4863,16 @@ extension WisprFlowSource {
     /// question) and the *still finishing* borrow do not stop it first.
     var wouldDeferStart: Bool {
         queuesSentences && deferred == nil && isReady && !(machineRecording && stopRelayed) && busyForStart != nil
+            && !onlyAnAbandonedRow
+    }
+
+    /// **Nothing of a sentence is owed — only a row the relay gave up on is still
+    /// finishing** (wave 6): the start borrows the local model as before the
+    /// queue (`AppDelegate`'s still-finishing borrow), rather than waiting
+    /// behind an orphan row with no countdown.
+    private var onlyAnAbandonedRow: Bool {
+        !machineOwes && !machineRecording && !speculative && !(capturing && !discardOnArrival)
+            && endingInFlight == 0 && stillFinishingAbandonedRow != nil
     }
 
     /// The sentence the machine was on when a take was deferred is over.
