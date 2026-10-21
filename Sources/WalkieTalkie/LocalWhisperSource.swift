@@ -260,6 +260,7 @@ final class LocalWhisperSource: DictationSource {
                 guard self.isRecording, self.take == t else { return }
                 self.isRecording = false
                 self.recordingJob = nil
+                self.stopChunkWatch()
                 self.settlePhase(.done("error"))
                 self.answer(t) { self.didEnd?(.failed(why: why, audio: nil, duration: 0)) }
             }
@@ -288,6 +289,7 @@ final class LocalWhisperSource: DictationSource {
         jobs[t] = job
         job.stoppedAt = Date()
         job.markers = markersInAudio
+        job.wantsWords = wantsWordTimings?() ?? false
         // Before the relay hears the close: everything that times the wait from
         // here on asks `DecodeRate` about this engine (2026-09-23) — and, for a
         // chunked take, about what is left of it, not the whole (2026-10-21).
@@ -334,6 +336,11 @@ final class LocalWhisperSource: DictationSource {
         if !job.pieces.isEmpty {
             let expected = tailEnd - job.lastCut
             let tailVoiced = ChunkPlanner.voiced(hops, from: Double(job.lastCut) / Self.rate)
+            // **The hops stop at `MicRecorder.hopCap` (12.8 min), the audio does
+            // not** (review 2026-10-22): past it the tail reads 0 s voiced and was
+            // dropped — up to two minutes of speech. Judged only where they reach.
+            let hopsEnd = hops.last.map { TimeInterval($0.t) + MeterHop.seconds } ?? 0
+            let hopsCoverTail = hopsEnd >= Double(tailEnd) / Self.rate - 1
             if tail.count != expected || job.markers {
                 // A tail no longer in memory (the take's 120 s cap) or a marker
                 // spliced into the file: the WAV is the only whole truth.
@@ -341,7 +348,7 @@ final class LocalWhisperSource: DictationSource {
                          + (job.markers ? "a marker was spliced into the WAV" : "the tail is not in memory any more")
                          + "; the whole take is decoded")
                 job.dropPieces()
-            } else if tailVoiced < Self.tailVoicedFloor {
+            } else if hopsCoverTail, tailVoiced < Self.tailVoicedFloor {
                 Log.info(String(format: "✂️ local: the %.1f s tail has %.2f s voiced — not decoded",
                                 Double(tail.count) / Self.rate, tailVoiced))
                 job.tailDone = true
@@ -353,7 +360,7 @@ final class LocalWhisperSource: DictationSource {
                                 job.pieces.count, Double(tail.count) / Self.rate, tailVoiced, job.leftAtStop))
                 whenModelUp(job) { [weak self] in
                     guard let self else { return }
-                    self.ask(job, samples: tail, from: job.lastCut, words: self.wantsWordTimings?() ?? false, isTail: true)
+                    self.ask(job, samples: tail, from: job.lastCut, words: job.wantsWords, isTail: true)
                 }
                 return
             }
@@ -373,7 +380,7 @@ final class LocalWhisperSource: DictationSource {
 
     private func whenModelUp(_ job: Job, _ go: @escaping () -> Void) {
         guard !whisper.ready else { return go() }
-        phase = .transcribing("loading the model")
+        if !isRecording { phase = .transcribing("loading the model") }
         Log.info(String(format: "⏳ the local model is not up yet — the %.1fs recording waits for it (up to %.0f s)",
                         job.duration, Self.modelWait))
         let asked = Date()
@@ -422,7 +429,8 @@ final class LocalWhisperSource: DictationSource {
         // the whole round trip: the JSON out, the helper's answer, and the queue
         // hop back. **After the wait for the weights**, which is not a decode.
         let decodeStartedAt = Date()
-        whisper.transcribe(wav: wav.path, words: wantsWordTimings?() ?? false) { [weak self] result in
+        let queuedBehind = unanswered.count > 1
+        whisper.transcribe(wav: wav.path, words: job.wantsWords) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
                 // The live helper, if the close killed it, comes back now that
@@ -432,8 +440,19 @@ final class LocalWhisperSource: DictationSource {
                     Log.info("🗑️ the local model answered a cancelled decode — dropped")
                     return
                 }
+                // **A helper that died under it is waited for, once** (review
+                // 2026-10-22): with takes queued, a request behind a dying helper
+                // answers nil at once — it used to go straight to Recover.
+                if result == nil, !self.whisper.ready, !job.retriedDecode {
+                    job.retriedDecode = true
+                    Log.error("local: take \(job.take)'s decode met a helper that was down — once more when it is back")
+                    self.bringUpModel()
+                    return self.whenModelUp(job) { [weak self] in self?.decodeNow(job) }
+                }
                 self.jobs[job.take] = nil
-                if let r = result, !r.text.isEmpty {
+                // **Not a round trip that queued behind another take** (review
+                // 2026-10-22): the wait for the helper is not decode time.
+                if let r = result, !r.text.isEmpty, !queuedBehind {
                     // Filed on the success path only: a decode that returned nothing
                     // says nothing about how long a decode takes.
                     DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt),
@@ -447,6 +466,8 @@ final class LocalWhisperSource: DictationSource {
     /// One take's words — whole or assembled from its chunks — on main.
     private func answered(_ job: Job, _ result: LocalWhisper.Result?) {
         let t = job.take
+        // Nothing of ours left in flight: the next estimate is about a whole take again.
+        if jobs.isEmpty { DecodeRate.noteLeft(nil) }
         guard let wav = job.wav else { return }
         let duration = job.duration
         guard let r = result, !r.text.isEmpty else {
@@ -501,6 +522,11 @@ final class LocalWhisperSource: DictationSource {
         var pieces: [Piece] = []
         var tailDone = false
         var leftAtStop: TimeInterval = 0
+        /// Word timings for the tail / the whole take — decided at the stop, from
+        /// this take's own cues (the next take's envelope may be the live one by
+        /// the time the decode is asked: a cold model, a chunk's fallback).
+        var wantsWords = false
+        var retriedDecode = false
         init(take: Int) { self.take = take }
 
         /// Chunks abandoned: answers still coming are dropped, files removed.
@@ -690,7 +716,6 @@ final class LocalWhisperSource: DictationSource {
                                 isTail ? "tail" : "\(job.pieces.firstIndex { $0 === piece }.map { $0 + 1 } ?? 0)",
                                 job.take, Date().timeIntervalSince(piece.askedAt),
                                 result.map { "\($0.text.count) chars" } ?? "no answer"))
-                if !isTail { self.live.warmLater() }
                 self.assembleIfDone(job)
             }
         }

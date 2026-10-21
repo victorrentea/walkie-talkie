@@ -111,3 +111,14 @@ final class ChunkJoinTests: XCTestCase {
         XCTAssertEqual(r.language, "ro")
     }
 }
+
+final class ChunkPlannerCapTests: XCTestCase {
+    func testNoCutWhenTheHopsStopShortOfNow() {
+        // Hops for 20 s ending in silence, but the take is at 60 s: the meter's cap.
+        var h: [MeterHop] = []
+        var t: Float = 0
+        while t < 20 { h.append(MeterHop(t: t, rms: t < 18 ? 2000 : 50, voiced: t < 18)); t += Float(MeterHop.seconds) }
+        XCTAssertNil(ChunkPlanner.cut(hops: h, from: 0, now: 60))
+        XCTAssertNotNil(ChunkPlanner.cut(hops: h, from: 0, now: Double(t)))
+    }
+}

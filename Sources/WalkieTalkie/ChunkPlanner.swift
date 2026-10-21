@@ -59,6 +59,10 @@ enum ChunkPlanner {
     static func cut(hops: [MeterHop], from lastCut: TimeInterval, now: TimeInterval,
                     tuning t: Tuning = Tuning()) -> TimeInterval? {
         guard now - lastCut >= t.trigger else { return nil }
+        // **Only where the hops reach** (review 2026-10-22): `MicRecorder` stops
+        // keeping hops at 12.8 min; a last unvoiced hop read as a pause still
+        // going would cut there for ever after.
+        guard let last = hops.last, TimeInterval(last.t) + MeterHop.seconds >= now - 0.5 else { return nil }
         let gap = now - lastCut >= t.hardCap ? t.capGap : t.minGap
         let hop = MeterHop.seconds
         var pauses: [Pause] = []
