@@ -103,6 +103,11 @@ final class HotkeyTap {
     /// to transcribe something already known to be unwanted.
     var onLocalCancel: (() -> Void)?
 
+    /// **🔽 ← while a microphone is open — the same cancel as 🔼 ←** (2026-10-21),
+    /// minus its ⚡ question at rest: nothing cancelled means the Return it
+    /// always was. Raised on the tap thread, so the other end hops.
+    var onBackCancel: (() -> Void)?
+
     /// **Wispr Flow is probably about to start listening** — its own start
     /// gesture, seen on the wire, ahead of any microphone opening.
     ///
@@ -4045,19 +4050,31 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }
                 return swallow(gesture, type, event)
 
-            // 🔽 ← — **Return, at any moment** (2026-10-05). Victor: *"If I do
-            // the gesture for back and swipe to the left at any point, this
-            // means an Enter. Hitting an Enter in the terminal, for example, to
-            // submit a prompt or enter in a text file."* Until then it threw a
-            // Wispr Flow sentence away (2026-09-21), and the relay's own when
-            // there was none — 🔼 ← is the cancel now, alone.
+            // 🔽 ← — **Return** (2026-10-05). Victor: *"If I do the gesture for
+            // back and swipe to the left at any point, this means an Enter.
+            // Hitting an Enter in the terminal, for example, to submit a prompt
+            // or enter in a text file."*
             //
-            // **Ungated**: no dictation state is read, no shell-prompt guard —
-            // it is the Return key, on the mouse. `postReturn` waits out
-            // Options+'s trailing ⌃⌥⌘ and stamps the key `backButtonStamp`, so
-            // a held prompt panel lets it through to the front app (TG11). The
-            // re-fire guard above keeps one slow flick from being two Returns.
+            // **…except while a microphone is open: then it cancels, like 🔼 ←**
+            // (2026-10-21, Victor: *"during a dictation or a prompt … either the
+            // Forward button swipe left or the back button swipe left on my
+            // mouse should do cancel"*). Any sentence — prompt or plain, the
+            // relay's engine or Wispr's. Once the microphone has closed it is
+            // the Return again, so a Return made while the words land still
+            // lands; a held prompt panel is not a microphone and passes it on.
+            //
+            // **No shell-prompt guard** on the Return: it is the Return key, on
+            // the mouse. `postReturn` waits out Options+'s trailing ⌃⌥⌘ and
+            // stamps the key `backButtonStamp`, so a held prompt panel lets it
+            // through to the front app (TG11). The re-fire guard above keeps one
+            // slow flick from being two Returns.
             case VK_F3:
+                if relayPromptOpen || relayPlainOpen || ownMicOpen || backStopsWispr
+                    || wisprMicIsOpen?() == true {
+                    Log.info("🗑️ 🔽 ← back button flicked left with a microphone open — cancel, as 🔼 ←")
+                    DispatchQueue.global().async { [weak self] in self?.onBackCancel?() }
+                    return swallow(gesture, type, event)
+                }
                 Log.info("⏎ 🔽 ← back button flicked left — Return")
                 Self.postReturn()
                 return swallow(gesture, type, event)

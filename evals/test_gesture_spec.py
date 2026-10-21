@@ -418,13 +418,23 @@ def spec(src: dict):
         {
             # Victor, 2026-10-05: "If I do the gesture for back and swipe to the
             # left at any point, this means an Enter." A cancel until then.
-            "row": ("🔽 back", "drag left, any moment"),
-            "does": "Return — this app's stamped key, ungated, no cancel",
+            # 2026-10-21: "during a dictation or a prompt … either the Forward
+            # button swipe left or the back button swipe left … should do cancel".
+            "row": ("🔽 back", "drag left"),
+            "does": "a microphone open: CANCEL it, as 🔼 ← (never its ⚡ question); otherwise Return — this app's stamped key",
             "checks": [
                 ("F3 posts the Return and is swallowed", "HotkeyTap `case VK_F3`",
                  lambda: has(gesture_case(src, "VK_F3"), r"Self\.postReturn\(\)\s*return swallow\(gesture, type, event\)\s*$")),
-                ("…and cancels nothing, whatever is dictating", "HotkeyTap `case VK_F3`",
-                 lambda: not has(gesture_case(src, "VK_F3"), r"onLocalCancel|postWisprCancel|ownDictation|wisprMicIsOpen")),
+                ("…but with any microphone open it raises the cancel first", "HotkeyTap `case VK_F3`",
+                 lambda: before(gesture_case(src, "VK_F3"),
+                                r"if relayPromptOpen \|\| relayPlainOpen \|\| ownMicOpen \|\| backStopsWispr\s*\|\| wisprMicIsOpen\?\(\) == true \{.*?onBackCancel\?\(\)",
+                                r"Self\.postReturn\(\)")),
+                ("…not 🔼 ←'s, which asks a ⚡ question at rest", "HotkeyTap `case VK_F3`",
+                 lambda: not has(gesture_case(src, "VK_F3"), r"onLocalCancel")),
+                ("the back cancel cancels, else a Return — never a question", "AppDelegate `onBackCancel`",
+                 lambda: before(closure(src, "hotkeys.onBackCancel"),
+                                r"if self\.cancelSentenceOrPanel\(.*?\) \{ return \}", r"HotkeyTap\.postReturn\(\)")
+                         and not has(closure(src, "hotkeys.onBackCancel"), r"startDictation|quick")),
             ],
         },
         {
@@ -612,9 +622,12 @@ MUTATIONS = [
      "if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow(\"⌘⌃X (autorepeat)\", type, event) }", ""),
     ("⌘⌃X stops the take the ordinary way (the cloud still gets it)", "AppDelegate.swift",
      "        guard source.handToLocal() else {", "        guard { endDictation(); return true }() else {"),
-    ("🔽 ← cancels again (before 2026-10-05)", "HotkeyTap.swift",
+    ("🔽 ← cancels at rest too (before 2026-10-05)", "HotkeyTap.swift",
      "                Self.postReturn()\n                return swallow(gesture, type, event)\n\n            // ⬆️ — dictate",
      "                DispatchQueue.global().async { [weak self] in self?.onLocalCancel?() }\n                return swallow(gesture, type, event)\n\n            // ⬆️ — dictate"),
+    ("🔽 ← is the Return mid-sentence too (2026-10-05 → 10-21)", "HotkeyTap.swift",
+     "                    DispatchQueue.global().async { [weak self] in self?.onBackCancel?() }\n",
+     ""),
     ("bare F7/F9 swallowed for the halo again (Q10)", "HotkeyTap.swift",
      "(keyCode == VK_F7 || keyCode == VK_F9) && fnKeyHeld && ", "(keyCode == VK_F7 || keyCode == VK_F9) && "),
 ]

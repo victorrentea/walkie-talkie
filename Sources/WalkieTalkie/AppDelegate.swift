@@ -2396,6 +2396,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.startDictation(paste: true, quick: true)
             }
         }
+        // 🔽 ← with a microphone open (2026-10-21): 🔼 ←'s cancel, never its
+        // ⚡ question — the tap only raises this mid-sentence, and a sentence
+        // that ended on the way here leaves the Return the flick means at rest.
+        hotkeys.onBackCancel = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.cancelSentenceOrPanel(reason: "⬅️ a cancel flick (🔽 ←)") { return }
+                Log.info("⏎ 🔽 ← — nothing left to cancel, a Return instead")
+                HotkeyTap.postReturn()
+            }
+        }
         // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
         // source that decides what a gesture on the wire means, and it takes the
         // callback in its own initialiser.
