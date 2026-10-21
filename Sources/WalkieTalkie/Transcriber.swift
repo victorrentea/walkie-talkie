@@ -488,8 +488,19 @@ final class LocalWhisper {
     /// failure read on this queue at the moment of the answer, so a request that
     /// queued behind a hung one can tell *the helper was already down* from *my
     /// own budget ran out* (`lastFailure` is shared and the next request resets it).
+    /// Requests asked and not answered yet, any caller's — a decode asked while
+    /// this is > 0 waits in the serial queue, and its wait is not decode time
+    /// (DecodeRate, review wave 4).
+    var requestsInFlight: Int { pidLock.lock(); defer { pidLock.unlock() }; return inFlight }
+    private var inFlight = 0
+
     func transcribe(wav: String, words: Bool = false, pcm: Bool = false, language: String? = nil,
-                    reporting done: @escaping (Result?, String?) -> Void) {
+                    reporting answer: @escaping (Result?, String?) -> Void) {
+        pidLock.lock(); inFlight += 1; pidLock.unlock()
+        let done: (Result?, String?) -> Void = { [weak self] r, why in
+            if let self { self.pidLock.lock(); self.inFlight -= 1; self.pidLock.unlock() }
+            answer(r, why)
+        }
         queue.async { [weak self] in
             guard let self = self else { done(nil, nil); return }
             self.lastFailure = nil

@@ -285,6 +285,7 @@ final class LocalWhisperSource: DictationSource {
         phase = .transcribing("")
         let t = job.take
         job.queuedBehind = !jobs.isEmpty || !unanswered.isEmpty
+            || whisper.requestsInFlight > job.pieces.filter { !$0.answered }.count
         unanswered.insert(t)
         jobs[t] = job
         job.stoppedAt = Date()
@@ -424,6 +425,7 @@ final class LocalWhisperSource: DictationSource {
     private func fail(_ job: Job, _ why: String) {
         guard jobs[job.take] === job else { return }
         jobs[job.take] = nil
+        if jobs.isEmpty { DecodeRate.noteLeft(nil) }   // wave 4: no stale estimate
         job.dropPieces()
         Log.error("local recording not transcribed — \(why); the audio is kept")
         answer(job.take) {
@@ -441,7 +443,7 @@ final class LocalWhisperSource: DictationSource {
         // the whole round trip: the JSON out, the helper's answer, and the queue
         // hop back. **After the wait for the weights**, which is not a decode.
         let decodeStartedAt = Date()
-        let queuedBehind = unanswered.count > 1
+        let queuedBehind = unanswered.count > 1 || whisper.requestsInFlight > 0
         whisper.transcribe(wav: wav.path, words: job.wantsWords, reporting: { [weak self] result, failure in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -629,6 +631,7 @@ final class LocalWhisperSource: DictationSource {
 
     private func disown(_ job: Job) {
         jobs[job.take] = nil
+        if jobs.isEmpty { DecodeRate.noteLeft(nil) }   // wave 4: no stale estimate
         job.cancelled = true
         job.dropPieces()
         // **Still closing** (the stop's `meter.stop()` not back from `audioQueue`,

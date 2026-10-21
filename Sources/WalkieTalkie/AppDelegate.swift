@@ -519,18 +519,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// actually running afterwards either way, so a refused pick cannot leave a
     /// tick beside an engine that is not listening.
     private func setEngine(_ id: String) {
-        // A pick of his own ends a borrow (Q21): what he picked is what stays.
-        if borrowedFrom != nil {
+        let next = engine(named: id)
+        // A pick of the borrowed engine itself ends the borrow (Q21): what he
+        // picked is what stays.
+        if borrowedFrom != nil, next === source {
             borrowedFrom = nil
             borrowReturn?.invalidate(); borrowReturn = nil
+            return
         }
-        let next = engine(named: id)
         guard next !== source else { return }
-        guard !listening, !settling, !speculative, !source.isRecording else {
+        // Answers still owed count too (wave 4): a cancel's late `.cancelled`
+        // (the WAV for Recover) would find its callbacks unwired.
+        guard !listening, !settling, !speculative, !source.isRecording,
+              source.answersPending == 0, !source.phase.isWaitingForWords else {
+            // Refused: a borrow in force stays in force — its return is what
+            // brings the Engine back (wave 4: it used to be forgotten here).
             overlay.flash("⏳ finish the sentence first — the engine stays \(source.name)",
                           duration: 3)
             status.setEngine(engineId)
             return
+        }
+        // A pick of his own ends a borrow (Q21): what he picked is what stays.
+        if borrowedFrom != nil {
+            borrowedFrom = nil
+            borrowReturn?.invalidate(); borrowReturn = nil
         }
         source.didMaybeBegin = nil
         source.didBegin = nil
@@ -7542,7 +7554,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wordsInFlight = settling || fallingBack || source.phase.isWaitingForWords
             || source.answersPending > 0 || (parkedSentence.map { !$0.finished } ?? false)
         let micOpen = listening || source.isRecording || speculative
-        let parkable = fallingBack && fallbackParkRefusal() == nil
+        // Rule D parks only a live, unfinished sentence (`startBlocker`, wave 4).
+        let parkable = fallingBack && fallbackParkRefusal() == nil && !(liveSentence?.finished ?? true)
             && !(settling && CFAbsoluteTimeGetCurrent() - settlingFrom < Self.queueStartAfterStop)
         let ready = wordsInFlight && !micOpen && (queueAccepts || parkable)
         if ready != overlay.readyForNext {
