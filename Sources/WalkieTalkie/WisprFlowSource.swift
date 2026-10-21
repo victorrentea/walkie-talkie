@@ -2415,9 +2415,21 @@ final class WisprFlowSource: DictationSource {
         // The row a held take gave up on, on every branch (wave 6): a cancel or
         // ⌘⌃X used to leave it for the next held take to watch.
         let ownRow = ownTakeRow
-        let ownDismissed = ownTakeDismissedAt
+        var ownDismissed = ownTakeDismissedAt
         ownTakeRow = nil
         ownTakeDismissedAt = 0
+        // **A held take whose row Wispr still has open is dismissed now** (wave 9):
+        // `nullRowHold` hands a take to the relay with Wispr's dictation still alive
+        // (its input off), and nothing else ever stops it — the next start's chord
+        // would toggle it off, and its row would be judged by a dismissal that
+        // never happened. As `giveUpOnWispr` does.
+        if ownTake != nil, let r = ownRow, ownDismissed == 0, let e = WisprHistory.entry(rowid: r),
+           WisprState.intermediateStatuses.contains(e.status) {
+            relayDismissedAt = CFAbsoluteTimeGetCurrent()
+            ownDismissed = Date().timeIntervalSince1970
+            Log.info("💻 row \(r) of the held take is still open in Wispr Flow — dismissed (⌃Escape)")
+            HotkeyTap.postWisprCancel()
+        }
         // Q12: a released take whose stop he made while it waited for Wispr —
         // the relay heard that close then (and latched its recipient, Q2).
         let relayed = stopRelayed
@@ -2492,8 +2504,10 @@ final class WisprFlowSource: DictationSource {
                 let row = historyRow ?? ownRow
                 endCapture(quiet: true)
                 // Batch 3: ⌃Escape went out just now — a row still open 1 s on is dead.
+                // A held take posted none at ⌘⌃X; its own dismissal stamp (above) is the
+                // truth for it (wave 9).
                 endWithRecording(DictationEnd.localForced, row: row, forced: true,
-                                 dismissedAt: Date().timeIntervalSince1970)
+                                 dismissedAt: ownTake != nil ? ownDismissed : Date().timeIntervalSince1970)
                 return
             }
             endCapture(quiet: true)
