@@ -158,6 +158,9 @@ final class AudioBridge {
     /// generation (the player's stop calls them all) moves no count.
     private var generation = 0
     private var reholds = 0
+    /// Re-holds this take, under `lock` — what the stop counts (wave 3).
+    private var reholdsLocked = 0
+    var reholdCount: Int { lock.lock(); defer { lock.unlock() }; return reholdsLocked }
     /// **Buffers that are a spoken marker, not his voice** (2026-09-30) —
     /// registered by `noteMarker` before the recorder hands them on. Under `lock`.
     private var markerIDs = Set<ObjectIdentifier>()
@@ -310,6 +313,7 @@ final class AudioBridge {
             self.recoveries = 0
             self.watchConfiguration(of: engine)
             self.lock.lock()
+            self.reholdsLocked = 0
             self.pending = 0; self.queued = 0; self.held = 0
             self.holding = holding; self.accepting = true
             self.isRunning = true
@@ -481,6 +485,7 @@ final class AudioBridge {
         backlog = archive
         keeping = true
         reholds += 1
+        lock.lock(); reholdsLocked += 1; lock.unlock()
         lock.lock()
         let stillHolding = holding
         if stillHolding { held = archived; queued = 0 } else { queued = archived; held = 0 }

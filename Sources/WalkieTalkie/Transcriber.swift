@@ -481,24 +481,33 @@ final class LocalWhisper {
     /// `language`: `ro`/`en` already known (a chunked take's tail) — the helper skips its LID pass.
     func transcribe(wav: String, words: Bool = false, pcm: Bool = false, language: String? = nil,
                     _ done: @escaping (Result?) -> Void) {
+        transcribe(wav: wav, words: words, pcm: pcm, language: language) { r, _ in done(r) }
+    }
+
+    /// **The same, with why it answered nil** (review wave 3, 2026-10-22) — the
+    /// failure read on this queue at the moment of the answer, so a request that
+    /// queued behind a hung one can tell *the helper was already down* from *my
+    /// own budget ran out* (`lastFailure` is shared and the next request resets it).
+    func transcribe(wav: String, words: Bool = false, pcm: Bool = false, language: String? = nil,
+                    reporting done: @escaping (Result?, String?) -> Void) {
         queue.async { [weak self] in
-            guard let self = self else { done(nil); return }
+            guard let self = self else { done(nil, nil); return }
             self.lastFailure = nil
             guard self.ready, let stdin = self.toHelper else {
                 self.lastFailure = "the local model was not up"
-                done(nil); return
+                done(nil, self.lastFailure); return
             }
             var body: [String: Any] = [pcm ? "pcm" : "wav": wav, "words": words]
             if let language { body["language"] = language }
             guard let req = try? JSONSerialization.data(withJSONObject: body) else {
-                done(nil); return
+                done(nil, self.lastFailure); return
             }
             var line = req
             line.append(0x0A)
             do { try stdin.write(contentsOf: line) } catch {
                 self.markDead("would not take a request (\(error))")
                 self.lastFailure = "the local helper had died"
-                done(nil); return
+                done(nil, self.lastFailure); return
             }
             // Generous, because it scales with the dictation: a three-minute one
             // is ~20s of work. **Past it the helper is killed** (`readLine`): a
@@ -507,11 +516,11 @@ final class LocalWhisper {
             guard let obj = self.readLine(timeout: Self.decodeBudget) else {
                 Log.error("whisper helper gave no answer — see the read loop")
                 if self.lastFailure == nil { self.lastFailure = "the local model gave no answer" }
-                done(nil); return
+                done(nil, self.lastFailure); return
             }
             guard (obj["ok"] as? Bool) == true, let text = obj["text"] as? String else {
                 Log.error("whisper helper: \((obj["error"] as? String) ?? "unknown error")")
-                done(nil); return
+                done(nil, self.lastFailure); return
             }
             // `null` is how the helper sends a NaN/inf score (2026-09-29): a
             // decode that broken is at the bottom of the confidence scale, so the
@@ -523,7 +532,7 @@ final class LocalWhisper {
                         compressionRatio: (obj["compression_ratio"] as? Double) ?? 0,
                         coverage: obj["coverage"] as? [String: Any],
                         words: Result.timedWords(obj["words"],
-                                                 spelling: text.trimmingCharacters(in: .whitespacesAndNewlines))))
+                                                 spelling: text.trimmingCharacters(in: .whitespacesAndNewlines))), nil)
         }
     }
 

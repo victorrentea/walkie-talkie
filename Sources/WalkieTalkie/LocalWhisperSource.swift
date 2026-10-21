@@ -442,8 +442,7 @@ final class LocalWhisperSource: DictationSource {
         // hop back. **After the wait for the weights**, which is not a decode.
         let decodeStartedAt = Date()
         let queuedBehind = unanswered.count > 1
-        let askedAt = Date()
-        whisper.transcribe(wav: wav.path, words: job.wantsWords) { [weak self] result in
+        whisper.transcribe(wav: wav.path, words: job.wantsWords, reporting: { [weak self] result, failure in
             DispatchQueue.main.async {
                 guard let self else { return }
                 // The live helper, if the close killed it, comes back now that
@@ -457,8 +456,10 @@ final class LocalWhisperSource: DictationSource {
                 // 2026-10-22): with takes queued, a request behind a dying helper
                 // answers nil at once — it used to go straight to Recover.
                 // Not its own budget running out (wave 2): a decode that hung for
-                // 300 s is not tried for another 300.
-                let ownTimeout = Date().timeIntervalSince(askedAt) >= LocalWhisper.decodeBudget - 5
+                // 300 s is not tried for another 300. Told by the helper client,
+                // not by wall time (wave 3): a request queued behind a hung one
+                // waited 300 s too, and found the helper down.
+                let ownTimeout = failure?.contains("did not answer within") ?? false
                 if result == nil, !self.whisper.ready, !job.retriedDecode, !ownTimeout {
                     job.retriedDecode = true
                     Log.error("local: take \(job.take)'s decode met a helper that was down — once more when it is back")
@@ -476,7 +477,7 @@ final class LocalWhisperSource: DictationSource {
                 }
                 self.answered(job, result)
             }
-        }
+        })
     }
 
     /// One take's words — whole or assembled from its chunks — on main.

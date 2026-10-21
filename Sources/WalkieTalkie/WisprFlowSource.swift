@@ -380,6 +380,9 @@ final class WisprFlowSource: DictationSource {
     /// Wispr has not been asked yet, so the relay arms no countdown for it now —
     /// `onHandedToWispr` arms it when the stop chord goes out.
     private(set) var closingDeferred = false
+    /// The bridge's re-hold count when this stop began; -1 between stops (wave 3).
+    private var stopReholdBase = -1
+    static let maxStopReholds = 4
     /// **The stop chord of a take that waited went out** — Wispr can start
     /// answering it now: `(take, its seconds of audio, seconds since his stop)`.
     /// The relay starts the take's countdown here (`AppDelegate.armAutoLocal`).
@@ -1541,6 +1544,15 @@ final class WisprFlowSource: DictationSource {
         // it the chord goes out and Q14 carries the take on the relay's WAV.
         // Each hold is its own wait (a re-hold mid-replay gets the full 2.5 s).
         if !bridge.isHolding { stopHeldSince = 0 }
+        // **A replay that keeps restarting is not heard** (wave 3): each re-hold
+        // gives the stop a fresh input wait and a fresh drain clock, so an input
+        // that flaps for ever held the stop for ever. Past `maxStopReholds` during
+        // this stop, Wispr is out of the sentence — the relay's own recording
+        // carries it to the local model (Q14), no chord.
+        if stopReholdBase < 0 { stopReholdBase = bridge.reholdCount }
+        if ownTakeOnly == nil, bridge.reholdCount - stopReholdBase >= Self.maxStopReholds {
+            _ = holdOwnTake("Wispr Flow's input dropped \(bridge.reholdCount - stopReholdBase) times while it heard the take")
+        }
         // **A hold restarts the drain's clock** (review wave 2): after a re-hold
         // mid-replay the whole take is queued again, above the last `drainSeen`,
         // and the stale `drainMovedAt` called it a stuck player 2 s later — the
@@ -1569,7 +1581,11 @@ final class WisprFlowSource: DictationSource {
                 Log.info(String(format: "🔀 holding the stop for %.0f ms of his voice still in the bridge",
                                 drain * 1000))
             }
-            if drainMovedAt == 0 || drain < drainSeen - 0.005 { drainSeen = drain; drainMovedAt = now }
+            // A queue that grew back (a re-hold too short for a tick to see it,
+            // wave 3) is moving too: the clock restarts on any change.
+            if drainMovedAt == 0 || drain < drainSeen - 0.005 || drain > drainSeen + 0.05 {
+                drainSeen = drain; drainMovedAt = now
+            }
             if now - drainMovedAt < Self.drainStall {
                 // Re-checked every quarter second: at a catch-up rate above 1 the
                 // queue empties faster than its own length in seconds.
@@ -1580,6 +1596,7 @@ final class WisprFlowSource: DictationSource {
                              + "stopping anyway", Self.drainStall, drain))
         }
         drainMovedAt = 0
+        stopReholdBase = -1
         // The line is drawn here for a released take (above): nothing after it.
         bridge.closeInput()
         // **Batch 4: Wispr is out of this sentence** (`holdOwnTake`) — no chord:
@@ -5091,6 +5108,11 @@ extension WisprFlowSource {
             } else if !HotkeyTap.wisprChordsMuted, watch.sampleIsRunningInput() {
                 // W6: a toggle over an open Wispr microphone stops that one.
                 busy = "Wispr Flow's microphone is still open"
+            } else if let top = WisprHistory.newest(), WisprState.intermediateStatuses.contains(top.status),
+                      Date().timeIntervalSince1970 - top.startedAt < 60 {
+                // His own row still being transcribed (wave 3): Wispr ignores a
+                // chord while it finishes one (2026-10-06 10:25:11).
+                busy = "Wispr Flow is still on row \(top.rowid)"
             } else if Date().timeIntervalSince1970 - hisChordAt < 2 {
                 // His own Wispr sentence starting (Q9): its row exists before its
                 // microphone opens, and a toggle now would stop it (wave 2).

@@ -4664,7 +4664,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var specPhase: AutoLocal.SpecPhase?
         var left: TimeInterval = 0
         if let w = autoLocalWait, !w.settled {
-            if !a.available || source === whisperSource {
+            // Only its own sentence settles it (wave 3): with a newer sentence live
+            // (a deferred Wispr take handed to the local model, say), the live
+            // envelope's "not available" says nothing about the parked one's words.
+            let ownSentence = w.sentence == nil || w.sentence === liveSentence
+            if (w.sentence?.finished ?? false) || (ownSentence && (!a.available || source === whisperSource)) {
                 // The words landed (or the sentence ended, or the local model took it).
                 autoLocalWait?.settled = true
                 if !fallingBack {
