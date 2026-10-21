@@ -700,6 +700,12 @@ name `Wispr Feed`); his microphone is `InputDevice.resolve()`, for Wispr too.
   stops the player (stale `.dataPlayedBack` callbacks dropped by `generation`) and puts the archive
   back in the backlog; the next release trims and catches up as usual. Log `🔀 bridge held again`.
   Unverified: whether a blip ever *keeps* the earlier audio (a replay would then say it twice).
+  **Review waves 2–8 (2026-10-22):** a re-hold restarts the stop's drain clock (any rise of the queue,
+  not only a hold a tick sees); more than `maxStopReholds` (4) re-holds during one stop gives the take up
+  (`giveUpOnWispr`: the row kept, the dismissal stamped in Unix time, ⌃Escape, the local model on the
+  relay's WAV, no drain into the dismissed Wispr). A "give up past 20 s instead of replaying" rule lived
+  for two waves and was taken back: 50 ms after the input goes off it cannot tell a blip from Wispr
+  ending its own dictation. A cancel or ⌘⌃X drops the replay instead of draining it.
 - `GET /test/state` → `wisprLive.bridge` {`feed`, `holding`, `held`, `queued`, `pending`}.
 
 ## A Wispr whose microphone does not open is out of the sentence at 3 s (2026-10-08)

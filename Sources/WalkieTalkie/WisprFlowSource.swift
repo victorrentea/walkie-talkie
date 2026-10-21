@@ -386,11 +386,7 @@ final class WisprFlowSource: DictationSource {
     /// A deferred take's release waits this long after the sentence before it is
     /// over — past Wispr's own paste of that row (wave 5).
     static let pasteSettle: CFAbsoluteTime = 0.7
-    /// A take longer than this is not replayed after an input blip — the local
-    /// model takes it (wave 6).
-    static let replayCeiling: TimeInterval = 20
-    /// One give-up hop in flight from the feed watch (feedQueue → main).
-    private var givingUpForBlip = false
+
     /// **The stop chord of a take that waited went out** — Wispr can start
     /// answering it now: `(take, its seconds of audio, seconds since his stop)`.
     /// The relay starts the take's countdown here (`AppDelegate.armAutoLocal`).
@@ -2411,7 +2407,6 @@ final class WisprFlowSource: DictationSource {
 
     private func closeListening(_ why: String) {
         stopReholdBase = -1   // every end of a stop, not only the chord path (wave 4)
-        givingUpForBlip = false   // the feed watch's give-up latch (wave 7)
         guard machineRecording || speculative else { return }
         // Batch 4: a sentence the relay's own recording carried (Wispr out of it)
         // closes here too, at his stop — and ends on that recording.
@@ -2504,7 +2499,14 @@ final class WisprFlowSource: DictationSource {
             endCapture(quiet: true)
             // A held take's dismissed row is watched to its end like any given-up
             // row (wave 7): a start right after must not chord into it.
-            if let r = ownRow { watchLateRow(r, dismissedAt: ownDismissed) }
+            if let r = ownRow {
+                // With its pid and close time, so the dead-row verdict can let it go
+                // (wave 8: a `nullRowHold` row has no dismissal stamp, and with none
+                // of the three it was held owned for 5 minutes).
+                let closed = lastStopAt > 0 ? Date().timeIntervalSince1970 - (CFAbsoluteTimeGetCurrent() - lastStopAt)
+                                            : Date().timeIntervalSince1970
+                watchLateRow(r, pid: pidAtAdoption, closedAt: closed, dismissedAt: ownDismissed)
+            }
             endCancelledWithRecording()
             return
         }
@@ -2867,30 +2869,11 @@ final class WisprFlowSource: DictationSource {
         // Only where a re-hold would act (the bridge still takes buffers): after a
         // normal stop's `closeInput` an input going off is Wispr's own end.
         if feed == .relay, saw, !open, now - last >= 0.05, bridge.canRehold {
-            let archived = bridge.archivedSeconds
-            if archived > Self.replayCeiling {
-                // **Too long to say again** (wave 6): replaying 20+ s at 1.25× holds
-                // his stop for most of the take; the local model has the same WAV.
-                // Latched until the sentence closes (wave 7): the condition stays
-                // true after the give-up, and a second call wiped the kept row.
-                if !givingUpForBlip {
-                    givingUpForBlip = true
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, self.ownTakeOnly == nil else { return }
-                        // Wispr ending the dictation itself (its row has a duration or
-                        // a status) is not a blip: the Wispr-side close delivers it
-                        // (wave 7 — the nullRowHold test, as for any input-off).
-                        if let row = self.historyRow, let e = WisprHistory.entry(rowid: row),
-                           !(WisprState.intermediateStatuses.contains(e.status) && e.duration == nil) {
-                            return
-                        }
-                        self.giveUpOnWispr(String(format: "Wispr Flow's input went off %.0f s into the take — "
-                                                  + "too long to replay", archived))
-                    }
-                }
-            } else {
-                bridge.rehold(String(format: "Wispr's input went off %.0f ms ago", (now - last) * 1000))
-            }
+            // Always replayed (wave 8 took back wave 6's "give up past 20 s": it could
+            // not tell a blip from Wispr ending its own dictation 50 ms after the
+            // input went off, and its latch leaked into the next sentence). A replay
+            // that keeps restarting is bounded at the stop (`maxStopReholds`).
+            bridge.rehold(String(format: "Wispr's input went off %.0f ms ago", (now - last) * 1000))
         }
         guard feed == .own else { return }
         if saw ? now - last >= 0.3 : now - since >= Self.ownFeedNoShow {

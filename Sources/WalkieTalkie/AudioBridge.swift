@@ -163,8 +163,6 @@ final class AudioBridge {
     var reholdCount: Int { lock.lock(); defer { lock.unlock() }; return reholdsLocked }
     /// `rehold` would act now: running, released, still taking buffers.
     var canRehold: Bool { lock.lock(); defer { lock.unlock() }; return isRunning && !holding && accepting }
-    /// Seconds of this take archived so far — what a re-hold would replay (wave 6).
-    var archivedSeconds: TimeInterval { lock.lock(); defer { lock.unlock() }; return archived }
     /// **Buffers that are a spoken marker, not his voice** (2026-09-30) —
     /// registered by `noteMarker` before the recorder hands them on. Under `lock`.
     private var markerIDs = Set<ObjectIdentifier>()
