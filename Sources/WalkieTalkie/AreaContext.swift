@@ -100,14 +100,24 @@ enum AreaContext {
     /// run from the cut's right corners to the red box's left ones, a funnel
     /// that narrows into the place it was cut from. `box` is the red box in the
     /// screen picture's own points.
+    ///
+    /// **The cut sits on the side its box is nearer** (2026-10-21, Victor: *"if
+    /// the cropped area is more towards the left hand side or the right hand
+    /// side of the screen … the zoomed in image should stay on the respective
+    /// side, which is closer"*): a box whose centre is right of the screen's
+    /// middle puts the cut after the screen, the lines from its left corners to
+    /// the box's right ones — the funnel mirrored, never crossing the screen.
     static func callout(cut: NSImage, cutSize: NSSize, screen: NSImage, box: CGRect) -> NSImage {
         let screenSize = screen.size
         let size = NSSize(width: cutSize.width + calloutGap + screenSize.width,
                           height: max(cutSize.height, screenSize.height))
+        let cutOnRight = cutsOnRight(box: box, screenWidth: screenSize.width)
         return NSImage(size: size, flipped: true) { bounds in
-            let cutRect = CGRect(x: 0, y: bounds.height - cutSize.height,
+            let cutRect = CGRect(x: cutOnRight ? screenSize.width + calloutGap : 0,
+                                 y: bounds.height - cutSize.height,
                                  width: cutSize.width, height: cutSize.height)
-            let screenRect = CGRect(x: cutSize.width + calloutGap, y: bounds.height - screenSize.height,
+            let screenRect = CGRect(x: cutOnRight ? 0 : cutSize.width + calloutGap,
+                                    y: bounds.height - screenSize.height,
                                     width: screenSize.width, height: screenSize.height)
             cut.draw(in: cutRect, from: .zero, operation: .sourceOver, fraction: 1,
                      respectFlipped: true, hints: nil)
@@ -123,11 +133,13 @@ enum AreaContext {
             sourceColor.setStroke()
             ring.stroke()
             let target = box.offsetBy(dx: screenRect.minX, dy: screenRect.minY)
+            let cutEdge = cutOnRight ? cutRect.minX : cutRect.maxX
+            let boxEdge = cutOnRight ? target.maxX : target.minX
             let lines = NSBezierPath()
-            lines.move(to: CGPoint(x: cutRect.maxX, y: cutRect.minY))
-            lines.line(to: CGPoint(x: target.minX, y: target.minY))
-            lines.move(to: CGPoint(x: cutRect.maxX, y: cutRect.maxY))
-            lines.line(to: CGPoint(x: target.minX, y: target.maxY))
+            lines.move(to: CGPoint(x: cutEdge, y: cutRect.minY))
+            lines.line(to: CGPoint(x: boxEdge, y: target.minY))
+            lines.move(to: CGPoint(x: cutEdge, y: cutRect.maxY))
+            lines.line(to: CGPoint(x: boxEdge, y: target.maxY))
             lines.lineWidth = 1.5
             lines.lineCapStyle = .round
             NSGraphicsContext.saveGraphicsState()
@@ -141,6 +153,12 @@ enum AreaContext {
             NSGraphicsContext.restoreGraphicsState()
             return true
         }
+    }
+
+    /// True when the box's centre is right of the screen's middle — the cut
+    /// then goes after the screen, not before it.
+    static func cutsOnRight(box: CGRect, screenWidth: CGFloat) -> Bool {
+        box.midX > screenWidth / 2
     }
 
     /// A white shaft and a filled head, with a dark halo so it reads on a white

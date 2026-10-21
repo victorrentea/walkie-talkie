@@ -50,22 +50,23 @@ final class AreaContextTests: XCTestCase {
     }
 
     func testTheCalloutJoinsTheCutToTheRedBox() throws {
-        // A 60 × 40 cut, the screen 320 × 200 to its right, the box at 200,100.
+        // A 60 × 40 cut, the screen 320 × 200 to its right, the box at 60,100
+        // — left of the middle, so the cut stays on the left.
         let cut = NSImage(size: NSSize(width: 60, height: 40), flipped: false) { r in
             NSColor.white.setFill(); r.fill(); return true
         }
         let screen = NSImage(size: NSSize(width: 320, height: 200), flipped: false) { r in
             NSColor.black.setFill(); r.fill(); return true
         }
-        let box = CGRect(x: 200, y: 100, width: 60, height: 40)
+        let box = CGRect(x: 60, y: 100, width: 60, height: 40)
         let image = AreaContext.callout(cut: cut, cutSize: cut.size, screen: screen, box: box)
         let gap = AreaContext.calloutGap
         XCTAssertEqual(image.size, NSSize(width: 60 + gap + 320, height: 200))
         let rep = try render(image, name: "callout.png")
         // In the gap, halfway along the upper line: red.
-        let from = CGPoint(x: 60, y: 160), to = CGPoint(x: 60 + gap + 200, y: 100)
-        let mid = color(rep, Int((from.x + 60 + gap) / 2 + 0.5),
-                        Int(from.y + (to.y - from.y) * ((gap / 2) / (to.x - from.x)) + 0.5))
+        let from = CGPoint(x: 60, y: 160), to = CGPoint(x: 60 + gap + 60, y: 100)
+        let mid = reddest(rep, Int((from.x + 60 + gap) / 2 + 0.5),
+                          Int(from.y + (to.y - from.y) * ((gap / 2) / (to.x - from.x)) + 0.5))
         XCTAssertGreaterThan(mid.redComponent, 0.6)
         XCTAssertLessThan(mid.greenComponent, 0.4)
         // The cut is ringed red, like its box on the screen.
@@ -75,6 +76,37 @@ final class AreaContextTests: XCTestCase {
         // The cut stands on the bottom edge.
         XCTAssertGreaterThan(brightness(rep, 30, 180), 0.95)
         XCTAssertLessThan(brightness(rep, 30, 100), 0.1)
+    }
+
+    func testABoxOnTheRightPutsTheCutOnTheRight() throws {
+        // The same cut and screen, the box at 200,100 — right of the middle:
+        // the screen first, the cut `calloutGap` after it.
+        let cut = NSImage(size: NSSize(width: 60, height: 40), flipped: false) { r in
+            NSColor.white.setFill(); r.fill(); return true
+        }
+        let screen = NSImage(size: NSSize(width: 320, height: 200), flipped: false) { r in
+            NSColor.black.setFill(); r.fill(); return true
+        }
+        let box = CGRect(x: 200, y: 100, width: 60, height: 40)
+        XCTAssertTrue(AreaContext.cutsOnRight(box: box, screenWidth: 320))
+        let image = AreaContext.callout(cut: cut, cutSize: cut.size, screen: screen, box: box)
+        let gap = AreaContext.calloutGap
+        XCTAssertEqual(image.size, NSSize(width: 60 + gap + 320, height: 200))
+        let rep = try render(image, name: "callout-right.png")
+        // The screen at the left edge, the cut at the right one, on the bottom.
+        XCTAssertLessThan(brightness(rep, 30, 180), 0.1)
+        XCTAssertGreaterThan(brightness(rep, Int(320 + gap) + 30, 180), 0.95)
+        // In the gap, halfway along the upper line (box's right corner → cut's
+        // left one): red.
+        let from = CGPoint(x: 260, y: 100), to = CGPoint(x: 320 + gap, y: 160)
+        let midX = 320 + gap / 2
+        let mid = reddest(rep, Int(midX + 0.5),
+                          Int(from.y + (to.y - from.y) * ((midX - from.x) / (to.x - from.x)) + 0.5))
+        XCTAssertGreaterThan(mid.redComponent, 0.6)
+        XCTAssertLessThan(mid.greenComponent, 0.4)
+        // The cut is ringed red at its right edge.
+        let edge = color(rep, Int(320 + gap + 59), 180)
+        XCTAssertGreaterThan(edge.redComponent, 0.6)
     }
 
     // MARK: -
@@ -122,6 +154,11 @@ final class AreaContextTests: XCTestCase {
     /// `x, y` from the top-left, like the corners.
     private func color(_ rep: NSBitmapImageRep, _ x: Int, _ y: Int) -> NSColor {
         (rep.colorAt(x: x, y: y) ?? .clear).usingColorSpace(.deviceRGB) ?? .clear
+    }
+    /// The reddest of the pixel and its two vertical neighbours: a 1.5 pt
+    /// slanted line need not cover the one pixel its maths rounds to.
+    private func reddest(_ rep: NSBitmapImageRep, _ x: Int, _ y: Int) -> NSColor {
+        (y - 1...y + 1).map { color(rep, x, $0) }.max { $0.redComponent < $1.redComponent }!
     }
     private func brightness(_ rep: NSBitmapImageRep, _ x: Int, _ y: Int) -> CGFloat {
         let c = color(rep, x, y)

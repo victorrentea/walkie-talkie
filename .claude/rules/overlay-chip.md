@@ -477,6 +477,11 @@ yields to `--label`).
   draws cut + screen as **one** attachment (`calloutGap` 32 pt between them, both on the bottom edge)
   so a line can cross from one to the other — the cut's right corners to the red box's left ones,
   1.5 pt, dark halo. Two attachments on a line cannot draw across each other.
+  **The cut sits on its box's side** (2026-10-21, Victor: *"if the cropped area is more towards the
+  left hand side or the right hand side of the screen … the zoomed in image should stay on that …
+  respective side, which is closer"*): a box whose centre is right of the screen's middle
+  (`AreaContext.cutsOnRight`) draws the screen first and the cut after it, the lines from the cut's
+  left corners to the box's right ones.
   **The cut wears the same red ring** (2026-10-16, Victor: *"the large image picked also surrounded
   by a red rectangle … the small box on the big screen becomes the large box at the side of it"*):
   `ringWidth` 2 pt, inside the cut's edge so the lines still leave from its outer corners.

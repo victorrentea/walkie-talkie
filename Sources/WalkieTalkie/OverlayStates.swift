@@ -623,6 +623,22 @@ enum OverlayStates {
                                  inlineFrames: [1: (frames[1], pixels)])
             },
 
+            Shot(slug: "prompt-area-context-right", group: "The held prompt", title: "The prompt, a ✂️ area on the right of the screen",
+                 when: "A wheel-drag area whose box's centre is right of the screen's middle.",
+                 note: "2026-10-21, Victor: the zoomed-in cut stays on the side its box is nearer — here the screen comes first and the cut after it, the lines from its left corners to the box's right ones.",
+                 shape: "panel", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                let frames = mockShots(2)
+                let pixels = ScreenCapture.pixelSize(of: URL(fileURLWithPath: frames[1])) ?? CGSize(width: 320, height: 200)
+                let k = pixels.width / 320
+                let box = CGRect(x: 190 * k, y: 110 * k, width: 120 * k, height: 60 * k)
+                let said = "this button \(ShotMarker.Token.area(1, box)) should be green."
+                o.showSentPrompt(said, hold: 6, shots: frames, stamps: ["", "0:03"],
+                                 words: said, heard: heard,
+                                 inlineShots: [1: mockCut(frames[1], box) ?? frames[1]],
+                                 inlineFrames: [1: (frames[1], pixels)])
+            },
+
             Shot(slug: "prompt-move-context", group: "The held prompt", title: "The prompt, a ⇧-drag move: red to green",
                  when: "A wheel-drag area with ⇧ / right-click, then a second box: *this, moved to there*.",
                  note: "2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.",
