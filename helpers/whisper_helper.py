@@ -240,6 +240,15 @@ WORDS = os.environ.get("RELAY_WHISPER_WORDS", "0") == "1"
 # Applied only to a model with turbo's decoder shape (4 layers × 20 heads) —
 # the LoRA keeps it. `RELAY_WHISPER_ALIGNMENT=default` keeps mlx's 40.
 TURBO_ALIGNMENT_HEADS = [[2, 4], [2, 11], [3, 3], [3, 6], [3, 11], [3, 14]]
+# **And large-v3's ten** (2026-10-21, openai/whisper-large-v3's
+# generation_config.json): until then a large-v3 model — the `whisper-large-victor`
+# LoRA, 32 layers × 20 heads — fell back to mlx's 320, and the 18:22:54 take's last
+# 69 words all came back at 139.48 s with zero length (the 📸 landed at the end)
+# while the opening sentence was read four times over. With these: 367 words, no
+# repeats, speech to 164.3 s, the picture where he took it. 128 mels keeps
+# large-v1/v2 (80 mels, other heads) out.
+LARGE_V3_ALIGNMENT_HEADS = [[7, 0], [10, 17], [12, 18], [13, 12], [16, 1], [17, 14],
+                            [19, 11], [21, 4], [24, 1], [25, 6]]
 ALIGNMENT = os.environ.get("RELAY_WHISPER_ALIGNMENT", "official")
 
 
@@ -248,8 +257,11 @@ def use_alignment_heads():
         return
     try:
         model = ModelHolder.get_model(MODEL, mx.float16)
-        if (model.dims.n_text_layer, model.dims.n_text_head) == (4, 20):
+        shape = (model.dims.n_text_layer, model.dims.n_text_head)
+        if shape == (4, 20):
             model.set_alignment_heads(np.array(TURBO_ALIGNMENT_HEADS))
+        elif shape == (32, 20) and model.dims.n_mels == 128:
+            model.set_alignment_heads(np.array(LARGE_V3_ALIGNMENT_HEADS))
     except Exception as e:  # noqa: BLE001 — timings are a nicety; the words are not
         print(f"alignment heads not set: {e}", file=sys.stderr)
 

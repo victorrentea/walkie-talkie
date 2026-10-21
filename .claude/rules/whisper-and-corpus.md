@@ -40,6 +40,12 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   start that is silent, or a ≤ 240 ms voiced stub + ≥ 200 ms silence, to the next voice onset (20 ms
   RMS, floor p10 + 12 dB). A press mid-pause landed in that pause **45.7 % → 88.6 %** (35 real pauses,
   truth = the clip cut there and both halves decoded alone). `evals/local-word-timing/`.
+- **Large-v3 has its own ten alignment heads** (2026-10-21, `LARGE_V3_ALIGNMENT_HEADS`, applied for a
+  32 × 20 decoder with 128 mels). Without them `whisper-large-victor` fell back to mlx's 320 heads: the
+  18:22:54 take's last 69 words came back at one instant (139.48 s, zero length), the 📸 went to the
+  end, and the DTW's seek re-read the opening sentence four times. With them, through the helper: 367
+  words, speech to 164.3 s, the press at *"as you can see here, to [📸1]"*. `ShotMarker.place` also
+  refuses timings with ≥ 6 words stopped on one instant (footer `at m:ss` instead).
 - **Never reintroduce the Wispr Flow database path.** Until 2026-08-29 the relay watched Wispr Flow's
   `flow.sqlite`, transcribed the WAV blob it found there, swallowed Wispr's own paste and fell back to
   Wispr's text. All of it went whole: `WisprWatcher.swift`, `FlowDB.swift`, `DictationMonitor.swift`,
