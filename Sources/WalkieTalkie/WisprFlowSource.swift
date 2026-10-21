@@ -2408,6 +2408,7 @@ final class WisprFlowSource: DictationSource {
 
     private func closeListening(_ why: String) {
         stopReholdBase = -1   // every end of a stop, not only the chord path (wave 4)
+        givingUpForBlip = false   // the feed watch's give-up latch (wave 7)
         guard machineRecording || speculative else { return }
         // Batch 4: a sentence the relay's own recording carried (Wispr out of it)
         // closes here too, at his stop — and ends on that recording.
@@ -2496,6 +2497,9 @@ final class WisprFlowSource: DictationSource {
                 return
             }
             endCapture(quiet: true)
+            // A held take's dismissed row is watched to its end like any given-up
+            // row (wave 7): a start right after must not chord into it.
+            if let r = ownRow { watchLateRow(r, dismissedAt: ownDismissed) }
             endCancelledWithRecording()
             return
         }
@@ -2862,13 +2866,21 @@ final class WisprFlowSource: DictationSource {
             if archived > Self.replayCeiling {
                 // **Too long to say again** (wave 6): replaying 20+ s at 1.25× holds
                 // his stop for most of the take; the local model has the same WAV.
+                // Latched until the sentence closes (wave 7): the condition stays
+                // true after the give-up, and a second call wiped the kept row.
                 if !givingUpForBlip {
                     givingUpForBlip = true
                     DispatchQueue.main.async { [weak self] in
-                        guard let self else { return }
+                        guard let self, self.ownTakeOnly == nil else { return }
+                        // Wispr ending the dictation itself (its row has a duration or
+                        // a status) is not a blip: the Wispr-side close delivers it
+                        // (wave 7 — the nullRowHold test, as for any input-off).
+                        if let row = self.historyRow, let e = WisprHistory.entry(rowid: row),
+                           !(WisprState.intermediateStatuses.contains(e.status) && e.duration == nil) {
+                            return
+                        }
                         self.giveUpOnWispr(String(format: "Wispr Flow's input went off %.0f s into the take — "
                                                   + "too long to replay", archived))
-                        self.givingUpForBlip = false
                     }
                 }
             } else {
@@ -3647,6 +3659,8 @@ final class WisprFlowSource: DictationSource {
     /// after the ⌃Escape — a deferred take waits for that.
     @discardableResult
     private func giveUpOnWispr(_ why: String) -> Bool {
+        // Already out (wave 7): the kept row must not be overwritten.
+        guard ownTakeOnly == nil else { return false }
         ownTakeRow = historyRow
         guard holdOwnTake(why) else { ownTakeRow = nil; return false }
         relayDismissedAt = CFAbsoluteTimeGetCurrent()
