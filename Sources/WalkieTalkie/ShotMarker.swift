@@ -964,7 +964,7 @@ enum ShotMarker {
     /// derived from the file:
     ///
     /// ```
-    /// [📸0🖱️@1000:800]  [📸3✂️900,345→2594,574]  [selected: "…" from app Chrome]
+    /// [📸0 auto]  [📸1]  [📸3✂️900,345→2594,574]  [selected: "…" from app Chrome]
     /// [chrome-selection-1: Place order]  [🎦1⏺️]  [🎦1⏹️5s]
     /// ```
     ///
@@ -996,15 +996,22 @@ enum ShotMarker {
         }
 
         /// The token without its brackets, for a footer row that goes on to say
-        /// when (`[📸1🖱️@1204:388 at 0:04]`) — the frame's own words, not a
-        /// second notation for them.
+        /// when (`[📸1 at 0:04]`) — the frame's own words, not a second notation
+        /// for them.
         /// `copied` (2026-10-15): an image he copied while the prompt recorded
-        /// (`AutoAttach.clipboard`) — not a frame of his screen, so no pointer.
+        /// (`AutoAttach.clipboard`) — not a frame of his screen.
+        ///
+        /// **No pointer since 2026-10-21** (Victor, of `[📸1🖱️@1373:863]` at the
+        /// end of a prompt: *"I want to get rid of this part in the image
+        /// inserts"*). `🖱️@x:y` is gone from every rendering of the token — in
+        /// the words, the leading `[📸0 auto]` and the footer's clock rows alike,
+        /// one vocabulary. `mouse` is still taken so the callers keep handing it
+        /// over; the prompt panel draws it as its yellow dot (`promptPointers`),
+        /// which never read it from here.
         static func caption(shot index: Int, mouse: CGPoint?, auto: Bool = false,
                             copied: Bool = false) -> String {
             let tail = auto ? " auto" : copied ? " 📋 copied" : ""
-            guard let mouse = mouse else { return "📸\(index)\(tail)" }
-            return "📸\(index)🖱️@\(Int(mouse.x)):\(Int(mouse.y))\(tail)"
+            return "📸\(index)\(tail)"
         }
 
         /// `✂️` is *I dragged a box round this*, and the four numbers are its
@@ -1134,6 +1141,15 @@ enum ShotMarker {
         -> (text: String, shots: [Int], selections: [Int], elements: [Int]) {
         let spoken = words.map(\.text).joined()
         guard inline, !cues.isEmpty, !words.isEmpty else { return (spoken, [], [], []) }
+        // **A clock that stopped places nothing** (2026-10-21) — the cues go to
+        // the footer with their `at m:ss`, as for a reply with no `words[]`.
+        let stuck = longestStoppedRun(words)
+        if stuck >= stoppedClockRun {
+            Log.info("markers: \(stuck) words share one instant in the timings — the "
+                     + "recogniser's clock stopped, so \(cues.count) cue(s) stay out of the "
+                     + "words and keep their clocks under them")
+            return (spoken, [], [], [])
+        }
 
         /// Where this cue goes: in front of the first token that had not started
         /// yet. `>=` rather than `>` so a press in the gap before a word belongs
@@ -1218,6 +1234,40 @@ enum ShotMarker {
         }
         return (out.trimmingCharacters(in: .whitespacesAndNewlines),
                 foundShots, foundSelections, foundElements)
+    }
+
+    /// **How many words in a row may share one instant before the timings are
+    /// not a clock** (2026-10-21). Healthy timings never get near it: the
+    /// longest run of zero-length words at one instant is ≤ 2 over 180 decodes
+    /// of `evals/local-word-timing/` (turbo, three head sets) and ≤ 1 over
+    /// Scribe's 60 references. The 18:19:01 dictation that day had **69** — the
+    /// Large LoRA decoded with mlx's default alignment heads (OpenAI's large-v3
+    /// ten were never set; `whisper_helper.use_alignment_heads` set heads only
+    /// for turbo's 4 × 20 decoder), so DTW parked the last 69 words, *"The
+    /// microphone is correctly set, as you can see here … from now."*, all at
+    /// 139.48 s while he spoke them until 164 s. The press at 142.77 s fell
+    /// after every word and `[📸1]` went to the very end of a 2,669-char prompt.
+    /// Re-decoded with the large-v3 heads the same take puts it after *"as you
+    /// can see here, to"*. A wrong place reads as a fact; a clock row does not.
+    static let stoppedClockRun = 6
+
+    /// The longest run of consecutive words (spacing tokens skipped) that each
+    /// take no time and all start at the same instant.
+    static func longestStoppedRun(_ words: [TimedWord]) -> Int {
+        let still: TimeInterval = 0.005
+        var best = 0, run = 0
+        var at: TimeInterval?
+        for w in words where !w.isSpacing && !w.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if w.end - w.start < still {
+                run = (at.map { abs(w.start - $0) < still } ?? false) && run > 0 ? run + 1 : 1
+                at = w.start
+            } else {
+                run = 0
+                at = nil
+            }
+            best = max(best, run)
+        }
+        return best
     }
 
     /// The seams the substitution leaves: a doubled space where two bits of

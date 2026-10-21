@@ -122,7 +122,7 @@ Every attachment is a **token where you made it**, and a legend under the words 
 where the files are. A real one:
 
 ```
-[📸0🖱️@1958:1511 auto]
+[📸0 auto]
 make the overlay draw above the screen grow effect, right now it ends up under it
 
 kamikaze
@@ -134,7 +134,7 @@ kamikaze
 
 ### Screenshots
 
-- **📸0 is automatic**: the screen as it was when you started talking (`auto`), with where the pointer was (`🖱️@x:y`).
+- **📸0 is automatic**: the screen as it was when you started talking (`auto`). The token says no pointer coordinates (2026-10-21); the prompt panel draws the pointer as a yellow dot on its preview.
 - **More shots**: the shutter (🔽 in Logi mode, the back button in Wheel mode) while a prompt records. The frame flies into the chip's 📸 and a red target blooms on the desktop where the pointer was. **Nothing is drawn into the picture**: a mark would cover what it points at.
 - **A region**: hold the wheel and drag during a dictation (`✂️x,y→x,y` in the token). ⌘ moves the box, ⌥ draws it from the middle, Esc calls it off. It is Victor Addons' crop, shared through `victor-mac-kit`.
 - **Two files per shot**: the retina original, and an 800 px copy that the agent reads. Same answers in the evals, about 40% fewer tokens.

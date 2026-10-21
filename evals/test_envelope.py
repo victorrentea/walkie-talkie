@@ -350,7 +350,7 @@ class FrameList(unittest.TestCase):
         """
         # A line of its own (2026-09-25) — the token is the frame's caption, not
         # the first word of the sentence; no blank line under it since 2026-09-29.
-        self.assertRegex(self.line, r"^\[📸0(🖱️@\d+:\d+)? auto\]\n\S")
+        self.assertRegex(self.line, r"^\[📸0 auto\]\n\S")
         # Its file: a row of its own, or the template the plain frames share.
         self.assertRegex(self.line, r"\[📸[0n] = 📁/screenshot-[0n](-\d+)?-800px\.jpg")
         self.assertNotIn("[and shot", self.line)
@@ -358,19 +358,21 @@ class FrameList(unittest.TestCase):
         self.assertNotIn("open only if the words need it:", self.line)
 
     def test_a_frame_the_words_could_not_carry_says_where_and_when(self):
-        """**Its pointer and its clock, in the footer** (2026-09-30).
+        """**Its clock, in the footer** (2026-09-30; no pointer since 2026-10-21).
 
         This route has no word timings, so no press is in the words. Until
-        2026-09-30 such a frame kept a full row with `at 0:0N` and lost its
-        pointer, and its clock stopped the fold. Now the files fold into the
-        template and each frame keeps a short row: `[📸1🖱️@1204:388 at 0:04]`
-        (`evals/envelope-wispr/`: 6/6 on every question, both models).
+        2026-09-30 such a frame kept a full row with `at 0:0N`, and its clock
+        stopped the fold. Now the files fold into the template and each frame
+        keeps a short row: `[📸1 at 0:04]` (`evals/envelope-wispr/`: 6/6 on
+        every question, both models — measured with the pointer, which Victor
+        had taken out of every token on 2026-10-21).
         """
         # The route resolves `Screenshot one` in the text, so a press may be in
-        # the words; either way it carries its pointer, and no row is the old
-        # pointer-less `[📸1 at 0:04 = …]`.
+        # the words; either way no row is the old `[📸1 at 0:04 = …]`, and no
+        # token says where the pointer was.
+        self.assertNotIn("🖱", self.line)
         for n in (1, 2):
-            self.assertRegex(self.line, r"\[📸%d🖱️@\d+:\d+( at \d+:\d+)?\]" % n)
+            self.assertRegex(self.line, r"\[📸%d( at \d+:\d+)?\]" % n)
             self.assertNotRegex(self.line, r"\[📸%d at \d+:\d+ = " % n)
 
     def test_what_was_said_twice_is_no_longer_said_at_all(self):
@@ -752,7 +754,7 @@ class FoldedFrameRows(unittest.TestCase):
 
     def test_the_automatic_frame_says_so(self):
         """`auto` on 📸0 — five characters for the one thing readers guessed at."""
-        self.assertRegex(self.line, r"^\[📸0🖱️@\d+:\d+ auto\]")
+        self.assertRegex(self.line, r"^\[📸0 auto\]")
         # And only there: a frame he pressed for must not claim to be automatic.
         self.assertEqual(self.line.count(" auto]"), 1)
 
@@ -779,15 +781,15 @@ class WisprFrameList(unittest.TestCase):
         self.assertFalse(self.line.startswith("[📸0"), self.line[:80])
         self.assertIn("uite aici", self.line.split("\n")[0])
 
-    def test_picture_zero_is_in_the_footer_with_pointer_and_clock(self):
+    def test_picture_zero_is_in_the_footer_with_its_clock(self):
         footer = self.line.split("\n\n", 1)[1]
-        self.assertRegex(footer, r"\n\[📸0🖱️@\d+:\d+ auto at 0:00\]")
+        self.assertRegex(footer, r"\n\[📸0 auto at 0:00\]")
         self.assertIn("[📸n = 📁/screenshot-n-800px.jpg, or -original.jpg at ", footer)
         self.assertEqual(self.line.count(" auto"), 1)
-        # A press the words did not take is listed the same way (pointer, clock).
+        # A press the words did not take is listed the same way (its clock).
         for n in (1, 2):
-            if "[📸%d🖱️" % n not in self.line.split("\n\n", 1)[0]:
-                self.assertRegex(footer, r"\[📸%d🖱️@\d+:\d+ at \d+:\d+\]" % n)
+            if "[📸%d]" % n not in self.line.split("\n\n", 1)[0]:
+                self.assertRegex(footer, r"\[📸%d at \d+:\d+\]" % n)
 
 
 @unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")

@@ -23,7 +23,7 @@ final class AreaContextTests: XCTestCase {
     }
 
     func testNotAnArea() {
-        XCTAssertNil(AreaContext.corners(in: "[📸2🖱️@1204:388]"))
+        XCTAssertNil(AreaContext.corners(in: "[📸2]"))
         XCTAssertNil(AreaContext.corners(in: "[selected: \"x\"]"))
     }
 

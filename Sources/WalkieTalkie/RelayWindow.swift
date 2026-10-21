@@ -3096,9 +3096,10 @@ private let heardLabel = NSTextField(labelWithString: "")
                 let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
                 var drawn = image
                 // The pointer is a yellow dot on the frame, not pixels in its
-                // caption (2026-10-17). Only a `🖱️` token's picture is the whole
-                // frame the fraction was measured on.
-                if raw.contains("🖱️"), let at = promptPointers[n] {
+                // caption (2026-10-17). Only a whole frame's picture is what the
+                // fraction was measured on — never a ✂️ cut (the token says no
+                // `🖱️` any more since 2026-10-21; `promptPointers` skips areas too).
+                if !raw.contains("✂️"), let at = promptPointers[n] {
                     drawn = Self.pointerDot(on: image, at: at, size: size)
                 }
                 // A ✂️ area: the whole screen it was cut from, after it on the

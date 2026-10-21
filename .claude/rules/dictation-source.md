@@ -515,6 +515,18 @@ per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py
   `LocalWhisper.Result.timedWords` drops them), the source answers `meter.offset(of:)`, and both
   `didTranscribe` and the local fallback hand `words` to `resolvingMarkers`. Precision, cost:
   `evals/local-word-timing/`; desk proof `evals/test_local_marker_place.py`.
+- **A stopped clock places nothing** (2026-10-21, `ShotMarker.longestStoppedRun` ≥
+  `stoppedClockRun` 6): ≥ 6 words in a row of zero length at one instant → no cue goes in the words,
+  each keeps its `at m:ss` row in the footer (log `markers: N words share one instant …`). Healthy
+  timings never pass 2 (180 turbo decodes, 60 Scribe references). The case: 18:19:01, Local
+  **Large** LoRA (32 × 20 decoder) — `whisper_helper.use_alignment_heads` set heads only for turbo's
+  4 × 20, so DTW ran on mlx's default 320 heads and parked the last 69 words at 139.48 s (spoken
+  until 164 s); the press at 142.77 s put `[📸1]` at the very end. The same decode's seek
+  (`seek = last_word_end`) re-read the opening 30 s four times — the duplicated first sentence in
+  that prompt is the same bug. **Re-decoded with large-v3's own ten heads** (`[[7,0],[10,17],[12,18],
+  [13,12],[16,1],[17,14],[19,11],[21,4],[24,1],[25,6]]`, openai/whisper-large-v3
+  `generation_config.json`): 367 words, no repeat, speech to 164.32 s, `[📸1]` after *"as you can see
+  here, to"*. Those heads belong in the helper for a 32 × 20, 128-mel decoder.
 - **Reserved at the gesture, keyed by path** (`shotMarkerNumbers`, before `screencapture` runs); the
   safety net is a **set** of real pictures, not a count. `ShotMarker.render` is the one vocabulary.
   Selection numbers are reserved under `fileSelection`'s lock (`reserveMarkerLocked`) and spoken after.

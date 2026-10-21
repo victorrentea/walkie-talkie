@@ -68,28 +68,28 @@ final class TerminalLineTests: XCTestCase {
 
     // 2026-09-29 15:19: a long envelope collapsed in the box is still unsent.
     func testACollapsedPasteInTheBoxIsStillInPrompt() {
-        let sent = "[📸0🖱️@1425:1838 auto]\nI still don't see the change here\n\n[Dictated in RO or EN]"
+        let sent = "[📸0 auto]\nI still don't see the change here\n\n[Dictated in RO or EN]"
         let tail = "⏺ done\n────\n❯ [Pasted text #1 +6 lines]\n────\n  Opus 5.5 · auto mode on"
         XCTAssertTrue(TerminalBinding.stillInPrompt(tail: tail, sent: sent))
         XCTAssertFalse(TerminalBinding.submitted(tail: tail, sent: sent))
     }
 
     func testACollapsedPasteAboveAnEmptyBoxIsNotPressedAgain() {
-        let sent = "[📸0🖱️@1425:1838 auto]\nI still don't see the change here"
+        let sent = "[📸0 auto]\nI still don't see the change here"
         let tail = "> [Pasted text #1 +6 lines]\n\n✻ Thinking…\n────\n❯ \n────\n  Opus 5.5 · auto mode on"
         XCTAssertFalse(TerminalBinding.stillInPrompt(tail: tail, sent: sent))
     }
 
     // 15:30: the box held the envelope's later lines, not its first.
     func testALaterLineOfTheEnvelopeInTheBoxIsStillInPrompt() {
-        let sent = "[📸0🖱️@1425:1838 auto]\nfix the legend\n\n[Dictated in RO or EN]\n[📁=$WALKIE_SHOTS/2026-09-29-15-23-32/15-29-57]"
+        let sent = "[📸0 auto]\nfix the legend\n\n[Dictated in RO or EN]\n[📁=$WALKIE_SHOTS/2026-09-29-15-23-32/15-29-57]"
         let tail = "⏺ done\n────\n❯ [Dictated in RO or EN]\n  [📁=$WALKIE_SHOTS/2026-09-29-15-23-32/15-29-57]\n────\n  Opus 5.5 · auto mode on"
         XCTAssertTrue(TerminalBinding.stillInPrompt(tail: tail, sent: sent))
     }
 
     // 15:26: box drawn empty, the footer says a paste is still held.
     func testPasteAgainToExpandIsStillInPrompt() {
-        let sent = "[📸0🖱️@1425:1838 auto]\na seventy second dictation"
+        let sent = "[📸0 auto]\na seventy second dictation"
         let tail = "────\n❯ \n────\n  Opus 5.5 · human-review · paste again to expand"
         XCTAssertTrue(TerminalBinding.stillInPrompt(tail: tail, sent: sent))
     }

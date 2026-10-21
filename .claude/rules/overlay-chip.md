@@ -459,10 +459,10 @@ yields to `--label`).
   *"pună o bulină galbenă pe captura ecranului acolo unde era mouse, în loc să îmi arate mouse cu
   pixel … e inutil pentru mine"*). `RelayWindow.withoutPointer` cuts `🖱️@x:y` out of every token the
   panel shows (`[📸2]`, `[📸0 auto]`); `RelayWindow.pointerDot` draws `systemYellow`, radius
-  `max(4, 5 % of the shorter side)`, ringed black 60 % — on the inline frame (a `🖱️` token only; an
+  `max(4, 5 % of the shorter side)`, ringed black 60 % — on the inline frame (a whole frame only; an
   area's picture is its cut-out) and on every strip thumbnail, 📸0 included. `AppDelegate` hands
   `pointers: [N: fraction of the frame]` from `shotMice` / `shotSizes`, areas skipped. **Panel only**:
-  the envelope keeps `🖱️@x:y` and the JPEGs stay clean. Shots `prompt-shots`, `prompt-inline`.
+  the JPEGs stay clean, and since 2026-10-21 the envelope says no `🖱️@x:y` either (`screenshots-and-selection.md`); the dot is drawn on every whole frame (`!raw.contains("✂️")`), `withoutPointer` only tidies an old token. Shots `prompt-shots`, `prompt-inline`.
 - **A ✂️ area brings the whole screen with it** (2026-10-15, Victor: *"put after them a picture of the
   entire screen … grayed out the rest and highlighting … the area that was selected … bordered in a
   bit of red rectangle, so it's clear that I'm sending also the entire screen"*). After the cut-out,

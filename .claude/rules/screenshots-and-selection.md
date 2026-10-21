@@ -17,7 +17,13 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 ## The shot's name (2026-09-19 — it says the number, and nothing else)
 
 - **`screenshot-3-original.jpg`, `screenshot-3-800px.jpg`, and for a drag `screenshot-3.jpg`** (the region, unscaled). The digit is the picture's place in this dictation — 0 is the automatic context frame — and it is the same digit the sentence's token says (`📸3`). `ScreenCapture.stem` writes it, `ScreenCapture.number(of:)` reads it back, `sibling(of:)` computes the other two names from it. → journal: *The envelope becomes tokens where he made them (2026-09-19)*
-- **Everything the name used to carry is a token in the words now** — the offset, the pointer (`[📸1🖱️@1000:800]`) and the dragged rectangle (`[📸3✂️900,345→2594,574]`). Said once, where he said it, instead of twice in two notations.
+- **Everything the name used to carry is a token in the words now** — the offset and the dragged rectangle (`[📸3✂️900,345→2594,574]`). Said once, where he said it, instead of twice in two notations.
+- **No pointer in any shot token since 2026-10-21** (Victor, of `[📸1🖱️@1373:863]` ending a prompt:
+  *"I want to get rid of this part in the image inserts"*). `ShotMarker.Token.caption` writes `📸N`
+  (+ ` auto` / ` 📋 copied`) and nothing else — in the words, the leading `[📸0 auto]` and the
+  footer's `[📸1 at 0:04]` alike, one vocabulary. Callers still pass `mouse:`; it only feeds the
+  panel's yellow dot (`promptPointers`). The `walkie-inbox` mod counts `📸\d+` and hides a token-only
+  first line — both still hold. `evals/envelope-*` measured the old shape and were not re-run.
 - **The number is reserved at the gesture and is unconditional** (`AppDelegate.reservePicture`): two presses a third of a second apart can finish in the other order, and the name needs a number whether or not a marker can be placed. The cue is the optional half (`cueLocked`).
 - **The disambiguating `-2` goes on the base, before the suffix** (`uniqueBase`): every dictation in a session folder produces a `screenshot-0`, and a `screenshot-0-original-2.jpg` would take its siblings into names nothing can compute.
 
@@ -35,11 +41,11 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
   any of them~~ (dropped 2026-09-30, below). An area frame is never folded — it carries corners.
 - **On Wispr the words come first and every frame follows them (2026-09-30).** No word timings, so
   no token can stand in the words — `leading` stands aside and 📸0 goes to the footer as
-  `[📸0🖱️@x:y auto at 0:00]` (`Message.wordsUntimed`, true for `WisprFlowSource.engineLabel`).
+  `[📸0 auto at 0:00]` (`Message.wordsUntimed`, true for `WisprFlowSource.engineLabel`).
   Victor: *"Prompt-ul să înceapă direct cu ce am dictat eu și ulterior să fie pozele cu timpii"*.
 - **A frame whose token is not in the words gets pointer + clock in the footer, and a clock folds**
   (2026-09-30, reverses *a row carrying `at 0:08` is never folded*): the template keeps the files,
-  each such frame a short row `[📸1🖱️@1204:388 at 0:04]`; a lone frame keeps its full row with the
+  each such frame a short row `[📸1 at 0:04]`; a lone frame keeps its full row with the
   same caption. The pointer used to be dropped on this path. Measured (`evals/envelope-wispr/`):
   every question 6/6 on both models, 366 chars against 456. Spoken markers into Wispr's audio are
   the open alternative (`evals/wispr-markers/`, 2026-09-30 evening).
