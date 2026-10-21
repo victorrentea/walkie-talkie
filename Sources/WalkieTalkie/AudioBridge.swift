@@ -149,6 +149,15 @@ final class AudioBridge {
     private var lastVoiced = false
     private var pacer = BridgePacer()
     private var backlog: [(buffer: AVAudioPCMBuffer, seconds: TimeInterval, voiced: Bool, marker: Bool)] = []
+    /// **Every chunk of this take, from the gesture** (2026-10-21) — what a
+    /// re-hold puts back in the backlog. On `queue`; capped at `archiveCap`.
+    private var archive: [(buffer: AVAudioPCMBuffer, seconds: TimeInterval, voiced: Bool, marker: Bool)] = []
+    private var archived: TimeInterval = 0
+    private static let archiveCap: TimeInterval = 600
+    /// Bumped at every re-hold: a `.dataPlayedBack` callback of an older
+    /// generation (the player's stop calls them all) moves no count.
+    private var generation = 0
+    private var reholds = 0
     /// **Buffers that are a spoken marker, not his voice** (2026-09-30) —
     /// registered by `noteMarker` before the recorder hands them on. Under `lock`.
     private var markerIDs = Set<ObjectIdentifier>()
@@ -288,6 +297,9 @@ final class AudioBridge {
             self.lastVoiced = false
             self.pacer = BridgePacer(tuning: Self.tuning)
             self.backlog.removeAll()
+            self.archive.removeAll()
+            self.archived = 0
+            self.reholds = 0
             self.playing = []
             self.keeping = holding
             self.startedAt = CFAbsoluteTimeGetCurrent()
@@ -319,6 +331,29 @@ final class AudioBridge {
         held = 0
         lock.unlock()
         queue.async { [weak self] in self?.playBacklog(why) }
+    }
+
+    /// **Wispr's input went off mid-sentence: hold again, and replay the whole
+    /// take at its next open** (2026-10-21).
+    ///
+    /// Victor: *"Wispr Flow engine lost the beginning of my dictation"*. Row
+    /// 19484 (15:34:46): the bridge was released 179 ms after the gesture, then
+    /// Wispr's input went off and back six times in two seconds (`a blip, not the
+    /// end of the sentence`). Wispr kept 6.32 s of an 8.7 s take — the audio
+    /// after its **last** reopen — and the transcript began mid-sentence
+    /// (*"down called volumetry.md …"*). Wispr restarts its recording when it
+    /// reopens its input, and From Walkie drops what is written while nobody
+    /// reads. So an off edge throws away what the player still holds and puts the
+    /// whole take back in the backlog; the next `release()` cuts the silence ahead
+    /// of the first word and paces it back to live like any held start. Only
+    /// while the relay still takes buffers (`accepting`) — after its stop, the
+    /// input closing is Wispr ending the sentence.
+    func rehold(_ why: String) {
+        lock.lock()
+        guard isRunning, !holding, accepting else { lock.unlock(); return }
+        holding = true
+        lock.unlock()
+        queue.async { [weak self] in self?.holdAgain(why) }
     }
 
     /// **Stop taking buffers, without touching the recorder** (2026-09-22).
@@ -417,6 +452,10 @@ final class AudioBridge {
         lock.lock()
         pending = max(0, pending - seconds)
         guard isRunning else { lock.unlock(); return }
+        if archived < Self.archiveCap {
+            archive.append((buffer, seconds, voiced, marker))
+            archived += seconds
+        }
         if keeping {
             // Before the release it waits in `held`; after it (the replay not
             // yet run), it is already Wispr's to hear and counts as queued.
@@ -431,9 +470,34 @@ final class AudioBridge {
         play(buffer, seconds: seconds, voiced: voiced, lag: lag, marker: marker)
     }
 
+    private func holdAgain(_ why: String) {
+        guard isRunning, let player else { return }
+        generation += 1
+        Self.guarded("stopping the player for a re-hold") {
+            player.stop()
+            player.play()
+        }
+        playing = []
+        backlog = archive
+        keeping = true
+        reholds += 1
+        lock.lock()
+        let stillHolding = holding
+        if stillHolding { held = archived; queued = 0 } else { queued = archived; held = 0 }
+        lock.unlock()
+        rateNow = 0; pace()
+        caughtUpAt = 0
+        Log.info(String(format: "🔀 bridge held again (%@) — re-hold %d: the whole take (%.2f s) "
+                        + "goes back to Wispr at its next open", why, reholds, archived))
+        // A release that came in between already ran its own replay.
+        if !stillHolding { playBacklog("released during the re-hold") }
+    }
+
     private func playBacklog(_ why: String) {
+        guard keeping else { return }
         releasedAt = CFAbsoluteTimeGetCurrent()
         let chunks = backlog
+        guard !chunks.isEmpty else { keeping = false; return }
         backlog.removeAll()
         keeping = false
         let first = BridgePacer.trimStart(chunks.map { ($0.seconds, $0.voiced) }, pad: pacer.tuning.leadPad)
@@ -465,12 +529,14 @@ final class AudioBridge {
             lock.lock(); queued = max(0, queued - seconds); lock.unlock()
             return false
         }
+        let gen = generation
         let scheduled = Self.guarded("scheduling a buffer") {
             player.scheduleBuffer(ready, at: nil, options: [],
                                   completionCallbackType: .dataPlayedBack) { [weak self] _ in
                 guard let self else { return }
-                self.lock.lock(); self.queued = max(0, self.queued - seconds); self.lock.unlock()
                 self.queue.async {
+                    guard gen == self.generation else { return }
+                    self.lock.lock(); self.queued = max(0, self.queued - seconds); self.lock.unlock()
                     let was = self.playing.isEmpty ? false : self.playing.removeFirst()
                     if was, self.playing.first != true {
                         self.lock.lock(); let behind = self.queued; self.lock.unlock()
@@ -578,6 +644,8 @@ final class AudioBridge {
             playFormat = nil
             toPlay = nil
             backlog.removeAll()
+            archive.removeAll()
+            archived = 0
             playing = []
             keeping = false
             if neverHeard > 0 {
@@ -672,7 +740,7 @@ final class AudioBridge {
         Self.guarded("stopping a failed bridge") { player?.stop(); engine?.stop() }
         self.player = nil; self.pitch = nil; self.engine = nil
         playFormat = nil; toPlay = nil
-        backlog.removeAll(); keeping = false; playing = []
+        backlog.removeAll(); archive.removeAll(); archived = 0; keeping = false; playing = []
         Log.error("🔀 audio bridge down mid-take — \(why); Wispr hears nothing more, "
                   + "the relay's own recording carries the sentence")
     }

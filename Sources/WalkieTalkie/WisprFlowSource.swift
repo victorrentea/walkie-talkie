@@ -2542,6 +2542,13 @@ final class WisprFlowSource: DictationSource {
         let saw = feedSawOpen, last = feedLastOpen
         feedLock.unlock()
         if open, bridge.isHolding { bridge.release("Wispr's input is running") }
+        // **Off under a relay sentence: Wispr will start its recording over at
+        // the reopen** (2026-10-21, row 19484 lost its first 2.4 s to six such
+        // blips) — the bridge holds again and replays the whole take then. Two
+        // ticks (≥ 50 ms) off, so one odd sample is not an edge.
+        if feed == .relay, saw, !open, now - last >= 0.05, !bridge.isHolding {
+            bridge.rehold(String(format: "Wispr's input went off %.0f ms ago", (now - last) * 1000))
+        }
         guard feed == .own else { return }
         if saw ? now - last >= 0.3 : now - since >= Self.ownFeedNoShow {
             endOwnFeed(saw ? "Wispr closed its input" : "Wispr never opened its input")

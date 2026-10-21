@@ -675,6 +675,14 @@ name `Wispr Feed`); his microphone is `InputDevice.resolve()`, for Wispr too.
   after a device change`); past that, or with From Walkie gone, `die()` takes it down with the counts at
   zero so the stop chord does not wait for audio nobody will play. `ObjCTryTests` pins the guard. The
   guest's crash reports kept no exception text, so the exact condition is still a guess.
+- **Wispr's input off mid-sentence = hold again, replay the whole take at the reopen** (2026-10-21,
+  `AudioBridge.rehold`, from `feedWatchTick`: off ≥ 50 ms under a relay feed, before the relay's stop).
+  Row 19484: released 179 ms after the gesture, then six input blips in 2 s; Wispr kept 6.32 s of 8.7
+  (*"down called volumetry.md…"*) — **Wispr restarts its recording at a reopen**, so whatever was
+  played before the last one is gone. The bridge archives every chunk of the take (≤ 600 s), a re-hold
+  stops the player (stale `.dataPlayedBack` callbacks dropped by `generation`) and puts the archive
+  back in the backlog; the next release trims and catches up as usual. Log `🔀 bridge held again`.
+  Unverified: whether a blip ever *keeps* the earlier audio (a replay would then say it twice).
 - `GET /test/state` → `wisprLive.bridge` {`feed`, `holding`, `held`, `queued`, `pending`}.
 
 ## A Wispr whose microphone does not open is out of the sentence at 3 s (2026-10-08)
