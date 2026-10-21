@@ -210,6 +210,15 @@ protocol DictationSource: AnyObject {
 
 }
 
+/// **One take counter for every source** (review 2026-10-22): each source kept
+/// its own from 0, so a borrowed local take 1 could resolve to a parked Wispr
+/// take-1 sentence (`AppDelegate.sentence(forTake:)` matches the number only).
+enum TakeSerial {
+    private static var n = 0
+    private static let lock = NSLock()
+    static func next() -> Int { lock.lock(); defer { lock.unlock() }; n += 1; return n }
+}
+
 /// One closed take, as `closedTakeAudio` answers it.
 struct TakeAudio {
     let url: URL
@@ -237,6 +246,11 @@ struct TimedWord {
     /// anything here asks is *is this a gap*, and `audio_event` — the third
     /// value, off in this app — is a word for every purpose below.
     let isSpacing: Bool
+    /// **A stretch with no timings inside it** (2026-10-22): a chunk the local
+    /// model decoded without word timings stands as one such word over its span
+    /// (`LocalWhisperSource.join`). A cue inside it cannot be placed — it keeps
+    /// its footer row (`ShotMarker.place`) rather than landing at the span's end.
+    var untimed = false
 }
 
 /// What a source hands back when the words arrive.

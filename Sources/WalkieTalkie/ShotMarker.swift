@@ -1161,7 +1161,13 @@ enum ShotMarker {
         // Spelled out rather than chained: the same two lines as one expression
         // are what the type checker gave up on (2026-09-19).
         var ordered: [(cue: Cue, slot: Int)] = []
-        for cue in cues { ordered.append((cue: cue, slot: slot(cue.at))) }
+        for cue in cues {
+            // Inside a stretch decoded without timings: its place is unknown, so
+            // it keeps its footer row (review 2026-10-22 — it used to land at the
+            // stretch's end, up to a chunk late, and "a wrong place reads as a fact").
+            if words.contains(where: { $0.untimed && $0.start < cue.at && cue.at < $0.end }) { continue }
+            ordered.append((cue: cue, slot: slot(cue.at)))
+        }
         ordered.sort { a, b in
             a.slot == b.slot ? a.cue.at < b.cue.at : a.slot < b.slot
         }

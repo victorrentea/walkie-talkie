@@ -5848,6 +5848,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash("⚠️ Wispr Flow is listening — one engine at a time", duration: 5)
             return
         }
+        // **No engine borrow over a sentence still in flight** (review 2026-10-22):
+        // a borrow swaps `source` to the local model, and every check that reads
+        // `source` then asks the wrong engine about the parked Wispr sentence —
+        // its Q14 fallback refused (Recover), ⌘⌃X and the countdown refused, and
+        // `dropDeadParked` letting it go while Wispr still works on it. Refused
+        // out loud instead; the next start after its words land borrows as before.
+        if source === wisprSource, liveInFlight || (parkedSentence.map { !$0.finished } ?? false),
+           wisprNotUpForAutoLocal() != nil || Connectivity.shared.offlineReason != nil
+            || (!wisprDefers && wisprSource.stillFinishingAbandonedRow != nil) {
+            Log.error("dictate gesture refused — Wispr Flow cannot take it and the previous sentence is still in flight (no borrow over it)")
+            overlay.flash("⏳ The previous sentence is still being transcribed", duration: 3)
+            return
+        }
         // **The sentence in flight steps aside** (Q12): its fields are parked in
         // it before this one's flags are set — see `Sentence`.
         let parkedHere: Bool
@@ -13098,7 +13111,7 @@ extension AppDelegate {
     /// instant its words arrived — which then ran on the live sentence's envelope.
     private func dropDeadParked() {
         guard let p = parkedSentence, !p.finished, p.waiting.isEmpty, !(p.env?.fallingBack ?? false),
-              let take = p.take, !source.isPending(take: take),
+              let take = p.take, !source.isPending(take: take), !wisprSource.isPending(take: take),
               take != source.answeringTake, take != wisprSource.answeringTake,
               Date().timeIntervalSince(parkedAt ?? p.startedAt) > Self.parkedGiveUp else { return }
         Log.error("🧾 sentence #\(p.id) never answered — let go so the next one is not held behind it")

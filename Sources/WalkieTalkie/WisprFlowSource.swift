@@ -355,7 +355,6 @@ final class WisprFlowSource: DictationSource {
     }()
     /// The take of the latest `start()` — deferred or not.
     private(set) var take = 0
-    private static var takeSerial = 0
     /// The take whose `didTranscribe` / `didEnd` is being called right now (set
     /// around each call, on main), so the relay hands it to its own sentence.
     private(set) var answeringTake: Int?
@@ -1168,8 +1167,7 @@ final class WisprFlowSource: DictationSource {
             Log.info("🗒️ the Scratchpad window is closed again — scratchpad mode is back")
         }
         let mode = wrapMode
-        Self.takeSerial += 1
-        take = Self.takeSerial
+        take = TakeSerial.next()
         // **The ring first, always.** Whatever the mode has to do to get Wispr
         // ready, Victor pressed a button and the beacon answers the button.
         gestureSeen("the relay asked for a dictation (\(mode.rawValue))", confident: true, relay: true, take: take)
@@ -4798,8 +4796,7 @@ extension WisprFlowSource {
     // MARK: Start
 
     func startDeferred(_ busy: String) {
-        Self.takeSerial += 1
-        take = Self.takeSerial
+        take = TakeSerial.next()
         let d = Deferred(take: take, older: machineTake, why: busy, mode: wrapMode,
                          underHeldPair: startUnderHeldPair, wav: Self.takeWAV("-take\(take)"))
         startUnderHeldPair = false

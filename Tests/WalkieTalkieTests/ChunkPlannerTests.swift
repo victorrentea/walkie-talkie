@@ -122,3 +122,16 @@ final class ChunkPlannerCapTests: XCTestCase {
         XCTAssertNotNil(ChunkPlanner.cut(hops: h, from: 0, now: Double(t)))
     }
 }
+
+final class UntimedCueTests: XCTestCase {
+    func testACueInsideAnUntimedChunkStaysInTheFooter() {
+        let words = [TimedWord(text: "Primul gând lung.", start: 0, end: 9.5, isSpacing: false, untimed: true),
+                     TimedWord(text: " Al", start: 10.0, end: 10.3, isSpacing: false),
+                     TimedWord(text: " doilea.", start: 10.4, end: 10.9, isSpacing: false)]
+        let cues = [ShotMarker.Cue(kind: .shot, index: 1, at: 4.0), ShotMarker.Cue(kind: .shot, index: 2, at: 10.35)]
+        let r = ShotMarker.place(words: words, cues: cues, shots: [1: "[📸1]", 2: "[📸2]"])
+        XCTAssertEqual(r.shots, [2])
+        XCTAssertFalse(r.text.contains("[📸1]"))
+        XCTAssertTrue(r.text.contains("Al [📸2] doilea."), r.text)
+    }
+}

@@ -311,8 +311,7 @@ final class ElevenLabsSource: DictationSource {
         isRecording = true
         // Unique across both ElevenLabs rows, so an engine switch between two
         // sentences in flight cannot hand one's answer to the other.
-        Self.takeSerial += 1
-        take = Self.takeSerial
+        take = TakeSerial.next()
         let t = take
         phase = .listening
         Log.info("🎙️ recording started for ElevenLabs — \(wav.lastPathComponent)")
@@ -410,7 +409,6 @@ final class ElevenLabsSource: DictationSource {
 
     /// The take of the latest `start()` — one per recording.
     private(set) var take = 0
-    private static var takeSerial = 0
     /// The take whose answer `didTranscribe` / `didEnd` are carrying right now
     /// (set around each call on the main queue), so the relay can hand it to
     /// the sentence it belongs to. Nil outside those calls.

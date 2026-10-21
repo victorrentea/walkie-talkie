@@ -218,8 +218,7 @@ final class LocalWhisperSource: DictationSource {
         isRecording = true
         // **A take of its own** (Q12 for the local model, 2026-10-21): an
         // earlier take may still be decoding — the relay keeps the order.
-        Self.takeSerial += 1
-        take = Self.takeSerial
+        take = TakeSerial.next()
         let job = Job(take: take)
         recordingJob = job
         DecodeRate.noteLeft(nil)
@@ -320,6 +319,17 @@ final class LocalWhisperSource: DictationSource {
     private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?, job: Job,
                                  tail: [Int16], tailEnd: Int, hops: [MeterHop]) {
         let t = job.take
+        // Cancelled while closing: answered once, here, with whatever was recorded.
+        if job.cancelled {
+            if job.cancelAtClose {
+                job.cancelAtClose = false
+                answer(t) {
+                    settlePhase(.done("dismissed"))
+                    didEnd?(.cancelled(audio: closed?.url, duration: closed?.duration ?? 0))
+                }
+            }
+            return
+        }
         guard let (wav, duration) = closed else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
             jobs[t] = nil
@@ -527,6 +537,8 @@ final class LocalWhisperSource: DictationSource {
         /// the time the decode is asked: a cold model, a chunk's fallback).
         var wantsWords = false
         var retriedDecode = false
+        /// Disowned between the stop and the close — `finishRecording` answers it.
+        var cancelAtClose = false
         init(take: Int) { self.take = take }
 
         /// Chunks abandoned: answers still coming are dropped, files removed.
@@ -563,7 +575,6 @@ final class LocalWhisperSource: DictationSource {
     /// Every take stopped and not answered yet, by take.
     private var jobs: [Int: Job] = [:]
     private(set) var take = 0
-    private static var takeSerial = 0
     private(set) var answeringTake: Int?
     private var unanswered: Set<Int> = []
     var answersPending: Int { unanswered.count }
@@ -605,6 +616,13 @@ final class LocalWhisperSource: DictationSource {
         jobs[job.take] = nil
         job.cancelled = true
         job.dropPieces()
+        // **Still closing** (the stop's `meter.stop()` not back from `audioQueue`,
+        // review 2026-10-22): answered there, with the WAV — answered here it went
+        // out with no audio for Recover and the file was orphaned.
+        if job.wav == nil, job.stoppedAt != nil {
+            job.cancelAtClose = true
+            return
+        }
         answer(job.take) {
             settlePhase(.done("dismissed"))
             didEnd?(.cancelled(audio: job.wav, duration: job.duration))
@@ -775,12 +793,13 @@ final class LocalWhisperSource: DictationSource {
             // On the piece's own ruler, like the helper's words — moved below.
             let w = r.words ?? (own.isEmpty ? [] : [TimedWord(text: own, start: 0,
                                                              end: max(0, (ends?[i] ?? offset) - offset),
-                                                             isSpacing: false)])
+                                                             isSpacing: false, untimed: true)])
             if !(words?.isEmpty ?? true), let first = w.first, !first.text.hasPrefix(" ") {
                 words?.append(TimedWord(text: " ", start: offset, end: offset, isSpacing: true))
             }
             words?.append(contentsOf: w.map {
-                TimedWord(text: $0.text, start: $0.start + offset, end: $0.end + offset, isSpacing: $0.isSpacing)
+                TimedWord(text: $0.text, start: $0.start + offset, end: $0.end + offset, isSpacing: $0.isSpacing,
+                          untimed: $0.untimed)
             })
         }
         if let w = words, w.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines) != text {
