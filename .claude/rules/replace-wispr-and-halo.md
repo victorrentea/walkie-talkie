@@ -336,6 +336,17 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
   crossed. A spinner, a creeping 97 % ring and a thin white arc were all tried that day and dropped.
   `halo.heads.progress` / `.localBudget` in `GET /test/state`; `WT_SHOOT_HALO`'s `words in flight`
   column draws it at two thirds.
+- **The ring keeps its fill across a focus change** (2026-10-21, Victor: *"If I change the focus of a
+  window during the progress bar … the wheel seems to start anew from scratch. It should continue
+  where it left off"*). Clicking through a window with no caret (`no caret found in it — no pin`)
+  sets `headsAt`/`noCaretAt` nil → `pinMoved` disarms → `DropArrow.hide`, and the next caret reading
+  raises it with a fresh `hold` — which restarted `holdFrom` at *now* and had also dropped
+  `localClock`. Now the clock is the sentence's: `CaretHalo.setDelivering(true)` stamps
+  `deliverFrom` (the close) and every `hold(…, since: deliverFrom)` fills from it; `hide()` no
+  longer clears `localClock` (`setDelivering(false)` does, and `syncLocalNow` whenever no budget
+  runs). The ring is drawn at its fill in the same call, and while crossed the clock runs on with
+  the ring hidden (`applyCrossed` shows it again). Desk: `halo.heads.progress` keeps climbing across
+  a hide/raise during the settle.
 - **Nowhere to type → grey pin, red ✕, no shine** (`DropArrow.crossed`, `CaretHalo.noCaretAt`):
   `FocusFrame` finds no caret **and** `TerminalBinding.focusTakesNoText` — the focused element is
   an `AXWebArea` with no `AXEditableAncestor` (a page with no field focused: Chrome, Safari,

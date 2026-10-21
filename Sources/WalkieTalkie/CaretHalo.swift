@@ -1240,12 +1240,18 @@ final class CaretHalo {
         delivering = on
         // The pin's ring falls back on it with no AutoLocal budget running.
         deliverEstimate = on ? estimate : 0
+        // **The ring's clock is the close, kept for the whole flight**
+        // (2026-10-21): every `hold` — the first, and each one that raises the
+        // pin again after a focus change took it down — fills from here.
+        deliverFrom = CFAbsoluteTimeGetCurrent()
         Log.info(on ? "⬇︎ the pin stays up while the words travel to the caret"
                     : "⬇︎ the pin goes — the words landed")
         guard on else {
             // `armed` going down hides them; the monitors only outlive the
             // collapse for their sake, so they go too unless the ring is up.
             arrow.armed = false
+            // The budget was this sentence's; the next one pushes its own.
+            arrow.localClock = nil
             releaseMonitorsIfIdle()
             return
         }
@@ -1257,9 +1263,10 @@ final class CaretHalo {
         // Placed from here as well as from `follow`: the pointer may not move
         // again between the stop gesture and the delivery, and the heads have to
         // be up either way.
-        arrow.hold(at: o, estimate: deliverEstimate)
+        arrow.hold(at: o, estimate: deliverEstimate, since: deliverFrom)
     }
     private var deliverEstimate: TimeInterval = 0
+    private var deliverFrom: CFAbsoluteTime = 0
 
     /// **The AutoLocal budget, for the pin's ring** (2026-10-20) — the close
     /// and its length while a budget is running, nil otherwise.
@@ -2522,7 +2529,7 @@ final class CaretHalo {
     /// idempotent after the first call and it is also what raises them again.
     private func placeHeads() {
         guard let o = headsOrigin else { return }
-        delivering ? arrow.hold(at: o, estimate: deliverEstimate) : arrow.place(at: o)
+        delivering ? arrow.hold(at: o, estimate: deliverEstimate, since: deliverFrom) : arrow.place(at: o)
     }
 
     private static func origin() -> NSPoint {

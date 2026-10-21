@@ -215,20 +215,28 @@ final class DropArrow {
     /// the ring 2026-10-20). Idempotent: called from every `follow()`;
     /// `estimate` is read on the first call only, and only stands in for a
     /// `localClock` that is not running.
-    func hold(at origin: NSPoint, estimate: TimeInterval = 0) {
+    ///
+    /// **`since` is the close, not this call** (2026-10-21, Victor: *"If I change
+    /// the focus of a window during the progress bar … the wheel seems to start
+    /// anew from scratch. It should continue where it left off"*). A focus
+    /// change through a window with no caret takes the pin down (`armed` off →
+    /// `hide`) and the next reading raises it again with a fresh `hold`; the
+    /// ring is a function of the sentence's own clock (`CaretHalo.deliverFrom`),
+    /// so a re-raised pin comes back at the fill it would have had anyway.
+    func hold(at origin: NSPoint, estimate: TimeInterval = 0, since: CFAbsoluteTime? = nil) {
         let p = panel ?? makePanel()
         move(p, to: origin)
         guard !holding else { return }
         holding = true
         setScale(Self.holdScale)
         setShine(1, animated: true)
-        setInFlight(true, estimate: estimate)
+        setInFlight(true, estimate: estimate, since: since ?? CFAbsoluteTimeGetCurrent())
         appear(p)
     }
 
     /// The pulse, the unbroken glint and the ring — on for the words in flight,
     /// off at the delivery.
-    private func setInFlight(_ on: Bool, estimate: TimeInterval = 0) {
+    private func setInFlight(_ on: Bool, estimate: TimeInterval = 0, since: CFAbsoluteTime = 0) {
         progressTimer?.invalidate()
         progressTimer = nil
         progressShown = 0
@@ -249,14 +257,18 @@ final class DropArrow {
             pin.removeAnimation(forKey: "pulse")
         }
         if let glint { Self.sweep(glint, rest: on ? 0 : Self.glintRest) }
-        // Crossed means nowhere to land: nothing is filling.
-        let ringed = on && !crossed
-        ring?.isHidden = !ringed
+        // Crossed means nowhere to land: nothing is filling — but the clock
+        // runs on, so a pin that finds a caret again shows the fill it has
+        // earned (`applyCrossed`).
+        ring?.isHidden = !(on && !crossed)
         for arc in arcs { arc.strokeEnd = 0 }
         CATransaction.commit()
-        guard ringed else { return }
-        holdFrom = CFAbsoluteTimeGetCurrent()
+        guard on else { return }
+        holdFrom = since
         holdEstimate = estimate
+        // Drawn now, not a tick later: a pin raised again mid-flight must not
+        // show one frame of an empty ring.
+        tickProgress()
         let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.tickProgress() }
         RunLoop.main.add(t, forMode: .common)
         progressTimer = t
@@ -295,7 +307,9 @@ final class DropArrow {
     func hide() {
         fading = false
         if holding { setInFlight(false) }
-        localClock = nil
+        // `localClock` is the sentence's, not the pin's: a hide on the way to
+        // another window must not lose it (2026-10-21). `CaretHalo.setDelivering(false)`
+        // clears it at the delivery, `AppDelegate.syncLocalNow` whenever no budget runs.
         holding = false
         panel?.orderOut(nil)
         panel?.alphaValue = 0
@@ -390,6 +404,8 @@ final class DropArrow {
         body?.fillColor = (crossed ? Self.deadFill : NSColor.systemRed).cgColor
         body?.strokeColor = (crossed ? Self.deadRim : Self.rim).cgColor
         cross?.isHidden = !crossed
+        // In flight, the ring follows the cross both ways; its clock never stopped.
+        if holding { ring?.isHidden = crossed }
         CATransaction.commit()
         if crossed { setShine(0, animated: false) }
     }
