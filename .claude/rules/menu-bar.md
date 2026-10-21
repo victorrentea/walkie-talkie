@@ -232,6 +232,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   so the bring-up loads the right ones. `GET /engine.engineRows` (the list as AppKit holds it),
   `whisperModels`, `whisperModelSelected`, `whisperModelPending`; `POST /test/whisper {"model": id}`
   picks the weights alone. The ⏱ checkbox's tooltip names the local model it would use.
+- **Local rows `💻 Local Turbo`, `💻 Local Turbo LoRA ★`, `💻 Local Large LoRA`, in that order, and
+  every Engine tooltip in sections** (2026-10-21, Victor: *"the tooltip should be cleaner to read …
+  explain the model, the machine I've used, its cost if I would buy it, the time I rented it for and
+  for how much, the word error ratio improvement, the expected latency … change the star to the local
+  LoRA … emphasize the turbo side … I'm showing that part often to people"*) — supersedes 2026-10-14's
+  `Local` / `Local LoRA` / `Local LoRA Large` and 2026-10-04's Large-first order. **The ★ is the card's
+  `"recommended": true`** (`StatusItem.starred`; no card flagged → lowest WER, 2026-10-15's rule).
+  Tooltip = headline, `WHAT` / `ACCURACY` / `SPEED ON THIS MAC` / `TRAINING` (or `COST`), one fact per
+  line, a blank line between sections, rendered by `WhisperModels.tooltip` from the card; the picked
+  row adds `Now: … GB RAM`. Cloud rows: `WHAT` / `SPEED` (`DecodeRate.typical` at 10 s and 1 min,
+  his own sentences, read at every open) / `PRIVACY`. Stored picks are paths, so the rename kept his pick.
 - **`Backup Local Pre-Transcribe` — a checkbox under the engine rows, between two separators**
   (2026-09-28, 22:25 as *Auto fallback to local (p98)*; renamed 2026-09-29 to *Prepare local
   transcript (p95)* when it stopped inserting, and 2026-10-06 to this title, Victor's words) — Victor: *"Auto fallback to local model should be a checkbox in the Engine submenu."*

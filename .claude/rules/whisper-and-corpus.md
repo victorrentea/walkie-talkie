@@ -24,12 +24,26 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 - **Which weights is a pick in the Engine list since 2026-10-03** (`WhisperModels`): the published
   turbo (default) or any folder under `~/.walkie-talkie/models/` with `config.json` +
   `weights.safetensors` — first `whisper-turbo-victor`, the LoRA on his 3,086 Wispr-labelled clips
-  (held-out WER 20.4 → 15.3 %). Titles/tooltips come from the folder's `model-card.json` only.
+  (held-out WER 20.4 → 15.3 %). Titles/tooltips come from the folder's `model-card.json` only (names since 2026-10-21: `Local Turbo` / `Local Turbo LoRA` / `Local Large LoRA`).
   `UserDefaults` `localWhisperModel` → `RELAY_WHISPER_MODEL` in `helperEnvironment` at each spawn
   (stored pick > env > original). A pick with the helper up replaces it via
   `AppDelegate.applyWhisperModelWhenIdle` — waits while `restartBlockers` is non-empty or it is
   loading. `LocalWhisper.stop()` clears `ready` synchronously: before that `restartHelper()` only
   ever stopped (its `bringUpModel` saw `ready` still true).
+- **The card is the tooltip's only source, structured since 2026-10-21** (`WhisperModels.Card`): flat
+  `name`, `tagline`, `recommended`, `base`, `params`, `layers`, `data`, `cost_usd`, `trained`, plus
+  `lora{rank,on,trainable,epochs,lr}`, `wer{before,after,ro[],en[],vocab_recall[],held_out,before_is}`,
+  `speed{mac,s_per_10s,s_per_min,x_audio,source}` (10 s / 1 min derived from `x_audio` when the medians
+  are missing), `training{machine,usd_per_hour,rented_min,train_min,session,buy,buy_source}`; every field
+  but `name` optional, old flat cards still render. The published Turbo's card is
+  `models/whisper-large-v3-turbo.model-card.json` (built-in `builtInOriginal` when absent). **Speeds are
+  measured, not quoted:** `decode-rate.jsonl` does not record the model, so each warm `whisper-local`
+  decode is attributed to the last `local model ready — <path>` in `relay.log` (EEST → UTC), median of
+  5–15 s takes (`10 s`) and 50–90 s takes (`1 min`) — on 2026-10-21: Turbo 0.9 / 3.0 s (23 Sep–3 Oct),
+  Turbo LoRA 1.2 / 2.8 s (3–20 Oct), Large LoRA 2.4 / 5.2 s (20–21 Oct), M1 Max 64 GB. Training: Runpod
+  H100 SXM 80 GB at $3.49/h (`voice-distill/train/CLOUD.md`), $3.60 ⇒ ≈ 62 min for all four variants;
+  GPU time per model from `voice-distill/runs/gpu/lora-*.log` `train_runtime` (Turbo 10.8, Large 8.4 min).
+  Originals of the cards: `model-card.json.bak-2026-10-21`.
 - **Word timings on request, starts snapped to the voice** (2026-10-04, for the screenshot markers —
   `dictation-source.md`, *Markers*). `{"wav", "words": true}` → `word_timestamps=True` + OpenAI's six
   large-v3-turbo alignment heads (mlx_whisper reads none from the folder; default = all 40 of the last

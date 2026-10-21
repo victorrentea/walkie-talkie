@@ -1678,14 +1678,15 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     /// **The local engine, one row per model** (2026-10-03, flattened the same
     /// day). Victor: every engine/model a sibling in one list, one tick, short
-    /// titles — `v3-victor 💻`, `v3-turbo 💻`, `v3-turbo-victor 💻`; the date, the cost, the WER, the data and the method are on the
-    /// tooltip, read from the folder's `model-card.json` (`WhisperModels.Option`),
+    /// titles — `💻 Local Turbo`, `💻 Local Turbo LoRA ★`, `💻 Local Large LoRA` since 2026-10-21;
+    /// the model, accuracy, speed on this Mac and training are on the sectioned
+    /// tooltip, read from the folder's `model-card.json` (`WhisperModels.tooltip`),
     /// never written twice. The tick needs both: the local engine live **and**
     /// this model picked.
     private func addLocalModelRows() {
         let picked = WhisperModels.selected
         let options = WhisperModels.options()
-        let best = Self.mostAccurate(options)
+        let best = Self.starred(options)
         for option in options {
             let mine = option.id == picked
             let row = NSMenuItem(title: Self.localRowTitle(option, loading: mine && engineLoading),
@@ -1698,18 +1699,30 @@ final class StatusItem: NSObject, NSMenuDelegate {
             }
             row.target = self
             row.representedObject = option.id
-            row.toolTip = option.details + (mine ? "\n" + engineDetails("whisper") : "")
+            row.toolTip = option.details + (mine ? "\n" + localNowLine() : "")
             row.image = engineId == "whisper" && mine ? Self.symbolIcon("checkmark") : Self.blankIcon
             engineSubmenu.addItem(row)
         }
     }
 
-    /// **A grey ★ after the most accurate local model** (2026-10-15, Victor: *"put a star after the
-    /// … local large LoRA in the engine selection … because right now [I'm] using … not the large
-    /// one"*) — the lowest held-out WER on a `model-card.json` (Local LoRA Large, 14.0 % vs the
-    /// turbo LoRA's 15.3 %), so the row he would switch to for accuracy is marked whichever is picked.
-    static func mostAccurate(_ options: [WhisperModels.Option]) -> String? {
-        options.compactMap { o in o.card?.werAfter.map { (o.id, $0) } }.min { $0.1 < $1.1 }?.0
+    /// **A grey ★ after the recommended local model — `"recommended": true` on its card**
+    /// (2026-10-21, Victor: *"change the star to the local LoRA … emphasize the turbo side"*):
+    /// `Local Turbo LoRA`, Turbo's speed with most of Large's accuracy gain (WER 15.3 % vs
+    /// 14.0 %, at half the decode time). Supersedes 2026-10-15's *most accurate*, which put it
+    /// on the Large LoRA; with no card flagged, that rule is still the fallback. Never more than
+    /// one star, never depends on which row is picked.
+    static func starred(_ options: [WhisperModels.Option]) -> String? {
+        if let flagged = options.first(where: { $0.card?.recommended == true }) { return flagged.id }
+        return options.compactMap { o in o.card?.werAfter.map { (o.id, $0) } }.min { $0.1 < $1.1 }?.0
+    }
+
+    /// The picked local row's last tooltip line: what the helper holds now.
+    private func localNowLine() -> String {
+        if engineLoading { return "Now: loading…" }
+        if let bytes = whisperFootprint?() {
+            return String(format: "Now: loaded, %.1f GB RAM · runs offline", Double(bytes) / 1_073_741_824)
+        }
+        return "Now: not loaded — comes up for the next sentence · runs offline"
     }
 
     /// `💻 <model name>` — `💻 v3-turbo`, `💻 v3-turbo-victor` (2026-10-03, Victor:
@@ -1950,23 +1963,50 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private func engineDetails(_ id: String) -> String {
         let key = elevenReady?() == true ? nil
             : "No API key — put ELEVENLABS_API_KEY=… in ~/.walkie-talkie/elevenlabs.env"
+        // **Sectioned like the local rows' cards** (2026-10-21): a headline, WHAT,
+        // SPEED (the typical round trip fitted to his own sentences on that engine,
+        // `DecodeRate.typical`, read at every open), PRIVACY.
+        func sections(_ s: [[String?]]) -> String {
+            s.map { $0.compactMap { $0 } }.filter { !$0.isEmpty }
+                .map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
+        }
+        func speed(_ engine: String) -> [String?] {
+            let fmt = { (v: Double) in String(format: v < 10 ? "%.1f s" : "%.0f s", v) }
+            return ["SPEED — fitted to your recent sentences on it",
+                    "10 s of speech → ≈ \(fmt(DecodeRate.typical(for: 10, engine: engine))) to text",
+                    "1 min of speech → ≈ \(fmt(DecodeRate.typical(for: 60, engine: engine))) to text"]
+        }
+        let cloudOnly = ["PRIVACY", "Audio leaves this Mac", key]
         switch id {
         case "eleven-live":
-            return (["Live caption: ElevenLabs \(ElevenLabsLive.model) — \(ElevenLabsLive.rate) (+20 % with keyterms), "
-                        + "the words across the top of the screen while you talk; "
-                        + "at every committed segment \(ElevenLabsSource.model) corrects them",
-                    "Sent text: ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate), "
-                        + "from the recording",
-                    "💸x3: every second is billed three times — the live stream, the corrections "
-                        + "and the final upload; measured 1.06 credits/s against 0.29 on ☁️ ElevenLabs alone (28 Sep)",
-                    "Audio leaves this Mac", key].compactMap { $0 })
-                .joined(separator: "\n")
+            return sections([
+                ["\(engineTitle(id)) — the words on screen while you talk"],
+                ["WHAT",
+                 "Live: ElevenLabs \(ElevenLabsLive.model) · \(ElevenLabsLive.rate) (+20 % with keyterms)",
+                 "Final: ElevenLabs \(ElevenLabsSource.model) · \(ElevenLabsSource.rate), from the recording",
+                 "It corrects the live words at every committed segment",
+                 "💸x3: each second billed three times (live, corrections, final upload)",
+                 "Measured 1.06 credits/s vs 0.29 on ☁️ ElevenLabs alone (28 Sep)"],
+                speed(DecodeRate.elevenLabs),
+                cloudOnly])
         case "eleven":
-            return (["ElevenLabs \(ElevenLabsSource.model) — \(ElevenLabsSource.rate)",
-                    "Audio leaves this Mac", key].compactMap { $0 })
-                .joined(separator: "\n")
+            return sections([
+                ["\(engineTitle(id)) — cloud recogniser, the default engine"],
+                ["WHAT",
+                 "Model: ElevenLabs \(ElevenLabsSource.model)",
+                 "Price: \(ElevenLabsSource.rate) of audio",
+                 "Sent: the recording, once you stop"],
+                speed(DecodeRate.elevenLabs),
+                cloudOnly])
         case "wispr":
-            return "Wispr Flow — its own microphone; its paste is blocked and the relay delivers the words"
+            return sections([
+                ["\(Self.cloud) Wispr Flow — its own app and microphone"],
+                ["WHAT",
+                 "Wispr Flow's cloud recogniser and its AI edit",
+                 "Its paste is blocked; the relay reads its History row and delivers the words",
+                 "Price: its own subscription, not billed per hour here"],
+                speed(DecodeRate.wisprFlow),
+                ["PRIVACY", "Audio leaves this Mac"]])
         default:
             let name = whisperModel?() ?? WhisperModels.displayName(LocalWhisperSource.configuredModel)
             let memory: String
