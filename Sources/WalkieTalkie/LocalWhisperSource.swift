@@ -475,13 +475,13 @@ final class LocalWhisperSource: DictationSource {
                     DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt),
                                       chars: r.text.count, compression: r.compressionRatio)
                 }
-                self.answered(job, result)
+                self.answered(job, result, failure: failure)
             }
         })
     }
 
     /// One take's words — whole or assembled from its chunks — on main.
-    private func answered(_ job: Job, _ result: LocalWhisper.Result?) {
+    private func answered(_ job: Job, _ result: LocalWhisper.Result?, failure: String? = nil) {
         let t = job.take
         // Nothing of ours left in flight: the next estimate is about a whole take again.
         if jobs.isEmpty { DecodeRate.noteLeft(nil) }
@@ -493,7 +493,9 @@ final class LocalWhisperSource: DictationSource {
             // the same sentence lost if the file goes — so `.failed` with
             // the audio, staged for *Recover*, where it used to be
             // `.silent("No words detected")` and `removeItem`.
-            let why = result == nil ? (whisper.lastFailure ?? "the local model gave no answer")
+            // This request's own reason (wave 4): the shared `lastFailure` may
+            // already be the next queued request's.
+            let why = result == nil ? (failure ?? whisper.lastFailure ?? "the local model gave no answer")
                                     : DictationEnd.heardNothing
             Log.error("local recording produced no transcript — \(why); the audio is kept")
             // **A helper that died or overran its budget is replaced now**
