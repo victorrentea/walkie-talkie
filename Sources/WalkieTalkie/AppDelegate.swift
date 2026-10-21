@@ -6485,7 +6485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 andThen?()
                 guard let frame else { return }
                 BindFlight.fly(from: frame, to: { [weak self] in
-                    self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+                    self?.overlay.bindLanding ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
                 }, outlined: true)
             }
             TerminalBinding.bringToFront(bound)
@@ -7921,8 +7921,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let unguarded = unguarded {
                 self.overlay.flash(unguarded, duration: BindFlight.duration)
             }
+            // `bindLanding`, not `chipFrame`: under a held prompt panel the
+            // window flies to the pointer, never into the panel (2026-10-21).
+            if self.overlay.bindLanding == nil {
+                Log.info("📍 bind flight → the pointer — the prompt panel is up, so there is no chip to land in")
+            }
             BindFlight.fly(from: frame, to: { [weak self] in
-                self?.overlay.chipFrame ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
+                self?.overlay.bindLanding ?? CGRect(origin: NSEvent.mouseLocation, size: .zero)
             })
         }
         return Self.describe(bound)

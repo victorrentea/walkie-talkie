@@ -1631,6 +1631,19 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// and it resizes under it as rows come and go.
     var chipFrame: CGRect { panel.frame }
 
+    /// **Where a bind's rectangle lands: the chip — never the prompt panel**
+    /// (2026-10-21, Victor: *"if I focus a terminal window while the panel is
+    /// displayed with the prompt preview, the new window gets … sucked into the
+    /// panel of the prompt … The window should bind and move towards the mouse"*).
+    /// `panel` is one window in two shapes, so `chipFrame` is the prompt panel's
+    /// corner while a prompt is held (`sentPrompt`) and while a spawn's dialog is
+    /// kept on screen (`spawnPanelHeld` / `spawnPanelFading` — its `sentPrompt`
+    /// is already nil, and `layoutContent` skips the bind's relayout). Nil then:
+    /// there is no chip by the pointer, and the flight aims at the pointer itself.
+    var bindLanding: CGRect? {
+        sentPrompt == nil && !spawnPanelHeld && !spawnPanelFading ? panel.frame : nil
+    }
+
     /// **Where a new frame flies into** (`CaptureFlash.flyIntoChip`, 2026-09-23):
     /// the `📸` of the shots row, in screen coordinates — the chip itself when
     /// that row is not up, nil when the chip is not on screen at all.
