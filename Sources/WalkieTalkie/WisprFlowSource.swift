@@ -383,6 +383,9 @@ final class WisprFlowSource: DictationSource {
     /// The bridge's re-hold count when this stop began; -1 between stops (wave 3).
     private var stopReholdBase = -1
     static let maxStopReholds = 4
+    /// A deferred take's release waits this long after the sentence before it is
+    /// over — past Wispr's own paste of that row (wave 5).
+    static let pasteSettle: CFAbsoluteTime = 0.7
     /// **The stop chord of a take that waited went out** — Wispr can start
     /// answering it now: `(take, its seconds of audio, seconds since his stop)`.
     /// The relay starts the take's countdown here (`AppDelegate.armAutoLocal`).
@@ -5131,7 +5134,12 @@ extension WisprFlowSource {
         }
         var busy: String?
         if done, d.ownTake == nil {
-            if let row = stillFinishingAbandonedRow {
+            if d.olderDoneAt > 0, now - d.olderDoneAt < Self.pasteSettle {
+                // Wispr pastes the row it just finished 0.41–0.51 s after it turns
+                // `formatted` (the firewall's measurement); a chord in that window
+                // may be ignored and the take would go local (wave 5).
+                busy = "Wispr Flow is still pasting the sentence before"
+            } else if let row = stillFinishingAbandonedRow {
                 busy = "Wispr Flow is still finishing row \(row)"
             } else if !HotkeyTap.wisprChordsMuted, watch.sampleIsRunningInput() {
                 // W6: a toggle over an open Wispr microphone stops that one.
