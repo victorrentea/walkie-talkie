@@ -435,7 +435,9 @@ final class LocalWhisper {
     /// Transcribes a WAV already on disk. Answers on a background queue.
     /// `words`: ask the helper for word timings — +45 % decode time, so only
     /// when a marker is waiting to be placed (2026-10-04, `evals/local-word-timing/`).
-    func transcribe(wav: String, words: Bool = false, _ done: @escaping (Result?) -> Void) {
+    /// `pcm`: `wav` is raw int16 16 kHz mono (a chunk cut from the take in
+    /// memory, `LocalWhisperSource`, 2026-10-21) — the helper's `{"pcm"}` request.
+    func transcribe(wav: String, words: Bool = false, pcm: Bool = false, _ done: @escaping (Result?) -> Void) {
         queue.async { [weak self] in
             guard let self = self else { done(nil); return }
             self.lastFailure = nil
@@ -443,7 +445,7 @@ final class LocalWhisper {
                 self.lastFailure = "the local model was not up"
                 done(nil); return
             }
-            guard let req = try? JSONSerialization.data(withJSONObject: ["wav": wav, "words": words] as [String: Any]) else {
+            guard let req = try? JSONSerialization.data(withJSONObject: [pcm ? "pcm" : "wav": wav, "words": words] as [String: Any]) else {
                 done(nil); return
             }
             var line = req

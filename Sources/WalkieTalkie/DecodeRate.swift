@@ -275,7 +275,25 @@ enum DecodeRate {
     /// dictation, at the moment the row opens.
     static func seconds(for audio: TimeInterval, engine: String? = nil) -> TimeInterval {
         let e = engine ?? activeEngine
-        return fit(usableWindow(e), prior: prior(for: e)).seconds(for: audio)
+        return fit(usableWindow(e), prior: prior(for: e)).seconds(for: leftOf(audio, engine: e))
+    }
+
+    /// **What is left to decode at the close, when it is not the whole take**
+    /// (2026-10-21). The local model decodes a long take in chunks while he is
+    /// still talking (`ChunkPlanner`), so at the stop only the tail — plus any
+    /// chunk not answered yet — stands between him and the words. Set by
+    /// `LocalWhisperSource` just before `didStopListening`, nil at its next start;
+    /// the chip's estimate and the rewind ask about this instead of the take, and
+    /// the round trip is filed against it. 60 s fresh, and only for its engine.
+    static func noteLeft(_ audio: TimeInterval?, engine: String = whisperLocal) {
+        lock.lock(); left = audio.map { (engine, $0, CFAbsoluteTimeGetCurrent()) }; lock.unlock()
+    }
+    private static var left: (engine: String, audio: TimeInterval, at: CFAbsoluteTime)?
+
+    private static func leftOf(_ audio: TimeInterval, engine: String) -> TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        guard let l = left, l.engine == engine, CFAbsoluteTimeGetCurrent() - l.at < 60 else { return audio }
+        return min(audio, l.audio)
     }
 
     /// **The middle, not the near-worst, without remembering it** — what the
@@ -289,6 +307,7 @@ enum DecodeRate {
     static func predict(audio: TimeInterval, engine: String? = nil) -> TimeInterval {
         let e = engine ?? activeEngine
         let f = fit(usableWindow(e), prior: prior(for: e))
+        let audio = leftOf(audio, engine: e)
         let typical = f.typical(for: audio), ceiling = f.seconds(for: audio)
         lock.lock()
         pending = (e, audio, typical, ceiling, CFAbsoluteTimeGetCurrent())

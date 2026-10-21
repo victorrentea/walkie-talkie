@@ -358,6 +358,18 @@ enum OverlayStates {
                 o.pinTranscribeWarmth(0.45)
             },
 
+            Shot(slug: "transcribing-ready", group: "Dictating", title: "Ready — talk again while it transcribes",
+                 when: "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
+                 note: "**`📻 Ready` is the top row** (2026-10-21, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue) \(Glyphs.loraMark)")
+                o.setTranscribing(true)
+                o.setReadyForNext(true)
+                o.setShotCount(1)
+                o.pinTranscribeWarmth(0.45)
+            },
+
             Shot(slug: "transcribing-lora", group: "Dictating", title: "…on Victor's own model",
                  when: "The wait, when the local model is the Engine and its weights are the LoRA trained on his voice.",
                  note: "**A subscript `ᵥ` after the local model's 💻** (2026-10-04, Victor: *\"pune un v mic după acel măr … dacă e modelul meu cu Lora\"*, then *\"ca indice\"*, and the apple became the laptop: *\"ca să se înțeleagă local\"*) — on `Transcribing via` and on the listening row's arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.",
@@ -792,6 +804,7 @@ enum OverlayStates {
         o.setLocalNow(false)
         o.setPasteHint(false)
         o.setHeldCount(0)
+        o.setReadyForNext(false)
         o.setFilming(false)
         o.clearFilmsCarried()
         o.filmFrames = nil

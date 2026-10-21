@@ -632,7 +632,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// waiting for a transcript is the recogniser's business, and the settle is
     /// over when `didTranscribe` or `didEnd` says so. `settleTimeout` is the
     /// backstop for a source that answers neither.
-    private var settling = false
+    private var settling = false {
+        didSet { if settling != oldValue { DispatchQueue.main.async { [weak self] in self?.syncReadyRow() } } }
+    }
     /// What the ring was saying about the destination when the microphone closed,
     /// so the chevrons do not disarm underneath the settle.
     private var settlingAtCaret = false
@@ -676,7 +678,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // working, and each of those is bounded by its own timeouts now — see
     // `armSettleGiveUp`.
     /// A local transcription is standing in for the engine that failed.
-    private var fallingBack = false
+    private var fallingBack = false {
+        didSet { if fallingBack != oldValue { DispatchQueue.main.async { [weak self] in self?.syncReadyRow() } } }
+    }
     /// **Which fallback is current, and its recording** (2026-09-26, R2 — TL11).
     /// A cancel bumps the token and keeps the WAV for *Recover*; the local
     /// model's answer, when it comes, carries the old token and is dropped.
@@ -7459,6 +7463,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         syncBorrowedGestures()
     }
 
+    /// **`📻 Ready` on the chip while the words are still in flight**
+    /// (2026-10-21) — the same answer `startBlocker` would give a start now:
+    /// the queue takes it, or the local model's decode would be parked. Run from
+    /// `syncBorrowedGestures` and whenever `settling` / `fallingBack` move.
+    fileprivate func syncReadyRow() {
+        guard !answeringInBackground else { return }
+        let queueAccepts = Self.sentenceQueueOn && queueRefusal() == nil
+        let wordsInFlight = settling || fallingBack || source.phase.isWaitingForWords
+            || source.answersPending > 0 || (parkedSentence.map { !$0.finished } ?? false)
+        let micOpen = listening || source.isRecording || speculative
+        let parkable = fallingBack && fallbackParkRefusal() == nil
+            && !(settling && CFAbsoluteTimeGetCurrent() - settlingFrom < Self.queueStartAfterStop)
+        let ready = wordsInFlight && !micOpen && (queueAccepts || parkable)
+        if ready != overlay.readyForNext {
+            Log.info(ready ? "📻 ready — a new sentence may start while the last one's words are in flight"
+                           : "📻 ready row down")
+        }
+        overlay.setReadyForNext(ready)
+    }
+
     private func syncBorrowedGestures() {
         // A parked sentence's answer (Q12) runs on its fields; `run` syncs after the swap-back.
         guard !answeringInBackground else { return }
@@ -7493,6 +7517,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.ownDictation = listening || source.isRecording || speculative || settling
         hotkeys.ownMicOpen = listening || source.isRecording || speculative
         hotkeys.sentenceQueueAccepts = Self.sentenceQueueOn && queueRefusal() == nil
+        syncReadyRow()
         // **A plain dictation attaches nothing; a prompt attaches everything**
         // (2026-10-08). Victor: *"If I am in plain dictation mode, there
         // shouldn't be possible to take photos … Nor select text … Just plain
@@ -8359,6 +8384,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Q12 (batch 6): the sentences in flight, oldest first — {id, state, target, startedAt, take, waiting}.
         out["sentences"] = describeSentences()
         out["sentenceQueue"] = Self.sentenceQueueOn
+        out["readyForNext"] = overlay.readyForNext
         out["lastFailure"] = lastFailure.map { ["why": $0.why, "engine": $0.engine, "at": Outbox.iso($0.at)] } ?? NSNull()
         out["recoverable"] = cancelledAudio.map { ["path": $0.url.path, "duration": $0.duration,
                                                    "expiresAt": Outbox.iso($0.at.addingTimeInterval(300))] } ?? NSNull()

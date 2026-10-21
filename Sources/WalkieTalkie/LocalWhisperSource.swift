@@ -216,6 +216,13 @@ final class LocalWhisperSource: DictationSource {
         let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
         markersInAudio = false
         isRecording = true
+        // **A take of its own** (Q12 for the local model, 2026-10-21): an
+        // earlier take may still be decoding — the relay keeps the order.
+        Self.takeSerial += 1
+        take = Self.takeSerial
+        let job = Job(take: take)
+        recordingJob = job
+        DecodeRate.noteLeft(nil)
         phase = .listening
         // Known now, before `didBegin`: the relay opens the band on it. The
         // caption itself starts once the microphone is open (below) — before
@@ -225,19 +232,23 @@ final class LocalWhisperSource: DictationSource {
             live.warm()
             Log.info("💬 live: the live helper is not up — no caption for this sentence")
         }
-        Log.info("🎙️ local recording started — \(wav.lastPathComponent)")
+        Log.info("🎙️ local recording started — \(wav.lastPathComponent) (take \(take)"
+                 + (unanswered.isEmpty ? ")" : ", \(unanswered.count) earlier still decoding)"))
         // **Opened on `audioQueue`, never on main** (2026-09-24) — the shape
         // `ElevenLabsSource` has had since 2026-09-19. `MicRecorder.start` and
         // `.stop` are synchronous CoreAudio calls that wait on the engine's own
         // mutex; a device change in flight (the DJI receiver dropping out) holds
         // it, and a cancel on the main thread then froze the whole app.
         let withCaption = liveOpen
+        let t = take
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             guard let why = self.meter.start(to: wav) else {
-                if withCaption {
-                    DispatchQueue.main.async {
-                        guard self.isRecording else { return }
+                DispatchQueue.main.async {
+                    guard self.isRecording, self.take == t else { return }
+                    // `takeEnd` is this take's from here on.
+                    job.open = true
+                    if withCaption {
                         self.live.begin()
                         self.didOpenLive?()
                     }
@@ -246,12 +257,14 @@ final class LocalWhisperSource: DictationSource {
             }
             Log.error("🎙️ local: the microphone would not open — \(why)")
             DispatchQueue.main.async {
-                guard self.isRecording else { return }
+                guard self.isRecording, self.take == t else { return }
                 self.isRecording = false
-                self.phase = .done("error")
-                self.didEnd?(.failed(why: why, audio: nil, duration: 0))
+                self.recordingJob = nil
+                self.settlePhase(.done("error"))
+                self.answer(t) { self.didEnd?(.failed(why: why, audio: nil, duration: 0)) }
             }
         }
+        startChunkWatch()
         didBegin?()
         return nil
     }
@@ -261,39 +274,94 @@ final class LocalWhisperSource: DictationSource {
     private let audioQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.local-mic")
 
     func stop() {
-        guard isRecording else { return }
+        guard isRecording, let job = recordingJob else { return }
         // **First**: a window still decoding is killed before the final decode
         // is even asked for (Victor: *"instantaneu anulezi orice"*).
         live.end()
         liveOpen = false
         isRecording = false
+        recordingJob = nil
+        stopChunkWatch()
         phase = .transcribing("")
+        let t = job.take
+        unanswered.insert(t)
+        jobs[t] = job
+        job.stoppedAt = Date()
+        job.markers = markersInAudio
         // Before the relay hears the close: everything that times the wait from
-        // here on asks `DecodeRate` about this engine (2026-09-23).
+        // here on asks `DecodeRate` about this engine (2026-09-23) — and, for a
+        // chunked take, about what is left of it, not the whole (2026-10-21).
         DecodeRate.activeEngine = DecodeRate.whisperLocal
+        if !job.pieces.isEmpty {
+            let tail = Double(max(0, meter.takeEnd - job.lastCut)) / Self.rate
+            let owed = job.pieces.filter { !$0.answered }.reduce(0) { $0 + $1.seconds }
+            job.leftAtStop = tail + owed
+            DecodeRate.noteLeft(tail + owed)
+        }
         didStopListening?()
+        let from = job.lastCut
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             let closed = self.meter.stop()
-            DispatchQueue.main.async { self.finishRecording(closed) }
+            // **The tail, read here** — on the queue that closed the take and
+            // before a next take's `start` (queued behind this) resets `take`.
+            let end = self.meter.takeEnd
+            let tail = job.pieces.isEmpty ? [] : self.meter.takeSlice(from: from, to: end)
+            let hops = job.pieces.isEmpty ? [] : self.meter.meterHops
+            DispatchQueue.main.async {
+                self.finishRecording(closed, job: job, tail: tail, tailEnd: end, hops: hops)
+            }
         }
     }
 
     /// The tail of `stop()`, on the main queue, exactly as it always ran.
-    private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?) {
+    private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?, job: Job,
+                                 tail: [Int16], tailEnd: Int, hops: [MeterHop]) {
+        let t = job.take
         guard let (wav, duration) = closed else {
             Log.info("local recording discarded — under \(MicRecorder.minimumDuration)s")
-            phase = .done("empty")
-            didEnd?(.silent(""))
+            jobs[t] = nil
+            job.cancelled = true
+            job.dropPieces()
+            answer(t) { settlePhase(.done("empty")); didEnd?(.silent("")) }
             return
         }
-        Log.info(String(format: "🎙️ local recording stopped — %.1fs", duration))
-        let decode = Decode(wav: wav, duration: duration)
-        decoding = decode
+        job.wav = wav
+        job.duration = duration
+        guard !job.cancelled else { return }
+        Log.info(String(format: "🎙️ local recording stopped — %.1fs (take %d)", duration, t))
+        // **Chunked** (2026-10-21): the pieces already asked for, plus the tail.
+        if !job.pieces.isEmpty {
+            let expected = tailEnd - job.lastCut
+            let tailVoiced = ChunkPlanner.voiced(hops, from: Double(job.lastCut) / Self.rate)
+            if tail.count != expected || job.markers {
+                // A tail no longer in memory (the take's 120 s cap) or a marker
+                // spliced into the file: the WAV is the only whole truth.
+                Log.info("✂️ local: the chunks are let go — "
+                         + (job.markers ? "a marker was spliced into the WAV" : "the tail is not in memory any more")
+                         + "; the whole take is decoded")
+                job.dropPieces()
+            } else if tailVoiced < Self.tailVoicedFloor {
+                Log.info(String(format: "✂️ local: the %.1f s tail has %.2f s voiced — not decoded",
+                                Double(tail.count) / Self.rate, tailVoiced))
+                job.tailDone = true
+                assembleIfDone(job)
+                return
+            } else {
+                Log.info(String(format: "✂️ local: %d chunk(s) asked for while he spoke; %.1f s tail to go "
+                                + "(%.2f s voiced), %.1f s still owed in all",
+                                job.pieces.count, Double(tail.count) / Self.rate, tailVoiced, job.leftAtStop))
+                whenModelUp(job) { [weak self] in
+                    guard let self else { return }
+                    self.ask(job, samples: tail, from: job.lastCut, words: self.wantsWordTimings?() ?? false, isTail: true)
+                }
+                return
+            }
+        }
         // **The audio waits for the model, not the other way round** — see
-        // `start()`. Registered in `decoding` first, so a cancel in the wait
+        // `start()`. Registered in `jobs` first, so a cancel in the wait
         // disowns it exactly as it disowns a decode (batch 1's R2).
-        whenModelUp(decode) { [weak self] in self?.decodeNow(decode) }
+        whenModelUp(job) { [weak self] in self?.decodeNow(job) }
     }
 
     /// Up to `modelWait`, polled on main (the load's own completion is
@@ -303,47 +371,51 @@ final class LocalWhisperSource: DictationSource {
     /// throughout; only the log and `phaseStatus` say what it is waiting on.
     static let modelWait: TimeInterval = 90
 
-    private func whenModelUp(_ decode: Decode, _ go: @escaping () -> Void) {
+    private func whenModelUp(_ job: Job, _ go: @escaping () -> Void) {
         guard !whisper.ready else { return go() }
         phase = .transcribing("loading the model")
         Log.info(String(format: "⏳ the local model is not up yet — the %.1fs recording waits for it (up to %.0f s)",
-                        decode.duration, Self.modelWait))
+                        job.duration, Self.modelWait))
         let asked = Date()
         var retried = false
         func poll() {
-            guard !decode.cancelled else { return }
+            guard !job.cancelled else { return }
             if whisper.ready {
                 Log.info(String(format: "⏳ the local model came up %.1f s after the stop — decoding", Date().timeIntervalSince(asked)))
-                phase = .transcribing("")
+                if !isRecording { phase = .transcribing("") }
                 return go()
             }
             if !loading {
                 // The load ended without the weights (or none was running).
                 guard !retried else {
-                    return fail(decode, lastLoadFailure.map { "the local model could not be loaded — \($0)" }
+                    return fail(job, lastLoadFailure.map { "the local model could not be loaded — \($0)" }
                                     ?? "the local model could not be loaded")
                 }
                 retried = true
                 bringUpModel()
             }
             guard Date().timeIntervalSince(asked) < Self.modelWait else {
-                return fail(decode, "the local model did not come up in \(Int(Self.modelWait)) s")
+                return fail(job, "the local model did not come up in \(Int(Self.modelWait)) s")
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { poll() }
         }
         poll()
     }
 
-    private func fail(_ decode: Decode, _ why: String) {
-        if decoding === decode { decoding = nil }
+    private func fail(_ job: Job, _ why: String) {
+        guard jobs[job.take] === job else { return }
+        jobs[job.take] = nil
+        job.dropPieces()
         Log.error("local recording not transcribed — \(why); the audio is kept")
-        phase = .done("error")
-        didEnd?(.failed(why: why, audio: decode.wav, duration: decode.duration))
+        answer(job.take) {
+            settlePhase(.done("error"))
+            didEnd?(.failed(why: why, audio: job.wav, duration: job.duration))
+        }
     }
 
-    private func decodeNow(_ decode: Decode) {
-        guard !decode.cancelled else { return }
-        let wav = decode.wav, duration = decode.duration
+    private func decodeNow(_ job: Job) {
+        guard !job.cancelled, let wav = job.wav else { return }
+        let duration = job.duration
         // What this decode actually costs, against the audio it was handed — the
         // pair `DecodeRate` learns the countdown's factor from. Started here
         // rather than inside `LocalWhisper`, because what the row promised covers
@@ -353,82 +425,327 @@ final class LocalWhisperSource: DictationSource {
         whisper.transcribe(wav: wav.path, words: wantsWordTimings?() ?? false) { [weak self] result in
             DispatchQueue.main.async {
                 guard let self else { return }
-                if self.decoding === decode { self.decoding = nil }
                 // The live helper, if the close killed it, comes back now that
                 // the sentence's own decode is over.
                 self.live.warmLater()
-                guard !decode.cancelled else {
+                guard !job.cancelled, self.jobs[job.take] === job else {
                     Log.info("🗑️ the local model answered a cancelled decode — dropped")
                     return
                 }
-                guard let r = result, !r.text.isEmpty else {
-                    // **The WAV is kept** (2026-09-26, §3.8): an empty answer and
-                    // a helper that answered nothing (dead, hung, timed out) are
-                    // the same sentence lost if the file goes — so `.failed` with
-                    // the audio, staged for *Recover*, where it used to be
-                    // `.silent("No words detected")` and `removeItem`.
-                    let why = result == nil ? (self.whisper.lastFailure ?? "the local model gave no answer")
-                                            : DictationEnd.heardNothing
-                    Log.error("local recording produced no transcript — \(why); the audio is kept")
-                    // **A helper that died or overran its budget is replaced now**
-                    // (2026-09-26, TL31), not at the next gesture: `readLine`
-                    // killed it, and the next sentence should find it warming.
-                    if result == nil, !self.whisper.ready { self.bringUpModel() }
-                    self.phase = .done("empty")
-                    self.didEnd?(.failed(why: why, audio: wav, duration: duration))
-                    return
+                self.jobs[job.take] = nil
+                if let r = result, !r.text.isEmpty {
+                    // Filed on the success path only: a decode that returned nothing
+                    // says nothing about how long a decode takes.
+                    DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt),
+                                      chars: r.text.count, compression: r.compressionRatio)
                 }
-                Log.info(String(format: "local whisper: %@ (%.2f, cr %.2f) — %d chars",
-                                r.language ?? "?", r.avgLogprob, r.compressionRatio, r.text.count)
-                         + Self.coverageNote(r.coverage))
-                // Filed on the success path only: a decode that returned nothing
-                // says nothing about how long a decode takes.
-                DecodeRate.record(audio: duration, decode: Date().timeIntervalSince(decodeStartedAt),
-                                  chars: r.text.count, compression: r.compressionRatio)
-                self.didTranscribe?(DictationResult(
-                    text: r.text, language: r.language, audio: wav, duration: duration,
-                    engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
-                    via: "local-whisper", markersInAudio: self.markersInAudio,
-                    engineLabel: Self.modelLabel, words: r.words))
-                self.phase = .done("formatted")
-                self.didEnd?(.delivered)
+                self.answered(job, result)
             }
         }
     }
 
-    /// **The decode in flight, and the way to disown it** (2026-09-26, R2 — the
-    /// same as `ElevenLabsSource.Upload`). The helper cannot be interrupted, so a
-    /// cancel after the close marks this, ends the sentence `.cancelled` with the
-    /// WAV for *Recover*, and the answer is dropped when it comes. Main queue only.
-    private final class Decode {
-        let wav: URL
-        let duration: TimeInterval
-        var cancelled = false
-        init(wav: URL, duration: TimeInterval) { self.wav = wav; self.duration = duration }
+    /// One take's words — whole or assembled from its chunks — on main.
+    private func answered(_ job: Job, _ result: LocalWhisper.Result?) {
+        let t = job.take
+        guard let wav = job.wav else { return }
+        let duration = job.duration
+        guard let r = result, !r.text.isEmpty else {
+            // **The WAV is kept** (2026-09-26, §3.8): an empty answer and
+            // a helper that answered nothing (dead, hung, timed out) are
+            // the same sentence lost if the file goes — so `.failed` with
+            // the audio, staged for *Recover*, where it used to be
+            // `.silent("No words detected")` and `removeItem`.
+            let why = result == nil ? (whisper.lastFailure ?? "the local model gave no answer")
+                                    : DictationEnd.heardNothing
+            Log.error("local recording produced no transcript — \(why); the audio is kept")
+            // **A helper that died or overran its budget is replaced now**
+            // (2026-09-26, TL31), not at the next gesture: `readLine`
+            // killed it, and the next sentence should find it warming.
+            if result == nil, !whisper.ready { bringUpModel() }
+            answer(t) {
+                settlePhase(.done("empty"))
+                didEnd?(.failed(why: why, audio: wav, duration: duration))
+            }
+            return
+        }
+        Log.info(String(format: "local whisper: %@ (%.2f, cr %.2f) — %d chars",
+                        r.language ?? "?", r.avgLogprob, r.compressionRatio, r.text.count)
+                 + Self.coverageNote(r.coverage))
+        answer(t) {
+            didTranscribe?(DictationResult(
+                text: r.text, language: r.language, audio: wav, duration: duration,
+                engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
+                via: "local-whisper", markersInAudio: job.markers,
+                engineLabel: Self.modelLabel, words: r.words))
+            settlePhase(.done("formatted"))
+            didEnd?(.delivered)
+        }
     }
-    private var decoding: Decode?
+
+    // MARK: - Takes (Q12 for the local model, 2026-10-21)
+
+    /// **One recording, from its start to its answer.** Main queue only.
+    /// `pieces` are the chunks asked for while he was still speaking (and the
+    /// tail, last); empty for a take decoded whole.
+    private final class Job {
+        let take: Int
+        var wav: URL?
+        var duration: TimeInterval = 0
+        var cancelled = false
+        var markers = false
+        var stoppedAt: Date?
+        /// The microphone is open and `takeEnd` is this take's.
+        var open = false
+        /// Sample index on the take's ruler where the next chunk starts.
+        var lastCut = 0
+        var pieces: [Piece] = []
+        var tailDone = false
+        var leftAtStop: TimeInterval = 0
+        init(take: Int) { self.take = take }
+
+        /// Chunks abandoned: answers still coming are dropped, files removed.
+        func dropPieces() {
+            for p in pieces { p.dropped = true; p.removeFile() }
+            pieces = []
+            tailDone = false
+        }
+    }
+
+    /// One chunk of a take, cut at a pause and sent to the helper as raw PCM.
+    private final class Piece {
+        let from: Int
+        let to: Int
+        let file: URL
+        let isTail: Bool
+        let askedAt = Date()
+        var answered = false
+        var dropped = false
+        var result: LocalWhisper.Result?
+        var seconds: TimeInterval { Double(to - from) / LocalWhisperSource.rate }
+        init(from: Int, to: Int, file: URL, isTail: Bool) {
+            self.from = from; self.to = to; self.file = file; self.isTail = isTail
+        }
+        func removeFile() { try? FileManager.default.removeItem(at: file) }
+    }
+
+    static let rate = 16000.0
+    /// A tail with less speech than this after the last cut is not decoded —
+    /// Whisper on near-silence invents a sentence (`www.clu.com.br`).
+    static let tailVoicedFloor: TimeInterval = 0.3
+
+    private var recordingJob: Job?
+    /// Every take stopped and not answered yet, by take.
+    private var jobs: [Int: Job] = [:]
+    private(set) var take = 0
+    private static var takeSerial = 0
+    private(set) var answeringTake: Int?
+    private var unanswered: Set<Int> = []
+    var answersPending: Int { unanswered.count }
+    func isPending(take t: Int) -> Bool { unanswered.contains(t) || jobs[t] != nil }
+    /// **The local model takes the next sentence while the last one decodes**
+    /// (2026-10-21, Victor: *"the ability to record immediately another … even
+    /// though you are currently transcribing the old snippet"*). The recording
+    /// is ours and the helper queues requests, so nothing here stops a second
+    /// take; `WT_LOCAL_QUEUE=0` puts the one-at-a-time rule back.
+    let queuesSentences: Bool = {
+        let v = ProcessInfo.processInfo.environment["WT_LOCAL_QUEUE"] ?? ElevenLabsSource.fileValue("WT_LOCAL_QUEUE")
+        return v != "0"
+    }()
+
+    /// Runs one take's `didTranscribe` / `didEnd`, labelled with the take.
+    private func answer(_ t: Int, _ body: () -> Void) {
+        let outer = answeringTake
+        answeringTake = t
+        unanswered.remove(t)
+        body()
+        answeringTake = outer
+    }
+
+    /// `phase` after one take's answer: another take still recording or
+    /// decoding keeps its own phase.
+    private func settlePhase(_ p: DictationPhase) {
+        if isRecording { return }
+        if !jobs.isEmpty || !unanswered.isEmpty { phase = .transcribing(""); return }
+        phase = p
+    }
+
+    func cancelTake(_ t: Int) {
+        if isRecording, t == take { return cancel() }
+        guard let job = jobs[t] else { return }
+        disown(job)
+    }
+
+    private func disown(_ job: Job) {
+        jobs[job.take] = nil
+        job.cancelled = true
+        job.dropPieces()
+        answer(job.take) {
+            settlePhase(.done("dismissed"))
+            didEnd?(.cancelled(audio: job.wav, duration: job.duration))
+        }
+    }
 
     func cancel() {
         live.end()
         liveOpen = false
-        if !isRecording, let d = decoding {
-            decoding = nil
-            d.cancelled = true
-            phase = .done("dismissed")
-            didEnd?(.cancelled(audio: d.wav, duration: d.duration))
+        if !isRecording {
+            // **The microphone is shut and the words are on their way** — the
+            // newest take in flight is this sentence now, and a cancel disowns it.
+            if let t = jobs.keys.max(), let job = jobs[t] { disown(job) }
             return
         }
-        guard isRecording else { return }
+        guard let job = recordingJob else { return }
         isRecording = false
-        phase = .done("dismissed")
+        recordingJob = nil
+        stopChunkWatch()
+        job.cancelled = true
+        job.dropPieces()
+        let t = job.take
+        settlePhase(.done("dismissed"))
         didStopListening?()
         audioQueue.async { [weak self] in
             guard let self = self else { return }
             let taken = self.meter.stop()
             DispatchQueue.main.async {
-                self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
+                self.answer(t) { self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0)) }
             }
         }
+    }
+
+    // MARK: - Chunks: decoding while he still speaks (2026-10-21)
+
+    /// `WT_LOCAL_CHUNKS=0` decodes every take whole, as before.
+    static var chunksOn: Bool {
+        (ProcessInfo.processInfo.environment["WT_LOCAL_CHUNKS"] ?? ElevenLabsSource.fileValue("WT_LOCAL_CHUNKS")) != "0"
+    }
+    private var chunkTimer: Timer?
+    private var chunkTuning = ChunkPlanner.Tuning()
+
+    private func startChunkWatch() {
+        stopChunkWatch()
+        guard Self.chunksOn else { return }
+        chunkTuning = ChunkPlanner.Tuning.configured
+        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in self?.chunkTick() }
+        RunLoop.main.add(t, forMode: .common)
+        chunkTimer = t
+    }
+
+    private func stopChunkWatch() {
+        chunkTimer?.invalidate()
+        chunkTimer = nil
+    }
+
+    /// Every 0.5 s while recording: is there a pause worth cutting at?
+    private func chunkTick() {
+        guard isRecording, let job = recordingJob, job.open, !markersInAudio, whisper.ready else { return }
+        let end = meter.takeEnd
+        let now = Double(end) / Self.rate
+        let from = Double(job.lastCut) / Self.rate
+        guard now - from >= chunkTuning.trigger else { return }
+        let hops = meter.meterHops
+        guard let cut = ChunkPlanner.cut(hops: hops, from: from, now: now, tuning: chunkTuning) else { return }
+        let to = min(end, Int(cut * Self.rate))
+        let samples = meter.takeSlice(from: job.lastCut, to: to)
+        guard samples.count == to - job.lastCut else {
+            // Older than the take's 120 s in memory: no chunks for this take.
+            Log.info("✂️ local: the audio since the last cut is no longer all in memory — chunks off for this take")
+            job.dropPieces()
+            stopChunkWatch()
+            return
+        }
+        let voiced = ChunkPlanner.voiced(hops, from: from, to: cut)
+        Log.info(String(format: "✂️ local: chunk %d cut at %.1f s — %.1f s of audio, %.1f s voiced, decoding while he speaks",
+                        job.pieces.count + 1, cut, cut - from, voiced))
+        ask(job, samples: samples, from: job.lastCut, words: true, isTail: false)
+        job.lastCut = to
+    }
+
+    /// One chunk to the helper. Background chunks always carry word timings —
+    /// a shutter pressed later must still find words around its moment, and
+    /// their cost is paid while he speaks; the tail asks only with a cue.
+    private func ask(_ job: Job, samples: [Int16], from: Int, words: Bool, isTail: Bool) {
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent("walkie-chunk-\(job.take)-\(job.pieces.count).pcm")
+        do {
+            try samples.withUnsafeBufferPointer { try Data(buffer: $0).write(to: file) }
+        } catch {
+            Log.error("✂️ local: could not write a chunk — \(error.localizedDescription); the whole take will be decoded")
+            if isTail { job.dropPieces(); decodeNow(job) } else { job.dropPieces(); stopChunkWatch() }
+            return
+        }
+        let piece = Piece(from: from, to: from + samples.count, file: file, isTail: isTail)
+        job.pieces.append(piece)
+        if isTail { job.tailDone = true }
+        whisper.transcribe(wav: file.path, words: words, pcm: true) { [weak self] result in
+            DispatchQueue.main.async {
+                piece.removeFile()
+                guard let self, !piece.dropped, !job.cancelled else { return }
+                piece.answered = true
+                piece.result = result
+                Log.info(String(format: "✂️ local: chunk %@ of take %d answered in %.1f s — %@",
+                                isTail ? "tail" : "\(job.pieces.firstIndex { $0 === piece }.map { $0 + 1 } ?? 0)",
+                                job.take, Date().timeIntervalSince(piece.askedAt),
+                                result.map { "\($0.text.count) chars" } ?? "no answer"))
+                if !isTail { self.live.warmLater() }
+                self.assembleIfDone(job)
+            }
+        }
+    }
+
+    /// Once the take is stopped and every piece has answered: the words, in
+    /// order. A piece that failed sends the whole WAV to the model instead —
+    /// a chunk is a speed-up, never a reason to lose a sentence.
+    private func assembleIfDone(_ job: Job) {
+        guard job.wav != nil, job.tailDone, !job.cancelled, jobs[job.take] === job,
+              job.pieces.allSatisfy({ $0.answered }) else { return }
+        let results = job.pieces.compactMap { $0.result }
+        guard results.count == job.pieces.count else {
+            Log.error("✂️ local: a chunk of take \(job.take) got no answer — decoding the whole take")
+            job.dropPieces()
+            return decodeNow(job)
+        }
+        jobs[job.take] = nil
+        let waited = job.stoppedAt.map { Date().timeIntervalSince($0) } ?? 0
+        let r = Self.join(job.pieces.map { ($0.result!, Double($0.from) / Self.rate) })
+        if !r.text.isEmpty, job.leftAtStop > 0 {
+            // The wait he saw, against what was left at the stop — the line the
+            // chip's estimate for a chunked take is read from (`noteLeft`).
+            DecodeRate.record(audio: job.leftAtStop, decode: waited, chars: r.text.count,
+                              compression: r.compressionRatio)
+        }
+        Log.info(String(format: "✂️ local: take %d assembled from %d piece(s) — %.1f s after the stop "
+                        + "(%.1f s of %.1f were left to decode)",
+                        job.take, job.pieces.count, waited, job.leftAtStop, job.duration))
+        live.warmLater()
+        answered(job, r)
+    }
+
+    /// The pieces' answers as one: texts joined with a space, words moved onto
+    /// the take's ruler (only if every piece has them), the worst confidence and
+    /// the worst loop, the language of the longest piece.
+    static func join(_ parts: [(LocalWhisper.Result, TimeInterval)]) -> LocalWhisper.Result {
+        let texts = parts.map { $0.0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let text = texts.joined(separator: " ")
+        var words: [TimedWord]? = []
+        for (r, offset) in parts {
+            guard let w = r.words else { words = nil; break }
+            if !(words?.isEmpty ?? true), let first = w.first, !first.text.hasPrefix(" ") {
+                words?.append(TimedWord(text: " ", start: offset, end: offset, isSpacing: true))
+            }
+            words?.append(contentsOf: w.map {
+                TimedWord(text: $0.text, start: $0.start + offset, end: $0.end + offset, isSpacing: $0.isSpacing)
+            })
+        }
+        if let w = words, w.map(\.text).joined().trimmingCharacters(in: .whitespacesAndNewlines) != text {
+            words = nil
+        }
+        let longest = parts.max { $0.0.text.count < $1.0.text.count }?.0
+        return LocalWhisper.Result(
+            text: text, language: longest?.language,
+            avgLogprob: parts.map { $0.0.avgLogprob }.min() ?? 0,
+            compressionRatio: parts.map { $0.0.compressionRatio }.max() ?? 0,
+            coverage: nil,
+            words: words.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     // MARK: - The model

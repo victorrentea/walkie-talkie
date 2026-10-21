@@ -316,6 +316,17 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let heldRow = NSView()
     private let heldGlyph = NSImageView()
     private let heldInfo = NSTextField(labelWithString: "")
+    /// **`📻 Ready` — the microphone may open again while the words are still
+    /// in flight** (2026-10-21, Victor: *"even though it's transcribing, in the
+    /// tooltip you should suggest ready whenever I could start talking again by
+    /// displaying the walkie-talkie at the top of the list … literally saying
+    /// ready even though the transcription is in progress"*). The top row, the
+    /// walkie (`walkie-bound`), green words. Pushed by `AppDelegate`
+    /// (`setReadyForNext`): a start now would be queued, not refused (Q12). With
+    /// nothing transcribing it is never up, so the chip looks as it always did.
+    private let readyRow = NSView()
+    private let readyGlyph = NSImageView()
+    private let readyInfo = NSTextField(labelWithString: RelayWindow.readyText)
     /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
     /// to — how many, and what the newest one was.
     ///
@@ -1490,6 +1501,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
         installEmojiRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, emoji: "💻")
         installEmojiRow(heldRow, glyph: heldGlyph, label: heldInfo, emoji: "📨")
+        installEmojiRow(readyRow, glyph: readyGlyph, label: readyInfo, emoji: "📻")
+        if let walkie = Self.walkieLiveGlyph { readyGlyph.image = walkie }
+        readyInfo.textColor = .systemGreen
 
         // Same face as every other row (see `titleFont`): it carries a CSS
         // selector, which was the argument for monospace here, and that argument
@@ -1979,7 +1993,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         if heldCount > 0 { heldInfo.stringValue = Self.heldText(heldCount) }
         if let text = localNowShown { localNowInfo.stringValue = text }
         for (on, label) in [(kamikaze, kamikazeInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
-                            (heldCount > 0, heldInfo)] where on {
+                            (heldCount > 0, heldInfo), (readyForNext, readyInfo)] where on {
             label.sizeToFit()
             let lead = glyphColumn + recordDotGap
             emojiRowsWidth = max(emojiRowsWidth, lead + ceil(label.frame.width))
@@ -2104,6 +2118,16 @@ private let heardLabel = NSTextField(labelWithString: "")
         let innerWidth = width - pad * 2
 
         var rows: [(view: NSView, height: CGFloat)] = []
+
+        // **`📻 Ready` first, above everything** — see `readyRow`.
+        if readyForNext {
+            readyInfo.sizeToFit()
+            layoutGlyphRow(readyRow, glyph: readyGlyph, label: readyInfo, width: innerWidth)
+            readyRow.isHidden = false
+            rows.append((readyRow, recordRowHeight))
+        } else {
+            readyRow.isHidden = true
+        }
 
         // **The state of the dictation comes first, above the destination**
         // (Victor, 2026-09-07: *"aș vrea ca listening cu bila roșie să
@@ -3432,6 +3456,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         localNowGlyph.wantsLayer = true
         heldInfo.wantsLayer = true
         heldGlyph.wantsLayer = true
+        readyInfo.wantsLayer = true
+        readyGlyph.wantsLayer = true
         // The flash row joins them whenever it is drawn bare — with no blur under
         // it, `labelColor` is the same invisible dark grey the selection row was.
         hintLabel.wantsLayer = true
@@ -3463,6 +3489,8 @@ private let heardLabel = NSTextField(labelWithString: "")
             heldInfo.shadow = Self.halo()
             heldInfo.textColor = .white
             heldGlyph.shadow = Self.halo()
+            readyInfo.shadow = Self.halo()
+            readyGlyph.shadow = Self.halo()
             engineInfo.shadow = Self.halo()
             engineInfo.textColor = .white
             elapsedLabel.shadow = Self.halo()
@@ -3513,6 +3541,8 @@ private let heardLabel = NSTextField(labelWithString: "")
             heldInfo.shadow = nil
             heldInfo.textColor = .secondaryLabelColor
             heldGlyph.shadow = nil
+            readyInfo.shadow = nil
+            readyGlyph.shadow = nil
             engineInfo.shadow = nil
             engineInfo.textColor = .secondaryLabelColor
             elapsedLabel.shadow = nil
@@ -4748,6 +4778,16 @@ private let heardLabel = NSTextField(labelWithString: "")
     }
 
     static func heldText(_ n: Int) -> String { "\(n) waiting — bind to send" }
+
+    /// A new sentence may start now — see `readyRow`.
+    private(set) var readyForNext = false
+    static let readyText = "Ready"
+
+    func setReadyForNext(_ on: Bool) {
+        guard readyForNext != on else { return }
+        readyForNext = on
+        layoutContent()
+    }
 
     /// The `📋 Re-paste ⌘⇧P` row is up — see `pasteRow`; `PasteHint` times it.
     private(set) var pasteHint = false

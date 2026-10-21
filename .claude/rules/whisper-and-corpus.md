@@ -91,6 +91,38 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   wait out a load. `POST /test/dictation` enters *below* the recogniser with a fabricated string, so
   it says nothing about it. → journal: *The recogniser*
 
+## The local model queues sentences and decodes long takes while he speaks (2026-10-21)
+
+Victor: *"the ability to record immediately another [prompt] even though you are currently
+transcribing the old snippet"* and *"if I'm exceeding … ten seconds of speech, start looking for
+places in the WAV that don't seem to have me talking … chop the audio … feed already that part … to
+the local model … don't feed too small chunks either"*.
+
+- **Takes, like ElevenLabs' (Q12)**: `LocalWhisperSource.queuesSentences` (`WT_LOCAL_QUEUE=0` off),
+  `take` / `answeringTake` / `unanswered` / `jobs[take]`, `cancelTake`. A `Job` lives from `start()`
+  to its answer; the helper is serial, so take 2's chunks queue behind take 1's tail. The relay's
+  Q12 rules (max 2 in flight, delivered in order) apply unchanged — `queueRefusal` reads only the flag.
+- **Chunks** (`WT_LOCAL_CHUNKS=0` off): a 0.5 s main-queue tick while recording asks the pure
+  `ChunkPlanner.cut` (tests: `ChunkPlannerTests`) — from `trigger` 10 s after the last cut, the
+  **longest** pause ≥ 0.6 s (≥ 0.3 s past 28 s) whose middle is ≥ 6 s after it, with ≥ 2 s voiced
+  before it, cut in its middle (0.4 s into one still going). The chunk is `MicRecorder.takeSlice`
+  (the in-memory take, same ruler as the WAV) sent as `{"pcm", "words": true}`; words always, their
+  cost is paid while he talks. At the stop the tail is sliced **on `audioQueue`, right after
+  `meter.stop()`** (a next take's `start` resets `take`), decoded with words only if a cue is waiting,
+  dropped under 0.3 s voiced. `join`: texts with one space, words moved by each chunk's start (kept
+  only if they spell the text), worst logprob, worst cr, the longest chunk's language.
+- **Never a lost sentence for a speed-up**: a chunk with no answer, a tail no longer in memory
+  (> 120 s since the last cut) or a marker spliced into the WAV (`markersInAudio`) → the whole WAV is
+  decoded as before. The corpus and Recover always get the whole WAV.
+- **The wait is what is left**: at the stop `DecodeRate.noteLeft(tail + chunks not yet answered)`;
+  `seconds(for:)` / `predict` read that (60 s, local only) and the round trip is filed against it.
+- Log: `✂️ local: chunk N cut at X s …`, `✂️ local: chunk N of take T answered in X s`, `✂️ local:
+  take T assembled from N piece(s) — X s after the stop (Y s of Z were left to decode)`.
+  Quality and the parameters: `evals/chunked-decode/`.
+- **`📻 Ready` on the chip** (`RelayWindow.readyRow`, top row, the walkie + green `Ready`;
+  `AppDelegate.syncReadyRow`, `GET /test/state.readyForNext`): up while words are in flight and a start
+  now would be queued (or a local fallback parked), from 0.8 s after the stop. Shot `transcribing-ready`.
+
 ## A device turned down to nothing is named (2026-10-15, `InputDevice.silencedReason`)
 
 - The Wave XLR sat at **input volume 0.00** from 19:02 that evening (peak 10–39 vs 5,000–32,000 an
