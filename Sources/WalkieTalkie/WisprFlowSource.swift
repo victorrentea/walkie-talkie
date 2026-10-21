@@ -1551,10 +1551,18 @@ final class WisprFlowSource: DictationSource {
         // carries it to the local model (Q14), no chord.
         if stopReholdBase < 0 { stopReholdBase = bridge.reholdCount }
         if ownTakeOnly == nil, bridge.reholdCount - stopReholdBase >= Self.maxStopReholds {
+            // The row is kept and the dismissal stamped before the capture ends
+            // (wave 5): `watchLateRow` holds its late ⌘V, and the dead-row verdict
+            // lets it go 1 s after the ⌃Escape — a deferred take waits for that.
+            ownTakeRow = historyRow
             if holdOwnTake("Wispr Flow's input dropped \(bridge.reholdCount - stopReholdBase) times while it heard the take") {
                 // Wispr is recording this take (its start went out): dismissed,
                 // as ⌘⌃X does — no chord will ever stop it otherwise (wave 4).
+                relayDismissedAt = CFAbsoluteTimeGetCurrent()
+                ownTakeDismissedAt = relayDismissedAt
                 HotkeyTap.postWisprCancel()
+            } else {
+                ownTakeRow = nil
             }
         }
         // **A hold restarts the drain's clock** (review wave 2): after a re-hold
@@ -2496,7 +2504,9 @@ final class WisprFlowSource: DictationSource {
             syncInputPoll()
             let row = ownTakeRow
             ownTakeRow = nil
-            endWithRecording(ownTake, row: row)
+            let dismissed = ownTakeDismissedAt
+            ownTakeDismissedAt = 0
+            endWithRecording(ownTake, row: row, dismissedAt: dismissed)
             return
         }
         // Q12: a take that waited — Wispr has it only now, so its countdown starts now.
@@ -2945,12 +2955,15 @@ final class WisprFlowSource: DictationSource {
         // release — only the bridge is left, after it has played out.
         let closedEarly = takeClosedEarly
         takeClosedEarly = false
+        // Wispr is out of this sentence (`holdOwnTake`): its replay goes nowhere,
+        // and draining it only held the local model back (wave 5).
+        let wisprOut = ownTakeOnly != nil
         meterQueue.async { [weak self] in
             guard let self else { return }
             self.setFeed(.none, ifNow: .relay)
             self.meter.onBuffer = nil
             if closedEarly {
-                self.drainThenStopBridge()
+                if wisprOut { self.bridge.stop() } else { self.drainThenStopBridge() }
                 if !keep, let taken = self.recording {
                     self.recording = nil
                     try? FileManager.default.removeItem(at: taken.url)
@@ -2981,7 +2994,7 @@ final class WisprFlowSource: DictationSource {
             // is what the stop chord waits on for the same reason; this is the
             // same wait on the way out, ended by a stuck player rather than a
             // clock, so it cannot hold the meter's queue for ever.
-            self.drainThenStopBridge()
+            if wisprOut { self.bridge.stop() } else { self.drainThenStopBridge() }
             if keep {
                 self.recording = taken
                 let voiced = self.recordingVoiced
@@ -3363,7 +3376,10 @@ final class WisprFlowSource: DictationSource {
             // Rowids only grow in one file: lower than a row already pasted for
             // him means another file (a `WT_WISPR_DB` switch) — its guard is void.
             if e.rowid < lastForeignRow { lastForeignRow = 0 }
-            if machineRelayStarted { ownedRow = e.rowid }
+            if machineRelayStarted {
+                ownedRow = e.rowid
+                if !relayRows.contains(e.rowid) { relayRows.append(e.rowid); if relayRows.count > 20 { relayRows.removeFirst() } }
+            }
             namedMic = ""
             Log.info(String(format: "wispr history: row %d is this dictation's — %.0f ms after the chord (%@)",
                             e.rowid, (CFAbsoluteTimeGetCurrent() - armedAt) * 1000,
@@ -4138,6 +4154,12 @@ final class WisprFlowSource: DictationSource {
     /// The Wispr row a held take gave up on — watched to its end at his stop
     /// (`watchLateRow`), so a late ⌘V from it is dropped, never a second copy.
     private var ownTakeRow: Int64?
+    /// When the re-hold limit dismissed Wispr under a held take (wave 5).
+    private var ownTakeDismissedAt: Double = 0
+    /// **Rows the relay adopted lately** (wave 5) — the release's busy check skips
+    /// exactly these (once dismissed they may stay `processing` for ever) and
+    /// counts his own rows whatever their number.
+    private var relayRows: [Int64] = []
     /// What "Wispr ended it itself" does for the close that is waiting.
     private var pendingWisprEnded: (() -> Void)?
 
@@ -5114,12 +5136,13 @@ extension WisprFlowSource {
             } else if !HotkeyTap.wisprChordsMuted, watch.sampleIsRunningInput() {
                 // W6: a toggle over an open Wispr microphone stops that one.
                 busy = "Wispr Flow's microphone is still open"
-            } else if let top = WisprHistory.newest(), top.rowid > max(ownedRow ?? 0, ownedFloor),
+            } else if let top = WisprHistory.newest(), !relayRows.contains(top.rowid),
                       WisprState.intermediateStatuses.contains(top.status),
                       Date().timeIntervalSince1970 - top.startedAt < 60 {
-                // Only a row newer than the relay's own (his — `WisprOwnership`'s
-                // floor): the relay's dismissed rows stay `processing` for ever
-                // (wave 4 — a cancel then a re-dictation waited 10 s and went local).
+                // Not a row the relay adopted (`relayRows`, wave 5): its dismissed
+                // rows stay `processing` for ever (wave 4 — a cancel then a
+                // re-dictation waited 10 s and went local); his own rows count,
+                // whatever their number.
                 // His own row still being transcribed (wave 3): Wispr ignores a
                 // chord while it finishes one (2026-10-06 10:25:11).
                 busy = "Wispr Flow is still on row \(top.rowid)"
