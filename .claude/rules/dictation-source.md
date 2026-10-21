@@ -114,7 +114,10 @@ dated note always wins. Speechmatics and Gemini were removed whole on 2026-09-20
   counted down but the decode ahead stayed `planned` (`⏱ … the local decode has not started (no WAV
   yet)`), nothing went in at zero, and Wispr's `error` came 33 s later. It reads `walkieOwned`
   (`relay || walkiePosted`) now; his own Wispr chord (Q9) still has none.
-- **A Wispr still finishing the take the relay gave up on cannot take the next one** (2026-10-06).
+- **A Wispr still finishing the take the relay gave up on cannot take the next one** (2026-10-06;
+  **its local borrow is reversed 2026-10-21 while the queue is on** — the next sentence is deferred
+  and handed to Wispr once the row is done, see *Wispr queues sentences* below; the borrow below
+  stands only with `WT_WISPR_QUEUE=0`).
   Measured 10:25:11: a start chord posted 6 s after ⌘⌃X left row 18414 `processing` was ignored; the
   sentence learnt so 12 s in (`holdOwnTake`) and went local by the back door — Victor read it as the
   new-session gesture picking another engine. `WisprFlowSource.stillFinishingAbandonedRow` (the row
@@ -320,7 +323,9 @@ He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-
 - **Q15: a Wispr sentence waits behind a held / paused / edited prompt panel** — its answer goes
   through `runAnswer` like every engine's (it used to force-send the panel, W10).
 - **Q16: a start while Wispr is still formatting is refused visibly** — flash *⏳ Wispr Flow takes one
-  sentence at a time* (`startDictation`, `onCleanHold`); Wispr does not queue.
+  sentence at a time* (`startDictation`, `onCleanHold`); Wispr does not queue. **Superseded
+  2026-10-21 by *Wispr queues sentences* below** — Q16 holds only with `WT_WISPR_QUEUE=0` (or
+  `WT_BRIDGE=0`).
 - **A cancelled Wispr sentence keeps the relay's recording for Recover** (W3): `closeListening`
   keeps the meter WAV even on a cancel, and every `.cancelled` from this source carries it
   (`endCancelledWithRecording`) — it was deleted (*nothing had been recorded yet*) or orphaned.
@@ -732,3 +737,43 @@ was a blip); `wispr history: row R recorded X s, the relay closed its take at Y 
 - **A Wispr-side close whose row is still NULL with no `duration` is not Wispr's end** (`nullRowHold`):
   up to 4 s from the input going off; the input back → the sentence goes on, the row moving → ended
   as before, the ceiling → `holdOwnTake`. A blip under the F19 hold cut the take at 2.8 s of 10.
+
+## Wispr queues sentences: the next one is recorded now, handed to Wispr when it is free (2026-10-21)
+
+Victor: *"the ability to record immediately another [prompt] even though you are currently
+transcribing the old snippet … this should also work if you are transcribing with Wispr … just
+buffer the wav and then hand it to Wispr whenever it's ready."* **Unit-tested only
+(`WisprDeferralTests`), not yet proven on a live Wispr.**
+
+- **`WisprFlowSource.queuesSentences`** (`WT_WISPR_QUEUE=0` off; off with `WT_BRIDGE=0` too — Wispr
+  must hear the relay's backlog). Takes like ElevenLabs': `take`, `answeringTake` (every `didEnd` /
+  `didTranscribe` through `machineAnswer`, labelled with the take the end began for; unlabelled with
+  the queue off), `answersPending`, `isPending`, `cancelTake`. The relay's Q12 rules apply unchanged.
+- **A start that meets Wispr busy is deferred** (`WisprDeferral.startBusy`: the last take's capture
+  still open, its end on its way, or `stillFinishingAbandonedRow`). The relay's meter + the bridge
+  **held** open at once (`startDeferredMeter`; `feedHeldForDeferred` keeps Wispr's input — still the
+  last sentence's — from releasing it), `didBegin`, no chord. The sentence before it keeps its WAV and
+  marker lists (`olderMarkers`). `AppDelegate.startDictation` skips W6's *Wispr is listening* refusal
+  and the *still finishing* borrow for it (`wouldDeferStart`). **This reverses 2026-10-06's local
+  borrow at the start** (above): the take waits for Wispr instead, bounded below.
+- **Released** (`deferredTick`, 0.2 s → pure `WisprDeferral.verdict`) when the sentence before it is
+  over (`olderDone`) and Wispr is free (no row finishing, its microphone shut — W6 at the release):
+  `gestureSeen(take:, announce: false)` + the start chord. Still talking: the bridge is released when
+  Wispr's input runs and catches up as usual. **Stopped already**: his stop called `didStopListening`
+  then (recipient latched, Q2) and closed the recorder only; the release runs `stopMachine()` at once
+  (`stopRelayed`): waits for Wispr's input (≤ 2.5 s per hold), replays the whole take (≤ 1.25×, a
+  re-hold on an input blip allowed until the chord), then the stop chord; no second close, no ring.
+- **Its countdown starts at that stop chord** (`onHandedToWispr` → `AppDelegate.armAutoLocal(for:take:)`),
+  not at his stop: while it waits or replays no budget runs for it (`closingDeferred`), and the
+  sentence before keeps its own countdown (`handOverTake` aims the clock's hand-over at it).
+  `📊 fallback: … deferred=X.XX` / `fallback.jsonl` `deferred` = the seconds no clock ran.
+- **Gives up → Q14** (the relay's WAV, the local model, floor 0.3 s — Wispr never heard it): the
+  sentence before not over 60 s after the gesture (`olderCeiling`), Wispr still busy 10 s after both
+  his stop and that sentence's end (`freeCeiling`), Wispr not running, the bridge not starting. Still
+  talking → it records on to his stop (`onOwnTake` flash). 🔼← drops it (WAV to Recover, no chord, the
+  sentence before untouched); ⌘⌃X hands it to the local model.
+- **Refused** (accepted, 2026-10-21): a third start while a stopped take is being replayed (one
+  bridge) — *Wispr Flow is still hearing the last take*; the 📻 Ready row may still show then.
+- Log prefix `🧾 wispr: take N deferred / waits / released / will not be Wispr Flow's`;
+  `GET /test/state.wisprLive.takes`.
+

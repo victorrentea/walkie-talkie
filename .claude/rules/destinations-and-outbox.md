@@ -48,7 +48,7 @@ Rules for where a dictation goes and when it is written: the held prompt, the ou
 - **A start while the last sentence's words are in flight is queued, not refused** — `startBlocker`
   asks `queueRefusal()`: refused only with **two already in flight** (flash *⏳ Two sentences in
   flight — wait for one to land*, log `start refused — two sentences are already in flight`), an
-  engine that is not `queuesSentences` (ElevenLabs, and the local model since 2026-10-21 — `whisper-and-corpus.md`; Wispr keeps batch 3's refusal),
+  engine that is not `queuesSentences` (ElevenLabs, the local model since 2026-10-21 — `whisper-and-corpus.md` — and Wispr Flow since 2026-10-21, its next take recorded by the relay and handed to Wispr when it is free — `dictation-source.md`, *Wispr queues sentences*; unit-tested only),
   a spawn or a film in flight, or within **0.8 s of the stop** (the same click twice).
   `WT_SENTENCE_QUEUE=0` (env / `elevenlabs.env`) puts the old rule back.
 - **A sentence the local model is decoding is parked on every engine** (D, 2026-09-28 wave 3 —

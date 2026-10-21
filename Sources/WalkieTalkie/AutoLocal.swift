@@ -190,6 +190,9 @@ enum AutoLocal {
         /// A desk run's sentence (the fake Scribe, a fake `History`, a forced
         /// budget) — written with `"test": true`, which `fallback-report.py` skips.
         var test = false
+        /// **Seconds the take waited for Wispr Flow before this clock could
+        /// start** (Q12 on Wispr, 2026-10-21) — nil for a take Wispr had at once.
+        var deferred: TimeInterval?
         let at: Date
 
         init(budget b: DecodeRate.Budget, localEta: TimeInterval, at: Date = Date()) {
@@ -211,6 +214,7 @@ enum AutoLocal {
                 + "localReady=\(Self.s(localReady)) engineAnswer=\(Self.s(engineAnswer)) "
                 + "budgetExpired=\(Self.s(budgetExpired)) outcome=\(outcome ?? "?") wasted=\(wasted) "
                 + "toWords=\(Self.s(toWords))"
+                + (deferred.map { String(format: " deferred=%.2f", $0) } ?? "")
                 + (test ? " [test]" : "")
                 + (specNote.map { " — \($0)" } ?? "")
         }
@@ -224,7 +228,7 @@ enum AutoLocal {
                     "specStart": n(specStart), "localReady": n(localReady), "engineAnswer": n(engineAnswer),
                     "engineFailed": engineFailed, "budgetExpired": n(budgetExpired), "rowShown": n(rowShown),
                     "outcome": outcome ?? NSNull(), "wasted": wasted, "toWords": n(toWords),
-                    "note": specNote ?? NSNull(), "test": test]
+                    "note": specNote ?? NSNull(), "test": test, "deferred": n(deferred)]
         }
 
         /// `wasted` from what ran: a decode that started, for a sentence whose

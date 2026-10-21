@@ -177,8 +177,13 @@ final class WisprFlowSource: DictationSource {
     /// true, and it does nothing else: no swallow, no Scratchpad, no routing.
     /// Taking over a tool he reached for directly is a different thing from
     /// wrapping a dictation this app asked for itself.
-    private(set) var relayStarted = false
-    /// **Walkie's sentence, whoever's chord**: `relayStarted` or the raw chord
+    ///
+    /// **The machine's sentence's** (2026-10-21): a deferred take (Q12, below)
+    /// is always the relay's, so `relayStarted` answers true while one stands —
+    /// the sentence the relay is told about is that one.
+    private var machineRelayStarted = false
+    var relayStarted: Bool { deferred != nil || machineRelayStarted }
+    /// **Walkie's sentence, whoever's chord**: `machineRelayStarted` or the raw chord
     /// 🔽 → posts (`walkiePosted`). The relay delivers both, so both owe the
     /// countdown a WAV — see `closedTakeAudio`.
     private var walkieOwned = false
@@ -268,7 +273,7 @@ final class WisprFlowSource: DictationSource {
     /// **Why the relay's own recording is carrying this sentence alone** — nil
     /// while Wispr is in it. Set by `holdOwnTake` (Wispr never answered the
     /// chord, F1; Wispr quit mid-sentence, item 3), cleared by `closeListening`
-    /// at HIS stop. While it stands `isRecording` is true (a microphone — the
+    /// at HIS stop. While it stands `machineRecording` is true (a microphone — the
     /// relay's — is open), no chord is posted to Wispr, and Wispr's microphone
     /// edges are not this sentence's.
     private(set) var ownTakeOnly: String?
@@ -311,7 +316,14 @@ final class WisprFlowSource: DictationSource {
 
     // MARK: - State
 
-    private(set) var isRecording = false
+    /// **The machine's sentence has a microphone open** — Wispr's take, from the
+    /// gesture to the relay's close. Every rule in this file that asks *is the
+    /// sentence still being spoken* asks this (it was `isRecording` until
+    /// 2026-10-21). The protocol's `isRecording` is the relay's question — *is a
+    /// microphone open for a sentence he has not stopped* — and adds a deferred
+    /// take (Q12) while hiding a machine take whose stop he already made.
+    private var machineRecording = false
+    var isRecording: Bool { (machineRecording && !stopRelayed) || (deferred?.recording ?? false) }
 
     /// **The measured state machine** — see `WisprState`. Everything below feeds
     /// it and nothing below asks it a question it cannot answer from its own
@@ -320,8 +332,129 @@ final class WisprFlowSource: DictationSource {
     let state = WisprState()
     /// `.listening` while the relay's own recording carries the sentence
     /// (`ownTakeOnly`): the machine is at rest (Wispr is out of it), the
-    /// sentence is not.
-    var phase: DictationPhase { ownTakeOnly != nil ? .listening : state.phase }
+    /// sentence is not. **A deferred take** (Q12, 2026-10-21) is `.listening`
+    /// while he talks and `.transcribing` once he stopped — its words are owed
+    /// whatever the machine is doing for the sentence before it; a released take
+    /// whose stop he already made (`stopRelayed`) is `.transcribing` too.
+    var phase: DictationPhase {
+        if let d = deferred { return d.recording ? .listening : .transcribing(Self.waitingForWispr) }
+        if stopRelayed { return .transcribing(Self.handingToWispr) }
+        return ownTakeOnly != nil ? .listening : state.phase
+    }
+    private static let waitingForWispr = "waiting for Wispr Flow"
+    private static let handingToWispr = "handing the take to Wispr Flow"
+
+    // MARK: - Takes (Q12 for Wispr Flow, 2026-10-21)
+
+    /// **`WT_WISPR_QUEUE=0` puts Q16 back** (one sentence at a time, refused
+    /// visibly). Needs the bridge: with `WT_BRIDGE=0` Wispr hears the room, not
+    /// the relay, and a take recorded before its chord can never reach it.
+    let queuesSentences: Bool = {
+        let v = ProcessInfo.processInfo.environment["WT_WISPR_QUEUE"] ?? ElevenLabsSource.fileValue("WT_WISPR_QUEUE")
+        return v != "0" && AudioBridge.isEnabled
+    }()
+    /// The take of the latest `start()` — deferred or not.
+    private(set) var take = 0
+    private static var takeSerial = 0
+    /// The take whose `didTranscribe` / `didEnd` is being called right now (set
+    /// around each call, on main), so the relay hands it to its own sentence.
+    private(set) var answeringTake: Int?
+    /// **The take of the sentence the machine is on** — set by `start()` (and by
+    /// a deferred take's release), nil for a sentence no `start()` opened (the
+    /// raw chord, the loopback routes), whose answers stay unlabelled as before.
+    private var machineTake: Int?
+    /// The machine's sentence still owes the relay its end (`didEnd`).
+    private var machineOwes = false
+    /// Ends on their way to `didEnd` through `meterQueue` (`endWithRecording`,
+    /// `endCancelledWithRecording`, `deliver`): a start in that hop waits.
+    private var endingInFlight = 0
+    /// **The machine's take was stopped by him before Wispr ever got it** — a
+    /// deferred take released after his stop. The relay already heard its close
+    /// (`didStopListening` at his stop, the recipient latched then — Q2), so the
+    /// machine's own close says nothing more; `isRecording` is false for it.
+    private var stopRelayed = false
+    /// The released take's length, for `DecodeRate` — `gestureAt` is the release.
+    private var relayedSpokenFor: TimeInterval = 0
+    /// His stop of the released take (its countdown's true start is the chord).
+    private var relayedStoppedAt: CFAbsoluteTime = 0
+    /// **A deferred take's close is being told** (around its `didStopListening`):
+    /// Wispr has not been asked yet, so the relay arms no countdown for it now —
+    /// `onHandedToWispr` arms it when the stop chord goes out.
+    private(set) var closingDeferred = false
+    /// **The stop chord of a take that waited went out** — Wispr can start
+    /// answering it now: `(take, its seconds of audio, seconds since his stop)`.
+    /// The relay starts the take's countdown here (`AppDelegate.armAutoLocal`).
+    var onHandedToWispr: ((_ take: Int?, _ audio: TimeInterval, _ waited: TimeInterval) -> Void)?
+    /// How long each recent take waited for Wispr (gesture → its start chord),
+    /// for the `📊 fallback:` trace (`deferred=`). Main only, the last few.
+    private var deferralSeconds: [Int: TimeInterval] = [:]
+    func deferral(take t: Int) -> TimeInterval? { deferralSeconds[t] }
+    /// The take the countdown's hand-over means (`AppDelegate.handOverAtBudget`),
+    /// read once by the next `handToLocal()` — his ⌘⌃X means the newest take.
+    var handOverTake: Int?
+    /// The released take's recorder was closed at his stop: `startMeter` opens
+    /// nothing and `stopMeter` closes only the bridge (main).
+    private var takeClosedEarly = false
+    /// The one take waiting for Wispr (main only).
+    private var deferred: Deferred?
+    private var deferredTimer: Timer?
+
+    var answersPending: Int {
+        guard let d = deferred else { return 0 }
+        return (olderDone ? 0 : 1) + (d.recording ? 0 : 1)
+    }
+    func isPending(take t: Int) -> Bool {
+        if let d = deferred, d.take == t { return true }
+        return t == machineTake && machineOwes
+    }
+
+    /// **A deferred take** — recorded by the relay while Wispr finishes the
+    /// sentence before it. Main queue only; what the recorder hands back at
+    /// his stop lives on `meterQueue` (`deferredResult`).
+    private final class Deferred {
+        let take: Int
+        /// The machine's take it waits behind (nil: a sentence no `start()` opened).
+        let older: Int?
+        let gestureAt = CFAbsoluteTimeGetCurrent()
+        let why: String
+        let mode: WrapMode
+        let underHeldPair: Bool
+        let wav: URL
+        var recording = true
+        var stoppedAt: CFAbsoluteTime = 0
+        /// The recorder's close for his stop has landed; `kept` is its WAV.
+        var closedKnown = false
+        var kept: TakeAudio?
+        var duration: TimeInterval = 0
+        var olderDoneAt: CFAbsoluteTime = 0
+        /// Wispr will not get it — the relay's own recording carries it (Q14).
+        var ownTake: String?
+        var lastWait = ""
+        init(take: Int, older: Int?, why: String, mode: WrapMode, underHeldPair: Bool, wav: URL) {
+            self.take = take; self.older = older; self.why = why; self.mode = mode
+            self.underHeldPair = underHeldPair; self.wav = wav
+        }
+        var stopped: Bool { stoppedAt > 0 }
+    }
+
+    /// What the recorder handed back for a deferred take (`meterQueue` only).
+    private struct DeferredResult {
+        var closed: (url: URL, duration: TimeInterval)?
+        var voiced: TimeInterval = 0
+        var health: MicRecorder.Health?
+        var said: [ShotMarker.Said] = []
+        var saidInRecording: [ShotMarker.Said] = []
+        var markersInAudio = false
+    }
+    private var deferredResult: DeferredResult?
+    /// The deferred take's recorder is open (`meterQueue` only) — not
+    /// `meter.isRecording`, which a feed of his own may set once it is closed.
+    private var deferredRecorderOpen = false
+
+    /// **The sentence before a deferred take: its markers** — the recorder's
+    /// marker lists are the deferred take's from its gesture on, and the
+    /// sentence still in flight reads its own from here (`markerLock`).
+    private var olderMarkers: (said: [ShotMarker.Said], inRecording: [ShotMarker.Said], inAudio: Bool)?
 
     /// **The 100 ms pull that replaced a push nobody could trust.**
     ///
@@ -504,7 +637,18 @@ final class WisprFlowSource: DictationSource {
     /// What this take really carried, for the result.
     private var saidThisTake: [ShotMarker.Said] {
         markerLock.lock(); defer { markerLock.unlock() }
-        return said
+        return olderMarkers?.said ?? said
+    }
+    /// The machine's take's `markersInAudio` — the sentence before a deferred
+    /// take reads its own (`olderMarkers`).
+    private var markersInMachineAudio: Bool {
+        markerLock.lock(); defer { markerLock.unlock() }
+        return olderMarkers?.inAudio ?? markersInAudio
+    }
+    /// The machine's take's `saidInRecording` (`meterQueue`).
+    private var saidInMachineRecording: [ShotMarker.Said] {
+        markerLock.lock(); defer { markerLock.unlock() }
+        return olderMarkers?.inRecording ?? saidInRecording
     }
 
     /// **How long Wispr still has to listen for audio this app has not handed
@@ -559,16 +703,22 @@ final class WisprFlowSource: DictationSource {
     /// sentence nothing was spliced into — the phrases stayed in the words, the
     /// frames went to the footer. Keyed by path because the next take resets
     /// `said` while the local model may still be decoding this one.
-    private var fallbackSaid: (wav: URL, said: [ShotMarker.Said])?
+    /// **A few, not one** (2026-10-21): with a deferred take (Q12) two
+    /// sentences can be handed to the local model a moment apart.
+    private var fallbackSaid: [(wav: URL, said: [ShotMarker.Said])] = []
     private let markerLock = NSLock()
 
     /// The markers spoken into `wav` — the WAV `endWithRecording` handed over.
     /// Empty for any other file.
     func saidSpliced(into wav: URL) -> [ShotMarker.Said] {
         markerLock.lock(); defer { markerLock.unlock() }
-        guard let f = fallbackSaid,
-              f.wav.standardizedFileURL.path == wav.standardizedFileURL.path else { return [] }
-        return f.said
+        let path = wav.standardizedFileURL.path
+        return fallbackSaid.last { $0.wav.standardizedFileURL.path == path }?.said ?? []
+    }
+    /// Under `markerLock`.
+    private func noteFallbackSaid(_ wav: URL, _ said: [ShotMarker.Said]) {
+        fallbackSaid.append((wav, said))
+        if fallbackSaid.count > 4 { fallbackSaid.removeFirst(fallbackSaid.count - 4) }
     }
 
     private let watch = WisprWatch()
@@ -863,6 +1013,9 @@ final class WisprFlowSource: DictationSource {
             }
             self.syncInputPoll()
             if previous.isListening != next.isListening {
+                // Q12: a released take he already stopped — Wispr listens to the
+                // relay's backlog, not to him: no ring, no music pause.
+                if next.isListening, self.stopRelayed { return }
                 self.hearingChanged?(next.isListening)
             }
         }
@@ -937,7 +1090,7 @@ final class WisprFlowSource: DictationSource {
         WisprScratchpad.startIdleSweep { [weak self] in
             guard let self else { return true }
             return self.state.phase == .idle && !self.capturing
-                && !self.isRecording && !self.speculative
+                && !self.machineRecording && !self.speculative
         }
         // **And whose front it is, given back after every close.** The close is
         // a chord posted at Wispr and Wispr answers it by activating itself —
@@ -976,8 +1129,27 @@ final class WisprFlowSource: DictationSource {
 
     @discardableResult
     func start() -> String? {
-        guard !isRecording else { return nil }
+        // A take already waiting for Wispr (Q12): one at a time behind it.
+        if let d = deferred {
+            if !d.recording { startUnderHeldPair = false }
+            return d.recording ? nil : "Wispr Flow still has take \(d.take) to transcribe — one sentence waits at a time"
+        }
+        guard !machineRecording || stopRelayed else { return nil }
+        // A released take he already stopped is still being played to Wispr
+        // through the bridge — the one bridge a next take would be held in.
+        if machineRecording, stopRelayed {
+            startUnderHeldPair = false
+            Log.info("🧾 wispr: start refused — take \(machineTake ?? 0) is still being played to Wispr Flow (the bridge is in use)")
+            return "Wispr Flow is still hearing the last take — start again in a moment"
+        }
         guard isReady else { return "Wispr Flow is not running" }
+        // **Q12 for Wispr (2026-10-21): a start while Wispr is still on the last
+        // sentence is recorded now and handed to Wispr when it is free** — before
+        // W6 below, because the microphone open then is the last sentence's.
+        if queuesSentences, let busy = busyForStart {
+            startDeferred(busy)
+            return nil
+        }
         // **W6 (2026-09-28): ask Wispr before toggling it.** The chord is a
         // toggle: posted over a Wispr that is already recording (his own right
         // ⌥⇧ sentence, a ghost left by a missed stop) it *stops* that one and
@@ -996,9 +1168,19 @@ final class WisprFlowSource: DictationSource {
             Log.info("🗒️ the Scratchpad window is closed again — scratchpad mode is back")
         }
         let mode = wrapMode
+        Self.takeSerial += 1
+        take = Self.takeSerial
         // **The ring first, always.** Whatever the mode has to do to get Wispr
         // ready, Victor pressed a button and the beacon answers the button.
-        gestureSeen("the relay asked for a dictation (\(mode.rawValue))", confident: true, relay: true)
+        gestureSeen("the relay asked for a dictation (\(mode.rawValue))", confident: true, relay: true, take: take)
+        postRelayStartChord(mode, underHeldPair: startUnderHeldPair)
+        startUnderHeldPair = false
+        return nil
+    }
+
+    /// The start chord for the mode the sentence opened in — `start()`'s, and a
+    /// deferred take's at its release (Q12).
+    private func postRelayStartChord(_ mode: WrapMode, underHeldPair: Bool) {
         switch mode {
         case .scratchpad:
             holdScratchpad()
@@ -1011,14 +1193,12 @@ final class WisprFlowSource: DictationSource {
             WisprSink.shared.open()
             WisprSink.shared.clear()
         case .off:
-            if startUnderHeldPair {
+            if underHeldPair {
                 HotkeyTap.postWisprHandsFreeUnderHeldPair()
             } else {
                 HotkeyTap.postWisprHandsFree()
             }
         }
-        startUnderHeldPair = false
-        return nil
     }
 
     /// Set by the right ⌘⌥ hold for the next `start()` only: his fingers are on
@@ -1054,7 +1234,7 @@ final class WisprFlowSource: DictationSource {
         Log.info("🗒️ the Scratchpad window is open — a held chord writes no note while it is; closing it first")
         WisprScratchpad.closeWindow { [weak self] gone in
             guard let self, self.startedMode == .scratchpad,
-                  self.isRecording || self.speculative else { return }
+                  self.machineRecording || self.speculative else { return }
             if gone {
                 Log.info("🗒️ the Scratchpad window is closed — holding the chord")
                 HotkeyTap.postWisprScratchpad(down: true)
@@ -1311,8 +1491,18 @@ final class WisprFlowSource: DictationSource {
     /// that had been delivered twelve seconds earlier.
     ///
     /// The relay knows what it asked for. The edge now confirms and logs.
+    ///
+    /// **His stop of a deferred take** (Q12) closes that one — the machine may
+    /// be busy with the sentence before it, which is exactly why it waited.
     func stop() {
-        guard isRecording || speculative else { return }
+        if let d = deferred, d.recording { return stopDeferred(d) }
+        stopMachine()
+    }
+
+    /// The machine's take — `stop()`'s body until 2026-10-21, re-entered by its
+    /// own waits (Wispr's input, the bridge's drain).
+    private func stopMachine() {
+        guard machineRecording || speculative else { return }
         // **The last second of his sentence may still be in this app** (2026-09-14).
         // With the bridge up, what Wispr has heard lags what he said by whatever
         // is queued in the player — and a stop chord posted now ends the
@@ -1341,12 +1531,18 @@ final class WisprFlowSource: DictationSource {
         // that is only ever taken for an addition. The recorder's own detach
         // still happens in `stopMeter`, on `meterQueue`, where it belongs.
         flushWaitingMarkers()
-        bridge.closeInput()
+        // **A released take whose recorder his stop already closed** (Q12) has
+        // nothing more coming in — and its input is left open so an input blip of
+        // Wispr's during the long replay can still hold it again and replay the
+        // take (`AudioBridge.rehold` needs it); it is closed before the chord.
+        if !takeClosedEarly { bridge.closeInput() }
         // **Wispr has not opened its input yet** (From Walkie, 2026-09-29): the
         // whole sentence is still held here, and a chord now would stop a Wispr
         // that never heard a word. Released if it is running this instant (the
         // 25 ms watch may not have ticked); otherwise waited for, bounded — past
         // it the chord goes out and Q14 carries the take on the relay's WAV.
+        // Each hold is its own wait (a re-hold mid-replay gets the full 2.5 s).
+        if !bridge.isHolding { stopHeldSince = 0 }
         if bridge.isHolding, ownTakeOnly == nil {
             if watch.sampleIsRunningInput() {
                 bridge.release("the relay's stop — Wispr's input is running")
@@ -1355,7 +1551,7 @@ final class WisprFlowSource: DictationSource {
                 if stopHeldSince == 0 { stopHeldSince = now }
                 let wisprTookIt = historyRow != nil || now - gestureAt < 1.0
                 if wisprTookIt, now - stopHeldSince < Self.stopWaitsForInput {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.stop() }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in self?.stopMachine() }
                     return
                 }
                 Log.error(String(format: "🔀 the stop waited %.1f s and Wispr's input never ran — "
@@ -1374,13 +1570,15 @@ final class WisprFlowSource: DictationSource {
             if now - drainMovedAt < Self.drainStall {
                 // Re-checked every quarter second: at a catch-up rate above 1 the
                 // queue empties faster than its own length in seconds.
-                DispatchQueue.main.asyncAfter(deadline: .now() + min(drain, 0.25)) { [weak self] in self?.stop() }
+                DispatchQueue.main.asyncAfter(deadline: .now() + min(drain, 0.25)) { [weak self] in self?.stopMachine() }
                 return
             }
             Log.error(String(format: "🔀 the bridge's queue has not moved for %.0f s (%.1f s still in it) — "
                              + "stopping anyway", Self.drainStall, drain))
         }
         drainMovedAt = 0
+        // The line is drawn here for a released take (above): nothing after it.
+        bridge.closeInput()
         // **Batch 4: Wispr is out of this sentence** (`holdOwnTake`) — no chord:
         // a toggle now would start a Wispr dictation nobody asked for.
         if ownTakeOnly != nil {
@@ -1393,13 +1591,13 @@ final class WisprFlowSource: DictationSource {
         // recording of the room.
         //
         // **A relay sentence too, and then the local model at once** (2026-09-29,
-        // 09:51): the check below asked `!isRecording`, which a relay start sets at
+        // 09:51): the check below asked `!machineRecording`, which a relay start sets at
         // the gesture — so it never fired for one. The stop chord went out (at
         // 09:45 it *started* Wispr: a ghost), and with no row coming the sentence
         // sat out the 30 s `captureTimeout` before Q14. Now the relay's own take
         // is the sentence, closed here and handed to the local model (Q14's
         // path through `ownTakeOnly`); E still watches for a late start.
-        if relayStarted, startWasLost {
+        if machineRelayStarted, startWasLost {
             Log.error("wispr: stop without a chord — Wispr never took the start (no row, no microphone): "
                       + "the relay's own recording is the sentence, the local model now")
             ownTakeOnly = "Wispr Flow never took the start chord"
@@ -1407,7 +1605,7 @@ final class WisprFlowSource: DictationSource {
             closeListening("the relay's own stop — Wispr never took the start, no chord posted")
             return
         }
-        if !isRecording, speculative, historyRow == nil, !watch.sampleIsRunningInput(),
+        if !machineRecording, speculative, historyRow == nil, !watch.sampleIsRunningInput(),
            CFAbsoluteTimeGetCurrent() - gestureAt > 1.0, startedMode != .scratchpad {
             Log.info("wispr: stop without a chord — Wispr never took the start (no row, no microphone)")
             closeListening("the relay's own stop (Wispr never started)")
@@ -1447,7 +1645,7 @@ final class WisprFlowSource: DictationSource {
     private func verifyStopTook(row: Int64, armed: CFAbsoluteTime, retried: Bool) {
         DispatchQueue.main.asyncAfter(deadline: .now() + WisprState.stopTakesWithin) { [weak self] in
             guard let self, self.capturing, self.armedAt == armed, self.historyRow == row,
-                  !self.isRecording, !self.speculative, !self.cancelling, !self.discardOnArrival,
+                  !self.machineRecording, !self.speculative, !self.cancelling, !self.discardOnArrival,
                   let e = WisprHistory.entry(rowid: row),
                   WisprState.stopWasLost(status: e.status, duration: e.duration,
                                          wisprMicOpen: self.watch.sampleIsRunningInput()) else { return }
@@ -1469,12 +1667,26 @@ final class WisprFlowSource: DictationSource {
         }
     }
 
+    /// **The newest sentence** (Q12): a deferred take if one stands — the
+    /// sentence before it goes on — else the machine's.
     func cancel() {
+        if let d = deferred { return cancelDeferred(d) }
+        cancelMachine()
+    }
+
+    /// **That take only** (Q12): the deferred one, or the machine's — never the other.
+    func cancelTake(_ t: Int) {
+        if let d = deferred, d.take == t { return cancelDeferred(d) }
+        if t == machineTake { return cancelMachine() }
+        Log.info("🧾 wispr: cancel of take \(t) — no take of that number is open or in flight")
+    }
+
+    private func cancelMachine() {
         // **The ✕ during the wait counts too.** Between the microphone closing
         // and the words arriving there are seconds in which the sentence is
         // still this app's to throw away — and it is exactly the stretch in
         // which Victor realises he does not want it.
-        if !isRecording, !speculative, capturing {
+        if !machineRecording, !speculative, capturing {
             // **A cancel during the settle must not disarm the swallow.**
             //
             // It used to `endCapture` here, and the adversarial run found what
@@ -1516,7 +1728,7 @@ final class WisprFlowSource: DictationSource {
             endCancelledWithRecording()
             return
         }
-        guard isRecording || speculative else { return }
+        guard machineRecording || speculative else { return }
         cancelling = true
         // **Release first, then dismiss.** In Scratchpad mode the chord is held,
         // and a ⌃Escape posted with it still down is a dismiss Wispr reads while
@@ -1538,10 +1750,21 @@ final class WisprFlowSource: DictationSource {
     // MARK: - ⌘⌃X: the local model, now (2026-09-28)
 
     func handToLocal() -> Bool {
+        // **A deferred take is the newest sentence** (Q12): recording or waiting
+        // for Wispr, it goes to the local model on the relay's own WAV — Wispr
+        // never heard it, so nothing is dismissed. The sentence before it stays
+        // Wispr's.
+        let meant = handOverTake
+        handOverTake = nil
+        if let d = deferred, meant == nil || meant == d.take { return handDeferredToLocal(d) }
+        if let d = deferred, meant != nil {
+            // The countdown of the sentence before it ran out (Q12): that one, not this.
+            Log.info("💻 the countdown's hand-over is take \(meant!)'s — take \(d.take), still waiting for Wispr, stays")
+        }
         // **Recording: Wispr is dismissed, not stopped** — a stop would have it
         // transcribe (and paste) words nobody is waiting for any more. The same
         // close the cancel makes, with the recording kept for the local model.
-        if isRecording || speculative {
+        if machineRecording || speculative {
             cancelling = true
             handingToLocal = true
             if startedMode == .scratchpad { HotkeyTap.postWisprScratchpad(down: false) }
@@ -1581,10 +1804,16 @@ final class WisprFlowSource: DictationSource {
     /// the speculative local decode reads it (2026-09-29). Not his own chord's
     /// sentence (nothing of it is the relay's to deliver), not a cancel, not a
     /// file already gone. **A 🔽 → plain sentence counts** (2026-10-06): it was
-    /// armed and counted down, but `relayStarted` is false for the raw chord, so
+    /// armed and counted down, but `machineRelayStarted` is false for the raw chord, so
     /// the decode never got its WAV — at 11:14 the countdown hit zero, nothing
     /// went in, and the words waited 33 s for Wispr's `error`.
     func closedTakeAudio(take: Int) -> TakeAudio? {
+        // A deferred take's own WAV, once his stop closed it (Q12) — the machine's
+        // guards below are the sentence before it's.
+        if let d = deferred, d.take == take {
+            guard let k = d.kept, FileManager.default.fileExists(atPath: k.url.path) else { return nil }
+            return k
+        }
         guard let k = keptTake, walkieOwned, intercepting, !cancelling, !discardOnArrival,
               FileManager.default.fileExists(atPath: k.url.path) else { return nil }
         return k
@@ -1601,7 +1830,7 @@ final class WisprFlowSource: DictationSource {
     }
 
     func simulateEdge(_ on: Bool) {
-        guard isRecording != on || (on && speculative) else { return }
+        guard machineRecording != on || (on && speculative) else { return }
         Log.info("wispr flow \(on ? "opened" : "closed") the microphone (simulated)")
         edge(on, measured: false)
     }
@@ -1618,7 +1847,7 @@ final class WisprFlowSource: DictationSource {
     ///
     /// - Parameter byHand: post it **as though Victor had pressed it** — `relay:
     ///   false`, so the dictation is Wispr's from the chord: ring only, nothing
-    ///   swallowed, nothing delivered, `intercepting` and `relayStarted` both
+    ///   swallowed, nothing delivered, `intercepting` and `machineRelayStarted` both
     ///   false. Without it the route keeps its old behaviour, which is the
     ///   transcribe primitive the harness is written against.
     ///
@@ -1630,7 +1859,7 @@ final class WisprFlowSource: DictationSource {
     ///   questions and they get two different calls.
     func postStartChord(byHand: Bool = false) {
         HotkeyTap.postWisprHandsFree()
-        if isRecording || speculative {
+        if machineRecording || speculative {
             closeListening("POST /test/wispr-handsfree — the toggle's second press")
         } else if byHand {
             gestureSeen("POST /test/wispr-handsfree {hand}", confident: true, relay: false, mode: .off)
@@ -1657,7 +1886,7 @@ final class WisprFlowSource: DictationSource {
     ///
     /// **`relay: false`, always.** The sentence is Wispr's own — the relay rings
     /// for it and routes nothing, which is the 09-12 contract for this flick and
-    /// is what `relayStarted` carries. `confident: true`, because this app
+    /// is what `machineRelayStarted` carries. `confident: true`, because this app
     /// posted the chord itself: there is no gesture to have misread. The
     /// toggle's two halves are told apart by `gestureSeen` from its own state,
     /// exactly as they are for his keyboard, so `closing` is a *description* of
@@ -1679,7 +1908,12 @@ final class WisprFlowSource: DictationSource {
     /// its own recording. On main, before anything goes on the wire: a lost start
     /// gets no chord, and the relay's own recording is the sentence (Q14).
     func rawStop() {
-        if isRecording || speculative, startWasLost {
+        // A deferred take has no chord of Wispr's to toggle (Q12): his stop is the relay's.
+        if let d = deferred, d.recording {
+            Log.info("🧾 wispr: the raw stop meets take \(d.take), still waiting for Wispr — no chord, the relay's stop")
+            return stopDeferred(d)
+        }
+        if machineRecording || speculative, startWasLost {
             Log.error("wispr: 🔽 → stop without a chord — Wispr never took the start (no row, no microphone): "
                       + "the relay's own recording is the sentence, the local model now")
             ownTakeOnly = "Wispr Flow never took the start chord"
@@ -1749,7 +1983,7 @@ final class WisprFlowSource: DictationSource {
                 "captureOpen": capturing,
                 "captureRow": historyRow.map { NSNumber(value: $0) } ?? NSNull(),
                 "speculative": speculative,
-                "isRecording": isRecording,
+                "isRecording": machineRecording,
                 "discarding": discardOnArrival,
                 "meterRecording": meter.isRecording,
                 "bridge": bridge.stats.merging(["feed": feedNow.rawValue]) { _, new in new },
@@ -1761,6 +1995,7 @@ final class WisprFlowSource: DictationSource {
                 "ownedFloor": ownedFloor,
                 "foreignRow": hotkeys.wisprForeignRowNoted,
                 "tailWatch": tailWatch != nil,
+                "takes": describeTakes,
                 "wisprPid": Int(Self.wisprMainPid),
                 "pidAtChord": Int(wisprPidAtChord),
                 // Batch 4: the relay's own recording carrying the sentence, and since when.
@@ -1829,15 +2064,19 @@ final class WisprFlowSource: DictationSource {
     ///   have no key held and no sink to take.
     /// (`heldPair` — the right ⌘⌥ hold read as Wispr's push-to-talk — went with
     /// Q9 step 2, 2026-09-28.)
+    /// - Parameter take: the take `start()` (or a deferred take's release) opened
+    ///   it as — nil for every other way in, whose answers stay unlabelled.
+    /// - Parameter announce: `didBegin` — false for a deferred take's release:
+    ///   the relay heard its beginning at his gesture (Q12).
     private func gestureSeen(_ why: String, confident: Bool, relay: Bool, mode: WrapMode? = nil,
-                             walkiePosted: Bool = false) {
+                             walkiePosted: Bool = false, take: Int? = nil, announce: Bool = true) {
         // **The chord is a toggle and the second press is the stop** (2026-09-13).
         // Only for a confident gesture: `fn ⌃ Space` is unambiguous and this
         // app's own posts no longer come back through the tap, so a hands-free
         // chord seen here while a dictation is open is Victor ending it from his
         // keyboard — which the relay used to learn only from a CoreAudio edge
         // that may be six seconds late or absent.
-        if confident, isRecording || speculative {
+        if confident, machineRecording || speculative {
             // Q9: his own chord never ends the relay's sentence — it is Wispr's
             // second sentence, not a stop.
             if !relay, !walkiePosted {
@@ -1848,7 +2087,7 @@ final class WisprFlowSource: DictationSource {
             closeListening("Victor's own \(why)")
             return
         }
-        guard !isRecording, !speculative else { return }
+        guard !machineRecording, !speculative else { return }
         // **Standalone (Q9, 2026-09-26): a dictation he starts with Wispr's own
         // chord is Wispr's alone** — not adopted, not firewalled, not delivered.
         // The back click's raw chord (`walkiePosted`) is Walkie's gesture, not his
@@ -1859,6 +2098,15 @@ final class WisprFlowSource: DictationSource {
             feedOwnSentence(why)
             return
         }
+        // **A take waiting for Wispr owns the meter and the bridge** (Q12): no
+        // other sentence of the relay's opens on the machine until it is released.
+        if let d = deferred, announce {
+            Log.error("🧾 wispr: \(why) — refused, take \(d.take) is waiting for Wispr Flow and owns the relay's microphone")
+            return
+        }
+        // Not a release of a take closed at his stop (`releaseDeferred` sets it after).
+        if announce { takeClosedEarly = false; stopRelayed = false }
+        machineTake = take
         stopHeldSince = 0
         drainMovedAt = 0
         hotkeys.setWisprRelayOwned(true)
@@ -1908,13 +2156,14 @@ final class WisprFlowSource: DictationSource {
             ? 0 : (front?.processIdentifier ?? 0)
         focusPid = frontPid != 0 ? frontPid
             : (Self.frontWindowOwner() ?? (lastFrontPid != 0 ? lastFrontPid : nil))
-        relayStarted = relay
+        machineRelayStarted = relay
         walkieOwned = relay || walkiePosted
+        machineOwes = walkieOwned
         startedMode = relay ? (mode ?? wrapMode) : .off
         // **Every Wispr sentence is the relay's to deliver** (2026-09-22). Until
         // today a dictation Victor started with Wispr's own chord was watched
         // and left to Wispr to paste; with the firewall dropping that paste at
-        // the tap there is nobody else to put the words anywhere. `relayStarted`
+        // the tap there is nobody else to put the words anywhere. `machineRelayStarted`
         // still says whose gesture it was — `AppDelegate` sends his own chord's
         // words to the caret rather than the bound agent.
         intercepting = wrapWispr
@@ -1931,9 +2180,9 @@ final class WisprFlowSource: DictationSource {
         // sentence went into whatever Terminal was in front.
         retireCaptureIfSettled()
         if confident {
-            isRecording = true
+            machineRecording = true
             Log.info("⚡ \(why) — opening the dictation on the gesture")
-            didBegin?()
+            if announce { didBegin?() }
         } else {
             didMaybeBegin?(why)
         }
@@ -1966,19 +2215,19 @@ final class WisprFlowSource: DictationSource {
             // caret instead of ttys001). Now the relay's recording carries the
             // sentence to HIS stop, which latches the recipient as every close does,
             // then this Mac transcribes it.
-            if self.relayStarted, self.holdOwnTake("Wispr Flow did not answer the chord") {
+            if self.machineRelayStarted, self.holdOwnTake("Wispr Flow did not answer the chord") {
                 self.armGhostWatch()   // E: the start may still land, late, as a ghost
                 return
             }
             self.speculative = false
-            self.isRecording = false
+            self.machineRecording = false
             // **Nothing else is going to release it.** This is the one path out
             // of a dictation that does not go through `closeListening`, and in
             // Scratchpad mode the chord is still down — twelve seconds of a
             // held key, then a hundred and twenty until the dead-man's switch.
             if HotkeyTap.scratchpadIsHeld { HotkeyTap.postWisprScratchpad(down: false) }
             // Q14: the relay's recording of those seconds is kept and judged.
-            let relays = self.relayStarted
+            let relays = self.machineRelayStarted
             if relays { self.armGhostWatch() }   // E: a start Wispr never answered
             self.stopMeter(keep: relays)
             self.state.timedOut("no row and no microphone within \(Int(Self.speculativeGrace)) s")
@@ -1987,7 +2236,7 @@ final class WisprFlowSource: DictationSource {
             Log.info("⚡ ring down: \(why)")
             self.endCapture(quiet: true)
             if relays { self.endWithRecording("Wispr Flow did not answer the chord", row: nil) }
-            else { self.didEnd?(.silent("")) }
+            else { self.machineAnswer(self.machineTake) { self.didEnd?(.silent("")) } }
         }
         speculativeDrop?.cancel()
         speculativeDrop = drop
@@ -2022,7 +2271,7 @@ final class WisprFlowSource: DictationSource {
         speculative = false
         Log.info(String(format: "⚡ %@ confirms the ring %.0f ms after the gesture",
                         what, (CFAbsoluteTimeGetCurrent() - gestureAt) * 1000))
-        isRecording = true
+        machineRecording = true
         startMeter()
     }
 
@@ -2057,7 +2306,7 @@ final class WisprFlowSource: DictationSource {
     static let micOpenGrace: TimeInterval = 3
     private func armMicOpenWatch(chord: CFAbsoluteTime) {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.micOpenGrace) { [weak self] in
-            guard let self, self.gestureAt == chord, self.relayStarted, self.isRecording || self.speculative,
+            guard let self, self.gestureAt == chord, self.machineRelayStarted, self.machineRecording || self.speculative,
                   self.ownTakeOnly == nil, !self.micSeen, !self.cancelling,
                   self.startedMode != .scratchpad, !self.watch.sampleIsRunningInput() else { return }
             let hadRow = self.historyRow
@@ -2073,8 +2322,8 @@ final class WisprFlowSource: DictationSource {
     }
     private func armChordAnswerProbe(chord: CFAbsoluteTime) {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.chordAnswerProbe) { [weak self] in
-            guard let self, self.gestureAt == chord, self.relayStarted,
-                  self.isRecording || self.speculative, self.ownTakeOnly == nil,
+            guard let self, self.gestureAt == chord, self.machineRelayStarted,
+                  self.machineRecording || self.speculative, self.ownTakeOnly == nil,
                   self.historyRow == nil, !self.micSeen else { return }
             let posted: String
             if let p = HotkeyTap.lastWisprChordPost(), p.at >= chord - 0.05 {
@@ -2129,16 +2378,20 @@ final class WisprFlowSource: DictationSource {
     }
 
     private func closeListening(_ why: String) {
-        guard isRecording || speculative else { return }
+        guard machineRecording || speculative else { return }
         // Batch 4: a sentence the relay's own recording carried (Wispr out of it)
         // closes here too, at his stop — and ends on that recording.
         let ownTake = ownTakeOnly
         ownTakeOnly = nil
+        // Q12: a released take whose stop he made while it waited for Wispr —
+        // the relay heard that close then (and latched its recipient, Q2).
+        let relayed = stopRelayed
+        stopRelayed = false
         dropPendingWisprClose()
-        if relayStarted, relayClosedWall == 0 { relayClosedWall = Date().timeIntervalSince1970 }
+        if machineRelayStarted, relayClosedWall == 0 { relayClosedWall = Date().timeIntervalSince1970 }
         // E (lab wave 3): a relay sentence Wispr's microphone never opened for —
         // its start may still land, late, as a ghost microphone.
-        if relayStarted, !micSeen { armGhostWatch() }
+        if machineRelayStarted, !micSeen { armGhostWatch() }
         // **The machine closes here too, and only here.** It used to be told
         // separately at each call site, and the one site that forgot was the
         // CoreAudio edge — so a dictation the relay had settled sat in `warming`
@@ -2159,15 +2412,18 @@ final class WisprFlowSource: DictationSource {
         // **When the relay itself stopped the last dictation**, which is what a
         // late CoreAudio *open* edge has to be told from a new one.
         lastStopAt = CFAbsoluteTimeGetCurrent()
-        isRecording = false
+        machineRecording = false
         speculativeDrop?.cancel()
         speculativeDrop = nil
         speculative = false
         stopMeter(keep: true)   // a cancel keeps it too — Recover (W3, 2026-09-28)
         captureFrom = CFAbsoluteTimeGetCurrent()
-        spokenFor = cancelling ? 0 : captureFrom - gestureAt
-        Log.info(String(format: "🎙️ the microphone is closed — %@ (%.0f ms of speech)",
-                        why, (captureFrom - gestureAt) * 1000))
+        spokenFor = cancelling ? 0 : relayed ? relayedSpokenFor : captureFrom - gestureAt
+        Log.info(relayed
+                 ? String(format: "🎙️ the microphone is closed — %@ (take %d: %.1f s he spoke, handed to Wispr %.0f ms after its release)",
+                          why, machineTake ?? 0, relayedSpokenFor, (captureFrom - gestureAt) * 1000)
+                 : String(format: "🎙️ the microphone is closed — %@ (%.0f ms of speech)",
+                          why, (captureFrom - gestureAt) * 1000))
         // The sentence is over, so the window may go — and the ten seconds the
         // keyboard guard is allowed to outlive it start counting here.
         if startedMode == .scratchpad {
@@ -2185,8 +2441,10 @@ final class WisprFlowSource: DictationSource {
         // Whichever engine is picked: a sentence Wispr's own chord opened is
         // Wispr's to transcribe (2026-09-23). One the relay's own recording
         // carried is the local model's at once: no Wispr budget is armed for it.
-        DecodeRate.activeEngine = ownTake == nil ? DecodeRate.wisprFlow : DecodeRate.whisperLocal
-        didStopListening?()
+        if !relayed {
+            DecodeRate.activeEngine = ownTake == nil ? DecodeRate.wisprFlow : DecodeRate.whisperLocal
+            didStopListening?()
+        }
         if cancelling {
             cancelling = false
             if handingToLocal {
@@ -2208,12 +2466,21 @@ final class WisprFlowSource: DictationSource {
         if let ownTake {
             // Wispr was out of it: nothing is coming from Wispr, the take is Q14's.
             endCapture(quiet: true)
-            if !isRecording, !speculative { state.reset("the relay's own recording closed (\(ownTake))") }
+            if !machineRecording, !speculative { state.reset("the relay's own recording closed (\(ownTake))") }
             syncInputPoll()
             let row = ownTakeRow
             ownTakeRow = nil
             endWithRecording(ownTake, row: row)
             return
+        }
+        // Q12: a take that waited — Wispr has it only now, so its countdown starts now.
+        if relayed {
+            DecodeRate.activeEngine = DecodeRate.wisprFlow
+            let waited = relayedStoppedAt > 0 ? CFAbsoluteTimeGetCurrent() - relayedStoppedAt : 0
+            // The trace's `deferred=`: the seconds no countdown ran for it.
+            if let t = machineTake { deferralSeconds[t] = waited }
+            Log.info(String(format: "⏱ take %d is Wispr Flow's now, %.1f s after his stop — its countdown starts here", machineTake ?? 0, waited))
+            onHandedToWispr?(machineTake, relayedSpokenFor, waited)
         }
         // The capture was armed at the gesture; what starts here is only its
         // deadline, because *how long may the words take* is counted from the
@@ -2231,7 +2498,7 @@ final class WisprFlowSource: DictationSource {
     private func syncInputPoll() {
         let wanted = state.wantsPoll
         if wanted, inputPoll == nil {
-            lastPollSaw = isRecording
+            lastPollSaw = machineRecording
             let t = Timer(timeInterval: Self.pollTick, repeats: true) { [weak self] _ in self?.pollInput() }
             inputPoll = t
             RunLoop.main.add(t, forMode: .common)
@@ -2257,10 +2524,10 @@ final class WisprFlowSource: DictationSource {
         // "Wispr ended it" does is exactly what this poll did before item 3.
         // **His own 🔽 → too** (2026-09-30, 17:13:40 and :47): the input blipped
         // off 1.4 s and 0.4 s in, this poll closed the take at once — no grace,
-        // it was not `relayStarted` — while Wispr recorded on to 3.1 and 7.1 s;
+        // it was not `machineRelayStarted` — while Wispr recorded on to 3.1 and 7.1 s;
         // the budget ran out on a sentence still being spoken and he cancelled
         // both. A plain dictation is delivered by the relay like any other.
-        if !on, isRecording, !cancelling {
+        if !on, machineRecording, !cancelling {
             let why = "the 100 ms poll saw the microphone close"
             return closeFromWisprSide(why) { [weak self] in
                 guard let self else { return }
@@ -2283,7 +2550,7 @@ final class WisprFlowSource: DictationSource {
         if on {
             noteMicSeen()
             confirmSpeculative(by: "the 100 ms poll")
-        } else if isRecording {
+        } else if machineRecording {
             // The same credential the notification needs, for the same reason:
             // a poll that never saw this dictation's microphone open is
             // reporting the end of somebody else's.
@@ -2306,7 +2573,7 @@ final class WisprFlowSource: DictationSource {
         // A guess the microphone never confirmed has no closing edge to wait
         // for: it is over here and now. Should Wispr open the microphone after
         // all, that edge opens a fresh dictation, which is what it would be.
-        if isRecording || speculative {
+        if machineRecording || speculative {
             Log.info("🗑️ ⌃Escape — Wispr Flow's dismiss, pressed by hand")
             cancelling = true
             closeListening("Victor's own ⌃Escape")
@@ -2334,19 +2601,19 @@ final class WisprFlowSource: DictationSource {
         // **Asked before the machine is told**, because `WisprState.notify(true)`
         // takes an `idle` machine into `listening`, and a late open edge would
         // therefore put the phase back into a sentence that is over.
-        if on, !speculative, !isRecording, let why = lateOpenEdge() {
+        if on, !speculative, !machineRecording, let why = lateOpenEdge() {
             Log.info("⚡ \(why) — a late confirmation of the sentence that is over, not a new dictation")
             return
         }
         // **Q9: a microphone nobody here asked for is Wispr's own sentence** —
         // no ring, no capture, no delivery; and its close is not ours.
-        if !speculative, !isRecording {
+        if !speculative, !machineRecording {
             if on { Log.info("⚡ Wispr opened its microphone for a sentence of its own — left to Wispr (Q9)") }
             return
         }
         // Batch 4, item 3: the same question as the poll's — a quit, or Wispr's own end?
         // Batch 5: credential or not; "Wispr ended it" is what the edge did before.
-        if !on, isRecording, !cancelling {
+        if !on, machineRecording, !cancelling {
             return closeFromWisprSide("the CoreAudio edge") { [weak self] in
                 guard let self else { return }
                 self.state.notify(false)
@@ -2369,16 +2636,18 @@ final class WisprFlowSource: DictationSource {
                 confirmSpeculative(by: "the mic edge")
                 return
             }
-            guard !isRecording else { return }
-            isRecording = true
+            guard !machineRecording else { return }
+            machineRecording = true
             openedAt = Date().timeIntervalSince1970
             // No chord was seen for this one — Victor's own, on a build whose
             // tap missed it — so the edge is the only clock there is.
             if gestureAt == 0 || state.chordAt == 0 { gestureAt = CFAbsoluteTimeGetCurrent() }
-            // Nobody's gesture but his: `relayStarted` would otherwise be the
+            // Nobody's gesture but his: `machineRelayStarted` would otherwise be the
             // previous sentence's answer, and the dress reads it.
-            relayStarted = false
+            machineRelayStarted = false
             walkieOwned = false
+            machineTake = nil
+            machineOwes = false
             beginCapture()
             startMeter()
             didBegin?()
@@ -2395,11 +2664,11 @@ final class WisprFlowSource: DictationSource {
             // was over before a word of it was spoken. `notifyMs` is nil unless
             // this notification saw *this* dictation start, which is exactly the
             // credential the report needs.
-            if isRecording, state.notifyMs == nil {
+            if machineRecording, state.notifyMs == nil {
                 Log.info("⚡ a mic edge closed with no matching open — it belongs to the previous dictation, ignored")
                 return
             }
-            guard isRecording else {
+            guard machineRecording else {
                 // The ordinary case since the relay closes on its own gesture:
                 // the edge arrives seconds later with nothing left to say. Said
                 // anyway, because *how much later* is the number that made all
@@ -2479,6 +2748,11 @@ final class WisprFlowSource: DictationSource {
     /// When the last feed ended — Wispr's input still closing after it is not a
     /// new sentence of his.
     private var feedEndedAt: CFAbsoluteTime = 0
+    /// **A deferred take's backlog is not released by Wispr's input** (Q12,
+    /// under `feedLock`): an input running before the take's own chord is the
+    /// sentence before it still finishing — released into it, his next words
+    /// would land in the last sentence's transcript.
+    private var feedHeldForDeferred = false
     private var feedTick = 0
     private let feedQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.feed-watch")
     private var feedTimer: DispatchSourceTimer?
@@ -2530,7 +2804,7 @@ final class WisprFlowSource: DictationSource {
             guard AudioBridge.isEnabled, feedTick % 8 == 0, now - ended > 1,
                   watch.sampleIsRunningInput() else { return }
             DispatchQueue.main.async { [weak self] in
-                guard let self, !self.isRecording, !self.speculative else { return }
+                guard let self, !self.machineRecording, !self.speculative else { return }
                 self.noteInputReopened()
                 self.feedOwnSentence("Wispr opened its input on its own")
             }
@@ -2538,6 +2812,7 @@ final class WisprFlowSource: DictationSource {
         }
         let open = watch.sampleIsRunningInput()
         feedLock.lock()
+        if feedHeldForDeferred { feedLock.unlock(); return }
         if open { feedSawOpen = true; feedLastOpen = now }
         let saw = feedSawOpen, last = feedLastOpen
         feedLock.unlock()
@@ -2600,7 +2875,10 @@ final class WisprFlowSource: DictationSource {
     }
 
     private func startMeter() {
-        let wav = Outbox.shotsDir.appendingPathComponent("wispr-\(Int(Date().timeIntervalSince1970)).wav")
+        // A released take closed at his stop (Q12): its recording is done — the
+        // confirmations that follow the chord must not open a new one.
+        guard !takeClosedEarly else { return }
+        let wav = Self.takeWAV()
         keptTake = nil
         meterQueue.async { [weak self] in
             guard let self else { return }
@@ -2636,10 +2914,23 @@ final class WisprFlowSource: DictationSource {
     /// - Parameter keep: whether the WAV is wanted. A cancelled sentence's audio
     ///   is Victor's voice with nothing to label it, and the corpus files pairs.
     private func stopMeter(keep: Bool) {
+        // **A released take whose recorder his stop already closed** (Q12): the
+        // WAV, its voiced seconds and health are in `recording` since the
+        // release — only the bridge is left, after it has played out.
+        let closedEarly = takeClosedEarly
+        takeClosedEarly = false
         meterQueue.async { [weak self] in
             guard let self else { return }
             self.setFeed(.none, ifNow: .relay)
             self.meter.onBuffer = nil
+            if closedEarly {
+                self.drainThenStopBridge()
+                if !keep, let taken = self.recording {
+                    self.recording = nil
+                    try? FileManager.default.removeItem(at: taken.url)
+                }
+                return
+            }
             self.recordingVoiced = self.meter.voicedSeconds
             let taken = self.meter.stop()
             // A (2026-09-28): what the device gave this take, always said.
@@ -2664,18 +2955,7 @@ final class WisprFlowSource: DictationSource {
             // is what the stop chord waits on for the same reason; this is the
             // same wait on the way out, ended by a stuck player rather than a
             // clock, so it cannot hold the meter's queue for ever.
-            if self.bridge.isRunning {
-                // Unbounded like the stop chord's wait, and ended the same way: by
-                // a queue that has not moved for `drainStall`.
-                var seen = self.bridge.queuedSeconds, movedAt = Date()
-                while seen > 0.02, Date().timeIntervalSince(movedAt) < Self.drainStall {
-                    Thread.sleep(forTimeInterval: 0.02)
-                    let now = self.bridge.queuedSeconds
-                    if now < seen - 0.005 { movedAt = Date() }
-                    seen = now
-                }
-                self.bridge.stop()
-            }
+            self.drainThenStopBridge()
             if keep {
                 self.recording = taken
                 let voiced = self.recordingVoiced
@@ -2687,6 +2967,22 @@ final class WisprFlowSource: DictationSource {
             }
             else if let taken { try? FileManager.default.removeItem(at: taken.url) }
         }
+    }
+
+    /// `meterQueue` only. Unbounded like the stop chord's wait, and ended the
+    /// same way: by a queue that has not moved for `drainStall`. **What is
+    /// still held is not waited for** — nobody is reading it (a deferred take's
+    /// backlog is torn down only when Wispr will never get it, Q12).
+    private func drainThenStopBridge() {
+        guard bridge.isRunning else { return }
+        var seen = bridge.queuedSeconds, movedAt = Date()
+        while seen > 0.02, Date().timeIntervalSince(movedAt) < Self.drainStall {
+            Thread.sleep(forTimeInterval: 0.02)
+            let now = bridge.queuedSeconds
+            if now < seen - 0.005 { movedAt = Date() }
+            seen = now
+        }
+        bridge.stop()
     }
 
     // MARK: - Catching the transcript
@@ -3023,7 +3319,7 @@ final class WisprFlowSource: DictationSource {
         // even `formatted` — and shipped the one character it found. The note
         // has to be a cross-check or it is a second delivery racing the first.
         if startedMode == .scratchpad, Self.deliverFromNote, Self.noteMayDeliver,
-           intercepting, !isRecording, pollNote() { return }
+           intercepting, !machineRecording, pollNote() { return }
         // **After adoption the capture reads its own row, never the newest**
         // (W4, 2026-09-28): his own right ⌥⇧ sentence makes a newer row, which
         // used to hide the relay's — its sentence then waited out the timeout.
@@ -3041,7 +3337,7 @@ final class WisprFlowSource: DictationSource {
             // Rowids only grow in one file: lower than a row already pasted for
             // him means another file (a `WT_WISPR_DB` switch) — its guard is void.
             if e.rowid < lastForeignRow { lastForeignRow = 0 }
-            if relayStarted { ownedRow = e.rowid }
+            if machineRelayStarted { ownedRow = e.rowid }
             namedMic = ""
             Log.info(String(format: "wispr history: row %d is this dictation's — %.0f ms after the chord (%@)",
                             e.rowid, (CFAbsoluteTimeGetCurrent() - armedAt) * 1000,
@@ -3087,7 +3383,7 @@ final class WisprFlowSource: DictationSource {
         // opens the microphone (100 NULL rows in September); the relay waited
         // the whole 30 s for it. Closed, still NULL, never a microphone:
         // Wispr heard nothing — the relay's own recording stands in (Q14).
-        case let s where s.isEmpty && !isRecording && !micSeen && took >= Self.nullNoMicCeiling * 1000:
+        case let s where s.isEmpty && !machineRecording && !micSeen && took >= Self.nullNoMicCeiling * 1000:
             Log.error(String(format: "wispr history: row %lld is still NULL %.1f s after the close and Wispr never opened its microphone — Wispr did not hear this sentence", e.rowid, took / 1000))
             let row = e.rowid
             endCapture(quiet: true)
@@ -3110,7 +3406,7 @@ final class WisprFlowSource: DictationSource {
             // another Wispr pid, still open 1 s after the relay's own dismiss, or
             // NULL with no `duration` 3 s after the close (`WisprState.deadRow`,
             // from Wispr's own code). The relay's recording stands in (Q14).
-            guard !isRecording, !speculative else { return }
+            guard !machineRecording, !speculative else { return }
             let closed = Date().timeIntervalSince1970 - (CFAbsoluteTimeGetCurrent() - captureFrom)
             let facts = WisprState.RowFacts(
                 rowid: e.rowid, status: s, duration: e.duration,
@@ -3154,7 +3450,7 @@ final class WisprFlowSource: DictationSource {
                 Log.info(String(format: "wispr history: %@ — Victor's own dictation, delivered by Wispr (%.0f ms)",
                                 e.status, took))
                 endCapture(quiet: true)
-                didEnd?(.silent(""))
+                machineAnswer(machineTake) { didEnd?(.silent("")) }
                 return
             }
             // **Wispr's take against the relay's** (2026-09-29): a row that
@@ -3244,7 +3540,7 @@ final class WisprFlowSource: DictationSource {
     private static let nullNoMicCeiling: TimeInterval = 3
 
     private func noteMicSeen() {
-        guard !micSeen, isRecording || speculative else { return }
+        guard !micSeen, machineRecording || speculative else { return }
         micSeen = true
         micOpened?()
     }
@@ -3255,14 +3551,14 @@ final class WisprFlowSource: DictationSource {
     /// 3 — TQ2's recording was cut at the kill, 1.0 s voiced, Recover only).
     /// Neither is his stop, so neither may end what he is saying: the capture
     /// (row poll, ⌘V swallow) is let go — Wispr has nothing more to give — while
-    /// the meter goes on recording, `isRecording` stays true and `phase` says
+    /// the meter goes on recording, `machineRecording` stays true and `phase` says
     /// `.listening`. His stop (`stop()` → `closeListening`, no chord posted)
     /// closes it the way every close does — the recipient latched then (Q2) —
     /// and `endWithRecording` hands the take to the local model (Q14). A cancel
     /// or ⌘⌃X still works on it. True when it took the sentence.
     @discardableResult
     private func holdOwnTake(_ why: String) -> Bool {
-        guard ownTakeOnly == nil, relayStarted, isRecording || speculative, !cancelling, !handingToLocal
+        guard ownTakeOnly == nil, machineRelayStarted, machineRecording || speculative, !cancelling, !handingToLocal
         else { return false }
         speculativeDrop?.cancel()
         speculativeDrop = nil
@@ -3275,11 +3571,13 @@ final class WisprFlowSource: DictationSource {
         ownTakeOnly = why
         ownTakeSince = CFAbsoluteTimeGetCurrent()
         speculative = false
-        isRecording = true
+        machineRecording = true
         endCapture(quiet: true)
         Log.error(String(format: "💻 %@ — %.1f s into the sentence: the relay's own recording carries it on until his stop, then this Mac transcribes it (Q14; batch 4)",
                          why, ownTakeSince - gestureAt))
-        onOwnTake?(why)
+        // A released take he already stopped (Q12): no *stop as usual* on the
+        // chip — the stop under way closes it on the relay's recording.
+        if !stopRelayed { onOwnTake?(why) }
         return true
     }
     /// The Wispr-side close (poll, CoreAudio edge) of any sentence waits up
@@ -3305,6 +3603,10 @@ final class WisprFlowSource: DictationSource {
         // 1.5 s floor guards a sentence Wispr did hear and mangled.
         let floor = micSeen ? ElevenLabsSource.fallbackVoicedFloor : 0.3
         let closed = lastStopAt > 0 ? Date().timeIntervalSince1970 - (CFAbsoluteTimeGetCurrent() - lastStopAt) : 0
+        // The take this end belongs to, read now (Q12): by the time the hop
+        // below comes back, another sentence may be the machine's.
+        let t = machineTake
+        endingInFlight += 1
         meterQueue.async { [weak self] in
             guard let self else { return }
             let taken = self.recording
@@ -3312,36 +3614,47 @@ final class WisprFlowSource: DictationSource {
             let voiced = self.recordingVoiced
             let recHealth = self.recordingHealth
             if let taken {
+                let said = self.saidInMachineRecording
                 self.markerLock.lock()
-                self.fallbackSaid = (taken.url, self.saidInRecording)
+                self.noteFallbackSaid(taken.url, said)
                 self.markerLock.unlock()
             }
             DispatchQueue.main.async {
+                self.endingInFlight -= 1
                 if let row { self.watchLateRow(row, pid: pid, closedAt: closed, dismissedAt: dismissedAt) }
-                guard let taken, FileManager.default.fileExists(atPath: taken.url.path) else {
-                    Log.error("wispr: \(why) — and the relay has no recording of it")
-                    self.didEnd?(.silent(why))
-                    return
-                }
-                if voiced >= floor {
-                    Log.error(String(format: "wispr: %@ — %.1f s voiced on the relay's own recording: the local model %@",
-                                     why, voiced, forced ? "takes it" : "stands in (Q14)"))
-                    self.didEnd?(.failed(why: why, audio: taken.url, duration: taken.duration))
-                } else if let health = recHealth, health.deaf {
-                    // **A: nobody listened — not "no speech".** Kept for Recover.
-                    Log.error(String(format: "wispr: %@ — the relay's own recording got NO AUDIO (%@): not 'no speech'; kept for Recover", why, health.line))
-                    self.didEnd?(.failed(why: "\(DictationEnd.recorderDeaf) (\(health.device))", audio: taken.url, duration: taken.duration))
-                } else if voiced < 0.3 {
-                    // **A (2026-09-28): Wispr failed too, so the take is kept** —
-                    // the meter's *no speech* is a judgement, and the lab showed it
-                    // wrong 4× in a row; Recover costs nothing.
-                    Log.info(String(format: "wispr: %@ — %.1f s voiced on the relay's own recording too (%@): kept for Recover", why, voiced, recHealth?.line ?? "no health"))
-                    self.didEnd?(.failed(why: DictationEnd.heardNothing, audio: taken.url, duration: taken.duration))
-                } else {
-                    Log.error(String(format: "wispr: %@ — only %.1f s voiced (under %.1f s): no local fallback, the audio is kept for Recover", why, voiced, ElevenLabsSource.fallbackVoicedFloor))
-                    self.didEnd?(.failed(why: DictationEnd.heardNothing, audio: taken.url, duration: taken.duration))
-                }
+                let end = Self.endOnRecording(why, taken: taken, voiced: voiced, health: recHealth,
+                                              floor: floor, forced: forced)
+                self.machineAnswer(t) { self.didEnd?(end) }
             }
+        }
+    }
+
+    /// **Q14's verdict on the relay's own recording** — the machine's take
+    /// (`endWithRecording`) and a deferred one's (`endDeferred`) alike.
+    private static func endOnRecording(_ why: String, taken: (url: URL, duration: TimeInterval)?,
+                                       voiced: TimeInterval, health recHealth: MicRecorder.Health?,
+                                       floor: TimeInterval, forced: Bool) -> DictationEnd {
+        guard let taken, FileManager.default.fileExists(atPath: taken.url.path) else {
+            Log.error("wispr: \(why) — and the relay has no recording of it")
+            return .silent(why)
+        }
+        if voiced >= floor {
+            Log.error(String(format: "wispr: %@ — %.1f s voiced on the relay's own recording: the local model %@",
+                             why, voiced, forced ? "takes it" : "stands in (Q14)"))
+            return .failed(why: why, audio: taken.url, duration: taken.duration)
+        } else if let health = recHealth, health.deaf {
+            // **A: nobody listened — not "no speech".** Kept for Recover.
+            Log.error(String(format: "wispr: %@ — the relay's own recording got NO AUDIO (%@): not 'no speech'; kept for Recover", why, health.line))
+            return .failed(why: "\(DictationEnd.recorderDeaf) (\(health.device))", audio: taken.url, duration: taken.duration)
+        } else if voiced < 0.3 {
+            // **A (2026-09-28): Wispr failed too, so the take is kept** —
+            // the meter's *no speech* is a judgement, and the lab showed it
+            // wrong 4× in a row; Recover costs nothing.
+            Log.info(String(format: "wispr: %@ — %.1f s voiced on the relay's own recording too (%@): kept for Recover", why, voiced, recHealth?.line ?? "no health"))
+            return .failed(why: DictationEnd.heardNothing, audio: taken.url, duration: taken.duration)
+        } else {
+            Log.error(String(format: "wispr: %@ — only %.1f s voiced (under %.1f s): no local fallback, the audio is kept for Recover", why, voiced, ElevenLabsSource.fallbackVoicedFloor))
+            return .failed(why: DictationEnd.heardNothing, audio: taken.url, duration: taken.duration)
         }
     }
 
@@ -3415,12 +3728,15 @@ final class WisprFlowSource: DictationSource {
     /// (W3, 2026-09-28) — it used to be deleted at the close (*nothing had been
     /// recorded yet*) or orphaned in Caches.
     private func endCancelledWithRecording() {
+        let t = machineTake
+        endingInFlight += 1
         meterQueue.async { [weak self] in
             guard let self else { return }
             let taken = self.recording
             self.recording = nil
             DispatchQueue.main.async {
-                self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0))
+                self.endingInFlight -= 1
+                self.machineAnswer(t) { self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0)) }
             }
         }
     }
@@ -3454,12 +3770,12 @@ final class WisprFlowSource: DictationSource {
             // A sentence of the relay's own is open: its microphone is not a ghost —
             // unless Wispr is out of it and the relay's own recording carries it
             // (batch 4): then a microphone of Wispr's is the late start itself.
-            guard !self.speculative, !(self.isRecording && self.ownTakeOnly == nil) else { return }
+            guard !self.speculative, !(self.machineRecording && self.ownTakeOnly == nil) else { return }
             let his = CGEventSource.keyState(.combinedSessionState, key: 61)
                 && CGEventSource.keyState(.combinedSessionState, key: 60)
             // E-FP: the relay's own capture still waiting for Wispr — that
             // microphone may be its sentence finishing after the relay's stop.
-            let inFlight = self.capturing && self.relayStarted && !self.discardOnArrival
+            let inFlight = self.capturing && self.machineRelayStarted && !self.discardOnArrival
             guard let why = WisprOwnership.ghostMic(now: now, micOpen: self.watch.sampleIsRunningInput(),
                                                     relayRecording: false, unansweredAt: self.unansweredChordAt,
                                                     hisKeysHeld: his, hisChordAt: self.hisChordAt,
@@ -3731,7 +4047,7 @@ final class WisprFlowSource: DictationSource {
     /// moved (`rowMoved`: its stop path ran, so it is alive).
     private func resolveWisprClose(rowMoved: Bool = false) {
         guard let ended = pendingWisprEnded else { return }
-        guard isRecording || speculative, ownTakeOnly == nil else { return dropPendingWisprClose() }
+        guard machineRecording || speculative, ownTakeOnly == nil else { return dropPendingWisprClose() }
         if rowMoved { state.wisprAliveAfterClose() }
         let gone = wisprGone()
         switch state.wisprCloseDue(processGone: gone != nil) {
@@ -3850,7 +4166,7 @@ final class WisprFlowSource: DictationSource {
         exitedAt = Date()
         // Batch 5: the exit wins over a close still waiting, whichever came first.
         if pid == wisprPidAtChord { state.wisprProcessExited() }
-        guard pid == wisprPidAtChord, capturing || isRecording || speculative, ownTakeOnly == nil else {
+        guard pid == wisprPidAtChord, capturing || machineRecording || speculative, ownTakeOnly == nil else {
             Log.info("⚡ Wispr Flow's process \(pid) exited (\(how)) — no sentence of the relay's is on it")
             return
         }
@@ -3873,12 +4189,12 @@ final class WisprFlowSource: DictationSource {
         WisprScratchpad.ensureClosed(reason: "Wispr Flow quit mid-sentence")
         // **Item 3 (batch 4): while he is still talking, a quit is not his stop.**
         // The relay's recording goes on to his stop, then Q14 transcribes all of it.
-        if relayStarted, isRecording || speculative, !cancelling {
+        if machineRelayStarted, machineRecording || speculative, !cancelling {
             Log.error("⚠️ Wispr Flow quit mid-sentence (\(why)) — not his stop: the relay's own recording goes on")
             if holdOwnTake("Wispr Flow quit") { return }
         }
         Log.error("⚠️ Wispr Flow quit mid-sentence (\(why)) — the relay's own recording stands in (Q14)")
-        if isRecording || speculative { closeListening("Wispr Flow quit") }
+        if machineRecording || speculative { closeListening("Wispr Flow quit") }
         // After the close, or `stopChord` would transition out of the `done`
         // this puts the machine in and the phase would say the sentence ended
         // normally.
@@ -4162,7 +4478,7 @@ final class WisprFlowSource: DictationSource {
         guard intercepting else {
             Log.info("wispr: Victor's own dictation is over and the relay took nothing from it")
             endCapture(quiet: true)
-            didEnd?(.silent(""))
+            machineAnswer(machineTake) { didEnd?(.silent("")) }
             return
         }
         if !askedForCopy, Self.copyFallbackEnabled {
@@ -4284,9 +4600,10 @@ final class WisprFlowSource: DictationSource {
         // `idle` and the transition log never says this one finished.
         if armedAt >= state.chordAt { state.delivered(via: via) }
         endCapture(quiet: true)
+        let t = machineTake
         guard !text.isEmpty else {
             Log.error("wispr: \(reason) carried nothing")
-            didEnd?(.silent("No words detected"))
+            machineAnswer(t) { didEnd?(.silent("No words detected")) }
             return
         }
         Log.info(String(format: "🗣️ wispr transcript via %@ — %d chars, %.0f ms after the microphone closed",
@@ -4297,11 +4614,15 @@ final class WisprFlowSource: DictationSource {
             DecodeRate.record(audio: spokenFor, decode: took, engine: DecodeRate.wisprFlow, chars: text.count)
             spokenFor = 0
         }
+        let inAudio = markersInMachineAudio
+        endingInFlight += 1
         meterQueue.async { [weak self] in
             guard let self else { return }
             let taken = self.recording
             self.recording = nil
             DispatchQueue.main.async {
+                self.endingInFlight -= 1
+                self.machineAnswer(t) {
                 self.didTranscribe?(DictationResult(
                     text: text,
                     language: nil,
@@ -4319,12 +4640,13 @@ final class WisprFlowSource: DictationSource {
                     // Only where the recogniser may have moved the focus under
                     // the sentence; every other path means *the caret*.
                     focusPid: self.startedMode == .scratchpad ? self.focusPid : nil,
-                    markersInAudio: self.markersInAudio,
+                    markersInAudio: inAudio,
                     engineLabel: Self.engineLabel,
                     said: saidNow,
                     asr: asrNow,
                     unformatted: rawNow))
                 self.didEnd?(.delivered)
+                }
             }
         }
     }
@@ -4379,7 +4701,7 @@ final class WisprFlowSource: DictationSource {
             // it checks the window and closes it before it holds the chord — and
             // a close started here would be the second half of a toggle behind
             // that one, which re-opens what the first shut.
-            if isRecording || speculative {
+            if machineRecording || speculative {
                 scratchpadWindowHandled = true
                 Log.info("🗒️ the next dictation is already opening — its own precondition closes the window, not this capture")
             }
@@ -4398,16 +4720,445 @@ final class WisprFlowSource: DictationSource {
         captureDeadline = nil
         // The machine goes back to rest with the capture, which is also what
         // takes the 100 ms poll off CoreAudio.
-        if !isRecording, !speculative { state.reset("the capture is over") }
+        if !machineRecording, !speculative { state.reset("the capture is over") }
         // **A sentence that is still being spoken gets its own window now.**
         // The capture that just ended belonged to the *previous* one — kept by
         // `retireCaptureIfSettled` because its row was not terminal — and
         // leaving this one with no swallow, no pasteboard watch and no row poll
         // is the 2026-09-13 Word failure with extra steps.
-        if isRecording || speculative, ownTakeOnly == nil {
+        if machineRecording || speculative, ownTakeOnly == nil {
             Log.info("wispr: the standing capture is retired — arming this dictation's own")
             beginCapture()
         }
         syncInputPoll()
+    }
+}
+
+// MARK: - Q12 for Wispr Flow: the deferred take (2026-10-21)
+//
+// Victor: *"the ability to record immediately another [prompt] even though you
+// are currently transcribing the old snippet … this should also work if you are
+// transcribing with Wispr … just buffer the wav and then hand it to Wispr
+// whenever it's ready."* Wispr takes one sentence at a time (Q16), so a start
+// that meets Wispr still on the last one is recorded by the relay at once — the
+// meter's WAV and the bridge's held backlog keep every word from the gesture —
+// and its real start (the chord, the capture, the 3 s microphone watch) runs
+// when the sentence before it has ended and Wispr is free. The pure rules:
+// `WisprDeferral`.
+
+extension WisprFlowSource {
+
+    /// Runs one take's `didTranscribe` / `didEnd`, labelled with it (main).
+    /// Unlabelled with the queue off: the relay's sentences carry no take then
+    /// (`dictationBegan` asks `queuesSentences`), and a label nobody holds
+    /// would skip the order rule (Q15, D2).
+    private func answer(_ t: Int?, _ body: () -> Void) {
+        let outer = answeringTake
+        answeringTake = queuesSentences ? t : nil
+        body()
+        answeringTake = outer
+    }
+
+    /// **The machine's sentence's end** — labelled with its take (read when the
+    /// end began, `t`), after which it owes the relay nothing; a deferred take
+    /// waiting behind it is looked at at once.
+    private func machineAnswer(_ t: Int?, _ body: () -> Void) {
+        answer(t, body)
+        if t == machineTake { machineOwes = false }
+        if deferred != nil { DispatchQueue.main.async { [weak self] in self?.deferredTick() } }
+    }
+
+    /// Why Wispr cannot take a start chord now — nil when it can.
+    private var busyForStart: String? {
+        WisprDeferral.startBusy(machineRecording: machineRecording, speculative: speculative,
+                                capturing: capturing, discarding: discardOnArrival,
+                                finishingRow: stillFinishingAbandonedRow, endingInFlight: endingInFlight,
+                                take: machineTake.map { String($0) } ?? "before")
+    }
+
+    /// **A start now would be deferred** (Q12) — `AppDelegate.startDictation`
+    /// asks, so that Wispr's microphone still open for the sentence before (W6's
+    /// question) and the *still finishing* borrow do not stop it first.
+    var wouldDeferStart: Bool {
+        queuesSentences && deferred == nil && isReady && !(machineRecording && stopRelayed) && busyForStart != nil
+    }
+
+    /// The sentence the machine was on when a take was deferred is over.
+    private var olderDone: Bool {
+        WisprDeferral.olderDone(owes: machineOwes, machineRecording: machineRecording, speculative: speculative,
+                                capturing: capturing, endingInFlight: endingInFlight, ownTake: ownTakeOnly != nil)
+    }
+
+    /// A WAV of the relay's own per take, never two in one second's name.
+    static func takeWAV(_ tag: String = "") -> URL {
+        let ms = Int((Date().timeIntervalSince1970 * 1000).rounded())
+        return Outbox.shotsDir.appendingPathComponent("wispr-\(ms / 1000)-\(String(format: "%03d", ms % 1000))\(tag).wav")
+    }
+
+    // MARK: Start
+
+    func startDeferred(_ busy: String) {
+        Self.takeSerial += 1
+        take = Self.takeSerial
+        let d = Deferred(take: take, older: machineTake, why: busy, mode: wrapMode,
+                         underHeldPair: startUnderHeldPair, wav: Self.takeWAV("-take\(take)"))
+        startUnderHeldPair = false
+        deferred = d
+        Log.info("🧾 wispr: take \(d.take) deferred — \(busy); the relay records it now (WAV + the bridge, held) "
+                 + "and hands it to Wispr Flow when it is free")
+        startDeferredMeter(d)
+        deferredTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in self?.deferredTick() }
+        deferredTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+        didBegin?()
+        // Q20's `Opening Wispr Flow...` is for Wispr's own microphone: here the
+        // relay's is open, and every word is kept — he may talk now.
+        micOpened?()
+    }
+
+    /// The recorder and the bridge, held, for a deferred take (`meterQueue`):
+    /// `startMeter`'s path, minus anything the sentence before it still owns —
+    /// its WAV (`recording`) is untouched and its marker lists set aside.
+    private func startDeferredMeter(_ d: Deferred) {
+        let t = d.take, wav = d.wav
+        feedLock.lock(); feedHeldForDeferred = true; feedLock.unlock()
+        meterQueue.async { [weak self] in
+            guard let self else { return }
+            if self.setFeed(.none, ifNow: .own) {
+                self.meter.onBuffer = nil
+                self.meter.stopMetering()
+                self.bridge.stop()
+                Log.info("🔀 take \(t) (deferred) takes the microphone over from his own Wispr feed")
+            }
+            self.markerLock.lock()
+            self.olderMarkers = (self.said, self.saidInRecording, self.markersInAudio)
+            self.waitingMarkers = []; self.said = []; self.saidInRecording = []
+            self.markersInAudio = false
+            self.markerLock.unlock()
+            self.deferredResult = nil
+            if self.bridge.isRunning {
+                Log.error("🔀 take \(t) (deferred): the bridge was still up — taken down before it holds this take")
+                self.bridge.stop()
+            }
+            var carried = false
+            if AudioBridge.isEnabled, self.bridge.start(format: MicRecorder.fileFormat, holding: true) {
+                self.meter.onBuffer = { [weak self] buffer in self?.bridge.schedule(buffer) }
+                self.setFeed(.relay)
+                carried = true
+            }
+            if let why = self.meter.start(to: wav) {
+                self.deferredRecorderOpen = false
+                Log.error("🧾 wispr: take \(t) (deferred) could not open the microphone — \(why)")
+                self.tearDownDeferredBridge()
+                self.restoreOlderMarkers()
+                DispatchQueue.main.async { self.deferredCouldNotRecord(t, why) }
+                return
+            }
+            self.deferredRecorderOpen = true
+            if !carried {
+                DispatchQueue.main.async {
+                    guard let d = self.deferred, d.take == t else { return }
+                    self.giveUpDeferred(d, "the bridge to Wispr Flow could not start")
+                }
+            }
+        }
+    }
+
+    private func deferredCouldNotRecord(_ t: Int, _ why: String) {
+        guard let d = deferred, d.take == t else { return }
+        finishDeferred(d)
+        d.recording = false
+        answer(t) { didEnd?(.failed(why: why, audio: nil, duration: 0)) }
+    }
+
+    // MARK: Stop, cancel, ⌘⌃X
+
+    /// **His stop of a deferred take**: the relay's close (the recipient is
+    /// latched now, Q2), the recorder closed — and the bridge left holding its
+    /// backlog for Wispr. Nothing is posted: Wispr has not been asked yet.
+    private func stopDeferred(_ d: Deferred) {
+        guard d.recording else { return }
+        d.recording = false
+        d.stoppedAt = CFAbsoluteTimeGetCurrent()
+        // Markers still waiting go into the held backlog, behind the last of him.
+        // The bridge's input stays open: the recorder closes below, so nothing
+        // more arrives, and a re-hold during the replay after the release needs
+        // it (`stopMachine` closes it before its chord).
+        flushWaitingMarkers()
+        Log.info(String(format: "🧾 wispr: take %d stopped %.1f s after his gesture — %@", d.take, d.stoppedAt - d.gestureAt,
+                        d.ownTake.map { "the relay's own recording is the sentence (\($0))" }
+                            ?? "it waits for Wispr Flow (\(d.lastWait.isEmpty ? d.why : d.lastWait)), the bridge holding all of it"))
+        // Before the relay hears the close — `DecodeRate.activeEngine`.
+        DecodeRate.activeEngine = d.ownTake == nil ? DecodeRate.wisprFlow : DecodeRate.whisperLocal
+        // No countdown yet: Wispr has not been asked (`onHandedToWispr` starts it).
+        closingDeferred = d.ownTake == nil
+        didStopListening?()
+        closingDeferred = false
+        let t = d.take
+        meterQueue.async { [weak self] in
+            guard let self else { return }
+            let r = self.closeDeferredRecorder(t)
+            DispatchQueue.main.async {
+                guard let d = self.deferred, d.take == t else { return }
+                guard r.closed != nil else {
+                    // Under `MicRecorder.minimumDuration`: a misfire, as on every engine.
+                    Log.info("🧾 wispr: take \(t) is under \(MicRecorder.minimumDuration) s — dropped, Wispr is never asked")
+                    self.finishDeferred(d)
+                    self.meterQueue.async {
+                        self.deferredResult = nil
+                        self.tearDownDeferredBridge()
+                        self.restoreOlderMarkers()
+                    }
+                    self.answer(t) { self.didEnd?(.silent("")) }
+                    return
+                }
+                d.closedKnown = true
+                d.duration = r.closed?.duration ?? 0
+                d.kept = r.closed.map { TakeAudio(url: $0.url, duration: $0.duration, voiced: r.voiced) }
+                self.deferredTick()
+            }
+        }
+    }
+
+    /// `meterQueue`: the deferred take's recorder closed (if it still is open)
+    /// and what it gave — kept in `deferredResult`. The bridge is not touched.
+    @discardableResult
+    private func closeDeferredRecorder(_ t: Int) -> DeferredResult {
+        var r = deferredResult ?? DeferredResult()
+        guard deferredRecorderOpen else { return r }
+        deferredRecorderOpen = false
+        r.voiced = meter.voicedSeconds
+        r.closed = meter.stop()
+        r.health = meter.lastHealth
+        meter.onBuffer = nil
+        markerLock.lock()
+        r.said = said; r.saidInRecording = saidInRecording; r.markersInAudio = markersInAudio
+        markerLock.unlock()
+        deferredResult = r
+        if let h = r.health {
+            Log.info(String(format: "wispr meter (take %d, deferred): %.1f s voiced — %@%@", t, r.voiced, h.line,
+                            h.deaf ? " — DEAF (no audio reached the recorder)" : ""))
+        }
+        if let taken = r.closed, Self.keepTakes {
+            let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkie-talkie/kept-takes")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            let dest = dir.appendingPathComponent(taken.url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            try? FileManager.default.copyItem(at: taken.url, to: dest)
+        }
+        return r
+    }
+
+    /// `meterQueue`: Wispr will never read this take's backlog.
+    private func tearDownDeferredBridge() {
+        meter.onBuffer = nil
+        bridge.stop()
+        setFeed(.none, ifNow: .relay)
+        feedLock.lock(); feedHeldForDeferred = false; feedLock.unlock()
+    }
+
+    /// `meterQueue`: the sentence before it has its marker lists back.
+    private func restoreOlderMarkers() {
+        markerLock.lock()
+        if let o = olderMarkers {
+            said = o.said; saidInRecording = o.inRecording; markersInAudio = o.inAudio
+            olderMarkers = nil
+        }
+        waitingMarkers = []
+        markerLock.unlock()
+    }
+
+    private func finishDeferred(_ d: Deferred) {
+        if deferred === d { deferred = nil }
+        deferredTimer?.invalidate()
+        deferredTimer = nil
+    }
+
+    /// 🔼← on a deferred take: dropped — no chord was ever posted, the WAV goes
+    /// to *Recover* like any cancel (W3). The sentence before it is not touched.
+    private func cancelDeferred(_ d: Deferred) {
+        let wasRecording = d.recording
+        finishDeferred(d)
+        Log.info("🗑️ take \(d.take) cancelled while it waited for Wispr Flow — no chord was ever posted; "
+                 + "the relay's recording is kept for Recover")
+        if wasRecording {
+            d.recording = false
+            d.stoppedAt = CFAbsoluteTimeGetCurrent()
+            bridge.closeInput()
+            didStopListening?()
+        }
+        let t = d.take
+        meterQueue.async { [weak self] in
+            guard let self else { return }
+            let r = self.closeDeferredRecorder(t)
+            self.deferredResult = nil
+            self.tearDownDeferredBridge()
+            self.restoreOlderMarkers()
+            DispatchQueue.main.async {
+                self.answer(t) { self.didEnd?(.cancelled(audio: r.closed?.url, duration: r.closed?.duration ?? 0)) }
+            }
+        }
+    }
+
+    /// ⌘⌃X (or the countdown) on a deferred take: the local model, on the
+    /// relay's own WAV — Wispr never heard it, so nothing is dismissed.
+    private func handDeferredToLocal(_ d: Deferred) -> Bool {
+        Log.info("💻 ⌘⌃X — take \(d.take) was waiting for Wispr Flow; the relay's own recording goes to the local model")
+        if d.recording {
+            d.recording = false
+            d.stoppedAt = CFAbsoluteTimeGetCurrent()
+            bridge.closeInput()
+            DecodeRate.activeEngine = DecodeRate.whisperLocal
+            didStopListening?()
+        }
+        endDeferred(d, why: DictationEnd.localForced, forced: true)
+        return true
+    }
+
+    /// **Wispr will not get this take** — the relay's own recording carries it
+    /// (Q14), to his stop if he is still talking (`holdOwnTake`'s shape).
+    private func giveUpDeferred(_ d: Deferred, _ why: String) {
+        guard d.ownTake == nil else { return }
+        d.ownTake = why
+        Log.error("🧾 wispr: take \(d.take) will not be Wispr Flow's — \(why); the relay's own recording carries it (Q14)"
+                  + (d.recording ? ", on to his stop" : ""))
+        if d.recording {
+            onOwnTake?(why)
+            meterQueue.async { [weak self] in self?.tearDownDeferredBridge() }
+        } else if d.closedKnown {
+            endDeferred(d, why: why, forced: false)
+        }
+    }
+
+    /// The deferred take ends on the relay's own WAV (Q14; ⌘⌃X when `forced`).
+    /// Wispr never heard it, so the floor is *some speech* (0.3 s), as for a
+    /// take whose Wispr microphone never opened.
+    private func endDeferred(_ d: Deferred, why: String, forced: Bool) {
+        finishDeferred(d)
+        let t = d.take
+        meterQueue.async { [weak self] in
+            guard let self else { return }
+            let r = self.closeDeferredRecorder(t)
+            self.deferredResult = nil
+            self.tearDownDeferredBridge()
+            if let c = r.closed {
+                self.markerLock.lock()
+                self.noteFallbackSaid(c.url, r.saidInRecording)
+                self.markerLock.unlock()
+            }
+            self.restoreOlderMarkers()
+            DispatchQueue.main.async {
+                // `why` unchanged: `DictationEnd.localForced` is matched by value.
+                Log.info("🧾 wispr: take \(t) ends on the relay's own recording")
+                let end = Self.endOnRecording(why, taken: r.closed, voiced: r.voiced,
+                                              health: r.health, floor: 0.3, forced: forced)
+                self.answer(t) { self.didEnd?(end) }
+            }
+        }
+    }
+
+    // MARK: The wait, and the release
+
+    /// Every 0.2 s while a take is deferred, and at each end of the sentence
+    /// before it: release, keep waiting, or give up — `WisprDeferral.verdict`.
+    private func deferredTick() {
+        guard let d = deferred else {
+            deferredTimer?.invalidate()
+            deferredTimer = nil
+            return
+        }
+        let now = CFAbsoluteTimeGetCurrent()
+        let done = olderDone
+        if done, d.olderDoneAt == 0 {
+            d.olderDoneAt = now
+            Log.info(String(format: "🧾 wispr: the sentence before take %d is over — %.1f s after take %d's gesture",
+                            d.take, now - d.gestureAt, d.take))
+        }
+        var busy: String?
+        if done, d.ownTake == nil {
+            if let row = stillFinishingAbandonedRow {
+                busy = "Wispr Flow is still finishing row \(row)"
+            } else if !HotkeyTap.wisprChordsMuted, watch.sampleIsRunningInput() {
+                // W6: a toggle over an open Wispr microphone stops that one.
+                busy = "Wispr Flow's microphone is still open"
+            }
+        }
+        let verdict = WisprDeferral.verdict(.init(now: now, gestureAt: d.gestureAt, stoppedAt: d.stoppedAt,
+                                                  closedKnown: d.closedKnown, ownTake: d.ownTake != nil,
+                                                  wisprRunning: isReady, olderDone: done,
+                                                  olderDoneAt: d.olderDoneAt, busy: busy))
+        switch verdict {
+        case .wait(let why):
+            if why != d.lastWait {
+                d.lastWait = why
+                Log.info("🧾 wispr: take \(d.take) waits — \(why)")
+            }
+        case .release:
+            releaseDeferred(d)
+        case .giveUp(let why):
+            giveUpDeferred(d, why)
+        case .endOwnTake:
+            endDeferred(d, why: d.ownTake ?? "Wispr Flow was out of it", forced: false)
+        }
+    }
+
+    /// **Wispr is free: the deferred take's real start.** Its WAV and markers
+    /// become the machine's, the bridge stops being held back from Wispr's
+    /// input, and the start runs as `start()`'s does — minus `didBegin` (the
+    /// relay heard that at his gesture). Stopped already: the ordinary stop
+    /// follows at once, and waits, as it always does, for Wispr's input and
+    /// for the bridge to play the backlog out (≤ 1.25×) before its chord.
+    private func releaseDeferred(_ d: Deferred) {
+        finishDeferred(d)
+        let now = CFAbsoluteTimeGetCurrent()
+        let stopped = d.stopped
+        Log.info(String(format: "🧾 wispr: take %d released — posting the start chord %.1f s after his gesture%@",
+                        d.take, now - d.gestureAt,
+                        stopped ? String(format: "; his stop came %.1f s ago — the stop chord follows once Wispr has heard all %.1f s",
+                                         now - d.stoppedAt, d.duration)
+                                : "; he is still talking — the bridge catches up"))
+        feedLock.lock(); feedHeldForDeferred = false; feedSawOpen = false; feedLock.unlock()
+        meterQueue.async { [weak self] in
+            guard let self else { return }
+            if stopped, let r = self.deferredResult {
+                self.recording = r.closed
+                self.recordingVoiced = r.voiced
+                self.recordingHealth = r.health
+            }
+            self.deferredResult = nil
+            // Still recording: the recorder is the machine's from here on.
+            self.deferredRecorderOpen = false
+            self.markerLock.lock(); self.olderMarkers = nil; self.markerLock.unlock()
+        }
+        takeClosedEarly = stopped
+        stopRelayed = stopped
+        relayedStoppedAt = d.stoppedAt
+        deferralSeconds[d.take] = now - d.gestureAt
+        if deferralSeconds.count > 8, let oldest = deferralSeconds.keys.min() { deferralSeconds[oldest] = nil }
+        relayedSpokenFor = d.duration
+        gestureSeen("take \(d.take), deferred — Wispr Flow is free", confident: true, relay: true,
+                    mode: d.mode, take: d.take, announce: false)
+        keptTake = stopped ? d.kept : nil
+        // His fingers are on right ⌘⌥ only while that hold is still the take.
+        postRelayStartChord(d.mode, underHeldPair: d.underHeldPair && !stopped)
+        if stopped { stopMachine() }
+    }
+
+    /// `GET /test/state.wisprLive.takes`.
+    var describeTakes: [String: Any] {
+        var out: [String: Any] = ["take": take, "queues": queuesSentences, "machineTake": machineTake ?? NSNull(),
+                                  "machineOwes": machineOwes, "stopRelayed": stopRelayed,
+                                  "endingInFlight": endingInFlight, "answersPending": answersPending]
+        if let d = deferred {
+            out["deferred"] = ["take": d.take, "older": d.older ?? NSNull(), "recording": d.recording,
+                               "for": CFAbsoluteTimeGetCurrent() - d.gestureAt,
+                               "stoppedFor": d.stopped ? CFAbsoluteTimeGetCurrent() - d.stoppedAt : NSNull(),
+                               "closed": d.closedKnown, "ownTake": d.ownTake ?? NSNull(),
+                               "waiting": d.lastWait] as [String: Any]
+        } else {
+            out["deferred"] = NSNull()
+        }
+        return out
     }
 }

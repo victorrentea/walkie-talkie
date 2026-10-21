@@ -15648,3 +15648,28 @@ starting the mic in the walkie-talkie so I can use the Mac dictation on F5."*
 - **Bare F5 passes to macOS** (22:36:00 it had started Wispr's hands-free toggle through
   `plainToggle`). Only that branch went: ⌃⌥⌘F5 is 🔽 →, and right ⌥ ×2 is still the keyboard's plain
   toggle (and its stop over an open prompt).
+
+## Wispr Flow queues sentences: recorded now, handed to Wispr when it is free (2026-10-21)
+
+Victor (dictated): *"the ability to record immediately another [prompt] even though you are
+currently transcribing the old snippet … Mind that this should also work if you are transcribing
+with Wispr. You should just buffer the wav and then hand it to Wispr whenever it's ready. It could
+be harder than with the local model though."*
+
+It was harder: `WisprFlowSource` is one state machine for one sentence (capture, row, chord,
+ownership windows), and Wispr itself takes one sentence at a time. So the next sentence is not a
+second machine but a **deferred take** beside it: the relay's meter and the bridge open at the
+gesture, held (the WAV and From Walkie's backlog keep every word), and the take is handed to the
+machine — the chord, the capture, the 3 s microphone watch — once the sentence before has ended and
+Wispr is free. If he already stopped, the stop follows at once and waits, as every stop does, for
+Wispr's input and the replay. The AutoLocal countdown of a deferred take starts at that real stop
+chord (coordinator's decision, same day): counted from his stop, the wait plus the replay would
+hand almost every deferred take to the local model before Wispr could answer.
+
+Decisions taken with the coordinator: a third start during a stopped take's replay is refused (one
+bridge); 2026-10-06's local borrow for a Wispr still finishing a row is **reversed** while the queue
+is on — the take waits for Wispr, bounded by 10 s after his stop and the sentence before's end, and
+60 s from the gesture, then Q14. **Unit-tested only** (`WisprDeferralTests`, 19 cases; 305 tests
+green); the lab plan (QW1–QW7, a guest `dnctl` delay for the stopped-before-release path) was not
+run — not yet proven on a live Wispr. Rules: `dictation-source.md`, *Wispr queues sentences*.
+

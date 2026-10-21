@@ -3642,6 +3642,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !self.wisprSource.micSeen { self.overlay.setOpening(true) }
         }
         wisprSource.didStopListening = { [weak self] in self?.overlay.setOpening(false); self?.dictationStoppedListening() }
+        // Q12 (2026-10-21): a take that waited for Wispr gets its countdown when
+        // Wispr has it — the stop chord after the replay, not his stop.
+        wisprSource.onHandedToWispr = { [weak self] take, audio, waited in
+            guard let self, self.source === self.wisprSource else { return }
+            let owner = self.sentence(forTake: take)
+            guard owner != nil || take == nil else {
+                Log.info("⏱ take \(take ?? 0) has no sentence left — no countdown")
+                return
+            }
+            Log.info(String(format: "⏱ take %d's countdown starts at Wispr's stop chord — %.1f s after his stop", take ?? 0, waited))
+            self.armAutoLocal(audio: audio, for: owner, take: take)
+        }
         // Batch 4: Wispr is out of this sentence — the relay's recording carries it.
         wisprSource.onOwnTake = { [weak self] why in
             guard let self else { return }
@@ -3656,8 +3668,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         wisprSource.didTranscribe = { [weak self] result in
             guard let self else { return }
             // Q15: through the order rule, like every other engine's answer —
-            // behind a held, paused or edited prompt panel, not over it.
-            self.runAnswer(for: self.liveSentence) { self.deliver(result) }
+            // behind a held, paused or edited prompt panel, not over it. **By take
+            // since 2026-10-21** (Q12 for Wispr): unlabelled, the live sentence.
+            self.runAnswer(for: self.sentence(forTake: self.wisprSource.answeringTake)) { self.deliver(result) }
         }
         // Q19 (2026-09-28): his own right ⌥⇧ sentence whose ⌘V the firewall
         // dropped because the relay's row was in flight — pasted at the caret,
@@ -3687,7 +3700,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .failed(_, let audio, _) where audio == nil: cancel = true
             default: break
             }
-            self.runAnswer(for: self.liveSentence, immediate: cancel) { self.dictationEnded(end) }
+            self.runAnswer(for: self.sentence(forTake: self.wisprSource.answeringTake), immediate: cancel) {
+                self.dictationEnded(end)
+            }
         }
         // **One letter on the chip, saying which recogniser is listening**
         // (2026-09-18) — `Listening(W)...`. Pushed from here because here is the
@@ -4725,6 +4740,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// sentence the clock was running for, and only while its words are still out.
     private func handOverAtBudget(_ sentence: Sentence?) {
         guard let w = autoLocalWait, w.sentence === sentence, !w.settled else { return }
+        // Q12 on Wispr: the clock's sentence, not a take recorded behind it.
+        if source === wisprSource { wisprSource.handOverTake = sentence?.take }
         localAutoTake = true
         if !transcribeLocallyNow(from: "⏱ the budget ran out") { localAutoTake = false }
     }
@@ -4804,7 +4821,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// At the close: the budget and the decode ahead, logged. Never on the local
     /// engine (nothing to fall back to), never with the checkbox off.
-    private func armAutoLocal(audio: TimeInterval) {
+    private func armAutoLocal(audio: TimeInterval, for owner: Sentence? = nil, take: Int? = nil) {
+        // **A Wispr take still queued behind the sentence before it** (Q12,
+        // 2026-10-21): no countdown while it waits or replays — Wispr cannot
+        // answer it yet. `wisprSource.onHandedToWispr` arms it at its stop chord;
+        // the countdown of the sentence before it runs on.
+        if source === wisprSource, wisprSource.closingDeferred {
+            Log.info("⏱ the take is queued behind the previous sentence — no countdown until Wispr Flow has it")
+            return
+        }
         autoLocalWait = nil
         if let old = spec { retireSpec(old, why: "a newer sentence closed") }
         spec = nil
@@ -4816,7 +4841,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // **A clean sentence on Wispr waits for the formatted words** (2026-10-10,
         // `AutoLocal.wisprCleanFloor`).
-        let floored = AutoLocal.budgetSeconds(b.seconds, clean: cleanSentence, wispr: source === wisprSource)
+        let sentence = owner ?? liveSentence
+        let clean = sentence === liveSentence ? cleanSentence : (sentence?.env?.cleanSentence ?? cleanSentence)
+        let floored = AutoLocal.budgetSeconds(b.seconds, clean: clean, wispr: source === wisprSource)
         if floored > b.seconds {
             Log.info(String(format: "⏱ a clean sentence on Wispr Flow — budget %.1f s raised to %.1f s, for Wispr's formatted words", b.seconds, floored))
             b = DecodeRate.Budget(seconds: floored, unclamped: b.unclamped, samples: b.samples, cap: b.cap,
@@ -4825,14 +4852,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let typical = DecodeRate.typical(for: audio, engine: DecodeRate.whisperLocal)
         let eta = testLocalEta ?? AutoLocal.localEta(typical: typical)
         let now = CFAbsoluteTimeGetCurrent()
-        let sentence = liveSentence
         let name = source === wisprSource ? "Wispr Flow" : "ElevenLabs"
         autoLocalWait = AutoLocalWait(budget: b, since: now, sinceDate: Date(), engineName: name, sentence: sentence)
         var trace = AutoLocal.Trace(budget: b, localEta: eta)
         trace.test = testBudget != nil || testLocalEta != nil
             || (source === wisprSource ? WisprFlowDB.overridePath != nil : ElevenLabsSource.batchOverridden)
+        // How long it waited for Wispr before this clock could start (Q12).
+        if source === wisprSource { trace.deferred = wisprSource.deferral(take: take ?? source.take) }
         if let sentence { sentence.fallback = trace } else { looseTrace = trace }
-        spec = SpecLocal(sentence: sentence, take: source.take, closeAt: now, startAt: trace.specPlanned)
+        spec = SpecLocal(sentence: sentence, take: take ?? source.take, closeAt: now, startAt: trace.specPlanned)
         Log.info(b.logLine + String(format: " — the local transcript is prepared from +%.2f s (localEta %.2f s%@); it goes in when the budget runs out, ⌘⌃X sooner",
                                     trace.specPlanned, eta, testLocalEta != nil || testBudget != nil ? ", forced by POST /test/local-auto" : ""))
         syncLocalNow()
@@ -5812,7 +5840,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Since 2026-09-28 (W6) asked on Engine = Wispr too**: under Q9 his own
         // right ⌥⇧ sentence never sets `isRecording`, so this is the only thing
         // that stops ⌘⌃D / 🔼 posting the hands-free toggle into it.
-        if !source.isRecording, wisprMic.sampleIsRunningInput() {
+        // **Not for a start Wispr will defer** (Q12, 2026-10-21): no chord goes
+        // out now, and the release asks W6 again before its own.
+        let wisprDefers = source === wisprSource && wisprSource.wouldDeferStart
+        if !source.isRecording, !wisprDefers, wisprMic.sampleIsRunningInput() {
             Log.error("dictate gesture refused — Wispr Flow's microphone is already open")
             overlay.flash("⚠️ Wispr Flow is listening — one engine at a time", duration: 5)
             return
@@ -5891,7 +5922,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.flash(AutoLocal.wisprOfflineFlash, duration: 3)
             }
         }
-        if source === wisprSource, !borrowedForWispr, let row = wisprSource.stillFinishingAbandonedRow {
+        // **Unless Wispr defers the start** (Q12, 2026-10-21, Victor: *"buffer the
+        // wav and then hand it to Wispr whenever it's ready"*): the relay records
+        // now and posts the chord once the row is done — still Wispr's sentence.
+        if source === wisprSource, !borrowedForWispr, !wisprDefers, let row = wisprSource.stillFinishingAbandonedRow {
             borrowEngine(whisperSource, for: "Wispr Flow is still finishing row \(row), the take handed to this Mac — it would ignore the chord")
             if source === whisperSource {
                 borrowedForWispr = true
