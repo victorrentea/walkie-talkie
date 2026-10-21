@@ -23,6 +23,9 @@ def check(label, samples, lang=None):
 # (a) the clip that lost real words
 a = A.load_audio(os.path.join(root, "2026-08-04/14-44-20-b0bb7123.wav"))
 check("14-44-20 (real words in window 2)", a)
+# (a2) a later window over room noise, not words (review wave 10: turbo's " Muzica")
+m = A.load_audio(os.path.join(root, "2026-09-16/20-22-58-local102.wav"))
+check("20-22-58 (noise in window 2)", m)
 # (b) chunk-like clips: 9-15 s of speech + 1.6 s of digital silence
 rows = []
 for l in open(os.path.join(root, "corpus.jsonl")):

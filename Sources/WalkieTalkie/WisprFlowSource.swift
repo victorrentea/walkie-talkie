@@ -2423,8 +2423,10 @@ final class WisprFlowSource: DictationSource {
         // (its input off), and nothing else ever stops it — the next start's chord
         // would toggle it off, and its row would be judged by a dismissal that
         // never happened. As `giveUpOnWispr` does.
+        // Only while it is still Wispr's newest row (wave 10, as the W2 net does):
+        // a newer one is his own dictation, and the ⌃Escape would dismiss that.
         if ownTake != nil, let r = ownRow, ownDismissed == 0, let e = WisprHistory.entry(rowid: r),
-           WisprState.intermediateStatuses.contains(e.status) {
+           WisprState.intermediateStatuses.contains(e.status), WisprHistory.newest()?.rowid == r {
             relayDismissedAt = CFAbsoluteTimeGetCurrent()
             ownDismissed = Date().timeIntervalSince1970
             Log.info("💻 row \(r) of the held take is still open in Wispr Flow — dismissed (⌃Escape)")
