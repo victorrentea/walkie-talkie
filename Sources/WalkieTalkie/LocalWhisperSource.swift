@@ -284,6 +284,7 @@ final class LocalWhisperSource: DictationSource {
         stopChunkWatch()
         phase = .transcribing("")
         let t = job.take
+        job.queuedBehind = !jobs.isEmpty || !unanswered.isEmpty
         unanswered.insert(t)
         jobs[t] = job
         job.stoppedAt = Date()
@@ -358,6 +359,7 @@ final class LocalWhisperSource: DictationSource {
                          + (job.markers ? "a marker was spliced into the WAV" : "the tail is not in memory any more")
                          + "; the whole take is decoded")
                 job.dropPieces()
+                DecodeRate.noteLeft(nil)
             } else if hopsCoverTail, tailVoiced < Self.tailVoicedFloor {
                 Log.info(String(format: "✂️ local: the %.1f s tail has %.2f s voiced — not decoded",
                                 Double(tail.count) / Self.rate, tailVoiced))
@@ -537,6 +539,9 @@ final class LocalWhisperSource: DictationSource {
         /// the time the decode is asked: a cold model, a chunk's fallback).
         var wantsWords = false
         var retriedDecode = false
+        /// Another take was still owed an answer at this one's stop — its wait is
+        /// not decode time.
+        var queuedBehind = false
         /// Disowned between the stop and the close — `finishRecording` answers it.
         var cancelAtClose = false
         init(take: Int) { self.take = take }
@@ -569,7 +574,10 @@ final class LocalWhisperSource: DictationSource {
     static let rate = 16000.0
     /// A tail with less speech than this after the last cut is not decoded —
     /// Whisper on near-silence invents a sentence (`www.clu.com.br`).
-    static let tailVoicedFloor: TimeInterval = 0.3
+    static let tailVoicedFloor: TimeInterval = 0.1
+    /// **Two voiced hops** (0.1 s; 0.3 until the review of 2026-10-22): a 16 s tail
+    /// holding *"Da, atât."* measured 0.26 s voiced and was dropped, while every
+    /// tail that decoded to an invention measured exactly 0.
 
     private var recordingJob: Job?
     /// Every take stopped and not answered yet, by take.
@@ -749,6 +757,7 @@ final class LocalWhisperSource: DictationSource {
         guard results.count == job.pieces.count else {
             Log.error("✂️ local: a chunk of take \(job.take) got no answer — decoding the whole take")
             job.dropPieces()
+            DecodeRate.noteLeft(nil)
             // **Through the wait for the weights** (2026-10-21, found in the lab): a
             // chunk with no answer is most often a helper killed at its 300 s budget,
             // so `ready` is false here and a bare `decodeNow` failed at once — the
@@ -759,7 +768,10 @@ final class LocalWhisperSource: DictationSource {
         let waited = job.stoppedAt.map { Date().timeIntervalSince($0) } ?? 0
         let r = Self.join(job.pieces.map { ($0.result!, Double($0.from) / Self.rate) },
                           ends: job.pieces.map { Double($0.to) / Self.rate })
-        if !r.text.isEmpty, job.leftAtStop > 0 {
+        // Only a wait that was this take's own tail: not a dropped tail (nothing
+        // decoded after the stop), not one queued behind another take (review
+        // 2026-10-22).
+        if !r.text.isEmpty, job.leftAtStop > 0, job.pieces.last?.isTail == true, !job.queuedBehind {
             // The wait he saw, against what was left at the stop — the line the
             // chip's estimate for a chunked take is read from (`noteLeft`).
             DecodeRate.record(audio: job.leftAtStop, decode: waited, chars: r.text.count,

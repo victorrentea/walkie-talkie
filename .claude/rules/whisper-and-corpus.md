@@ -141,6 +141,14 @@ the local model … don't feed too small chunks either"*.
 - **Never a lost sentence for a speed-up**: a chunk with no answer, a tail no longer in memory
   (> 120 s since the last cut) or a marker spliced into the WAV (`markersInAudio`) → the whole WAV is
   decoded as before. The corpus and Recover always get the whole WAV.
+- **Adversarial review, 2026-10-22** (three reviewers: gestures, audio rulers, threads): fixed — the
+  tail past `MicRecorder.hopCap` (12.8 min) read as silent and was dropped; a decode queued behind a
+  dying helper went to Recover (now waits for it once); the tail's word-timing decision is frozen at
+  its stop; a cancel between the stop and the close answers once, with the WAV; **no engine borrow
+  over a sentence in flight** (refused with a flash — the borrow swapped `source` under a parked Wispr
+  sentence); one take counter for every source (`TakeSerial`); a cue inside a chunk decoded without
+  timings (`TimedWord.untimed`) keeps its footer row; DecodeRate is not fed a dropped tail or a wait
+  behind another take. Known, not fixed: Recover keeps one cancelled WAV (a second cancel replaces it).
 - **The wait is what is left**: at the stop `DecodeRate.noteLeft(tail + chunks not yet answered)`;
   `seconds(for:)` / `predict` read that (60 s, local only) and the round trip is filed against it.
 - Log: `✂️ local: chunk N cut at X s …`, `✂️ local: chunk N of take T answered in X s`, `✂️ local:
