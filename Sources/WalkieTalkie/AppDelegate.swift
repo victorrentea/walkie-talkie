@@ -13089,9 +13089,17 @@ extension AppDelegate {
     /// A parked sentence whose take the source no longer holds will never be
     /// answered (a lost callback): let it go rather than hold the newer one for
     /// ever.
+    ///
+    /// **Not while its own answer is the one running** (2026-10-21, found in the
+    /// lab): a source's `answer(_:)` takes the take out of its pending set *before*
+    /// it calls back, so inside that `didTranscribe` the take reads as not pending.
+    /// `runAnswer` asks this first, and a sentence parked over `parkedGiveUp` (a
+    /// chunked local take queued behind another, a slow upload) was let go at the
+    /// instant its words arrived — which then ran on the live sentence's envelope.
     private func dropDeadParked() {
         guard let p = parkedSentence, !p.finished, p.waiting.isEmpty, !(p.env?.fallingBack ?? false),
               let take = p.take, !source.isPending(take: take),
+              take != source.answeringTake, take != wisprSource.answeringTake,
               Date().timeIntervalSince(parkedAt ?? p.startedAt) > Self.parkedGiveUp else { return }
         Log.error("🧾 sentence #\(p.id) never answered — let go so the next one is not held behind it")
         p.finished = true
