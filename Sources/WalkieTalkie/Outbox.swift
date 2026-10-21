@@ -45,6 +45,9 @@ enum Outbox {
     /// yellow badge while the tty matches its own, and that is the whole
     /// vocabulary — *this is the session the words would come to*.
     static func publishBound(tty: String?) {
+        // The photo run shares this home with the installed app and must not
+        // clear its binding marker at launch or quit (2026-10-21).
+        guard !RelayWindow.shooting else { return }
         guard let tty = tty else {
             try? FileManager.default.removeItem(at: boundTTYURL)
             return
@@ -355,6 +358,9 @@ enum Outbox {
                      /// 2026-09-27): `{pauses, fillers, restarts, rate, verdict, …}`,
                      /// filed for later study. The corpus row gets nothing.
                      affect: [String: Any]? = nil) {
+        // The photo run files nothing in the real outbox: its quit wrote a
+        // `session_end` ("user closed the relay") for an app still running.
+        guard !RelayWindow.shooting else { return }
         var obj: [String: Any] = [
             "ts": ISO8601DateFormatter().string(from: Date()),
             "kind": kind,
@@ -426,10 +432,15 @@ enum Log {
         let url = Outbox.home.appendingPathComponent("relay.log")
         let fm = FileManager.default
         try? fm.createDirectory(at: Outbox.home, withIntermediateDirectories: true)
-        if !fm.fileExists(atPath: url.path) { fm.createFile(atPath: url.path, contents: nil) }
-        guard let handle = try? FileHandle(forWritingTo: url) else { return nil }
-        handle.seekToEndOfFile()
-        return handle
+        // **`O_APPEND`, not a seek to the end** (2026-10-21). A handle that seeks
+        // once writes at its own offset forever after, so a second process on the
+        // same file — a photo run, a test build — wrote over the installed app's
+        // lines and the app over its: the 17:07 shoot's first lines were
+        // overwritten and the next one starts mid-stamp, `0-21 17:07:18`.
+        // With `O_APPEND` every write lands at the end of the file as it is then.
+        let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        guard fd >= 0 else { return nil }
+        return FileHandle(fileDescriptor: fd, closeOnDealloc: true)
     }()
 
     private static let clock: DateFormatter = {

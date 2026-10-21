@@ -262,6 +262,8 @@ final class HotkeyTap {
         .appendingPathComponent(".walkie-talkie/prompting")
 
     static func markPrompting(_ on: Bool) {
+        // The photo run's launch must not clear the installed app's mark (2026-10-21).
+        guard !RelayWindow.shooting else { return }
         if on {
             try? "\(getpid())\n".write(to: promptingMark, atomically: true, encoding: .utf8)
         } else {

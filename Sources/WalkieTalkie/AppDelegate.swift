@@ -3188,7 +3188,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let trusted = AXIsProcessTrusted()
-        let tapped = hotkeys.start()
+        // **No tap while shooting the state pages** (2026-10-21). The photo run
+        // is a second process beside the installed app — `SingleInstance` never
+        // matches it (no bundle id, another executable) — and a tap created later
+        // sits at the head of the session's chain: for the ~27 s of a shoot, every
+        // side-button gesture went to the debug copy, which recorded him with its
+        // own engine on windows parked off-screen while the real app saw nothing.
+        // Victor, 17:07: *"I was pressing the dictation and had to restart"*.
+        let tapped = RelayWindow.shooting ? false : hotkeys.start()
         // **The firewall proves itself** — at launch, and after every wake, the
         // two moments a tap is most likely to be enabled and dead. A dead tap
         // under an always-on drop is not a dead hotkey, it is Wispr's next
@@ -3225,7 +3232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // is not `ro.victorrentea.wispr-relay`, no checkbox anywhere will help and
         // the fix is `./build-app.sh`, not System Settings.
         Log.info("accessibility trusted=\(trusted) eventTap=\(tapped) bundle=\(Bundle.main.bundleIdentifier ?? "<none>")")
-        if !trusted || !tapped {
+        if (!trusted || !tapped) && !RelayWindow.shooting {
             DispatchQueue.main.async { [weak self] in
                 self?.overlay.flash("⚠️ grant Accessibility to Walkie Talkie", duration: 15)
             }

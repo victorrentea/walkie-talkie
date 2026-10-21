@@ -19,9 +19,11 @@ import AppKit
 /// with it is in `CLAUDE.md`: a change to the overlay is not finished until this
 /// has been re-run.
 ///
-/// **`RELAY_SHOOT=<dir>`**, and the app quits when it is done. `SingleInstance`
-/// means starting it also stands the running copy down, which is why the script
-/// puts it back afterwards.
+/// **`RELAY_SHOOT=<dir>`**, and the app quits when it is done. It runs beside the
+/// installed copy — `SingleInstance` never matched it (no bundle id, another
+/// executable) — so since 2026-10-21 it leaves that copy alone: no event tap, no
+/// outbox line, no binding marker, no "From Walkie" switch, and the script no
+/// longer "puts it back" (that `open` was a reopen event — a Dock-tile restart).
 enum OverlayStates {
 
     /// One photograph: what it is, when Victor sees it, and what the picture is

@@ -39,6 +39,9 @@ enum FromWalkieDevice {
     }
 
     static func set(_ on: Bool, reason: String) {
+        // The photo run is a second process beside the installed app: its quit
+        // turned the device off under the running relay (2026-10-21, 17:07:45).
+        guard !RelayWindow.shooting else { return }
         guard let box = box() else {
             Log.info("🎚️ From Walkie: driver not installed — nothing to turn \(on ? "on" : "off") (\(reason))")
             return

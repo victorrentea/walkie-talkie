@@ -330,6 +330,24 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   same reopen event the Dock does.** 1.3 s from the click to a re-bound relay.
   → journal: *The Dock tile restarts it (2026-09-14)*
 
+## The photo run sits beside the installed app and must not touch it (2026-10-21)
+
+- **`RELAY_SHOOT` (`docs/shoot-overlay-states.sh`) is a second live process, not a replacement.**
+  `SingleInstance` matches by bundle id or executable path, and `.build/debug/WalkieTalkie` has
+  neither in common with the installed app (`bundle=<none>`), so nothing was ever stood down.
+  2026-10-21 17:07:18–45: the shooter's tap — newest, so first in the session chain — took
+  Victor's 🔼 / 🔼 ↑ / 🔼 ← for the whole shoot and recorded him with *its* engine (ElevenLabs)
+  on windows parked off-screen; the installed app logged nothing from 17:07:11 to 17:07:45.
+  Then the script's "put it back" `open -g` hit the still-running app as a **reopen event =
+  Dock-tile restart** (every shoot since 10-15 is followed ~1 s by `↻ restart asked from the
+  Dock tile`). Victor: *"I was pressing the dictation and had to restart"*.
+- **Under `RelayWindow.shooting`: no event tap, no Accessibility flash, no `Outbox.send`, no
+  `publishBound`, no `FromWalkieDevice.set`, no `markPrompting`** — the shooter quit used to
+  write `session_end` into the real outbox, clear `bound-tty`, and turn "From Walkie" off under
+  the running relay. The script no longer waits for idle, reads the binding or reopens the app.
+- **`relay.log` is opened `O_APPEND`.** It was a seek-to-end once, so two processes wrote at
+  their own offsets over each other's lines (the shoot's lines started mid-stamp, `0-21 17:07:18`).
+
 ## Do not
 
 - Do not launch `/Applications/Walkie Talkie.app` by its executable path, and do not remove
