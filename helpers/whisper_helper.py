@@ -499,28 +499,56 @@ def transcribe(path, words=WORDS, samples=None, language=None):
     return res
 
 
+def _voice_meter(samples):
+    """Seconds of voice in a span of the clip — the relay's own meter, roughly
+    (`VoicedMeter`): 64 ms hops, 9 dB over the clip's floor (its 10th percentile),
+    never under the absolute floor of 180 on the int16 scale."""
+    x = np.asarray(samples, dtype=np.float32)
+    n = len(x) // 1024
+    if n == 0:
+        return lambda a, b: 0.0
+    rms = np.sqrt((x[: n * 1024].reshape(n, 1024) ** 2).mean(axis=1))
+    bar = max(180.0 / 32768.0, float(np.percentile(rms, 10)) * 10 ** (9 / 20))
+    voiced = rms > bar
+    def seconds(a, b):
+        i, j = max(0, int(a * 16000 / 1024)), min(n, int(np.ceil(b * 16000 / 1024)))
+        return float(voiced[i:j].sum()) * 1024 / 16000 if j > i else 0.0
+    return seconds
+
+
 def first_window_only(res, words, samples):
-    """**With word timings, a clip that fits one window is read once** (2026-10-21).
+    """**With word timings, a later window over silence is dropped** (2026-10-21,
+    narrowed 2026-10-22).
 
     With `word_timestamps=True` mlx_whisper seeks to the end of the last word and
     decodes what is left of the 30 s window again — on a chunk ending in a pause,
     that leftover is silence and the model invents a closing phrase (*"La
     revedere!"*, *"Da, da."*): 82 of 119 chunks, WER 13.1 % → 18.2 %
-    (`evals/chunked-decode/`). A clip ≤ 30 s is all in the first window, so only
-    the segments with `seek == 0` are kept — WER back to the plain-text 14.1 %.
+    (`evals/chunked-decode/`). **But a later window can hold real words** (review
+    wave 9): when the first window ends mid-segment (the 224-token cap on fast
+    speech, or no closing timestamp) mlx_whisper drops that unfinished segment and
+    the words come back only from the second window — `14-44-20-b0bb7123.wav`
+    lost its last sentence to the first version of this filter. So a `seek > 0`
+    segment is dropped only when its own span has under 0.25 s of voice.
     """
     if not words or len(samples) > A.N_SAMPLES:
         return
     segs = res.get("segments") or []
-    kept = [s for s in segs if s.get("seek", 0) == 0]
-    if len(kept) == len(segs) or not kept:
+    if all(s.get("seek", 0) == 0 for s in segs):
         return
-    print(f"first window only: {len(segs) - len(kept)} later segment(s) dropped "
-          f"({' | '.join((s.get('text') or '').strip()[:40] for s in segs if s not in kept)})",
-          file=sys.stderr)
+    voice = _voice_meter(samples)
+    kept, dropped = [], []
+    for s in segs:
+        if s.get("seek", 0) == 0 or voice(s.get("start", 0.0), s.get("end", 0.0)) >= 0.25:
+            kept.append(s)
+        else:
+            dropped.append(s)
+    if not dropped or not kept:
+        return
+    print(f"later window over silence: {len(dropped)} segment(s) dropped "
+          f"({' | '.join((s.get('text') or '').strip()[:40] for s in dropped)})", file=sys.stderr)
     res["segments"] = kept
     res["text"] = "".join(s.get("text") or "" for s in kept)
-
 
 def coverage(res):
     """Where in the audio the words came from — to catch a missing middle.

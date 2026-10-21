@@ -136,8 +136,13 @@ the local model … don't feed too small chunks either"*.
   8 s / 0.9 s → WER **12.6 % chunked vs 13.1 % whole** (noise: ±1.5 pt), mean wait after the stop
   **3.86 → 2.35 s**; 6 s / 0.6 s cost +0.9 pt, 4 s chunks or 0.4 s gaps +1.5…2.1 pt. **Word timings on
   every chunk cost +5 pt** (13.1 → 18.2 %): mlx_whisper seeks past the last word and decodes the
-  leftover silence as a new window, inventing *"La revedere!"* (82 of 119 chunks). The helper now keeps
-  a ≤ 30 s clip's first window only when timings are asked (`first_window_only`, seek == 0).
+  leftover silence as a new window, inventing *"La revedere!"* (82 of 119 chunks). With timings on, a
+  ≤ 30 s clip's **later-window segment is dropped only if its own span has < 0.25 s of voice**
+  (`first_window_only` + `_voice_meter`; review wave 9). The first version dropped every `seek > 0`
+  segment and lost real words: when the first window ends mid-segment (the 224-token cap on fast speech)
+  mlx_whisper re-decodes them only in window 2 (`14-44-20-b0bb7123.wav`, last sentence gone). Proof both
+  ways: `evals/chunked-decode/later_window_check.py <model>` — turbo keeps that sentence (1.86 s voiced),
+  the Large LoRA's *"Thank you."* over appended silence (0.00 s) is dropped.
 - **Never a lost sentence for a speed-up**: a chunk with no answer, a tail no longer in memory
   (> 120 s since the last cut) or a marker spliced into the WAV (`markersInAudio`) → the whole WAV is
   decoded as before. The corpus and Recover always get the whole WAV.
