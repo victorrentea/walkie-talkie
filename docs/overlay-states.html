@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 67 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 68 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -447,6 +447,16 @@
         <p class="note">The one row left in which Victor is waiting on the app — <code>preparing</code>, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top. The seconds it used to count down came off on 2026-09-08 — the filling word says the same estimate, and a number ticking toward zero is a deadline to watch.</p>
         <code class="slug">transcribing</code>
       </section>
+      <section class="card" id="transcribing-ready">
+        <header>
+          <h3>Ready — talk again while it transcribes</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/transcribing-ready.png" width="308" height="117" style="opacity:0.8" alt="Ready — talk again while it transcribes"></div>
+        <p class="when">The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).</p>
+        <p class="note"><strong><code>📻 Ready</code> is the top row</strong> (2026-10-21, Victor: <em>&quot;even though it&#x27;s transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready&quot;</em>). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.</p>
+        <code class="slug">transcribing-ready</code>
+      </section>
       <section class="card" id="transcribing-lora">
         <header>
           <h3>…on Victor&#x27;s own model</h3>
@@ -480,9 +490,9 @@
       <section class="card" id="transcribing-fallback-countdown">
         <header>
           <h3>Fallback to local — counting down to the budget</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">235×94 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="235" height="94" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
+        <div class="shot"><img src="states/transcribing-fallback-countdown.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — counting down to the budget"></div>
         <p class="when">From one second into the wait for ElevenLabs or Wispr Flow with <em>Backup Local Pre-Transcribe</em> on (the default), until the engine&#x27;s p95 for that length runs out.</p>
         <p class="note"><strong>The countdown is on the row with the keys</strong> (2026-10-07; <code>💻 local in 3s / ⌘⌃X ...</code> is Victor&#x27;s own wording, the 💻 in the glyph column — replacing 10-06&#x27;s <code>⌘⌃X - 💻 fallback, auto in 3s...</code>). Victor: <em>&quot;put a countdown timer … when the timer expires, the local dictation is automatically injected&quot;</em>, then <em>&quot;put it like fallback to local in countdown timer and then show the key shortcuts&quot;</em>. At the close the relay reads the engine&#x27;s p95 (<code>DecodeRate.budget</code>) and starts the local model <code>budget − localEta</code> into the wait, so its words are ready about when the count reaches zero — and then they go in (<code>via: local-auto</code>). ⌘⌃X puts them in sooner (<code>via: local-forced</code>); the engine&#x27;s words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; <strong>no engine&#x27;s name</strong> (<em>&quot;don&#x27;t leak the name of any tool, only the icon&quot;</em> — the logo on the first row says which). It replaces the <code>🤔⏱️</code> the first row grew past 150 % of the estimate, and 09-29&#x27;s <em>offered, never inserted</em> <code>Use local</code>.</p>
         <code class="slug">transcribing-fallback-countdown</code>
@@ -490,9 +500,9 @@
       <section class="card" id="transcribing-fallback-now">
         <header>
           <h3>Fallback to local — the budget ran out</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-fallback-now.png" width="308" height="93" style="opacity:0.8" alt="Fallback to local — the budget ran out"></div>
+        <div class="shot"><img src="states/transcribing-fallback-now.png" width="308" height="117" style="opacity:0.8" alt="Fallback to local — the budget ran out"></div>
         <p class="when">The count reached zero with the engine&#x27;s words still out and the local decode not quite done.</p>
         <p class="note"><code>auto now...</code>: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.</p>
         <code class="slug">transcribing-fallback-now</code>
@@ -500,9 +510,9 @@
       <section class="card" id="listening-wispr-starting">
         <header>
           <h3>Wispr Flow is not up — this Mac listens</h3>
-          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
         </header>
-        <div class="shot"><img src="states/listening-wispr-starting.png" width="308" height="117" style="opacity:0.8" alt="Wispr Flow is not up — this Mac listens"></div>
+        <div class="shot"><img src="states/listening-wispr-starting.png" width="308" height="93" style="opacity:0.8" alt="Wispr Flow is not up — this Mac listens"></div>
         <p class="when">A sentence started on Engine = Wispr Flow while Wispr is not running, or was launched by the relay under 12 s ago (auto fallback on).</p>
         <p class="note">Victor: <em>&quot;10 s startup time is killing&quot;</em>. The relay records on its own microphone and the local model has the words at the close; Wispr Flow is launched in the background for the next sentence.</p>
         <code class="slug">listening-wispr-starting</code>
@@ -825,7 +835,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 3c7d09e · 21 Oct 2026 · built 21 Oct 2026, 17:07
+  Generated from <code>OverlayStates.swift</code> · repo at a78a02f · 21 Oct 2026 · built 21 Oct 2026, 18:55
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

@@ -356,6 +356,18 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
+    "height" : 117,
+    "image" : "transcribing-ready.png",
+    "note" : "**`📻 Ready` is the top row** (2026-10-21, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
+    "shape" : "chip",
+    "slug" : "transcribing-ready",
+    "title" : "Ready — talk again while it transcribes",
+    "when" : "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
+    "width" : 308
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
     "height" : 93,
     "image" : "transcribing-lora.png",
     "note" : "**A subscript `ᵥ` after the local model's 💻** (2026-10-04, Victor: *\"pune un v mic după acel măr … dacă e modelul meu cu Lora\"*, then *\"ca indice\"*, and the apple became the laptop: *\"ca să se înțeleagă local\"*) — on `Transcribing via` and on the listening row's arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.",
@@ -392,19 +404,19 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 94,
+    "height" : 117,
     "image" : "transcribing-fallback-countdown.png",
     "note" : "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
     "shape" : "chip",
     "slug" : "transcribing-fallback-countdown",
     "title" : "Fallback to local — counting down to the budget",
     "when" : "From one second into the wait for ElevenLabs or Wispr Flow with *Backup Local Pre-Transcribe* on (the default), until the engine's p95 for that length runs out.",
-    "width" : 235
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 93,
+    "height" : 117,
     "image" : "transcribing-fallback-now.png",
     "note" : "`auto now...`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
     "shape" : "chip",
@@ -416,7 +428,7 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "listening-wispr-starting.png",
     "note" : "Victor: *\"10 s startup time is killing\"*. The relay records on its own microphone and the local model has the words at the close; Wispr Flow is launched in the background for the next sentence.",
     "shape" : "flash",
