@@ -4757,6 +4757,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handOverAtBudget(_ sentence: Sentence?) {
         guard let w = autoLocalWait, w.sentence === sentence, !w.settled else { return }
         // Q12 on Wispr: the clock's sentence, not a take recorded behind it.
+        // A newer take already released on Wispr: its words are in hand (the release
+        // waited for them), nothing to hand over — and no flash for a key he never
+        // pressed (wave 12).
+        if source === wisprSource, wisprSource.takeWasOvertaken(sentence?.take) {
+            autoLocalWait?.settled = true
+            Log.info("⏱ the budget of take \(sentence?.take ?? 0) ran out after a newer take was released — nothing to hand over")
+            return
+        }
         if source === wisprSource { wisprSource.handOverTake = sentence?.take }
         localAutoTake = true
         if !transcribeLocallyNow(from: "⏱ the budget ran out") {

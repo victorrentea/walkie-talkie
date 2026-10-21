@@ -547,7 +547,10 @@ def first_window_only(res, words, samples):
     # The later window as a whole (wave 11): one real sentence in it proves the
     # rest — a short real "Gata." beside it is not judged alone.
     later_end = max(s.get("end", 0.0) for s in later)
-    real = voice(first_end + 0.3, later_end) >= 1.0
+    # From the later window's own first segment — not the silence before it, where
+    # breaths and clicks would count for an invented phrase (wave 12).
+    later_start = max(first_end + 0.3, min(s.get("start", 0.0) for s in later))
+    real = voice(later_start, later_end) >= 1.0
     kept = [s for s in segs if s.get("seek", 0) == 0 or real]
     dropped = [] if real else later
     if not dropped or not kept:

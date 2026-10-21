@@ -403,6 +403,12 @@ final class WisprFlowSource: DictationSource {
     private var takeClosedEarly = false
     /// The one take waiting for Wispr (main only).
     private var deferred: Deferred?
+    /// A newer take, released, is the machine's while `take` (an older one) is
+    /// asked about — the countdown of `take` has nothing to hand over here (wave 12).
+    func takeWasOvertaken(_ take: Int?) -> Bool {
+        guard deferred == nil, let take, let m = machineTake else { return false }
+        return m != take
+    }
     private var deferredTimer: Timer?
 
     var answersPending: Int {
