@@ -138,7 +138,7 @@ the local model … don't feed too small chunks either"*.
   every chunk cost +5 pt** (13.1 → 18.2 %): mlx_whisper seeks past the last word and decodes the
   leftover silence as a new window, inventing *"La revedere!"* (82 of 119 chunks). With timings on, a
   ≤ 30 s clip's **later-window segment is kept only with ≥ 1 s of voice in its span, counted from
-  0.3 s after the first window's last word** (`first_window_only` + `_voice_meter`; waves 9–10 —
+  0.3 s after the first window's last word, over the later window as a whole** (`first_window_only` + `_voice_meter`; waves 9–11 —
   0.25 s kept 7 of 28 invented Large-LoRA tails, which read 0.26–0.38 s through an early DTW end, and
   turbo's "Muzica" over room noise, 0.90 s). The first version dropped every `seek > 0`
   segment and lost real words: when the first window ends mid-segment (the 224-token cap on fast speech)

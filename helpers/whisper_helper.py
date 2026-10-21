@@ -529,8 +529,8 @@ def first_window_only(res, words, samples):
     speech, or no closing timestamp) mlx_whisper drops that unfinished segment and
     the words come back only from the second window — `14-44-20-b0bb7123.wav`
     lost its last sentence to the first version of this filter. So a `seek > 0`
-    segment is kept only with **≥ 1 s of voice** in its span, counted from 0.3 s
-    after the first window's last word (review wave 10, measured: the Large LoRA's
+    window is kept only with **≥ 1 s of voice** over its whole span (all its
+    segments together, wave 11), counted from 0.3 s after the first window's last word (review wave 10, measured: the Large LoRA's
     invented tails at chunk edges read 0.26–0.38 s — the real word's end spilling
     in through an early DTW end — and stock turbo's "Muzica" over room noise 0.90 s;
     the saved real sentence 1.86 s). An energy meter cannot tell a cough from a
@@ -543,13 +543,13 @@ def first_window_only(res, words, samples):
         return
     voice = _voice_meter(samples)
     first_end = max((s.get("end", 0.0) for s in segs if s.get("seek", 0) == 0), default=0.0)
-    kept, dropped = [], []
-    for s in segs:
-        a = max(s.get("start", 0.0), first_end + 0.3)
-        if s.get("seek", 0) == 0 or voice(a, s.get("end", 0.0)) >= 1.0:
-            kept.append(s)
-        else:
-            dropped.append(s)
+    later = [s for s in segs if s.get("seek", 0) != 0]
+    # The later window as a whole (wave 11): one real sentence in it proves the
+    # rest — a short real "Gata." beside it is not judged alone.
+    later_end = max(s.get("end", 0.0) for s in later)
+    real = voice(first_end + 0.3, later_end) >= 1.0
+    kept = [s for s in segs if s.get("seek", 0) == 0 or real]
+    dropped = [] if real else later
     if not dropped or not kept:
         return
     print(f"later window over silence: {len(dropped)} segment(s) dropped "
