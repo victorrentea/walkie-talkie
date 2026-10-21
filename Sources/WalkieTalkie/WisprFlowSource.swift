@@ -1789,6 +1789,13 @@ final class WisprFlowSource: DictationSource {
             // The countdown of the sentence before it ran out (Q12): that one, not this.
             Log.info("💻 the countdown's hand-over is take \(meant!)'s — take \(d.take), still waiting for Wispr, stays")
         }
+        // The countdown's take is not the machine's any more (wave 11): a released
+        // take B is on it now, and the sentence before's countdown must not hand B
+        // over. Nothing to do for that older one here.
+        if deferred == nil, let m = meant, m != machineTake {
+            Log.info("💻 the countdown's hand-over is take \(m)'s — take \(machineTake) is Wispr's now and stays")
+            return false
+        }
         // **Recording: Wispr is dismissed, not stopped** — a stop would have it
         // transcribe (and paste) words nobody is waiting for any more. The same
         // close the cancel makes, with the recording kept for the local model.
