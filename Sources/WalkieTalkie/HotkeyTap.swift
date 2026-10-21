@@ -5020,7 +5020,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
           "at rest: start a plain dictation — a picture while a prompt is dictating; during a plain dictation: stop it, insert the words, then Return"),
          ("back-down",     VK_F12, "⌃⌥⌘F12", "during a plain dictation: stop it, the words alone, no Return — otherwise unbind (the menu's Disconnect)"),
          ("back-right",    VK_F5,  "⌃⌥⌘F5",  "start or stop a plain dictation — clean words at the caret, heard by the Engine; the stop presses no Return"),
-         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "Return — at any moment, whatever is dictating"),
+         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "a microphone open: cancel it, as 🔼 ←; otherwise Return"),
          ("back-up",       VK_F4,  "⌃⌥⌘F4",  "start or stop a screen recording, while a dictation is open")]
     }
 
