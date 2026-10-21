@@ -702,7 +702,11 @@ final class LocalWhisperSource: DictationSource {
         guard results.count == job.pieces.count else {
             Log.error("✂️ local: a chunk of take \(job.take) got no answer — decoding the whole take")
             job.dropPieces()
-            return decodeNow(job)
+            // **Through the wait for the weights** (2026-10-21, found in the lab): a
+            // chunk with no answer is most often a helper killed at its 300 s budget,
+            // so `ready` is false here and a bare `decodeNow` failed at once — the
+            // take went to Recover instead of being decoded whole.
+            return whenModelUp(job) { [weak self] in self?.decodeNow(job) }
         }
         jobs[job.take] = nil
         let waited = job.stoppedAt.map { Date().timeIntervalSince($0) } ?? 0
