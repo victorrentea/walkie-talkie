@@ -116,6 +116,9 @@ enum DecodeRate {
     /// History) — the same reason: 50 of the newest Wispr samples on
     /// 2026-09-28 were the harness's ~38 s clip.
     static let wisprFlowTest = "wispr-flow-test"
+    /// The local model answered by a stand-in (`WT_WHISPER_HELPER`, the desk's fake
+    /// helper, 2026-10-22) — the same reason.
+    static let whisperLocalTest = "whisper-local-test"
 
     /// What an engine costs before it has taught this file anything. The local
     /// model's is the old fallback; the other two are read off `relay.log`
@@ -407,7 +410,9 @@ enum DecodeRate {
                        chars: Int? = nil, compression: Double? = nil) {
         guard audio > 0, decode > 0 else { return }
         // A desk run's fake Wispr rows never teach the real line (2026-09-28).
-        let engine = engine == wisprFlow && WisprFlowDB.overridePath != nil ? wisprFlowTest : engine
+        // Nor a fake local helper's (`WT_WHISPER_HELPER`, 2026-10-22).
+        let engine = engine == wisprFlow && WisprFlowDB.overridePath != nil ? wisprFlowTest
+            : engine == whisperLocal && LocalWhisper.helperOverride != nil ? whisperLocalTest : engine
         // The first decode after the helper starts is the *local model's* cold
         // start; a hosted recogniser has no weights to page in.
         var cold = false

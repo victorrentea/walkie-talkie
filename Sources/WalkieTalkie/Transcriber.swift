@@ -232,6 +232,38 @@ final class LocalWhisper {
         return candidates.first { FileManager.default.fileExists(atPath: $0.path) }?.path
     }
 
+    /// **A stand-in helper for desk tests** (2026-10-22, `evals/plan/fake_whisper_helper.py`,
+    /// `evals/plan/cases_chunks.py`): `WT_WHISPER_HELPER=<path to a .py>` — the environment,
+    /// then a line in `elevenlabs.env`, **re-read at every spawn**: the installed app is
+    /// launched by `open` and inherits no variable from the harness, so the harness writes
+    /// the line and asks `POST /test/whisper {"restart": true}`; the line gone and a second
+    /// restart bring the model back. Both helpers (the sentence's and the live caption's)
+    /// run it. Every spawn under it logs a loud 🧪 line; its decodes are filed apart
+    /// (`DecodeRate.whisperLocalTest`) and its words never reach the voice corpus.
+    static var helperOverride: String? {
+        overrideValue(env: ProcessInfo.processInfo.environment,
+                      file: try? String(contentsOf: ElevenLabsSource.configURL, encoding: .utf8))
+    }
+
+    /// The pure half of `helperOverride`: the environment wins, then the file's last
+    /// `WT_WHISPER_HELPER=` line (`#` lines skipped, quotes tolerated); empty is none.
+    static func overrideValue(env: [String: String], file: String?) -> String? {
+        let key = "WT_WHISPER_HELPER"
+        if let v = env[key]?.trimmingCharacters(in: .whitespaces), !v.isEmpty { return v }
+        var found: String?
+        for line in (file ?? "").split(separator: "\n") {
+            let row = line.trimmingCharacters(in: .whitespaces)
+            guard !row.hasPrefix("#"), let eq = row.firstIndex(of: "="),
+                  row[row.startIndex..<eq].trimmingCharacters(in: .whitespaces) == key else { continue }
+            var value = String(row[row.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
+                value = String(value.dropFirst().dropLast())
+            }
+            found = value.isEmpty ? nil : value
+        }
+        return found
+    }
+
     /// Which `python3` runs the helper, found by probing rather than by PATH.
     ///
     /// **`/usr/bin/env python3` was the bug.** A relay launched the way it is
@@ -315,11 +347,20 @@ final class LocalWhisper {
         queue.async { [weak self] in
             guard let self = self else { return }
             guard self.proc == nil else { onReady(nil); return }
-            guard let helper = Self.helperPath else {
+            let fake = Self.helperOverride
+            if let fake, !FileManager.default.fileExists(atPath: fake) {
+                onReady("WT_WHISPER_HELPER points at \(fake), which does not exist"); return
+            }
+            guard let helper = fake ?? Self.helperPath else {
                 onReady("whisper_helper.py not found beside the binary"); return
             }
+            if let fake {
+                Log.error("🧪 \(self.tag): WT_WHISPER_HELPER is in force — spawning \(fake), "
+                          + "a desk test's FAKE helper, not the model")
+            }
 
-            guard let python = Self.pythonPath else {
+            // The fake is stdlib-only: any python3 runs it, mlx_whisper or not.
+            guard let python = Self.pythonPath ?? (fake != nil ? "/usr/bin/python3" : nil) else {
                 onReady("no python3 here has mlx_whisper — `pip3 install mlx-whisper`, "
                         + "or point RELAY_WHISPER_PYTHON at the one that does")
                 return

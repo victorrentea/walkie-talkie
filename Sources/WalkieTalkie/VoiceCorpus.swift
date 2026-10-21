@@ -70,6 +70,12 @@ final class VoiceCorpus {
     ///   answer they believe.
     func captureLocal(wav: URL, text: String, language: String?, duration: TimeInterval,
                       app: String?, engine: String = "whisper-local") {
+        // A desk test's fake local helper answered (`WT_WHISPER_HELPER`, 2026-10-22):
+        // its words are not what was said, and a wrong pair here is wrong forever.
+        if engine == "whisper-local", LocalWhisper.helperOverride != nil {
+            Log.info("corpus: not filed — the fake local helper (WT_WHISPER_HELPER) answered this take")
+            return
+        }
         guard let audio = try? Data(contentsOf: wav), audio.count > 44 else {
             Log.error("corpus: local recording vanished before it could be filed")
             return

@@ -98,6 +98,10 @@ IN_LAB = _in_lab()
 # Extra per-case restores a case module registers (cases_wispr: the fake History DB line, the
 # chord mute); `cleanup()` runs them after every case and at exit, whatever the case did.
 CLEANUPS = []
+# Per-case set-ups a case module registers, called with the case after the relay is idle and before
+# anything else (cases_chunks: the fake local helper in for its own cases, the real model back for
+# every other one — 2026-10-22). An exception is the case's ERROR.
+BEFORE_CASE = []
 RUN = {"credits_before": None, "usage_error": None, "engine0": None, "fake": None, "results": [],
        "credits_after": None}
 
@@ -886,6 +890,8 @@ def run(selected, report_path):
         t0 = time.time()
         RUN["case_t0"] = t0
         try:
+            for fn in BEFORE_CASE:
+                fn(c)
             if c.get("engine") and not engine_for_case(c):
                 raise RuntimeError(f"POST /engine {c['engine']} was not taken (engine {engine()['engine']})")
             if RUN["fake"]:
@@ -955,7 +961,8 @@ def main():
     here = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, here)
     for mod in ("cases_lc", "cases_lifecycle", "cases_delivery", "cases_gestures", "cases_audio", "cases_queue",
-                "cases_wispr", "cases_wispr_soak", "cases_wispr_chaos", "cases_localnow", "cases_localauto", "cases_w4real", "cases_kamikaze"):
+                "cases_wispr", "cases_wispr_soak", "cases_wispr_chaos", "cases_localnow", "cases_localauto", "cases_w4real", "cases_kamikaze",
+                "cases_chunks"):
         try:
             importlib.import_module(mod)
         except ModuleNotFoundError as e:
