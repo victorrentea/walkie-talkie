@@ -157,7 +157,10 @@ if _block_present() and not FW.harness_alive():
 # ---------------------------------------------------------------- audio
 def take_wav(blocks=3, block=9.5, gap=1.4, offset=0.0):
     """`blocks` stretches of his speech (`CLIP_EN_LONG` from `offset` s), `gap` s of digital silence
-    between them — one cut per gap."""
+    between them — one cut per gap. **Offsets 0–60 only** (2026-10-22): the clip goes quiet around
+    80–108 s (RMS ~105, hiss), and a take built there ends in silence — the app rightly drops
+    that tail, which read as lost words in C9/C12."""
+    assert offset <= 60, "CLIP_EN_LONG is hiss from ~80 s to ~108 s"
     path = f"{WORK}/chunks-{blocks}x{block}-{gap}-{int(offset)}.wav"
     if os.path.exists(path):
         return path
@@ -180,6 +183,7 @@ def take_wav(blocks=3, block=9.5, gap=1.4, offset=0.0):
 
 
 def play_bg(wav, **kw):
+    kw.setdefault("tail", 0.0)   # speech up to the stop — see `say`
     th = threading.Thread(target=play, args=(wav,), kwargs=kw, daemon=True)
     th.start()
     return th
@@ -218,9 +222,13 @@ def stop():
 
 
 def say(wav, **kw):
+    """Speech right up to the stop: the clip with no silent tail and a 0.15 s beat after it
+    (2026-10-22). With 0.5 + 0.6 s of silence the planner (gap ≥ 0.9 s) rightly cut in that
+    last pause and the tail was empty, so no case ever met a tail still decoding."""
     time.sleep(0.4)
+    kw.setdefault("tail", 0.0)
     play(wav, **kw)
-    time.sleep(0.6)
+    time.sleep(0.15)
 
 
 def rows_since(n0):
@@ -469,7 +477,7 @@ def c5():
         m = start()
         if not m: return "FAIL", "A's microphone never opened"
         if not on_inject(m): stop(); return not_inject(m)
-        say(take_wav(3, offset=70))
+        say(take_wav(3, offset=60))
         t_a = stop()
         time.sleep(1.5)
         if not start(): return "FAIL", "B's microphone never opened"
@@ -506,7 +514,7 @@ def c6():
         m = start()
         if not m: return "FAIL", "the microphone never opened"
         if not on_inject(m): stop(); return not_inject(m)
-        say(take_wav(3, offset=100))
+        say(take_wav(3, offset=10))
         stop()
         rows = wait_for(lambda: rows_since(n0), tmo("terminal") + tmo("local"), 0.3) or []
         settle()
@@ -578,7 +586,7 @@ def c8():
             t_sel = time.time()
         finally:
             th.join(40)
-        time.sleep(0.6)
+        time.sleep(0.15)
         stop()
         rows = wait_for(lambda: rows_since(n0), tmo("terminal"), 0.3) or []
         settle()
@@ -629,13 +637,13 @@ def c9():
         m = start()
         if not m: return "FAIL", "the microphone never opened (a)"
         if not on_inject(m): stop(); return not_inject(m)
-        th = play_bg(take_wav(3, offset=50), lead=0.4)
+        th = play_bg(take_wav(3, offset=40), lead=0.4)
         try:
             wait_requests(ep, lambda r: r["kind"] == "chunk", 9.5 + 1.4 + tmo(2))
             post("/test/local-now")
         finally:
             th.join(40)
-        time.sleep(0.6)
+        time.sleep(0.15)
         stop()
         ok, note = _one_delivery(n0, m, ep, tmo("local"))
         oks.append(ok); notes.append(f"(a) recording: {note}; requests {[r['kind'] for r in FW.requests(ep)]}")
@@ -645,7 +653,7 @@ def c9():
         n0 = outbox_count()
         m = start()
         if not m: return "FAIL", "the microphone never opened (b); " + "; ".join(notes)
-        say(take_wav(3, offset=80))
+        say(take_wav(3, offset=20))
         stop()
         wait_requests(ep, lambda r: r["kind"] == "tail", tmo("local"))
         post("/test/local-now")
@@ -679,7 +687,7 @@ def c10():
                         _, ans = post("/engine", {"id": "eleven"})
                     finally:
                         th.join(40)
-                    time.sleep(0.6)
+                    time.sleep(0.15)
                     stop()
                 else:
                     say(take_wav(3, offset=60))
@@ -753,14 +761,14 @@ def c12():
         m = start()
         if not m: return "FAIL", "the microphone never opened"
         if not on_inject(m): stop(); return not_inject(m)
-        th = play_bg(take_wav(3, offset=90), lead=0.4)
+        th = play_bg(take_wav(3, offset=30), lead=0.4)
         try:
             wait_requests(ep, lambda r: r["kind"] == "chunk", 9.5 + 1.4 + tmo(2))
             busy1 = busy_why()
             rc1, out1 = _dry_run()
         finally:
             th.join(40)
-        time.sleep(0.6)
+        time.sleep(0.15)
         stop()
         wait_requests(ep, lambda r: r["kind"] == "tail", tmo("local") + 8)
         busy2 = busy_why()

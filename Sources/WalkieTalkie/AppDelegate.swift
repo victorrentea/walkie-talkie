@@ -5854,9 +5854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // its Q14 fallback refused (Recover), ⌘⌃X and the countdown refused, and
         // `dropDeadParked` letting it go while Wispr still works on it. Refused
         // out loud instead; the next start after its words land borrows as before.
-        if source === wisprSource, liveInFlight || (parkedSentence.map { !$0.finished } ?? false),
-           wisprNotUpForAutoLocal() != nil || Connectivity.shared.offlineReason != nil
-            || (!wisprDefers && wisprSource.stillFinishingAbandonedRow != nil) {
+        if noBorrowOverInFlight(wisprDefers: wisprDefers) {
             Log.error("dictate gesture refused — Wispr Flow cannot take it and the previous sentence is still in flight (no borrow over it)")
             overlay.flash("⏳ The previous sentence is still being transcribed", duration: 3)
             return
@@ -7514,9 +7512,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (2026-10-21) — the same answer `startBlocker` would give a start now:
     /// the queue takes it, or the local model's decode would be parked. Run from
     /// `syncBorrowedGestures` and whenever `settling` / `fallingBack` move.
+    /// **A start that would borrow the local model while a Wispr sentence is in
+    /// flight** (review 2026-10-22) — refused by `startDictation`, so the Ready
+    /// row and the back click must not offer it either. A sentence the local
+    /// model is already standing in for (`fallingBack`, rule D) does not count:
+    /// its answer runs on its own envelope, whatever `source` is.
+    fileprivate func noBorrowOverInFlight(wisprDefers: Bool? = nil) -> Bool {
+        guard source === wisprSource else { return false }
+        let liveBusy = liveInFlight && !fallingBack
+        let parkedBusy = parkedSentence.map { !$0.finished && !($0.env?.fallingBack ?? false) } ?? false
+        guard liveBusy || parkedBusy else { return false }
+        let defers = wisprDefers ?? wisprSource.wouldDeferStart
+        return wisprNotUpForAutoLocal() != nil || Connectivity.shared.offlineReason != nil
+            || (!defers && wisprSource.stillFinishingAbandonedRow != nil)
+    }
+
     fileprivate func syncReadyRow() {
         guard !answeringInBackground else { return }
-        let queueAccepts = Self.sentenceQueueOn && queueRefusal() == nil
+        let queueAccepts = Self.sentenceQueueOn && queueRefusal() == nil && !noBorrowOverInFlight()
         let wordsInFlight = settling || fallingBack || source.phase.isWaitingForWords
             || source.answersPending > 0 || (parkedSentence.map { !$0.finished } ?? false)
         let micOpen = listening || source.isRecording || speculative
@@ -7563,7 +7576,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ring and the settle and does not care where the words are going.
         hotkeys.ownDictation = listening || source.isRecording || speculative || settling
         hotkeys.ownMicOpen = listening || source.isRecording || speculative
-        hotkeys.sentenceQueueAccepts = Self.sentenceQueueOn && queueRefusal() == nil
+        hotkeys.sentenceQueueAccepts = Self.sentenceQueueOn && queueRefusal() == nil && !noBorrowOverInFlight()
         syncReadyRow()
         // **A plain dictation attaches nothing; a prompt attaches everything**
         // (2026-10-08). Victor: *"If I am in plain dictation mode, there

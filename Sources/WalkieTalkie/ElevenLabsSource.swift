@@ -404,6 +404,8 @@ final class ElevenLabsSource: DictationSource {
     /// still on `audioQueue`): `finishRecording` hands them to the local model
     /// instead of uploading (2026-09-28).
     private var forcedTakes: Set<Int> = []
+    /// Takes cancelled between the stop and the close (wave 2).
+    private var closingCancelled: Set<Int> = []
 
     // MARK: - Takes (Q12)
 
@@ -487,6 +489,15 @@ final class ElevenLabsSource: DictationSource {
     /// The tail of `stop()`, on the main queue, exactly as it always ran.
     private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?, voiced: TimeInterval,
                                  hops: [MeterHop] = [], take t: Int, stoppedAt: Date?, markers: Bool) {
+        if closingCancelled.remove(t) != nil {
+            forcedTakes.remove(t)
+            Log.info("🗑️ take \(t) was cancelled while it closed — not uploaded")
+            answer(t) {
+                settlePhase(.done("dismissed"))
+                didEnd?(.cancelled(audio: closed?.url, duration: closed?.duration ?? 0))
+            }
+            return
+        }
         let forced = forcedTakes.remove(t) != nil
         guard let (wav, duration) = closed else {
             Log.info("recording discarded — under \(MicRecorder.minimumDuration)s")
@@ -596,6 +607,13 @@ final class ElevenLabsSource: DictationSource {
     /// drop (`transcriptDisowned`).
     func cancelTake(_ t: Int) {
         if isRecording, t == take { return cancel() }
+        // **Still closing** (wave 2, the sibling of the local model's fix): no
+        // upload yet — `finishRecording` answers it cancelled, with the WAV, and
+        // uploads nothing.
+        if uploads[t] == nil, unanswered.contains(t) {
+            closingCancelled.insert(t)
+            return
+        }
         guard let up = uploads[t] else { return }
         uploads[t] = nil
         up.cancel()
@@ -675,6 +693,11 @@ final class ElevenLabsSource: DictationSource {
             uploads[t] = nil
             up.cancel()
             answer(t) { settlePhase(.done("dismissed")); didEnd?(.cancelled(audio: up.wav, duration: up.duration)) }
+            return
+        }
+        // Shut and still closing — no upload yet (wave 2): answered at the close.
+        if !isRecording, let t = unanswered.max(), uploads[t] == nil {
+            closingCancelled.insert(t)
             return
         }
         guard isRecording else { return }
