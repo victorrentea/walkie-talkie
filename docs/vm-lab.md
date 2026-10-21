@@ -1,5 +1,11 @@
 # The lab — a headless macOS guest for the live tests
 
+> **Since 2026-10-21 `wt-lab` lives on Vic again: `TART_HOME=/Volumes/Vic/tart`** (Victor: the internal
+> disk was full — 6 GB free — and the VM held 39 GB of it). Moved with the VM stopped
+> (`rsync -aS --exclude control.sock`, the same image, so Wispr's sign-in inside it survives), booted
+> once from Vic, then `~/tart` deleted. Boots and guest builds are slower again (USB HDD) — the price
+> of the space. The paragraph below is the history.
+
 A Tart VM (`wt-lab`) on Apple's Virtualization.framework, so that synthetic mouse and keys, the
 witness Terminal tabs and the test audio stay inside a guest instead of on Victor's screen, his
 speakers and his clipboard. Driven by `tools/vm-lab.sh`. First built 2026-09-26; an earlier
@@ -86,7 +92,7 @@ tools/vm-lab.sh down      # guest shutdown, then reap
 tools/vm-lab.sh look      # Screen Sharing on Victor's screen — only when he asks for it
 ```
 
-By hand: `export TART_HOME=~/tart` first, **always** (without it Tart silently uses
+By hand: `export TART_HOME=/Volumes/Vic/tart` first (back on Vic since 2026-10-21), **always** (without it Tart silently uses
 `~/.tart`; `/Volumes/Vic/tart` is the old home since 2026-09-29). Then
 `nohup tart run wt-lab --no-graphics --no-audio --no-clipboard > $TART_HOME/wt-lab.log 2>&1 &`.
 

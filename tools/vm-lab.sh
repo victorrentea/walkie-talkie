@@ -40,8 +40,13 @@ set -euo pipefail
 # through it. `~/tart` holds only `vms/wt-lab` (+ the night stamp); the base image and the OCI cache
 # stay on Vic (`/Volumes/Vic/tart`) and are not needed to run the lab. `TART_HOME=/Volumes/Vic/tart`
 # still points at the old copy, renamed `wt-lab.moved-2026-09-29`.
-export TART_HOME="${TART_HOME:-$HOME/tart}"
-[ -d "$TART_HOME" ] || { echo "❌ $TART_HOME is not there (since 2026-09-29 the lab lives on the internal disk; \$TART_HOME=/Volumes/Vic/tart is the old home)" >&2; exit 1; }
+#
+# **Back on Vic since 2026-10-21** (Victor: *"stop it and move it back to the external disk to free
+# the space"* — the internal disk was 100 % full, 6 GB left; the VM took 39 GB of it). Copied with
+# `rsync -aS --exclude control.sock` with the VM stopped (same disk image, not a clone, so the Wispr
+# Flow session signed in inside it survives), booted from Vic, then `~/tart` deleted.
+export TART_HOME="${TART_HOME:-/Volumes/Vic/tart}"
+[ -d "$TART_HOME" ] || { echo "❌ $TART_HOME is not there — is the disk Vic mounted? (the lab lives on Vic since 2026-10-21)" >&2; exit 1; }
 
 VM="${WT_LAB_VM:-wt-lab}"
 BASE="${WT_LAB_BASE:-wt-base}"

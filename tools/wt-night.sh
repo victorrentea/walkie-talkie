@@ -27,7 +27,7 @@
 set -euo pipefail
 
 REPO=/Users/victorrentea/workspace/walkie-talkie
-export TART_HOME="${TART_HOME:-$HOME/tart}"
+export TART_HOME="${TART_HOME:-/Volumes/Vic/tart}"   # back on Vic since 2026-10-21
 STAMP="$TART_HOME/night/last-run"
 SESSION=wt-night
 LOGDIR="$HOME/.walkie-talkie/night"
