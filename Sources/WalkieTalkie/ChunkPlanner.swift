@@ -23,8 +23,11 @@ enum ChunkPlanner {
 
     struct Tuning: Equatable {
         var trigger: TimeInterval = 10
-        var minChunk: TimeInterval = 6
-        var minGap: TimeInterval = 0.6
+        // 8 s / 0.9 s measured (2026-10-21, `evals/chunked-decode/`, 40 takes,
+        // the Large LoRA): WER 12.6 % chunked vs 13.1 % whole; 6 s / 0.6 s cost
+        // +0.9 pt, 4 s chunks or 0.4 s gaps +1.5…2.1 pt.
+        var minChunk: TimeInterval = 8
+        var minGap: TimeInterval = 0.9
         var hardCap: TimeInterval = 28
         var capGap: TimeInterval = 0.3
         var minVoiced: TimeInterval = 2

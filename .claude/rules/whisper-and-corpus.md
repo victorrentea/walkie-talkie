@@ -124,13 +124,20 @@ the local model … don't feed too small chunks either"*.
   Q12 rules (max 2 in flight, delivered in order) apply unchanged — `queueRefusal` reads only the flag.
 - **Chunks** (`WT_LOCAL_CHUNKS=0` off): a 0.5 s main-queue tick while recording asks the pure
   `ChunkPlanner.cut` (tests: `ChunkPlannerTests`) — from `trigger` 10 s after the last cut, the
-  **longest** pause ≥ 0.6 s (≥ 0.3 s past 28 s) whose middle is ≥ 6 s after it, with ≥ 2 s voiced
+  **longest** pause ≥ 0.9 s (≥ 0.3 s past 28 s) whose middle is ≥ 8 s after it, with ≥ 2 s voiced
   before it, cut in its middle (0.4 s into one still going). The chunk is `MicRecorder.takeSlice`
-  (the in-memory take, same ruler as the WAV) sent as `{"pcm", "words": true}`; words always, their
-  cost is paid while he talks. At the stop the tail is sliced **on `audioQueue`, right after
-  `meter.stop()`** (a next take's `start` resets `take`), decoded with words only if a cue is waiting,
-  dropped under 0.3 s voiced. `join`: texts with one space, words moved by each chunk's start (kept
-  only if they spell the text), worst logprob, worst cr, the longest chunk's language.
+  (the in-memory take, same ruler as the WAV) sent as `{"pcm"}`, **words only with a cue waiting**,
+  like a whole take. At the stop the tail is sliced **on `audioQueue`, right after `meter.stop()`** (a
+  next take's `start` resets `take`), sent with the chunks' agreed `language` (the helper skips its LID
+  pass, −0.56 s), dropped under 0.3 s voiced. `join`: texts with one space, words moved by each
+  chunk's start — a chunk decoded without them stands as one word over its span; kept only if they
+  spell the text —, worst logprob, worst cr, the longest chunk's language (`ChunkJoinTests`).
+- **Measured, `evals/chunked-decode/`** (40 takes > 25 s, Large LoRA, Wispr's raw text as reference):
+  8 s / 0.9 s → WER **12.6 % chunked vs 13.1 % whole** (noise: ±1.5 pt), mean wait after the stop
+  **3.86 → 2.35 s**; 6 s / 0.6 s cost +0.9 pt, 4 s chunks or 0.4 s gaps +1.5…2.1 pt. **Word timings on
+  every chunk cost +5 pt** (13.1 → 18.2 %): mlx_whisper seeks past the last word and decodes the
+  leftover silence as a new window, inventing *"La revedere!"* (82 of 119 chunks). The helper now keeps
+  a ≤ 30 s clip's first window only when timings are asked (`first_window_only`, seek == 0).
 - **Never a lost sentence for a speed-up**: a chunk with no answer, a tail no longer in memory
   (> 120 s since the last cut) or a marker spliced into the WAV (`markersInAudio`) → the whole WAV is
   decoded as before. The corpus and Recover always get the whole WAV.

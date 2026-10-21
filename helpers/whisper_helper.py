@@ -449,14 +449,17 @@ def load_pcm(path):
     return mx.array(np.fromfile(path, dtype="<i2")).astype(mx.float32) / 32768.0
 
 
-def transcribe(path, words=WORDS, samples=None):
+def transcribe(path, words=WORDS, samples=None, language=None):
     with quiet():
         # Decoded once, here, and handed to both halves as an array: the LID pass
         # needs the samples anyway, and passing the path twice would shell out to
         # ffmpeg twice for the same file.
         if samples is None:
             samples = A.load_audio(path)
-        lang = pick_language(samples)
+        # **A language the caller already knows skips the LID pass** (2026-10-21):
+        # the tail of a chunked take reuses its chunks' language — 0.56 s of the
+        # tail's 1.40 s (`evals/chunked-decode/`).
+        lang = language if language in LANGUAGES else pick_language(samples)
 
         def decode(prompt):
             return mlx_whisper.transcribe(
@@ -471,6 +474,7 @@ def transcribe(path, words=WORDS, samples=None):
             )
 
         res = decode(VOCABULARY_RO if lang == "ro" else VOCABULARY)
+    first_window_only(res, words, samples)
     res["duration"] = len(samples) / A.SAMPLE_RATE
     res["_samples"] = samples
     res["retried"] = False
@@ -483,6 +487,7 @@ def transcribe(path, words=WORDS, samples=None):
     if first > LOOP_CEILING:
         with quiet():
             again = decode(None)
+        first_window_only(again, words, samples)
         second = _worst_ratio(again)
         print(f"looped (cr {first:.1f}) — retried without the prompt: cr {second:.1f}, "
               f"{'kept the retry' if second < first else 'kept the first'}", file=sys.stderr)
@@ -492,6 +497,29 @@ def transcribe(path, words=WORDS, samples=None):
             res = again
     cut_loops(res)
     return res
+
+
+def first_window_only(res, words, samples):
+    """**With word timings, a clip that fits one window is read once** (2026-10-21).
+
+    With `word_timestamps=True` mlx_whisper seeks to the end of the last word and
+    decodes what is left of the 30 s window again — on a chunk ending in a pause,
+    that leftover is silence and the model invents a closing phrase (*"La
+    revedere!"*, *"Da, da."*): 82 of 119 chunks, WER 13.1 % → 18.2 %
+    (`evals/chunked-decode/`). A clip ≤ 30 s is all in the first window, so only
+    the segments with `seek == 0` are kept — WER back to the plain-text 14.1 %.
+    """
+    if not words or len(samples) > A.N_SAMPLES:
+        return
+    segs = res.get("segments") or []
+    kept = [s for s in segs if s.get("seek", 0) == 0]
+    if len(kept) == len(segs) or not kept:
+        return
+    print(f"first window only: {len(segs) - len(kept)} later segment(s) dropped "
+          f"({' | '.join((s.get('text') or '').strip()[:40] for s in segs if s not in kept)})",
+          file=sys.stderr)
+    res["segments"] = kept
+    res["text"] = "".join(s.get("text") or "" for s in kept)
 
 
 def coverage(res):
@@ -578,7 +606,7 @@ for line in sys.stdin:
         t0 = time.monotonic()
         want_words = bool(req.get("words", WORDS))
         samples = load_pcm(path) if req.get("pcm") else None
-        res = transcribe(path, words=want_words, samples=samples)
+        res = transcribe(path, words=want_words, samples=samples, language=req.get("language"))
         decode_s = time.monotonic() - t0
         segs = res.get("segments") or []
         # The worst segment, not the average: a dictation is unusable if any part

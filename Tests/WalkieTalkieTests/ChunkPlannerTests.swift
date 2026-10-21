@@ -44,7 +44,7 @@ final class ChunkPlannerTests: XCTestCase {
     }
 
     func testAnOngoingPauseIsCutAPadIn() {
-        let h = hops([(10, true), (0.8, false)])
+        let h = hops([(10, true), (1.0, false)])
         let cut = ChunkPlanner.cut(hops: h, from: 0, now: end(h))!
         XCTAssertEqual(cut, 10.4, accuracy: 0.1)
     }
@@ -73,5 +73,41 @@ final class ChunkPlannerTests: XCTestCase {
         let h = hops([(2, true), (1, false), (3, true)])
         XCTAssertEqual(ChunkPlanner.voiced(h, from: 0), 5, accuracy: 0.1)
         XCTAssertEqual(ChunkPlanner.voiced(h, from: 2.5), 3, accuracy: 0.1)
+    }
+}
+
+final class ChunkJoinTests: XCTestCase {
+
+    private func result(_ text: String, words: [TimedWord]?, lang: String = "ro") -> LocalWhisper.Result {
+        LocalWhisper.Result(text: text, language: lang, avgLogprob: -0.2, compressionRatio: 1.4,
+                            coverage: nil, words: words)
+    }
+
+    func testAPieceWithoutWordsStandsAsOneWordOverItsSpan() {
+        let a = result("Primul gând.", words: nil)
+        let b = result("Al doilea.", words: [TimedWord(text: " Al", start: 0.2, end: 0.4, isSpacing: false),
+                                             TimedWord(text: " doilea.", start: 0.5, end: 0.9, isSpacing: false)])
+        let r = LocalWhisperSource.join([(a, 0), (b, 9.5)], ends: [9.5, 12])
+        XCTAssertEqual(r.text, "Primul gând. Al doilea.")
+        let w = try! XCTUnwrap(r.words)
+        XCTAssertEqual(w.map(\.text).joined(), "Primul gând. Al doilea.")
+        XCTAssertEqual(w.first!.start, 0, accuracy: 0.001)
+        XCTAssertEqual(w.first!.end, 9.5, accuracy: 0.001)
+        XCTAssertEqual(w.last!.start, 10.0, accuracy: 0.001)
+    }
+
+    func testNoPieceWithWordsMeansNoWords() {
+        let r = LocalWhisperSource.join([(result("Unu.", words: nil), 0), (result("Doi.", words: nil), 8)])
+        XCTAssertEqual(r.text, "Unu. Doi.")
+        XCTAssertNil(r.words)
+    }
+
+    func testWorstScoresWin() {
+        let a = LocalWhisper.Result(text: "a", language: "en", avgLogprob: -0.1, compressionRatio: 1.2, coverage: nil)
+        let b = LocalWhisper.Result(text: "bbbb", language: "ro", avgLogprob: -0.7, compressionRatio: 2.0, coverage: nil)
+        let r = LocalWhisperSource.join([(a, 0), (b, 8)])
+        XCTAssertEqual(r.avgLogprob, -0.7, accuracy: 0.001)
+        XCTAssertEqual(r.compressionRatio, 2.0, accuracy: 0.001)
+        XCTAssertEqual(r.language, "ro")
     }
 }

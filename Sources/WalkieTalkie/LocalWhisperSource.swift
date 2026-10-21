@@ -656,13 +656,16 @@ final class LocalWhisperSource: DictationSource {
         let voiced = ChunkPlanner.voiced(hops, from: from, to: cut)
         Log.info(String(format: "✂️ local: chunk %d cut at %.1f s — %.1f s of audio, %.1f s voiced, decoding while he speaks",
                         job.pieces.count + 1, cut, cut - from, voiced))
-        ask(job, samples: samples, from: job.lastCut, words: true, isTail: false)
+        ask(job, samples: samples, from: job.lastCut, words: wantsWordTimings?() ?? false, isTail: false)
         job.lastCut = to
     }
 
-    /// One chunk to the helper. Background chunks always carry word timings —
-    /// a shutter pressed later must still find words around its moment, and
-    /// their cost is paid while he speaks; the tail asks only with a cue.
+    /// One chunk to the helper. **Word timings only with a cue waiting**, like a
+    /// whole take (2026-10-21): with them on every chunk, WER went 13.1 → 18.2 %
+    /// (`evals/chunked-decode/` — the helper now reads a ≤ 30 s clip's first
+    /// window only, `first_window_only`, but the timings also cost ×1.69 on a
+    /// chunk). A cue lies in the chunk cut after it, which asks for them. The
+    /// tail reuses the chunks' language, so the helper skips its LID pass.
     private func ask(_ job: Job, samples: [Int16], from: Int, words: Bool, isTail: Bool) {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent("walkie-chunk-\(job.take)-\(job.pieces.count).pcm")
@@ -676,7 +679,8 @@ final class LocalWhisperSource: DictationSource {
         let piece = Piece(from: from, to: from + samples.count, file: file, isTail: isTail)
         job.pieces.append(piece)
         if isTail { job.tailDone = true }
-        whisper.transcribe(wav: file.path, words: words, pcm: true) { [weak self] result in
+        let language = isTail ? Self.chunksLanguage(job.pieces.dropLast()) : nil
+        whisper.transcribe(wav: file.path, words: words, pcm: true, language: language) { [weak self] result in
             DispatchQueue.main.async {
                 piece.removeFile()
                 guard let self, !piece.dropped, !job.cancelled else { return }
@@ -710,7 +714,8 @@ final class LocalWhisperSource: DictationSource {
         }
         jobs[job.take] = nil
         let waited = job.stoppedAt.map { Date().timeIntervalSince($0) } ?? 0
-        let r = Self.join(job.pieces.map { ($0.result!, Double($0.from) / Self.rate) })
+        let r = Self.join(job.pieces.map { ($0.result!, Double($0.from) / Self.rate) },
+                          ends: job.pieces.map { Double($0.to) / Self.rate })
         if !r.text.isEmpty, job.leftAtStop > 0 {
             // The wait he saw, against what was left at the stop — the line the
             // chip's estimate for a chunked take is read from (`noteLeft`).
@@ -724,15 +729,28 @@ final class LocalWhisperSource: DictationSource {
         answered(job, r)
     }
 
+    /// The language every answered chunk agreed on, for the tail — nil if they
+    /// disagree or none answered.
+    private static func chunksLanguage(_ pieces: ArraySlice<Piece>) -> String? {
+        let langs = Set(pieces.compactMap { $0.result?.language })
+        return langs.count == 1 ? langs.first : nil
+    }
+
     /// The pieces' answers as one: texts joined with a space, words moved onto
-    /// the take's ruler (only if every piece has them), the worst confidence and
-    /// the worst loop, the language of the longest piece.
-    static func join(_ parts: [(LocalWhisper.Result, TimeInterval)]) -> LocalWhisper.Result {
+    /// the take's ruler (a piece decoded without them stands as one word over
+    /// its whole span — no cue lies in it), the worst confidence and the worst
+    /// loop, the language of the longest piece. No piece with words → no words.
+    static func join(_ parts: [(LocalWhisper.Result, TimeInterval)], ends: [TimeInterval]? = nil) -> LocalWhisper.Result {
         let texts = parts.map { $0.0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         let text = texts.joined(separator: " ")
-        var words: [TimedWord]? = []
-        for (r, offset) in parts {
-            guard let w = r.words else { words = nil; break }
+        let anyWords = parts.contains { $0.0.words != nil }
+        var words: [TimedWord]? = anyWords ? [] : nil
+        for (i, (r, offset)) in parts.enumerated() where anyWords {
+            let own = r.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // On the piece's own ruler, like the helper's words — moved below.
+            let w = r.words ?? (own.isEmpty ? [] : [TimedWord(text: own, start: 0,
+                                                             end: max(0, (ends?[i] ?? offset) - offset),
+                                                             isSpacing: false)])
             if !(words?.isEmpty ?? true), let first = w.first, !first.text.hasPrefix(" ") {
                 words?.append(TimedWord(text: " ", start: offset, end: offset, isSpacing: true))
             }
