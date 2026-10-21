@@ -1541,6 +1541,11 @@ final class WisprFlowSource: DictationSource {
         // it the chord goes out and Q14 carries the take on the relay's WAV.
         // Each hold is its own wait (a re-hold mid-replay gets the full 2.5 s).
         if !bridge.isHolding { stopHeldSince = 0 }
+        // **A hold restarts the drain's clock** (review wave 2): after a re-hold
+        // mid-replay the whole take is queued again, above the last `drainSeen`,
+        // and the stale `drainMovedAt` called it a stuck player 2 s later — the
+        // stop chord went out with most of the take unheard.
+        if bridge.isHolding { drainMovedAt = 0 }
         if bridge.isHolding, ownTakeOnly == nil {
             if watch.sampleIsRunningInput() {
                 bridge.release("the relay's stop — Wispr's input is running")
@@ -4889,7 +4894,10 @@ extension WisprFlowSource {
         // Before the relay hears the close — `DecodeRate.activeEngine`.
         DecodeRate.activeEngine = d.ownTake == nil ? DecodeRate.wisprFlow : DecodeRate.whisperLocal
         // No countdown yet: Wispr has not been asked (`onHandedToWispr` starts it).
-        closingDeferred = d.ownTake == nil
+        // Never a countdown of its own here (review wave 2): a take given up to
+        // the local model has none, and arming one would retire the older
+        // sentence's — its clock starts at its real stop chord (`onHandedToWispr`).
+        closingDeferred = true
         didStopListening?()
         closingDeferred = false
         let t = d.take
@@ -4983,7 +4991,9 @@ extension WisprFlowSource {
             d.recording = false
             d.stoppedAt = CFAbsoluteTimeGetCurrent()
             bridge.closeInput()
+            closingDeferred = true   // the older sentence keeps its countdown (wave 2)
             didStopListening?()
+            closingDeferred = false
         }
         let t = d.take
         meterQueue.async { [weak self] in
@@ -5007,7 +5017,9 @@ extension WisprFlowSource {
             d.stoppedAt = CFAbsoluteTimeGetCurrent()
             bridge.closeInput()
             DecodeRate.activeEngine = DecodeRate.whisperLocal
+            closingDeferred = true   // the older sentence keeps its countdown (wave 2)
             didStopListening?()
+            closingDeferred = false
         }
         endDeferred(d, why: DictationEnd.localForced, forced: true)
         return true
@@ -5079,6 +5091,10 @@ extension WisprFlowSource {
             } else if !HotkeyTap.wisprChordsMuted, watch.sampleIsRunningInput() {
                 // W6: a toggle over an open Wispr microphone stops that one.
                 busy = "Wispr Flow's microphone is still open"
+            } else if Date().timeIntervalSince1970 - hisChordAt < 2 {
+                // His own Wispr sentence starting (Q9): its row exists before its
+                // microphone opens, and a toggle now would stop it (wave 2).
+                busy = "his own Wispr Flow sentence is starting"
             }
         }
         let verdict = WisprDeferral.verdict(.init(now: now, gestureAt: d.gestureAt, stoppedAt: d.stoppedAt,

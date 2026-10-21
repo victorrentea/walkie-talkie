@@ -4743,7 +4743,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Q12 on Wispr: the clock's sentence, not a take recorded behind it.
         if source === wisprSource { wisprSource.handOverTake = sentence?.take }
         localAutoTake = true
-        if !transcribeLocallyNow(from: "⏱ the budget ran out") { localAutoTake = false }
+        if !transcribeLocallyNow(from: "⏱ the budget ran out") {
+            localAutoTake = false
+            // Not read by a hand-over that never happened — a later ⌘⌃X must not
+            // find it (review wave 2).
+            if source === wisprSource { wisprSource.handOverTake = nil }
+        }
     }
     /// The hand-over in flight is the clock's, not his ⌘⌃X — `via: local-auto`.
     private var localAutoTake = false
