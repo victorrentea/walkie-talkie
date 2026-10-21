@@ -38,7 +38,7 @@ def _skip():
 def _open(mark, timeout=8):
     """F10 and wait for a microphone opened after `mark`."""
     n0 = count(mark, OPENED)
-    gesture("forward-right")
+    post("/test/gesture", {"name": "forward-right", "direct": True})
     return wait_for(lambda: count(mark, OPENED) > n0, timeout, 0.05)
 
 
@@ -70,7 +70,7 @@ def q1():
         if not _open(m): return "FAIL", "the first microphone never opened"
         if not on_inject(m): return not_inject(m)
         _say(CLIP_A)
-        gesture("forward-right")                       # stop A — its upload is 6 s late
+        post("/test/gesture", {"name": "forward-click", "direct": True})                       # stop A — its upload is 6 s late
         time.sleep(1.2)                                # past the 0.8 s same-click window
         opened2 = _open(m)
         s = state()
@@ -78,7 +78,7 @@ def q1():
         parked = log_has(m, PARKED)
         if opened2:
             _say(CLIP_EN_LONG, seconds=4)
-            gesture("forward-right")
+            post("/test/gesture", {"name": "forward-click", "direct": True})
         both = _two_delivered(n0)
         rows = _rows_since(n0)
         first_is_a = bool(rows) and A_WORD in (rows[0].get("text") or "").lower()
@@ -95,20 +95,20 @@ def q2():
     why = _skip()
     if why: return "SKIP", why
     with rig():
-        post("/test/eleven", {"fail": "delayx2", "delayMs": 8000})   # A's and B's uploads both late
+        post("/test/eleven", {"fail": "delayx2", "delayMs": 12000})   # A's and B's uploads both late
         n0 = outbox_count()
         m = log_mark()
         if not _open(m): return "FAIL", "the first microphone never opened"
         if not on_inject(m): return not_inject(m)
         _say(CLIP_A)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         time.sleep(1.2)
         if not _open(m): return "FAIL", "the second microphone never opened"
         _say(CLIP_EN_LONG, seconds=3)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         time.sleep(1.2)
         opened_before = count(m, OPENED)
-        gesture("forward-right")                       # the third start
+        post("/test/gesture", {"name": "forward-right", "direct": True})                       # the third start
         refused = wait_for(lambda: log_has(m, REFUSED), 3, 0.05)
         time.sleep(1.0)
         third = count(m, OPENED) > opened_before
@@ -132,11 +132,11 @@ def q3():
         if not _open(m): return "FAIL", "the first microphone never opened"
         if not on_inject(m): return not_inject(m)
         _say(CLIP_A)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         time.sleep(1.2)
         if not _open(m): return "FAIL", "the second microphone never opened"
         _say(CLIP_EN_LONG, seconds=3)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         waited = wait_for(lambda: log_has(m, WAITS), 12, 0.1)
         both = _two_delivered(n0)
         rows = _rows_since(n0)
@@ -159,11 +159,11 @@ def q4():
         if not _open(m): return "FAIL", "the first microphone never opened"
         if not on_inject(m): return not_inject(m)
         _say(CLIP_A)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         time.sleep(1.2)
         if not _open(m): return "FAIL", "the second microphone never opened"
         time.sleep(1.5)
-        gesture("forward-left")                        # 🔼← — cancel
+        post("/test/cancel")                        # 🔼← — cancel
         cancelled = wait_for(lambda: log_has(m, r"dictation cancelled"), 3, 0.05)
         one = wait_for(lambda: outbox_count() >= n0 + 1, 60, 0.3)
         time.sleep(3)
@@ -186,13 +186,13 @@ def q5():
         if not _open(m): return "FAIL", "the first microphone never opened"
         if not on_inject(m): return not_inject(m)
         _say(CLIP_A)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         time.sleep(1.2)
         if not _open(m): return "FAIL", "the second microphone never opened"
         _say(CLIP_EN_LONG, seconds=3)
-        gesture("forward-right")
+        post("/test/gesture", {"name": "forward-click", "direct": True})
         time.sleep(1.0)
-        gesture("forward-left")                        # 🔼← — nothing recording
+        post("/test/cancel")                        # 🔼← — nothing recording
         cancelled = wait_for(lambda: log_has(m, r"dictation cancelled"), 3, 0.05)
         wait_for(lambda: outbox_count() >= n0 + 1, 60, 0.3)
         time.sleep(10)                                 # B's late answer, if it were delivered, is in by now
@@ -219,11 +219,11 @@ def q6():
             if not _open(m): return "FAIL", "the first microphone never opened"
             if not on_inject(m): return not_inject(m)
             _say(CLIP_A)
-            gesture("forward-right")
+            post("/test/gesture", {"name": "forward-click", "direct": True})
             time.sleep(1.2)
             if not _open(m): return "FAIL", "the second microphone never opened"
             _say(CLIP_EN_LONG, seconds=3)
-            gesture("forward-right")
+            post("/test/gesture", {"name": "forward-click", "direct": True})
             first = wait_for(lambda: (state().get("prompt") or {}).get("held"), 30, 0.1)
             p1 = state().get("prompt") or {}
             first_is_a = A_WORD in str(p1).lower()

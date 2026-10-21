@@ -437,6 +437,9 @@ final class WisprFlowSource: DictationSource {
         var kept: TakeAudio?
         var duration: TimeInterval = 0
         var olderDoneAt: CFAbsoluteTime = 0
+        /// The last tick a busy reason held the release (wave 7) — the paste settle
+        /// counts from it too.
+        var lastBusyAt: CFAbsoluteTime = 0
         /// Wispr will not get it — the relay's own recording carries it (Q14).
         var ownTake: String?
         var lastWait = ""
@@ -2453,7 +2456,9 @@ final class WisprFlowSource: DictationSource {
         speculativeDrop?.cancel()
         speculativeDrop = nil
         speculative = false
-        stopMeter(keep: true, wisprOut: ownTake != nil)   // a cancel keeps it too — Recover (W3, 2026-09-28)
+        // A cancel or ⌘⌃X dismissed Wispr: its replay goes nowhere either (wave 7 —
+        // it held the answer and the next take's microphone behind the drain).
+        stopMeter(keep: true, wisprOut: ownTake != nil || cancelling || handingToLocal)   // a cancel keeps it too — Recover (W3, 2026-09-28)
         captureFrom = CFAbsoluteTimeGetCurrent()
         spokenFor = cancelling ? 0 : relayed ? relayedSpokenFor : captureFrom - gestureAt
         Log.info(relayed
@@ -5189,12 +5194,7 @@ extension WisprFlowSource {
         }
         var busy: String?
         if done, d.ownTake == nil {
-            if d.olderDoneAt > 0, now - d.olderDoneAt < Self.pasteSettle {
-                // Wispr pastes the row it just finished 0.41–0.51 s after it turns
-                // `formatted` (the firewall's measurement); a chord in that window
-                // may be ignored and the take would go local (wave 5).
-                busy = "Wispr Flow is still pasting the sentence before"
-            } else if let row = stillFinishingAbandonedRow {
+            if let row = stillFinishingAbandonedRow {
                 busy = "Wispr Flow is still finishing row \(row)"
             } else if !HotkeyTap.wisprChordsMuted, watch.sampleIsRunningInput() {
                 // W6: a toggle over an open Wispr microphone stops that one.
@@ -5213,6 +5213,17 @@ extension WisprFlowSource {
                 // His own Wispr sentence starting (Q9): its row exists before its
                 // microphone opens, and a toggle now would stop it (wave 2).
                 busy = "his own Wispr Flow sentence is starting"
+            }
+            // Wispr pastes the row it just finished 0.41–0.51 s after it turns
+            // `formatted` (the firewall's measurement); a chord in that window may be
+            // ignored and the take would go local (wave 5). Counted from the later
+            // of the sentence before ending and the last busy reason clearing — a
+            // row that finished after its sentence was answered is pasted then too
+            // (wave 7).
+            if busy != nil {
+                d.lastBusyAt = now
+            } else if now - max(d.olderDoneAt, d.lastBusyAt) < Self.pasteSettle {
+                busy = "Wispr Flow is still pasting the sentence before"
             }
         }
         let verdict = WisprDeferral.verdict(.init(now: now, gestureAt: d.gestureAt, stoppedAt: d.stoppedAt,
