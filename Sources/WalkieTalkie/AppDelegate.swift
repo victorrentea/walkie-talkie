@@ -7349,8 +7349,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// laid out with the new count. No chip on screen, no flight: the ripple at
     /// the pointer is the receipt that never depends on the chip.
     /// → `CaptureFlash.flyIntoChip`
-    /// `outlineOnly` — the dragged area (2026-09-24): the box's white edge
-    /// flies without the pixels inside it, and nothing is decoded.
+    /// `outlineOnly` — the full-screen shutter (2026-10-23; the dragged area
+    /// from 2026-09-24 until then): the white edge flies without the pixels
+    /// inside it, and nothing is decoded.
     private func flyShotIntoChip(_ path: String, from source: CGRect?, outlineOnly: Bool = false) {
         guard let source = source else { return }
         let picture = outlineOnly ? nil : CaptureFlash.loadPicture(path)
@@ -11440,7 +11441,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // row goes up under his cursor instead — the receipt is the number,
                 // and the picture flies into it.
                 self.publishShotCount()
-                self.flyShotIntoChip(ScreenCapture.handover(for: path), from: Self.screenFrame(at: cursor))
+                // **Outline only** (2026-10-23, Victor: *"Nu și când fac poză la
+                // tot ecranul, ci doar când fac poza unui crop"*) — the crop alone
+                // carries its pixels into the chip.
+                self.flyShotIntoChip(path, from: Self.screenFrame(at: cursor), outlineOnly: true)
                 return
             }
             self.send(kind: "screenshot", paths: [path])
@@ -11604,9 +11608,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("✂️ area attached to in-flight dictation (\(count) picture(s) so far)")
         publishShotCount()
         // The box he framed flies from where he framed it — the display is not
-        // what he pointed at, the box is. **Its outline only** (2026-09-24,
-        // Victor: *"just the border, the rectangle"*).
-        flyShotIntoChip(path, from: movedTo ?? rect, outlineOnly: true)
+        // what he pointed at, the box is. **With its pixels again** (2026-10-23,
+        // Victor: *"nu vreau doar chenarul, ci și poza efectivă care e capturată
+        // din crop-ul acela … Să văd ce s-a luat efectiv"*; outline only since
+        // 2026-09-24): the cut-out, from the source box — on a move too, since
+        // the cut-out is what was taken.
+        flyShotIntoChip(ScreenCapture.zoom(for: path) ?? path, from: rect)
         return path
     }
 
