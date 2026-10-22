@@ -394,6 +394,12 @@ enum SpawnTerminal {
     /// a timer would be racing the shell. The launcher itself stays — zsh reads
     /// a script incrementally, and deleting it out from under `exec` is a class
     /// of flake not worth the few hundred bytes it saves.
+    /// What `cx` is in Victor's shell — `claude --allow-dangerously-skip-permissions` —
+    /// plus starting in auto mode. Spelled out because the alias lives in
+    /// `.zshrc` and a script is not an interactive shell: aliases do not expand here.
+    /// Bypass stays one shift+tab away; auto is where the session opens.
+    private static let claudeFlags = "--allow-dangerously-skip-permissions --permission-mode auto"
+
     private static func script(prompt: String, directory: String) -> String {
         """
         #!/bin/zsh
@@ -407,7 +413,7 @@ enum SpawnTerminal {
           echo "$prompt"
           exec /bin/zsh -l
         fi
-        exec claude "$prompt"
+        exec claude \(claudeFlags) "$prompt"
         """
     }
 
@@ -425,7 +431,7 @@ enum SpawnTerminal {
           echo "walkie: claude is not on the PATH — could not resume \(session)"
           exec /bin/zsh -l
         fi
-        exec claude --resume \(quote(session))
+        exec claude \(claudeFlags) --resume \(quote(session))
         """
     }
 
