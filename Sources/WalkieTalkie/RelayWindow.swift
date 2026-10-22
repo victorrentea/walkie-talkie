@@ -210,6 +210,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let shotsPulse = ChangePulse()
     private let selectionPulse = ChangePulse()
     private let pickPulse = ChangePulse()
+    /// `📻 Ready for more` flashes when it comes up (2026-10-22) — see `readyRow`.
+    private let readyPulse = ChangePulse()
     private var changePulseTimer: Timer?
     /// The pictures of the states page hold the flash at its brightest.
     private var changePulsePinned = false
@@ -340,7 +342,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// tooltip you should suggest ready whenever I could start talking again by
     /// displaying the walkie-talkie at the top of the list … literally saying
     /// ready even though the transcription is in progress"*). The top row, the
-    /// walkie (`walkie-bound`), green words. Pushed by `AppDelegate`
+    /// walkie (`walkie-bound`), plain words (green until 2026-10-22). Pushed by `AppDelegate`
     /// (`setReadyForNext`): a start now would be queued, not refused (Q12). With
     /// nothing transcribing it is never up, so the chip looks as it always did.
     private let readyRow = NSView()
@@ -1523,7 +1525,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         installEmojiRow(heldRow, glyph: heldGlyph, label: heldInfo, emoji: "📨")
         installEmojiRow(readyRow, glyph: readyGlyph, label: readyInfo, emoji: "📻")
         if let walkie = Self.walkieLiveGlyph { readyGlyph.image = walkie }
-        readyInfo.textColor = .systemGreen
+        // **No green since 2026-10-22** — the ink of every other row, and the
+        // yellow flash when it comes up (`setReadyForNext`, `readyPulse`).
+        readyRow.addSubview(readyPulse, positioned: .below, relativeTo: nil)
 
         // Same face as every other row (see `titleFont`): it carries a CSS
         // selector, which was the argument for monospace here, and that argument
@@ -2290,8 +2294,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             kamikazeRow.isHidden = true
         }
 
-        // ⌘⌃X, the same way — see `localNowRow`.
-        if localNow != nil {
+        // ⌘⌃X, the same way — see `localNowRow`. On the Transcribing line instead
+        // while there is one (`localNowFolded`).
+        if localNow != nil, !localNowFolded {
             localNowInfo.sizeToFit()
             layoutGlyphRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, width: innerWidth)
             localNowRow.isHidden = false
@@ -3514,6 +3519,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             heldInfo.textColor = .white
             heldGlyph.shadow = Self.halo()
             readyInfo.shadow = Self.halo()
+            readyInfo.textColor = .white
             readyGlyph.shadow = Self.halo()
             engineInfo.shadow = Self.halo()
             engineInfo.textColor = .white
@@ -3566,6 +3572,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             heldInfo.textColor = .secondaryLabelColor
             heldGlyph.shadow = nil
             readyInfo.shadow = nil
+            readyInfo.textColor = .secondaryLabelColor
             readyGlyph.shadow = nil
             engineInfo.shadow = nil
             engineInfo.textColor = .secondaryLabelColor
@@ -4487,7 +4494,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         var running = false
         for (pulse, row, label) in [(shotsPulse, recordRow, recordInfo),
                                     (selectionPulse, selectionRow, selectionLabel),
-                                    (pickPulse, pickRow, pickInfo)] {
+                                    (pickPulse, pickRow, pickInfo),
+                                    (readyPulse, readyRow, readyInfo)] {
             guard let t0 = pulse.startedAt, !row.isHidden else { pulse.isHidden = true; continue }
             let age = now - t0
             guard changePulsePinned || age < Self.changePulseDuration else {
@@ -4515,13 +4523,13 @@ private let heardLabel = NSTextField(labelWithString: "")
         changePulsePinned = false
         changePulseTimer?.invalidate()
         changePulseTimer = nil
-        for pulse in [shotsPulse, selectionPulse, pickPulse] { pulse.startedAt = nil; pulse.isHidden = true }
+        for pulse in [shotsPulse, selectionPulse, pickPulse, readyPulse] { pulse.startedAt = nil; pulse.isHidden = true }
     }
 
     /// The states page: every tally row on screen wears its flash at full.
     func pinChangePulse() {
         changePulsePinned = true
-        for pulse in [shotsPulse, selectionPulse, pickPulse] { pulse.startedAt = CACurrentMediaTime() }
+        for pulse in [shotsPulse, selectionPulse, pickPulse, readyPulse] { pulse.startedAt = CACurrentMediaTime() }
         placeChangePulses()
     }
 
@@ -4665,6 +4673,18 @@ private let heardLabel = NSTextField(labelWithString: "")
         // (The `  🤔⏱️` note past 150 % of the estimate went on 2026-10-06 —
         // Victor: *"remove the thinking face"*; the ⌘⌃X row counts down to
         // the local fallback instead, `AutoLocal.rowText`.)
+        // **And that countdown rides this line since 2026-10-22** — `localNowInline`,
+        // after the word, in full ink: it is not part of the bar.
+        if transcribing, let tail = localNowInline {
+            out.append(NSAttributedString(string: "  ", attributes: [.font: hintFont]))
+            for ch in tail {
+                if Glyphs.Engine(rawValue: ch) != nil || ch.unicodeScalars.first?.properties.isEmojiPresentation == true {
+                    out.append(Self.inline(Self.wordGlyph(ch, ink: lit), font: hintFont))
+                } else {
+                    out.append(NSAttributedString(string: String(ch), attributes: [.font: hintFont, .foregroundColor: lit]))
+                }
+            }
+        }
         transcribeLit = steps
         return out
     }
@@ -4843,12 +4863,21 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// armed, the countdown `💻 local in 3s / ⌘⌃X ...` (2026-10-07,
     /// `AutoLocal.rowText`; 10-06's `⌘⌃X - 💻 fallback, auto in 3s...` before).
     private var localNowShown: String?
+    /// **The same, folded onto the `Transcribing...` line** (2026-10-22, Victor:
+    /// *"după acel text … un emoji de calculator și să spui in … countdown-ul fix
+    /// acolo după transcribing și scurtătura tot acolo după. Nu un rând separat,
+    /// neintuitiv, confuz"*): `💻 in 3s ⌘⌃X`. While a sentence records the row
+    /// stays a row — there is no Transcribing line to ride.
+    private var localNowInline: String?
+    /// The row is drawn on the Transcribing line rather than as its own.
+    private var localNowFolded: Bool { transcribing && localNowInline != nil }
 
     /// - Parameters:
     ///   - countdown: seconds to the budget, when the local words go in on their own.
     func setLocalNow(_ on: Bool, loading: Bool = false, countdown: TimeInterval? = nil) {
         let next: Bool? = on ? (loading && countdown == nil) : nil
         let text = on ? AutoLocal.rowText(countdown: countdown, loading: loading, keys: Self.localNowKeys) : nil
+        localNowInline = on ? AutoLocal.inlineText(countdown: countdown, loading: loading, keys: Self.localNowKeys) : nil
         // Once a second, as the whole seconds change — the one relayout this
         // row asks for while it counts (its width moves with the digit).
         guard next != localNow || text != localNowShown else { return }
@@ -4887,6 +4916,11 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard readyForNext != on else { return }
         readyForNext = on
         layoutContent()
+        // **The yellow flash, then the plain row** (2026-10-22, Victor: *"să nu
+        // fie cu verde, ci același fond ca de obicei … un flash, cum faci atunci
+        // când fac o poză nouă … flash-ul e galben ca de obicei și dispare,
+        // rămânând pe ecran tooltipul zicând Ready for more"*).
+        if on { flashChange(readyPulse) }
     }
 
     /// The `📋 Re-paste ⌘⇧P` row is up — see `pasteRow`; `PasteHint` times it.
@@ -5765,7 +5799,27 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// ends the hold with `releaseSpawnPanel` the moment the window is on screen,
     /// and any relayout in between (a new dictation, a flash) ends it too, since
     /// new state on the chip is by definition newer than this picture.
-    private var spawnPanelHeld = false
+    private var spawnPanelHeld = false {
+        didSet { if spawnPanelHeld != oldValue { syncHeldSkip() } }
+    }
+    /// **`»` over the held dialog** (2026-10-22, `HeldPromptSkip`): up for as
+    /// long as the hold, a click fades the dialog now — the delivery goes on.
+    private let heldSkip = HeldPromptSkip()
+
+    private func syncHeldSkip() {
+        guard spawnPanelHeld, !Self.shooting else { return heldSkip.hide() }
+        heldSkip.onClick = { [weak self] in
+            guard let self, self.spawnPanelHeld else { return }
+            Log.info("⏩ the sent prompt's dialog taken down by its » — the delivery carries on")
+            self.releaseSpawnPanel(fadeOver: 0.15, force: true)
+        }
+        // After this turn of the run loop: the hold is set before the panel's
+        // last layout, and the button belongs on the frame it ends up at.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.spawnPanelHeld, self.panel.isVisible else { return }
+            self.heldSkip.show(over: self.panel.frame, level: self.panel.level, sharing: self.panel.sharingType)
+        }
+    }
     /// The half second between the outline leaving and the panel being gone.
     private var spawnPanelFading = false
 
@@ -5786,9 +5840,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// Nothing happens if the hold has already ended: the flight is fired from a
     /// background poll, and a dictation started in the meantime has taken the
     /// chip back.
-    func releaseSpawnPanel(fadeOver seconds: TimeInterval = 0.5) {
+    func releaseSpawnPanel(fadeOver seconds: TimeInterval = 0.5, force: Bool = false) {
         guard spawnPanelHeld else { return }
-        if pointerReadsSpawnPanel {
+        if !force, pointerReadsSpawnPanel {
             lingerWhileRead(fadeOver: seconds)
             return
         }

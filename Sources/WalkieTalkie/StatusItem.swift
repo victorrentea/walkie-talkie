@@ -1622,6 +1622,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "A second copy of the model runs it (~2 GB more), so the final transcription never waits: "
             + "a window still decoding when you stop is killed."
         engineSubmenu.addItem(liveRow)
+        // **✍️ The dictation editor** (2026-10-22, `DictationEditor`) — an engine
+        // switch too: what happens to the words between the engine and the caret.
+        let editorRow = NSMenuItem(title: "✍️ Edit plain dictation (Haiku)", action: #selector(editorClicked), keyEquivalent: "")
+        editorRow.target = self
+        editorRow.image = DictationEditor.enabled ? Self.symbolIcon("checkmark") : Self.blankIcon
+        editorRow.toolTip = "A plain dictation from ElevenLabs or a local model is read once more by Haiku "
+            + "before it is pasted, with what is on screen: the app, the text around the caret, the names in the window. "
+            + "It fixes misheard words and names, drops fillers and keeps only a self-correction.\n"
+            + "Wispr Flow's words are already edited by Wispr. Waits at most \(Int(DictationEditor.budget)) s, then pastes the raw words."
+        engineSubmenu.addItem(editorRow)
         // **🧾 What the account has left, under a line of its own** (2026-09-28,
         // moved here from Victor Addons the same morning — *"quota lui 11labs
         // are sens doar in walkie"*). Below the rows he picks from, because it
@@ -1778,6 +1788,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func localLiveClicked() {
         onToggleLocalLive?(!LocalLive.isOn)
+    }
+
+    @objc private func editorClicked() {
+        DictationEditor.enabled.toggle()
+        Log.info("✍️ dictation editor \(DictationEditor.enabled ? "on" : "off") from the menu")
+        DictationEditor.shared.warm()
     }
 
     private func applyQuotaRow() {

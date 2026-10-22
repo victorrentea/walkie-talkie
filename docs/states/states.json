@@ -370,7 +370,7 @@
     "group" : "Dictating",
     "height" : 117,
     "image" : "transcribing-ready.png",
-    "note" : "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
+    "note" : "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and the row's ordinary ink, above the wait — **no green since 2026-10-22**, and the yellow flash of a changed row when it comes up (Victor: *\"să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare\"*). Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
     "shape" : "chip",
     "slug" : "transcribing-ready",
     "title" : "Ready for more — talk again while it transcribes",
@@ -392,50 +392,50 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-local-now.png",
-    "note" : "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land.",
+    "note" : "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land. **On the `Transcribing` line since 2026-10-22** (`💻 local ⌘⌃X`), no row of its own.",
     "shape" : "chip",
     "slug" : "transcribing-local-now",
     "title" : "⌘⌃X — the local model, now",
     "when" : "From one second into the wait for ElevenLabs (or Wispr Flow) with *Backup Local Pre-Transcribe* off — never while the microphone is open. With it on, the row is the `💻 local in 3s \/ ⌘⌃X ...` countdown.",
-    "width" : 308
+    "width" : 316
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-local-now-loading.png",
     "note" : "`(loading)` says the key will not answer at once — not that it will not work. Pressed now, the WAV waits for the weights (up to 90 s, the fallback's own window) and the words go where the sentence was going.",
     "shape" : "chip",
     "slug" : "transcribing-local-now-loading",
     "title" : "⌘⌃X while the local model is cold",
     "when" : "Waiting on ElevenLabs with the local weights not loaded (a cold start, or the helper restarted).",
-    "width" : 308
+    "width" : 388
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-fallback-countdown.png",
-    "note" : "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
+    "note" : "**On the `Transcribing` line since 2026-10-22** — `Transcribing via <engine>... 💻 in 3s ⌘⌃X`, no row of its own (Victor: *\"countdown-ul fix acolo după transcribing și scurtătura tot acolo după. Nu un rând separat, neintuitiv, confuz\"*); while the sentence still records it stays a row. Before that: **the countdown is on the row with the keys** (2026-10-07; `💻 local in 3s \/ ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
     "shape" : "chip",
     "slug" : "transcribing-fallback-countdown",
     "title" : "Fallback to local — counting down to the budget",
     "when" : "From one second into the wait for ElevenLabs or Wispr Flow with *Backup Local Pre-Transcribe* on (the default), until the engine's p95 for that length runs out.",
-    "width" : 308
+    "width" : 317
   },
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
-    "height" : 117,
+    "height" : 93,
     "image" : "transcribing-fallback-now.png",
-    "note" : "`auto now...`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
+    "note" : "**At `now` the engine on the line is this Mac** (2026-10-22, Victor: *\"când treci la modelul local, în transcribing să înlocuiești … cu calculatorul … zici now și efectiv înlocuiești motorul cu local\"*): `Transcribing via 💻... 💻 now ⌘⌃X`. `now`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
     "shape" : "chip",
     "slug" : "transcribing-fallback-now",
     "title" : "Fallback to local — the budget ran out",
     "when" : "The count reached zero with the engine's words still out and the local decode not quite done.",
-    "width" : 308
+    "width" : 312
   },
   {
     "alpha" : 0.80000000000000004,
@@ -656,14 +656,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 613,
+    "height" : 581,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -692,26 +692,26 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 427,
+    "height" : 411,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own indented paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said.",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 319,
+    "height" : 321,
     "image" : "prompt-area-context.png",
     "note" : "2026-10-15, Victor: after the cut-out, the whole screen that goes with it — greyed outside the box, the box lit and ringed red — so it is plain that the entire screen is sent too. Drawn by `AreaContext`, never written to disk.",
     "shape" : "panel",
     "slug" : "prompt-area-context",
     "title" : "The prompt, a ✂️ area and the screen it was cut from",
     "when" : "A wheel-drag area whose token is in the words.",
-    "width" : 501
+    "width" : 509
   },
   {
     "alpha" : 1,
@@ -728,14 +728,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 346,
+    "height" : 348,
     "image" : "prompt-move-context.png",
     "note" : "2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.",
     "shape" : "panel",
     "slug" : "prompt-move-context",
     "title" : "The prompt, a ⇧-drag move: red to green",
     "when" : "A wheel-drag area with ⇧ \/ right-click, then a second box: *this, moved to there*.",
-    "width" : 644
+    "width" : 651
   },
   {
     "alpha" : 1,
@@ -783,7 +783,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,

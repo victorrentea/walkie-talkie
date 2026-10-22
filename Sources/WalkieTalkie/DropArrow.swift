@@ -22,7 +22,7 @@ import QuartzCore
 /// |---|---|---|
 /// | talking | nothing | the pin, plain |
 /// | `patience` of quiet, then `swell` | the heads fade in | the glint and the glow fade in |
-/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, pulsing, shine at full and unbroken, a ring filling in the hole |
+/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, pulsing, glint unbroken, **no glow outside** (2026-10-22), a ring filling in the hole |
 /// | the ⌘V | cut | cut |
 ///
 /// **Always up while he talks**, because the pin answers *where*, and that is
@@ -257,6 +257,11 @@ final class DropArrow {
             pin.removeAnimation(forKey: "pulse")
         }
         if let glint { Self.sweep(glint, rest: on ? 0 : Self.glintRest) }
+        // **No glow round the pin while the words travel** (2026-10-22, Victor:
+        // *"pinul în timpul transcrierii … să nu mai aibă glow exterior, să aibă
+        // doar glow interior care reprezintă progress bar"*): the one light left is
+        // the progress in the hole. The breath is `shineLayers[0]`.
+        shineLayers.first?.isHidden = on
         // Crossed means nowhere to land: nothing is filling — but the clock
         // runs on, so a pin that finds a caret again shows the fill it has
         // earned (`applyCrossed`).
@@ -428,6 +433,8 @@ final class DropArrow {
                         progress: CGFloat = 0) -> CALayer {
         let built = DropArrow().build(posed: true)
         built.ring.isHidden = progress <= 0 || crossed
+        // In flight, no glow outside (`setInFlight`).
+        built.shine.first?.isHidden = progress > 0
         for arc in built.arcs { arc.strokeEnd = progress }
         for layer in built.shine { layer.opacity = shining && !crossed ? 1 : 0 }
         built.body.fillColor = (crossed ? deadFill : NSColor.systemRed).cgColor
@@ -475,6 +482,8 @@ final class DropArrow {
         // but the inside glow should be the one that expresses the progress … I
         // can't tell if it's progress bar or the glow"*): the hole is cut out of
         // the breath, so all that lights it is the progress (`ring`).
+        // And since 2026-10-22 the breath is off altogether while the words are in
+        // flight — only the quiet glows outside (`setInFlight`).
         let outsideOnly = CAShapeLayer()
         outsideOnly.frame = group.bounds
         let keep = CGMutablePath()

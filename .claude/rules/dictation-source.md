@@ -621,6 +621,18 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
 | `WT_WHISPER_HELPER=<path>` | **test-only**: a fake local helper (`evals/plan/fake_whisper_helper.py`), read from env → `elevenlabs.env` **at every helper spawn**; without a live harness lock the fake runs the real helper. Its decodes file under `whisper-local-test`, never in the corpus |
 | `WT_ELEVEN_LIVE_URL` · `WT_ELEVEN_BATCH_URL` | the realtime socket / batch upload somewhere else (2026-09-27): env → `elevenlabs.env`, read at every engine pick; the harness points them at `evals/plan/fake_scribe.py` (`desk-testing.md`). Default `wss://api.elevenlabs.io/v1/speech-to-text/realtime` · `https://api.elevenlabs.io/v1/speech-to-text` |
 
+## ✍️ The dictation editor (2026-10-22, `DictationEditor`)
+
+- Plain dictations from ElevenLabs or the local model only (Wispr edited its own); prompts never.
+  Engine menu `✍️ Edit plain dictation (Haiku)`, `UserDefaults dictationEditor`, `WT_EDITOR=0|1`.
+- Context through Accessibility at delivery, ≤ 0.15 s: app + window title, 1000 chars before the
+  caret / 300 after / the selection, ≤ 50 names from the focused window's tree. Nothing from a secure
+  field or a password manager. Never a screenshot.
+- A pre-started `claude -p --model haiku` (`QuickAsk.Worker`), one per sentence. **Budget 4 s**
+  (`WT_EDITOR_BUDGET`): past it the raw words go and the late edit is only logged. An edit of the wrong
+  shape (empty, a tag echoed, a length an answer would have) is refused (`acceptable`).
+- Log: `✍️ editor: context …`, `✍️ editor: «raw» → «edited» in N ms`.
+
 ## Do not
 
 - **Read Wispr's DB as a recogniser or transcript fallback.** `flow.sqlite` is read only by

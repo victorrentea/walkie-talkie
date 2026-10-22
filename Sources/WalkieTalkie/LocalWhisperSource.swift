@@ -518,7 +518,7 @@ final class LocalWhisperSource: DictationSource {
                 text: r.text, language: r.language, audio: wav, duration: duration,
                 engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
                 via: "local-whisper", markersInAudio: job.markers,
-                engineLabel: Self.modelLabel, words: r.words))
+                engineLabel: Self.modelLabel, words: r.words, unsure: LocalWhisper.isUnsure(r)))
             settlePhase(.done("formatted"))
             didEnd?(.delivered)
         }
@@ -833,7 +833,19 @@ final class LocalWhisperSource: DictationSource {
             avgLogprob: parts.map { $0.0.avgLogprob }.min() ?? 0,
             compressionRatio: parts.map { $0.0.compressionRatio }.max() ?? 0,
             coverage: nil,
-            words: words.flatMap { $0.isEmpty ? nil : $0 })
+            words: words.flatMap { $0.isEmpty ? nil : $0 },
+            // Each piece weighted by its words, standing in for its tokens.
+            meanLogprob: Self.weightedMean(parts.map { ($0.0.meanLogprob, $0.0.text.count) }))
+    }
+
+    static func weightedMean(_ xs: [(Double?, Int)]) -> Double? {
+        var total = 0.0, weight = 0
+        for (v, n) in xs where n > 0 {
+            guard let v else { return nil }
+            total += v * Double(n)
+            weight += n
+        }
+        return weight > 0 ? total / Double(weight) : nil
     }
 
     // MARK: - The model

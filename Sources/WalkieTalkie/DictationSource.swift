@@ -369,6 +369,12 @@ struct DictationResult {
     /// when prompting"*: an envelope for an agent carries these instead of the
     /// formatter's rewrite; a plain sentence keeps `text`. Nil for every other source.
     var unformatted: String? = nil
+    /// **The local model was unsure of these words** (2026-10-22): the worst
+    /// segment's `avg_logprob` under `LocalWhisper.micFloor`. A plain dictation
+    /// then ends with 🎤 — Victor: *"când confidence … pe model local e mic, să
+    /// termine orice dictare curată cu iconul unui microfon"*. Only the local
+    /// model measures it; every other source leaves it false.
+    var unsure: Bool = false
 }
 
 /// **Who inserts the text.**

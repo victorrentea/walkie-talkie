@@ -86,6 +86,18 @@ final class QuickAsk {
         changes the answer. Write nothing before your checks are done, then write \
         the answer again, fixed.
         """ + " " + citeFormat
+    /// **🌐 More: one more round on the web** (2026-10-22, Victor: *"un buton mic …
+    /// more, prin care să mai solicit mai mult research pe internet … mai multe
+    /// dovezi și alte surse"*). Given the answer already checked and the sources it
+    /// used, so the round goes looking somewhere else.
+    static let morePrompt = """
+        You get a spoken question by Victor and an answer to it already checked on \
+        the web, with the sources it used. Search further: more evidence, from \
+        sources other than the ones listed (other sites, primary sources, more \
+        recent ones), and anything that contradicts or completes the answer. Write \
+        nothing before your searches are done, then write the answer again on all \
+        the evidence, the old sources included where they still hold.
+        """ + " " + citeFormat
     /// A question with no answer by then is given up.
     static let timeout: TimeInterval = 45
     /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
@@ -347,16 +359,37 @@ final class QuickAsk {
         }
     }
 
-    /// 🔎 then 🧐, on `queue`.
+    /// **🌐 More** (2026-10-22): another web round on the last answer, from
+    /// sources other than `sources`, then the 🧐 review again — the same
+    /// `checks` callbacks as the first round. Ends whatever is still running.
+    func more(_ question: String, images: [String] = [], history: [Turn] = [],
+              answer: String, sources: [URL], checks: Checks) {
+        queue.async {
+            self.cancelLocked()
+            let run = Run()
+            run.checks = checks
+            self.current = run
+            let asked = Self.framed(question, history: history)
+            let pictures = Self.pictures(images, history: history)
+            let web = self.start(run, prompt: Self.morePrompt, tools: Self.webTools)
+            let used = sources.map { "- \($0.absoluteString)" }.joined(separator: "\n")
+            Log.info("⚡ 🌐 more: another web round, \(sources.count) source(s) to look past")
+            self.check(run, question: asked, pictures: pictures, answer: answer, web: web, checks: checks,
+                       webInput: "Question: \(asked)\n\nAnswer so far, already checked on the web:\n\(answer)"
+                           + (used.isEmpty ? "" : "\n\nSources already used — find others:\n\(used)"))
+        }
+    }
+
+    /// 🔎 then 🧐, on `queue`. `webInput` replaces the web stage's message (🌐 More).
     private func check(_ run: Run, question: String, pictures: [(label: String, path: String)],
-                       answer: String, web: Worker?, checks: Checks) {
+                       answer: String, web: Worker?, checks: Checks, webInput: String? = nil) {
         guard let web else {
             DispatchQueue.main.async { checks.web("⚠️ the web check did not start", true) }
             return endLocked(run)
         }
         // The reviewer starts while the web is searched.
         let reviewer = start(run, prompt: Self.reviewPrompt, tools: Self.webTools)
-        let asked = "Question: \(question)\n\nQuick answer, from memory: \(answer)"
+        let asked = webInput ?? "Question: \(question)\n\nQuick answer, from memory: \(answer)"
         stage(run, web, Self.content(asked, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
             DispatchQueue.main.async { checks.web(text, false) }
         }, onDone: { found, error in
@@ -429,8 +462,9 @@ final class QuickAsk {
         return true
     }
 
-    /// One `claude -p` speaking stream-json both ways.
-    private final class Worker {
+    /// One `claude -p` speaking stream-json both ways. Not private since
+    /// 2026-10-22: the dictation editor (`DictationEditor`) keeps one too.
+    final class Worker {
         private let process = Process()
         private let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
         private var buffer = Data()
@@ -457,7 +491,8 @@ final class QuickAsk {
             let dir = Outbox.home.appendingPathComponent("quick")
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             process.executableURL = URL(fileURLWithPath: claude)
-            process.arguments = ["-p", "--model", model, "--effort", effort,
+            // An empty effort is left to the model — Haiku takes none.
+            process.arguments = ["-p", "--model", model] + (effort.isEmpty ? [] : ["--effort", effort]) + [
                                  "--input-format", "stream-json", "--output-format", "stream-json",
                                  "--verbose", "--include-partial-messages", "--no-session-persistence",
                                  "--tools", tools, "--strict-mcp-config", "--setting-sources", "",

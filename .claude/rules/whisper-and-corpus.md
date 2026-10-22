@@ -167,6 +167,15 @@ the local model … don't feed too small chunks either"*.
   `AppDelegate.syncReadyRow`, `GET /test/state.readyForNext`): up while words are in flight and a start
   now would be queued (or a local fallback parked), from 0.8 s after the stop. Shot `transcribing-ready`.
 
+## 🎤 on a plain dictation the local model was unsure of (2026-10-22)
+
+- The helper sends `mean_logprob` (segments' `avg_logprob` weighted by tokens) beside the worst
+  segment's; `LocalWhisper.isUnsure` reads it (worst segment from an older helper) against
+  **`micFloor` −0.25** → `DictationResult.unsure` → ` 🎤` after the plain words (`AppDelegate`, the
+  caret branch). Chunks join it weighted by text length (`weightedMean`).
+- Measured on 395 takes, `evals/local-confidence/`: 9 % flagged, 54 % of them > 30 % WER (base 26 %).
+  **Never the worst segment for this** — it flags long takes at chance.
+
 ## A device turned down to nothing is named (2026-10-15, `InputDevice.silencedReason`)
 
 - The Wave XLR sat at **input volume 0.00** from 19:02 that evening (peak 10–39 vs 5,000–32,000 an

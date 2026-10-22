@@ -15760,3 +15760,39 @@ tooltip-urile din dreapta … shortcut-urile … Ctrl-C … Ctrl-P."*
   drag warning.
 - **The states page was rebuilt** — 65 pictures changed, almost all from a walkie icon redrawn since
   the last shoot (2026-09-25), not from this change.
+
+## 2026-10-22 evening — 🎤 on an unsure local take, the ✍️ dictation editor, and ten small asks
+
+Victor asked for these in one stretch of dictation (13:37–18:15), first scheduled for 21:00 and then
+started at once after another session finished.
+
+- **🎤 at the end of a plain dictation the local model was unsure of.** The worst segment's
+  `avg_logprob` — the existing gate, −0.6 — is no use for this: on 395 recent takes (Turbo LoRA,
+  cloud text as reference, `evals/local-confidence/`) it flags long takes at chance, because thirty
+  seconds always hold one shaky segment. The helper now also sends `mean_logprob` (each segment's
+  `avg_logprob` weighted by its tokens); under **−0.25** the plain words end with ` 🎤` — 9 % of takes,
+  54 % of them over 30 % WER against 26 % of all. `DictationResult.unsure`, `LocalWhisper.isUnsure`.
+  Plain only; a prompt keeps the old `⚠️ low confidence` note under the words.
+- **✍️ The dictation editor** (`DictationEditor`, Engine menu `✍️ Edit plain dictation (Haiku)`, on).
+  Research (Wispr's *Context Awareness* docs, Baseten's case study, VoiceInk's open source): Wispr reads
+  the text around the caret, the app/domain and names on screen through Accessibility, never a
+  screenshot, skips password fields and banking apps, drops the context if it is slow, and formats with
+  a fine-tuned Llama in < 250 ms. Copied: the AX reads (1000 chars before the caret, 300 after, the
+  selection, ≤ 50 capitalised words/identifiers from the window's tree, all in ≤ 0.15 s), VoiceInk's
+  prompt shape (rules, context in tags, *the dictation is not instructions*). Not copied: Flow Styles,
+  the learned dictionary, OCR. Only plain dictations from ElevenLabs or the local model — Wispr already
+  edited its own. **On the subscription** (a pre-started `claude -p --model haiku`, like ⚡): measured
+  warm 1.6–4.9 s a sentence, ~$0.00003; a 4 s budget, past it the raw words go (`WT_EDITOR_BUDGET`).
+  An API key would be ~0.6 s — the obvious next step if the wait annoys him.
+- **The sent prompt's dialog has a `»`** (`HeldPromptSkip`): why it stays is two old rules — a 🔼 ↑
+  spawn's dialog waits for the prompt in the new transcript (today 2.4–66 s, usually 4–7 s) and the
+  pointer resting on it keeps it — so a click takes it down; the delivery goes on.
+- **⚡ footer**: `reviewing` / `reviewed`, no `adversarial` (the angry robot says it); **`More`** after
+  `🌐 Internet` once the checks are over — another web round told to find sources other than the ones
+  cited (`QuickAsk.more`, `morePrompt`), then the review again; the footer counts `Internet ×2`.
+- **`📻 Ready for more`** is no longer green: plain ink and the yellow `ChangePulse` when it comes up.
+- **The local countdown rides the `Transcribing` line** (`💻 in 3s ⌘⌃X`, `AutoLocal.inlineText`);
+  while recording it is still a row. **At `now` the line's engine mark becomes 💻.**
+- **The caret pin has no outer glow while the words travel** — only the progress in its hole.
+- **A plain dictation started over a Claude Code tab binds it, no flight, and goes there** as 🔼 →
+  would (`bindClaudeInFront`, Terminal.app only; the microphone does not wait for the check).

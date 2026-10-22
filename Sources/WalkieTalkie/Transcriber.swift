@@ -61,6 +61,10 @@ final class LocalWhisper {
         /// `ShotMarker.place` needs to put a picture's reference between two
         /// words. Nil when the helper sent none or they do not spell the text.
         var words: [TimedWord]? = nil
+        /// **The whole take's confidence** (2026-10-22): the helper's
+        /// `mean_logprob`, every token counted once — what the 🎤 on a plain
+        /// dictation reads (`LocalWhisper.isUnsure`). Nil from an older helper.
+        var meanLogprob: Double? = nil
 
         /// The helper's `words`, kept only if they spell `text` exactly.
         static func timedWords(_ raw: Any?, spelling text: String) -> [TimedWord]? {
@@ -108,6 +112,17 @@ final class LocalWhisper {
     /// over, which is exactly what a high average log-probability describes.
     /// Two numbers, two failure modes, and neither substitutes for the other.
     static let loopCeiling = 2.4
+
+    /// **Under this, a plain dictation ends with 🎤** (2026-10-22) — the whole
+    /// take's `meanLogprob` (the worst segment's when an older helper sent no
+    /// mean). **−0.25, measured** (`evals/local-confidence/`, Turbo LoRA, 395
+    /// takes of Oct 4–22 with the cloud text as the reference): 9 % of takes
+    /// flagged, 54 % of those over 30 % WER against 26 % of all takes; −0.3 flags
+    /// 4 % at 71 %. The worst segment (`avgLogprob`) is no use here: at any floor
+    /// it flags the long takes, which always hold one shaky segment, at ~35 %.
+    static let micFloor = -0.25
+
+    static func isUnsure(_ r: Result) -> Bool { (r.meanLogprob ?? r.avgLogprob) < micFloor }
 
     private var proc: Process?
     /// The helper's pid, kept beside `proc` so it can be read **without touching
@@ -543,7 +558,8 @@ final class LocalWhisper {
                         compressionRatio: (obj["compression_ratio"] as? Double) ?? 0,
                         coverage: obj["coverage"] as? [String: Any],
                         words: Result.timedWords(obj["words"],
-                                                 spelling: text.trimmingCharacters(in: .whitespacesAndNewlines))), nil)
+                                                 spelling: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                        meanLogprob: obj["mean_logprob"] as? Double), nil)
         }
     }
 

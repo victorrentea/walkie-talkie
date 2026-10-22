@@ -328,6 +328,9 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
   bands flush with the rim, clipped to the hole, ~53 % at the rim fading a third of the way in, the
   middle clear — clockwise from twelve, **and the only light in the hole**: the outer glow's breath is
   masked out of it (*"I can't tell if it's progress bar or the glow"*),
+  **and no outer glow at all while in flight** (2026-10-22, Victor: *"pinul în timpul transcrierii …
+  să nu mai aibă glow exterior, să aibă doar glow interior care reprezintă progress bar"*;
+  `setInFlight` hides the breath, `shineLayers[0]`; the quiet's glow is unchanged),
   **from zero to full at the moment the local model would take the sentence anyway** (same day:
   *"complete when the local model would [deliver] … anyway"*, *"you tend to constantly underestimate
   the time"*): linear over the AutoLocal budget from the close (`AppDelegate.syncLocalNow` →

@@ -1448,6 +1448,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⚡ The quick model's process, started now so the first 🔼 ← question
         // does not pay its ~4 s start-up (`QuickAsk`).
         QuickAsk.shared.warm()
+        // ✍️ And the dictation editor's, Haiku (`DictationEditor`).
+        DictationEditor.shared.warm()
         overlay = RelayWindow()
 
         // **The ✕ cancels the dictation before it ends anything.** It ended the
@@ -3353,6 +3355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.startDictation(paste: true, clean: true)
                     // C: a start the blocker refused leaves the toggle where it was.
                     if !self.listening, !self.speculative, !self.source.isRecording { self.hotkeys.notePlainStartRefused() }
+                    else { self.bindClaudeInFront() }
                 }
             }
         }
@@ -4462,10 +4465,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.setSpawnDestination(nil)
                 overlay.clearSelection()
             }
+            // **🎤 when the local model was unsure** (2026-10-22): the plain
+            // dictation ends with it — `DictationResult.unsure`.
+            let mic = clean && result.unsure ? " 🎤" : ""
             if prompt {
                 deliverCaretPrompt(line, to: result.focusPid)
+            } else if clean, DictationEditor.applies(toEngine: result.engine) {
+                // **✍️ Edited against the screen first** (2026-10-22,
+                // `DictationEditor`): the paste waits for it, never past its budget.
+                let submit = submitClean, pid = result.focusPid
+                DictationEditor.shared.edit(line) { [weak self] edited in
+                    guard let self else { return }
+                    self.pasteText(edited + mic, to: pid)
+                    if submit { self.submitAfterCleanWords() }
+                    self.pasteHint.pulse(reason: "an edited plain sentence has just landed")
+                }
+                return
             } else {
-                pasteText(line, to: result.focusPid)
+                pasteText(line + mic, to: result.focusPid)
                 if submitClean { submitAfterCleanWords() }
             }
             // **The key that says it again, at the instant the ⌘V goes out.**
@@ -4741,6 +4758,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         overlay.setLocalNow(row.shown, loading: !whisperSource.isReady, countdown: row.countdown)
+        // **At `now` the engine on the Transcribing line is this Mac** (2026-10-22,
+        // Victor: *"când treci la modelul local, în transcribing să înlocuiești …
+        // cu calculatorul … zici now și efectiv înlocuiești motorul cu local"*):
+        // the budget is out and the local words are the ones going in.
+        if row.shown, let c = row.countdown, c <= 0 {
+            overlay.setEngineMark(Self.mark(engine: "whisper"))
+        }
         if a.available, localNowTick == nil {
             // 0.1 s: the decode's start is read here.
             let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in self?.syncLocalNow() }
@@ -5216,7 +5240,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // Same WAV the failed engine recorded, so its cues share the ruler.
                 words: r.words,
                 // …and the markers it spoke into it, read back off these words.
-                said: said))
+                said: said,
+                unsure: LocalWhisper.isUnsure(r)))
         }
         if let sp = spec, !sp.consumed, sp.phase != .discarded,
            sp.wav.map({ $0.standardizedFileURL.path == wav.standardizedFileURL.path })
@@ -5682,6 +5707,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         endDictation()
+    }
+
+    /// **A plain dictation started over a Claude Code terminal binds it and goes
+    /// there** (2026-10-22, Victor: *"când apăs dictare simplă la caret și se
+    /// întâmplă să ai sub focus un terminal cu Claude, să te și legi la acest
+    /// terminal … fără animația de a trage terminalul … ca și cum aș fi apăsat
+    /// click forward și apoi dictare legată"*). The microphone opens at once, as
+    /// for any plain sentence; the question — Terminal.app in front, a live Claude
+    /// Code on its tab (`frontClaudePromptTTY`, `osascript` + `ps`) — is asked
+    /// beside it, and a yes binds that tab with no flight and turns the sentence
+    /// to it the way 🔼 → does (`aimAtBoundTerminal`): 🔽 is still its stop.
+    /// VS Code's terminal is not bound this way — a binding there is the IDE's.
+    private func bindClaudeInFront() {
+        guard !quickAsk else { return }
+        let sentence = liveSentence
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self, let tty = TerminalBinding.frontClaudePromptTTY(bundleID: front) else { return }
+            let short = (tty as NSString).lastPathComponent
+            let already = self.terminal.target.flatMap { $0.handle.tty == short ? $0 : nil }
+            guard let bound = already ?? self.terminal.bind(tty: tty) else {
+                Log.info("📍 a plain dictation over Claude Code on \(short) — it could not be bound; the words stay at the caret")
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.liveSentence === sentence, self.listening || self.source.isRecording,
+                      self.cleanSentence, !self.cleanRedirected else { return }
+                Log.info("📍 a plain dictation over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there")
+                if already == nil {
+                    self.boundAt = Date()
+                    self.showBound(bound)
+                }
+                self.aimAtBoundTerminal()
+            }
+        }
     }
 
     /// Point a sentence aimed at the bound terminal at the caret instead — the
@@ -6511,39 +6571,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // A stage's words are not shown as they come — the search narrates —
         // only its finished answer, or that it failed under the last good one.
-        let checks = QuickAsk.Checks(web: { text, isDone in
-            guard isDone else { return }
-            if text.hasPrefix("⚠️") {
-                steps = ["🌐 Internet failed", ReplyPanel.adversary + " adversarial reviewing" + ReplyPanel.dots]
-            } else {
-                let c = QuickAsk.cited(text)
-                answer = c.text
-                // No ✏️ on the search (same day, *"scoate creionul din Search"*).
-                steps = ["🌐 Internet", ReplyPanel.adversary + " adversarial reviewing" + ReplyPanel.dots]
-                searched = ReplyPanel.plain(c.text)
-                remember(searched ?? "")
-            }
-            Log.info(String(format: "⚡ 🔎 web answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
-                            String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+        // **`reviewing` / `reviewed`, no `adversarial`** (2026-10-22, Victor: *"fața
+        // acelui robot sugerează că e adversar"*). **`🌐 More` after `Internet`**
+        // once the checks are over (same day — `ReplyPanel.more`): one more web
+        // round from other sources, then the review again; `Internet ×2` says it.
+        var round = 1
+        func internet(_ running: Bool) -> String {
+            "🌐 Internet" + (round > 1 ? " ×\(round)" : "") + (running ? ReplyPanel.dots : " " + ReplyPanel.more)
+        }
+        func makeChecks(first: Bool) -> QuickAsk.Checks {
+            QuickAsk.Checks(web: { text, isDone in
+                guard isDone else { return }
+                if text.hasPrefix("⚠️") {
+                    steps = ["🌐 Internet failed", ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
+                } else {
+                    let c = QuickAsk.cited(text)
+                    answer = c.text
+                    // No ✏️ on the search (same day, *"scoate creionul din Search"*).
+                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : ""), ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
+                    searched = ReplyPanel.plain(c.text)
+                    remember(searched ?? "")
+                }
+                Log.info(String(format: "⚡ 🔎 web answer (round %d) at %.1f s — %@", round, CFAbsoluteTimeGetCurrent() - started,
+                                String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+                paint(force: true)
+            }, review: { text, isDone in
+                guard isDone else { return }
+                if text.hasPrefix("⚠️") {
+                    steps[steps.count - 1] = ReplyPanel.adversary + " failed"
+                } else {
+                    let c = QuickAsk.cited(text)
+                    answer = c.text
+                    steps[steps.count - 1] = ReplyPanel.adversary + (c.changed ? " reviewed ✏️" : " reviewed")
+                    reviewed = ReplyPanel.plain(c.text)
+                    remember(reviewed ?? "")
+                }
+                // The checks are over: More can be asked for.
+                if steps.count > 1, !steps[0].hasSuffix("failed") { steps[0] = internet(false) }
+                Log.info(String(format: "⚡ 🧐 reviewed answer (round %d) at %.1f s — %@", round, CFAbsoluteTimeGetCurrent() - started,
+                                String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
+                paint(force: true)
+            }, end: {
+                ReplyPanel.finishLive(question: token)
+                if first { checked?(searched, reviewed) }
+            })
+        }
+        let checks = makeChecks(first: true)
+        ReplyPanel.onMore = { [weak self] in
+            guard let self, self.quickToken == token, !QuickAsk.shared.isAnswering,
+                  ReplyPanel.reopenLive(question: token) else { return }
+            round += 1
+            steps = [internet(true)]
             paint(force: true)
-        }, review: { text, isDone in
-            guard isDone else { return }
-            if text.hasPrefix("⚠️") {
-                steps[steps.count - 1] = ReplyPanel.adversary + " failed"
-            } else {
-                let c = QuickAsk.cited(text)
-                answer = c.text
-                steps[steps.count - 1] = ReplyPanel.adversary + (c.changed ? " adversarial reviewed ✏️" : " adversarial reviewed")
-                reviewed = ReplyPanel.plain(c.text)
-                remember(reviewed ?? "")
+            let sources = ReplyPanel.parseLinks(answer).links.map { l -> URL in
+                var c = URLComponents(url: l.url, resolvingAgainstBaseURL: false)
+                c?.fragment = nil
+                return c?.url ?? l.url
             }
-            Log.info(String(format: "⚡ 🧐 reviewed answer at %.1f s — %@", CFAbsoluteTimeGetCurrent() - started,
-                            String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
-            paint(force: true)
-        }, end: {
-            ReplyPanel.finishLive(question: token)
-            checked?(searched, reviewed)
-        })
+            var seen = Set<URL>()
+            QuickAsk.shared.more(asked, images: images, history: history, answer: ReplyPanel.plain(answer),
+                                 sources: sources.filter { seen.insert($0).inserted }, checks: makeChecks(first: false))
+        }
         QuickAsk.shared.ask(asked, images: images, history: history, checks: checks, onText: { text in
             answer = text
             paint()

@@ -338,6 +338,23 @@ enum ReplyPanel {
     /// The quick answer is complete: the pop-up stays, as any other.
     static func finishLive(question token: Int) { if liveToken == token { liveOpen = false } }
 
+    /// **🌐 More** (2026-10-22, Victor: *"un buton mic acolo pe dialogul care
+    /// apare să zică more, prin care să mai solicit mai mult research pe
+    /// internet"*): a link in the ⚡ footer, right after `🌐 Internet`, that is
+    /// not a page — `openLink` hands it to `onMore` (`AppDelegate.askQuick`).
+    static let moreURL = URL(string: "walkie-quick:more")!
+    static var more: String { link("More", moreURL) }
+    static var onMore: (() -> Void)?
+    /// The finished ⚡ pop-up is being written again (🌐 More): later `live`
+    /// calls rewrite it in place instead of opening a new one. False when it
+    /// is gone or is another question's.
+    @discardableResult
+    static func reopenLive(question token: Int) -> Bool {
+        guard panel != nil, liveToken == token, token != dismissedLive else { return false }
+        liveOpen = true
+        return true
+    }
+
     /// The ✕ took down a ⚡ pop-up still being written — its checks stop (`QuickAsk.cancel`).
     static var onLiveDismissed: (() -> Void)?
 
@@ -519,6 +536,12 @@ enum ReplyPanel {
     /// A link opened from the pop-up — the page in the browser, the quote
     /// selected on it (`#:~:text=`, `QuickAsk.cited`). The pop-up stays.
     static func openLink(_ url: URL) {
+        if url == moreURL {
+            Log.info("💬 🌐 More clicked on the ⚡ pop-up")
+            lastOpened = url
+            onMore?()
+            return
+        }
         Log.info("💬 the reply pop-up's link clicked — \(url.absoluteString.prefix(160))")
         lastOpened = url
         if openLinks { NSWorkspace.shared.open(url) }
@@ -622,6 +645,10 @@ enum ReplyPanel {
             if foot.location != NSNotFound {
                 styled.addAttribute(.font, value: footerFont, range: NSRange(location: foot.location, length: ns.length - foot.location))
                 styled.replaceCharacters(in: foot, with: "🤖")
+                // 🤖 is two UTF-16 units where the marker was one: a link in the
+                // footer (🌐 More) moves by one.
+                links = links.map { $0.range.location > foot.location
+                    ? (NSRange(location: $0.range.location + 1, length: $0.range.length), $0.url) : $0 }
             }
             var at = (styled.string as NSString).range(of: adversary)
             while at.location != NSNotFound {

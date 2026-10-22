@@ -70,6 +70,17 @@ enum AutoLocal {
         return "Local now" + (loading ? " (loading)" : "") + "  " + keys
     }
 
+    /// **The countdown as it reads on the `Transcribing...` line** (2026-10-22,
+    /// `RelayWindow.localNowInline`): `💻 in 3s ⌘⌃X`, `💻 now ⌘⌃X`,
+    /// `💻 local ⌘⌃X` with no budget running (`(loading)` while the weights are down).
+    static func inlineText(countdown: TimeInterval? = nil, loading: Bool, keys: String) -> String {
+        if let c = countdown {
+            let s = Int(c.rounded(.up))
+            return "💻 " + (s > 0 ? "in \(s)s" : "now") + " " + keys
+        }
+        return "💻 local" + (loading ? " (loading)" : "") + " " + keys
+    }
+
     /// **A plain sentence on Wispr waits for Wispr's own words** (2026-10-10,
     /// Victor: *"in dictare curata cu wispr ca motor, ia te rog varianta
     /// redactata"*). That evening two clean sentences went in as the local

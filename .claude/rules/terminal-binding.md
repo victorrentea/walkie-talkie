@@ -44,6 +44,13 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 - **A claimed sentence stays on disk until its turn starts** (2026-10-09). The mod claims by renaming the `.msg` into `inbox/pending/<session id>/`, stamps it `@<claude pid>` when it hands it to `$.prompt.submit` (unawaited — the engine's queue holds them all, in order), and deletes it when the call resolves. Every `session.start` replays the folder: a file stamped by a dead process is submitted again, so a `claude --resume` (or `resurrect`) gets what the dead one never started. Measured cause: 79 of 83 inbox sentences on 10-08/09 reached a transcript; the three real losses (18:55, 18:56, 19:02 on ttys010) were held in the old mod's memory behind a ten-minute turn when the process was killed at ~19:06. A session never resumed leaves its sentences in `pending/` — they are not lost, only not delivered.
 - **Why not a channel**: `--dangerously-load-development-channels` asks at every start (a custom channel cannot join the allowlist without an org admin), and a channel message delivered mid-turn is framed as untrusted — the model refused it (2026-10-07). The cross-session socket arrives as a *peer*, not as him.
 
+## A plain dictation over a Claude Code tab binds it (2026-10-22, `bindClaudeInFront`)
+
+The 🔽 start opens the microphone at once; beside it, `frontClaudePromptTTY` (Terminal.app in front,
+a live Claude Code on its tab). Yes → that tab is bound **with no flight** (or already is) and the
+sentence turns to it as 🔼 → turns it (`aimAtBoundTerminal`; 🔽 stays its stop). VS Code is not bound
+this way. Log `📍 a plain dictation over Claude Code on ttysNNN — …`.
+
 ## The shell guard
 
 - **Run the guard before every delivery, never once at bind.** Victor hits Escape or the agent exits, the tab goes back to a prompt with the binding still pointing at it, and at a prompt a dictation is not typed at an agent, it is **run** — *"Șterge tot ce e în folderul de build"* said out loud is a real `rm`. → journal: *The shell guard is the load-bearing part*

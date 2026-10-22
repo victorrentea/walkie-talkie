@@ -368,6 +368,16 @@ yields to `--label`).
   and no word — fixed with the same `inline(Glyphs.emoji(…))`.
   → journal: *Two implementation traps, both paid for*; *The wait fills too (2026-09-08)*
 
+### Three changes of 2026-10-22, evening
+
+- **`📻 Ready for more` is plain ink**, not green, and flashes the yellow `ChangePulse` when it comes
+  up (`readyPulse`, in `placeChangePulses`' list).
+- **The local countdown is on the `Transcribing` line** while there is one: `Transcribing via <mark>...
+  💻 in 3s ⌘⌃X` (`localNowInline`, `AutoLocal.inlineText`, full ink — not part of the bar); the
+  `localNowRow` only while the sentence records. At `now` AppDelegate sets the engine mark to 💻.
+- **`»` on the held sent-prompt dialog** (`HeldPromptSkip`, its own panel over the top-right corner,
+  because the held dialog ignores the mouse): fades the dialog now, the delivery goes on.
+
 ## Type, ink, and drawn glyphs
 
 - **One face, one size, one weight: every word on the chip is `hintFont` — system 17, regular.**

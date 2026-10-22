@@ -371,7 +371,7 @@ enum OverlayStates {
 
             Shot(slug: "transcribing-ready", group: "Dictating", title: "Ready for more — talk again while it transcribes",
                  when: "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
-                 note: "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
+                 note: "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and the row's ordinary ink, above the wait — **no green since 2026-10-22**, and the yellow flash of a changed row when it comes up (Victor: *\"să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare\"*). Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue) \(Glyphs.loraMark)")
@@ -394,7 +394,7 @@ enum OverlayStates {
 
             Shot(slug: "transcribing-local-now", group: "Dictating", title: "⌘⌃X — the local model, now",
                  when: "From one second into the wait for ElevenLabs (or Wispr Flow) with *Backup Local Pre-Transcribe* off — never while the microphone is open. With it on, the row is the `💻 local in 3s / ⌘⌃X ...` countdown.",
-                 note: "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land.",
+                 note: "**The quick exit, written where he is looking** (2026-09-28). Victor: *\"I want a local fallback that I can access during the dictation, at any point, through a key combination displayed in the tooltip\"*. ⌘⌃X closes the microphone as the ordinary stop does and has this Mac transcribe the take — nothing is uploaded; pressed during the wait, the cloud answer is abandoned and only logged when it lands. A row like `📋 Re-paste ⌘V`: an emoji, the words, the keys. The key works from the first sample; the row waits a second into the transcription (*\"only displayed after 1 s after starting the transcribing\"*), so a fast engine never shows it. It goes when the words land. **On the `Transcribing` line since 2026-10-22** (`💻 local ⌘⌃X`), no row of its own.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setTranscribing(true)
@@ -416,22 +416,24 @@ enum OverlayStates {
 
             Shot(slug: "transcribing-fallback-countdown", group: "Dictating", title: "Fallback to local — counting down to the budget",
                  when: "From one second into the wait for ElevenLabs or Wispr Flow with *Backup Local Pre-Transcribe* on (the default), until the engine's p95 for that length runs out.",
-                 note: "**The countdown is on the row with the keys** (2026-10-07; `💻 local in 3s / ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
+                 note: "**On the `Transcribing` line since 2026-10-22** — `Transcribing via <engine>... 💻 in 3s ⌘⌃X`, no row of its own (Victor: *\"countdown-ul fix acolo după transcribing și scurtătura tot acolo după. Nu un rând separat, neintuitiv, confuz\"*); while the sentence still records it stays a row. Before that: **the countdown is on the row with the keys** (2026-10-07; `💻 local in 3s / ⌘⌃X ...` is Victor's own wording, the 💻 in the glyph column — replacing 10-06's `⌘⌃X - 💻 fallback, auto in 3s...`). Victor: *\"put a countdown timer … when the timer expires, the local dictation is automatically injected\"*, then *\"put it like fallback to local in countdown timer and then show the key shortcuts\"*. At the close the relay reads the engine's p95 (`DecodeRate.budget`) and starts the local model `budget − localEta` into the wait, so its words are ready about when the count reaches zero — and then they go in (`via: local-auto`). ⌘⌃X puts them in sooner (`via: local-forced`); the engine's words landing first take the row down and the local ones are discarded. Whole seconds, rounded up; **no engine's name** (*\"don't leak the name of any tool, only the icon\"* — the logo on the first row says which). It replaces the `🤔⏱️` the first row grew past 150 % of the estimate, and 09-29's *offered, never inserted* `Use local`.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setTranscribing(true)
                 o.setShotCount(1)
+                o.setEngineMark(" via \(Glyphs.Engine.eleven.rawValue)")
                 o.pinTranscribeWarmth(0.55)
                 o.setLocalNow(true, countdown: 2.4)
             },
 
             Shot(slug: "transcribing-fallback-now", group: "Dictating", title: "Fallback to local — the budget ran out",
                  when: "The count reached zero with the engine's words still out and the local decode not quite done.",
-                 note: "`auto now...`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
+                 note: "**At `now` the engine on the line is this Mac** (2026-10-22, Victor: *\"când treci la modelul local, în transcribing să înlocuiești … cu calculatorul … zici now și efectiv înlocuiești motorul cu local\"*): `Transcribing via 💻... 💻 now ⌘⌃X`. `now`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setTranscribing(true)
                 o.setShotCount(1)
+                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue)")
                 o.pinTranscribeWarmth(1.0)
                 o.setLocalNow(true, countdown: 0)
             },

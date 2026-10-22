@@ -293,6 +293,20 @@ def timed_words(res, samples=None):
     return out
 
 
+def mean_logprob(segs):
+    """Token-weighted mean of the segments' `avg_logprob`; None with no tokens or a NaN."""
+    total = weight = 0.0
+    for s in segs:
+        lp, n = s.get("avg_logprob"), len(s.get("tokens") or [])
+        if lp is None or n == 0:
+            continue
+        if lp != lp:
+            return None
+        total += lp * n
+        weight += n
+    return round(total / weight, 4) if weight else None
+
+
 def memory_stats():
     """MLX's own accounting, in MB — the only honest view of this process.
 
@@ -664,6 +678,12 @@ for line in sys.stdin:
             # would answer depending on where in the list the NaN sat.
             "avg_logprob": min((s.get("avg_logprob", 0.0) for s in segs), default=0.0,
                                key=lambda v: -math.inf if v != v else v),
+            # The whole take's confidence (2026-10-22, the 🎤 on a plain dictation):
+            # the per-token mean, each segment weighted by its tokens. The worst
+            # segment above flags most long takes — one shaky segment in thirty
+            # seconds is ordinary — while the takes that are wrong as a whole are
+            # short and low throughout. `evals/local-confidence/`.
+            "mean_logprob": mean_logprob(segs),
             "compression_ratio": max((s.get("compression_ratio", 0.0) for s in segs), default=0.0),
             "no_speech_prob": max((s.get("no_speech_prob", 0.0) for s in segs), default=0.0),
             "coverage": coverage(res),
