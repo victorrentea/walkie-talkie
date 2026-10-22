@@ -13,8 +13,8 @@ final class GestureHintBarTests: XCTestCase {
 
     func testAPromptIsVictorsSketch() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true)), [
-            Cross(click: "🏁 end ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 shot ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
+            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
         ])
     }
 
@@ -38,7 +38,7 @@ final class GestureHintBarTests: XCTestCase {
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
             Cross(click: "⚡ ask ⌘⌘", up: "", down: "", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 shot ⌃P", up: "", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "", right: ""),
         ])
     }
 
@@ -65,8 +65,8 @@ final class GestureHintBarTests: XCTestCase {
             Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
-            Cross(click: "🏁 end ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil, corner: "☝️"),
-            Cross(click: "📸 shot ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: "", corner: "✌️"),
+            Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil, corner: "☝️"),
+            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: "", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: false, noMouse: true))[1].right, "⏹️ ⌘⌘")
     }

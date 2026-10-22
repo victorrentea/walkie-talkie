@@ -155,8 +155,12 @@ final class GestureHintBar {
         // *"să-mi apară și shortcut-urile … pe care le pot apăsa"*): right ⌘ ×2
         // ends a prompt (and stops a plain sentence without a Return), ⌃P is the
         // shutter while a prompt records.
-        if s.prompting || s.quick { front.click = (front.click ?? "") + " ⌘⌘" }
-        if back.click == "📸 shot" { back.click = "📸 shot ⌃P" }
+        // **The emoji, a slash, the key** for the end and the shot (2026-10-23,
+        // Victor: *"Lasă doar steagul de finish … taie cu shot și lasă doar un
+        // slash între ele"*) — `🏁 / ⌘⌘`, `📸 / ⌃P`; the words went.
+        if front.click == "🏁 end" { front.click = "🏁 / ⌘⌘" }
+        else if s.prompting || s.quick { front.click = (front.click ?? "") + " ⌘⌘" }
+        if back.click == "📸 shot" { back.click = "📸 / ⌃P" }
         if !s.prompting && !s.quick { back.right = "⏹️ ⌘⌘" }
         return [front, back]
     }
