@@ -962,7 +962,7 @@ def main():
     sys.path.insert(0, here)
     for mod in ("cases_lc", "cases_lifecycle", "cases_delivery", "cases_gestures", "cases_audio", "cases_queue",
                 "cases_wispr", "cases_wispr_soak", "cases_wispr_chaos", "cases_localnow", "cases_localauto", "cases_w4real", "cases_kamikaze",
-                "cases_chunks", "cases_wispr_queue"):
+                "cases_chunks", "cases_wispr_queue", "cases_chunk_markers"):
         try:
             importlib.import_module(mod)
         except ModuleNotFoundError as e:

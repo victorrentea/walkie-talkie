@@ -4,6 +4,14 @@
 > leaves real words only in the second. Proof both ways: `later_window_check.py <model>` and
 > `later_window_chunks.py <model> <n>` (the 28 invented Large-LoRA chunk tails all dropped). The
 > recommendation below about the first window is superseded by that rule.
+>
+> **Pictures in chunk 2/3 (2026-10-22, `marker_placement.py <model>`, needs a CM1 run first for its
+> files in /tmp/wt-plan):** the same 32 s take decoded whole and in three chunks, a picture placed at the
+> middle of a 0.6 s silence inside chunk 2 and chunk 3. On `whisper-turbo-victor` chunked vs whole differ
+> by at most one word (📸1 `the number after [📸] the` vs `the number after the [📸]`; 📸2 `try [📸] to`
+> vs `[📸] Try`). The whole decode itself is ~2 words late at 📸1 — the LoRA's word timings, not the
+> chunks (its alignment heads are turbo's, never measured on the LoRA). The live desk case
+> `evals/plan/cases_chunk_markers.py` (CM1) adds ~0.5 s of press jitter, too coarse for its ±1-word check.
 
 # Decoding a long take in pause-cut chunks while he talks (2026-10-21)
 
