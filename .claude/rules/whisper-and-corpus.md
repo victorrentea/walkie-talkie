@@ -129,11 +129,12 @@ the local model … don't feed too small chunks either"*.
   (the in-memory take, same ruler as the WAV) sent as `{"pcm"}`, **words only with a cue waiting**,
   like a whole take. At the stop the tail is sliced **on `audioQueue`, right after `meter.stop()`** (a
   next take's `start` resets `take`), sent with the chunks' agreed `language` (the helper skips its LID
-  pass, −0.56 s), dropped under 0.3 s voiced. `join`: texts with one space, words moved by each
+  pass, −0.56 s), dropped under 0.1 s voiced (two hops; c5dc9e8). `join`: texts with one space, words moved by each
   chunk's start — a chunk decoded without them stands as one word over its span; kept only if they
   spell the text —, worst logprob, worst cr, the longest chunk's language (`ChunkJoinTests`).
 - **Measured, `evals/chunked-decode/`** (40 takes > 25 s, Large LoRA, Wispr's raw text as reference):
-  8 s / 0.9 s → WER **12.6 % chunked vs 13.1 % whole** (noise: ±1.5 pt), mean wait after the stop
+  8 s / 0.9 s → WER **12.7 % chunked vs 13.1 % whole** (12.6 % with the previous chunk as prompt
+  context, which the app does not send; noise ±1.5 pt), mean wait after the stop
   **3.86 → 2.35 s**; 6 s / 0.6 s cost +0.9 pt, 4 s chunks or 0.4 s gaps +1.5…2.1 pt. **Word timings on
   every chunk cost +5 pt** (13.1 → 18.2 %): mlx_whisper seeks past the last word and decodes the
   leftover silence as a new window, inventing *"La revedere!"* (82 of 119 chunks). With timings on, a

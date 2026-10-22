@@ -1,3 +1,10 @@
+> **2026-10-22, after the review waves:** the app does **not** keep "only the first window" any more —
+> `helpers/whisper_helper.py` `first_window_only` keeps a later window with ≥ 1 s of voice over its own
+> span (from 0.3 s after the first window's last word), because a first window that ends mid-segment
+> leaves real words only in the second. Proof both ways: `later_window_check.py <model>` and
+> `later_window_chunks.py <model> <n>` (the 28 invented Large-LoRA chunk tails all dropped). The
+> recommendation below about the first window is superseded by that rule.
+
 # Decoding a long take in pause-cut chunks while he talks (2026-10-21)
 
 What the local model loses in words, and gains in wait, when a take is decoded as chunks cut at

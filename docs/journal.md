@@ -15673,3 +15673,50 @@ is on — the take waits for Wispr, bounded by 10 s after his stop and the sente
 green); the lab plan (QW1–QW7, a guest `dnctl` delay for the stopped-before-release path) was not
 run — not yet proven on a live Wispr. Rules: `dictation-source.md`, *Wispr queues sentences*.
 
+
+## Review waves on the queues and chunks (2026-10-22, the night)
+
+Victor, 2026-10-21 evening: *"Run another round of adversarial code review and testing of this chunk-based
+approach as I feel it can lead to many complications in combination with in-flight gestures"*, then
+*"send out a new round of review, fix findings if real then send another wave until a wave does not find
+any other bugs. Then run a fable review of all the findings and fixes"*. He left the Mac to it for the night.
+
+**Twelve waves**, each 2–3 read-only reviewers on a slice (gestures, audio rulers, threads, the Wispr
+deferral, single-sentence regressions, the patch code itself, end-to-end journeys), every finding checked
+before a fix; each fix its own commit with the scenario in the message (`git log --grep "Review wave"`).
+Wave 12's sweep found nothing. The ones worth remembering:
+
+- **Lost words:** a take past `MicRecorder.hopCap` (12.8 min) had its last ≤ 2 min read as silence and
+  dropped (0333011); a 0.3 s tail floor dropped a real *"Da, atât."* (c5dc9e8, now 0.1 s); the first
+  `first_window_only` dropped a real last sentence when Whisper's first window ended mid-segment (e5a3cba).
+- **Mixed sentences:** a local borrow while a Wispr sentence was parked swapped `source` under it — its
+  fallback, ⌘⌃X and dead-parked check asked the wrong engine (790b8f5); per-source take counters let local
+  take 1 match a parked Wispr take 1 (one `TakeSerial` now).
+- **Silent truncation on Wispr:** a re-hold during a stopped deferred take's replay tripped the 2 s
+  drain-stall and posted the stop chord with most of the take unheard (e8d9b59, completed 6da30d7).
+- **A wave fixing the last wave**, three times: wave 5's drain skip never ran (`closeListening` had
+  cleared the flag it read — 3a745cd); the dismissal stamp was `CFAbsoluteTime` where `deadRow` compares
+  Unix time (same commit); wave 6's *give up on an input blip past 20 s instead of replaying* broke twice
+  (a 40 Hz repeat, a latch leaking into the next sentence) and was **taken back** in c92cad9 — 50 ms after
+  the input goes off it cannot tell a blip from Wispr ending its own dictation.
+- **`first_window_only`, five versions in one night** (5da8bcb → e5a3cba → 29e3d93 → 9dffa09 → bc56b40):
+  drop every later window → keep one with ≥ 0.25 s voice → ≥ 1 s from 0.3 s after the first window's last
+  word → judged as a whole → from its own first segment; then the bar capped at 600 (int16) so a
+  speech-dense chunk does not put it inside the speech. Measured on 2 + 8 clips and the 28 Large-LoRA
+  chunk tails (`evals/chunked-decode/later_window_check.py`, `later_window_chunks.py`).
+
+**Tests that night:** C1–C12 (chunks, a fake local helper — `WT_WHISPER_HELPER`), QW0–QW7 (the Wispr
+deferral on a fake `History`, chords muted), Q1–Q6 (the ElevenLabs queue on the fake Scribe, rewritten to
+direct routes: the screen was locked, which hides synthetic chords from the tap; stops are the forward
+click since 🔼 → mid-sentence flips the destination). Three rig traps paid for: `CLIP_EN_LONG` is hiss from
+~80 to ~108 s; a take ending in > 0.9 s of silence is cut there and has no tail; a live Wispr finishes a
+row ~0.5 s after its mic closes, so only a fake `History` holds one in flight. One QW1 failure was the
+microphone's `'nope'` (OSStatus 1852797029) on a device switch — six times since September, on ordinary
+starts too; its recovery never got audio back (DEAF). Not fixed; worth its own look.
+
+**The Fable review** (independent, after the waves): the local queue + chunks are shippable; the Wispr
+deferral is proven only against a fake Wispr — watch for the first live `take N deferred`, and
+`WT_WISPR_QUEUE=0` if it misbehaves; the bridge re-hold has no test (`WT_BRIDGE_REHOLD=0` added). It found
+two more, fixed: his own cancelled Wispr row held every deferred release for 60 s (the release now waits
+only for a row with a duration, recorded < 15 s ago), and the clip-relative voice bar (capped). It also
+suggested passing the take into `handToLocal` instead of the `handOverTake` field — not done.

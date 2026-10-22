@@ -80,6 +80,11 @@ final class AudioBridge {
     /// what this app plays into it, so there is nothing to double. `WT_BRIDGE=0`
     /// for a run; `POST /test/bridge {"on": …}` at runtime.
     static var isEnabled: Bool = ProcessInfo.processInfo.environment["WT_BRIDGE"] != "0"
+    /// `WT_BRIDGE_REHOLD=0` (environment, then `elevenlabs.env`): Wispr's input going
+    /// off mid-sentence is let pass, as before 2026-10-21. Read once.
+    static let reholdOn: Bool = {
+        (ProcessInfo.processInfo.environment["WT_BRIDGE_REHOLD"] ?? ElevenLabsSource.fileValue("WT_BRIDGE_REHOLD")) != "0"
+    }()
 
     /// Where his voice is carried to — a substring, like every needle here.
     private static var deviceNeedle: String {
@@ -355,6 +360,9 @@ final class AudioBridge {
     /// while the relay still takes buffers (`accepting`) — after its stop, the
     /// input closing is Wispr ending the sentence.
     func rehold(_ why: String) {
+        // `WT_BRIDGE_REHOLD=0` turns the re-hold off for a run (Fable review: the
+        // one behaviour of the bridge no test drives).
+        guard Self.reholdOn else { return }
         lock.lock()
         guard isRunning, !holding, accepting else { lock.unlock(); return }
         holding = true

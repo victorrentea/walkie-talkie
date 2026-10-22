@@ -5213,7 +5213,13 @@ extension WisprFlowSource {
                 busy = "Wispr Flow's microphone is still open"
             } else if let top = WisprHistory.newest(), !relayRows.contains(top.rowid),
                       WisprState.intermediateStatuses.contains(top.status),
-                      Date().timeIntervalSince1970 - top.startedAt < 60 {
+                      let rec = top.duration,
+                      Date().timeIntervalSince1970 - (top.startedAt + rec) < 15 {
+                // Only a row being transcribed now: it has its recording's duration
+                // and finished recording under 15 s ago (Fable review — a row of his
+                // he cancelled stays `processing` with no duration for ever, and held
+                // every release for a minute). His row still recording has his
+                // microphone open, which the check above already waits for.
                 // Not a row the relay adopted (`relayRows`, wave 5): its dismissed
                 // rows stay `processing` for ever (wave 4 — a cancel then a
                 // re-dictation waited 10 s and went local); his own rows count,

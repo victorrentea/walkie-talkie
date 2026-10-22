@@ -508,7 +508,10 @@ def _voice_meter(samples):
     if n == 0:
         return lambda a, b: 0.0
     rms = np.sqrt((x[: n * 1024].reshape(n, 1024) ** 2).mean(axis=1))
-    bar = max(180.0 / 32768.0, float(np.percentile(rms, 10)) * 10 ** (9 / 20))
+    # Capped at 600 on the int16 scale (Fable review): on a chunk that is nearly all
+    # speech the 10th percentile is speech, and the bar would sit inside it — a soft
+    # real remainder would read as silence. Speech here is 800–3,000; room tone < 250.
+    bar = max(180.0 / 32768.0, min(float(np.percentile(rms, 10)) * 10 ** (9 / 20), 600.0 / 32768.0))
     voiced = rms > bar
     def seconds(a, b):
         i, j = max(0, int(a * 16000 / 1024)), min(n, int(np.ceil(b * 16000 / 1024)))

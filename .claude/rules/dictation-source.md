@@ -615,6 +615,10 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
 | `WT_WISPR_RAW_PROMPTS=0` | prompts carry Wispr's `formattedText` again instead of `asrText` (2026-10-06) |
 | `WT_WISPR_COPY_FALLBACK=1` | re-enable `copy_last_text` — see below |
 | `WT_WISPR_DB=<path>` | a fake `flow.sqlite` instead of Wispr's (test-only, 2026-09-28): env → `elevenlabs.env`, re-read ≤ 1 s; `evals/plan/fake_wispr_db.py` (`desk-testing.md`) |
+| `WT_WISPR_QUEUE=0` · `WT_LOCAL_QUEUE=0` · `WT_SENTENCE_QUEUE=0` | the Wispr deferral / the local model's queue / the relay's Q12 queue off (env → `elevenlabs.env`, read at launch) |
+| `WT_LOCAL_CHUNKS=0` · `WT_CHUNK_TRIGGER` · `WT_CHUNK_MIN` · `WT_CHUNK_GAP` | the local model's chunked decode off / its cut rule (s; defaults 10 · 8 · 0.9, `ChunkPlanner.Tuning.configured`) |
+| `WT_BRIDGE_REHOLD=0` | Wispr's input going off mid-sentence is let pass, no re-hold/replay (read at launch) |
+| `WT_WHISPER_HELPER=<path>` | **test-only**: a fake local helper (`evals/plan/fake_whisper_helper.py`), read from env → `elevenlabs.env` **at every helper spawn**; without a live harness lock the fake runs the real helper. Its decodes file under `whisper-local-test`, never in the corpus |
 | `WT_ELEVEN_LIVE_URL` · `WT_ELEVEN_BATCH_URL` | the realtime socket / batch upload somewhere else (2026-09-27): env → `elevenlabs.env`, read at every engine pick; the harness points them at `evals/plan/fake_scribe.py` (`desk-testing.md`). Default `wss://api.elevenlabs.io/v1/speech-to-text/realtime` · `https://api.elevenlabs.io/v1/speech-to-text` |
 
 ## Do not
@@ -748,8 +752,10 @@ was a blip); `wispr history: row R recorded X s, the relay closed its take at Y 
 
 Victor: *"the ability to record immediately another [prompt] even though you are currently
 transcribing the old snippet … this should also work if you are transcribing with Wispr … just
-buffer the wav and then hand it to Wispr whenever it's ready."* **Unit-tested only
-(`WisprDeferralTests`), not yet proven on a live Wispr.**
+buffer the wav and then hand it to Wispr whenever it's ready."* **Proven on a fake Wispr only**
+(`WisprDeferralTests`, desk cases QW1–QW7 on a fake `History` with chords muted — QW0 on live Wispr
+never deferred: Wispr finishes a row ~0.5 s after its mic closes). **No live deferral seen yet** —
+grep `🧾 wispr: take N deferred` in `relay.log` the first days; `WT_WISPR_QUEUE=0` turns it off.
 
 - **`WisprFlowSource.queuesSentences`** (`WT_WISPR_QUEUE=0` off; off with `WT_BRIDGE=0` too — Wispr
   must hear the relay's backlog). Takes like ElevenLabs': `take`, `answeringTake` (every `didEnd` /
@@ -762,16 +768,24 @@ buffer the wav and then hand it to Wispr whenever it's ready."* **Unit-tested on
   marker lists (`olderMarkers`). `AppDelegate.startDictation` skips W6's *Wispr is listening* refusal
   and the *still finishing* borrow for it (`wouldDeferStart`). **This reverses 2026-10-06's local
   borrow at the start** (above): the take waits for Wispr instead, bounded below.
+- **An orphan row alone does not defer** (wave 6, `onlyAnAbandonedRow`): nothing of a sentence owed,
+  only a row the relay gave up on still finishing → the start borrows the local model as on 2026-10-06.
 - **Released** (`deferredTick`, 0.2 s → pure `WisprDeferral.verdict`) when the sentence before it is
-  over (`olderDone`) and Wispr is free (no row finishing, its microphone shut — W6 at the release):
+  over (`olderDone`) and Wispr is free — the busy reasons, in order: a relay row still finishing
+  (`stillFinishingAbandonedRow`), Wispr's microphone open (W6), **his own row being transcribed**
+  (not in `relayRows`, intermediate, with a `duration`, recorded < 15 s ago — a row of his he cancelled
+  stays `processing` with none), his own chord < 2 s ago; then **`pasteSettle` 0.7 s** after the later
+  of the sentence before ending and the last busy tick (Wispr pastes 0.41–0.51 s after `formatted`):
   `gestureSeen(take:, announce: false)` + the start chord. Still talking: the bridge is released when
   Wispr's input runs and catches up as usual. **Stopped already**: his stop called `didStopListening`
   then (recipient latched, Q2) and closed the recorder only; the release runs `stopMachine()` at once
   (`stopRelayed`): waits for Wispr's input (≤ 2.5 s per hold), replays the whole take (≤ 1.25×, a
   re-hold on an input blip allowed until the chord), then the stop chord; no second close, no ring.
 - **Its countdown starts at that stop chord** (`onHandedToWispr` → `AppDelegate.armAutoLocal(for:take:)`),
-  not at his stop: while it waits or replays no budget runs for it (`closingDeferred`), and the
-  sentence before keeps its own countdown (`handOverTake` aims the clock's hand-over at it).
+  not at his stop: while it waits or replays no budget runs for it (`closingDeferred` — on every end of
+  a deferred take: stop, cancel, ⌘⌃X, give-up), and the sentence before keeps its own countdown
+  (`handOverTake` aims the clock's hand-over at it; settled only by its own sentence; a take already
+  overtaken by a released newer one settles quietly — `takeWasOvertaken`).
   `📊 fallback: … deferred=X.XX` / `fallback.jsonl` `deferred` = the seconds no clock ran.
 - **Gives up → Q14** (the relay's WAV, the local model, floor 0.3 s — Wispr never heard it): the
   sentence before not over 60 s after the gesture (`olderCeiling`), Wispr still busy 10 s after both
@@ -780,6 +794,10 @@ buffer the wav and then hand it to Wispr whenever it's ready."* **Unit-tested on
   sentence before untouched); ⌘⌃X hands it to the local model.
 - **Refused** (accepted, 2026-10-21): a third start while a stopped take is being replayed (one
   bridge) — *Wispr Flow is still hearing the last take*; the 📻 Ready row may still show then.
+- **A held take's end** (stop, cancel, ⌘⌃X): its open row, if still Wispr's newest, is dismissed
+  (⌃Escape, stamped in Unix time) and watched (`watchLateRow` with pid + close time); a cancel or ⌘⌃X
+  drops the bridge's replay instead of draining it into a dismissed Wispr.
 - Log prefix `🧾 wispr: take N deferred / waits / released / will not be Wispr Flow's`;
-  `GET /test/state.wisprLive.takes`.
+  `GET /test/state.wisprLive.takes`. The 12 review waves of 2026-10-22 and what each fixed: the
+  journal, *Review waves on the queues and chunks*.
 
