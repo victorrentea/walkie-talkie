@@ -4474,7 +4474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // **✍️ Edited against the screen first** (2026-10-22,
                 // `DictationEditor`): the paste waits for it, never past its budget.
                 let submit = submitClean, pid = result.focusPid
-                DictationEditor.shared.edit(line) { [weak self] edited in
+                DictationEditor.shared.edit(line, pid: pid) { [weak self] edited in
                     guard let self else { return }
                     self.pasteText(edited + mic, to: pid)
                     if submit { self.submitAfterCleanWords() }
@@ -4763,7 +4763,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cu calculatorul … zici now și efectiv înlocuiești motorul cu local"*):
         // the budget is out and the local words are the ones going in.
         if row.shown, let c = row.countdown, c <= 0 {
-            overlay.setEngineMark(Self.mark(engine: "whisper"))
+            if !markedLocalNow { overlay.setEngineMark(Self.mark(engine: "whisper")) }
+            markedLocalNow = true
+        } else if markedLocalNow, !fallingBack, autoLocalWait?.settled != false {
+            // The wait is over and the local words did not take it (the engine's
+            // landed first): the next sentence must not wear 💻 (review 2026-10-22).
+            markedLocalNow = false
+            if !answeringInBackground { overlay.setEngineMark(Self.mark(engine: engineId)) }
         }
         if a.available, localNowTick == nil {
             // 0.1 s: the decode's start is read here.
@@ -4776,6 +4782,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     private var localNowTick: Timer?
+    /// The engine mark was turned to 💻 at the countdown's `now` — put back when the wait ends.
+    private var markedLocalNow = false
     /// When the last offline hand-over fired — once per sentence (`settlingFrom`).
     private var offlineHandOverAt: CFAbsoluteTime = 0
 
@@ -5723,22 +5731,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !quickAsk else { return }
         let sentence = liveSentence
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        // Still this plain sentence, still open, not redirected — asked on main,
+        // before the binding moves and again after (review 2026-10-22: the bind
+        // used to happen first and a failed check left the chip on the old one).
+        let stillOurs: () -> Bool = { [weak self] in
+            guard let self else { return false }
+            return (sentence == nil || self.liveSentence === sentence) && (self.listening || self.source.isRecording)
+                && self.cleanSentence && !self.cleanRedirected && !self.quickAsk
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self, let tty = TerminalBinding.frontClaudePromptTTY(bundleID: front) else { return }
             let short = (tty as NSString).lastPathComponent
+            var ours = false
+            DispatchQueue.main.sync { ours = stillOurs() }
+            guard ours else { return }
             let already = self.terminal.target.flatMap { $0.handle.tty == short ? $0 : nil }
             guard let bound = already ?? self.terminal.bind(tty: tty) else {
                 Log.info("📍 a plain dictation over Claude Code on \(short) — it could not be bound; the words stay at the caret")
                 return
             }
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.liveSentence === sentence, self.listening || self.source.isRecording,
-                      self.cleanSentence, !self.cleanRedirected else { return }
-                Log.info("📍 a plain dictation over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there")
+                guard let self else { return }
+                // A binding that moved is always shown, whatever the sentence did since.
                 if already == nil {
                     self.boundAt = Date()
                     self.showBound(bound)
                 }
+                guard stillOurs() else {
+                    Log.info("📍 bound to Claude Code on \(short), but the plain sentence ended or turned meanwhile — it keeps its course")
+                    return
+                }
+                Log.info("📍 a plain dictation over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there")
                 self.aimAtBoundTerminal()
             }
         }
@@ -11888,6 +11911,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if overlay?.isHoldingPrompt ?? false { why.append("prompt on screen") }
         if !awaitingBind.isEmpty { why.append("held for a bind") }
         if deliveriesInFlight > 0 || caretHalo.delivering { why.append("delivering") }
+        // A plain sentence waiting for its ✍️ edit has not been pasted yet (review 2026-10-22).
+        if DictationEditor.shared.inFlight > 0 { why.append("editing") }
         if spawnsInFlight > 0 { why.append("spawning") }
         if film != nil { why.append("filming") }
         return why

@@ -662,6 +662,9 @@ enum ReplyPanel {
                     styled.replaceCharacters(in: at, with: piece)
                 } else {
                     styled.replaceCharacters(in: at, with: "😠")
+                    // Two units where the marker was one, as for 🤖 above.
+                    links = links.map { $0.range.location > at.location
+                        ? (NSRange(location: $0.range.location + 1, length: $0.range.length), $0.url) : $0 }
                 }
                 at = (styled.string as NSString).range(of: adversary)
             }

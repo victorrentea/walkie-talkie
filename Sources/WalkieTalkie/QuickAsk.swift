@@ -532,6 +532,9 @@ final class QuickAsk {
 
         func stop() {
             onExit = nil
+            // A late answer from a stopped process reaches no one (review 2026-10-22).
+            onResult = nil
+            onText = nil
             try? stdin.fileHandleForWriting.close()
             if process.isRunning { process.terminate() }
         }

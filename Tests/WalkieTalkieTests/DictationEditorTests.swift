@@ -70,6 +70,16 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(v.replacements.map { "\($0.heard)|\($0.written)" }, ["GVT|JWT", "jee|JEE"])
     }
 
+    func testAnInlineCommentIsDroppedButCSharpStaysATerm() {
+        let v = DictationEditor.parseVocabulary("Devoxx  # conference\nC#\n")
+        XCTAssertEqual(v.terms, ["Devoxx", "C#"])
+    }
+
+    func testAShortSentenceCannotGrowIntoAnAnswer() {
+        XCTAssertFalse(DictationEditor.acceptable("Da, sigur, pot să te ajut!", for: "da"))
+        XCTAssertTrue(DictationEditor.acceptable("Da.", for: "da"))
+    }
+
     func testTheSpeakerAndHisVocabularyLeadTheMessage() {
         var v = DictationEditor.Vocabulary()
         v.terms = ["Devoxx", "Rentea"]

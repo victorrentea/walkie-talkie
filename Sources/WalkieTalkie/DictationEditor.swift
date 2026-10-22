@@ -117,9 +117,12 @@ final class DictationEditor {
 
     /// Nil when there is nothing that may be read — a password field, a private
     /// app, Accessibility not answering.
-    static func readContext() -> Context? {
+    static func readContext(pid target: pid_t? = nil) -> Context? {
         let started = CFAbsoluteTimeGetCurrent()
-        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        // The app the words go to (`DictationResult.focusPid`) — he may have moved
+        // on while the cloud transcribed (review 2026-10-22).
+        guard let app = target.flatMap({ NSRunningApplication(processIdentifier: $0) })
+                ?? NSWorkspace.shared.frontmostApplication else { return nil }
         if let id = app.bundleIdentifier, privateApps.contains(id) { return nil }
         let pid = app.processIdentifier
         let axApp = AXUIElementCreateApplication(pid)
@@ -252,8 +255,10 @@ final class DictationEditor {
     static func parseVocabulary(_ text: String) -> Vocabulary {
         var v = Vocabulary()
         for line in text.split(whereSeparator: \.isNewline) {
-            let l = line.trimmingCharacters(in: .whitespaces)
+            var l = line.trimmingCharacters(in: .whitespaces)
             guard !l.isEmpty, !l.hasPrefix("#") else { continue }
+            // `Devoxx  # conference` — a comment after whitespace; `C#` stays a term.
+            if let hash = l.range(of: " #") { l = l[..<hash.lowerBound].trimmingCharacters(in: .whitespaces) }
             if let arrow = l.range(of: "→") ?? l.range(of: "->") {
                 let heard = l[..<arrow.lowerBound].trimmingCharacters(in: .whitespaces)
                 let written = l[arrow.upperBound...].trimmingCharacters(in: .whitespaces)
@@ -308,7 +313,7 @@ final class DictationEditor {
         let e = edited.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !e.isEmpty, !e.contains("<dictation>"), !e.contains("<before_caret>") else { return false }
         let ratio = Double(e.count) / Double(max(1, words.count))
-        return words.count < 12 ? ratio < 3 : (0.45...1.6).contains(ratio)
+        return words.count < 12 ? e.count <= words.count + 6 : (0.45...1.6).contains(ratio)
     }
 
     // MARK: - The model
@@ -325,6 +330,7 @@ final class DictationEditor {
     /// session is busy.
     private var spare: QuickAsk.Worker?
     private var failedStarts = 0
+    private var lastFailureAt: CFAbsoluteTime = 0
     /// Sentences one session takes before a fresh one replaces it.
     static let sessionTurns = 40
 
@@ -353,6 +359,7 @@ final class DictationEditor {
             return w
         } catch {
             failedStarts += 1
+            lastFailureAt = CFAbsoluteTimeGetCurrent()
             Log.error("✍️ could not start the editor process: \(error)")
             return nil
         }
@@ -366,6 +373,7 @@ final class DictationEditor {
                 if self.session === w { self.session = nil }
                 if self.spare === w { self.spare = nil }
                 self.failedStarts += 1
+                self.lastFailureAt = CFAbsoluteTimeGetCurrent()
                 Log.error("✍️ an editor process exited by itself (\(self.failedStarts)/3) — \(w.stderrTail)")
             }
         }
@@ -374,7 +382,13 @@ final class DictationEditor {
     /// The process for the next sentence: the session when it is free, else the
     /// spare (used once, then stopped). `once` says which.
     private func takeWorker() -> (worker: QuickAsk.Worker, once: Bool)? {
-        failedStarts = 0
+        // Three failed starts stop the trying for a minute (review 2026-10-22: the
+        // count was reset on every sentence, so a missing `claude` spawned two
+        // processes per sentence and every one waited out the budget).
+        if failedStarts >= 3 {
+            guard CFAbsoluteTimeGetCurrent() - lastFailureAt > 60 else { return nil }
+            failedStarts = 0
+        }
         warmLocked()
         // A session that has not answered in 30 s is stuck: it goes.
         if busy, CFAbsoluteTimeGetCurrent() - busySince > 30, let s = session {
@@ -390,13 +404,16 @@ final class DictationEditor {
             return (s, false)
         }
         guard let s = spare, s.alive else { return nil }
-        spare = nil
+        // The next spare starts now, not at this one's answer: the sentence after
+        // may need it while the session is still busy (review 2026-10-22).
+        spare = start()
         return (s, true)
     }
 
     /// The session answered: free again, or retired at `sessionTurns` (the spare
     /// steps in at the next `warmLocked`).
     private func release(_ w: QuickAsk.Worker, once: Bool) {
+        failedStarts = 0
         if once { w.stop(); warmLocked(); return }
         guard session === w else { return }
         busy = false
@@ -411,8 +428,34 @@ final class DictationEditor {
 
     /// Edits `words` against the screen. `done` on main, exactly once, within
     /// `budget`: the edit, or the raw words.
-    func edit(_ words: String, budget: TimeInterval = DictationEditor.budget,
+    /// **Edits land in the order they were asked for** (review 2026-10-22, Q12):
+    /// a second sentence on the spare can be answered before the first on the
+    /// session, or the first can run out its budget after the second answered —
+    /// the words and their Returns must still reach the caret in spoken order.
+    /// Main thread only.
+    private var nextTicket = 0
+    private var nextToDeliver = 0
+    private var finished: [Int: () -> Void] = [:]
+    /// Sentences asked for and not yet handed back — a restart blocker (`AppDelegate.restartBlockers`).
+    private(set) var inFlight = 0
+
+    private func deliverInOrder(_ ticket: Int, _ deliver: @escaping () -> Void) {
+        finished[ticket] = deliver
+        while let next = finished.removeValue(forKey: nextToDeliver) {
+            nextToDeliver += 1
+            inFlight -= 1
+            next()
+        }
+    }
+
+    /// Edits `words` against the screen of `pid` (the app the words go to; the
+    /// one in front when nil). `done` on main, exactly once, within `budget`
+    /// (plus any earlier sentence's wait): the edit, or the raw words.
+    func edit(_ words: String, pid: pid_t? = nil, budget: TimeInterval = DictationEditor.budget,
               done: @escaping (_ text: String) -> Void) {
+        let ticket = nextTicket
+        nextTicket += 1
+        inFlight += 1
         let started = CFAbsoluteTimeGetCurrent()
         var answered = false
         let lock = NSLock()
@@ -427,11 +470,11 @@ final class DictationEditor {
                 return
             }
             Log.info("✍️ editor: \(why) in \(ms) ms")
-            DispatchQueue.main.async { done(text) }
+            DispatchQueue.main.async { self.deliverInOrder(ticket) { done(text) } }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + budget) { finish(words, Self.timedOut) }
         DispatchQueue.global(qos: .userInitiated).async {
-            let context = Self.readContext()
+            let context = Self.readContext(pid: pid)
             self.queue.async {
                 guard let (w, once) = self.takeWorker() else { return finish(words, "no editor process") }
                 if let c = context {

@@ -1342,7 +1342,7 @@ final class ElementPicker {
             let started = CFAbsoluteTimeGetCurrent()
             let done = DispatchSemaphore(value: 0)
             var edited = words
-            DictationEditor.shared.edit(words) { text in edited = text; done.signal() }
+            DispatchQueue.main.async { DictationEditor.shared.edit(words) { text in edited = text; done.signal() } }
             _ = done.wait(timeout: .now() + DictationEditor.budget + 2)
             respond(conn, 200, ["ok": true, "words": words, "edited": edited, "changed": edited != words,
                                 "ms": Int((CFAbsoluteTimeGetCurrent() - started) * 1000)])
