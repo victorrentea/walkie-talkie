@@ -351,9 +351,37 @@ final class HotkeyTap {
     /// the source already knows about that one.
     var onWisprMaybeCancelling: (() -> Void)?
 
-    /// Whether the right ⌘⌥ pair is currently held, so `onCleanHold` is told
-    /// on the edge rather than on every `flagsChanged` while it is down.
+    /// Whether the right ⌘ hold has opened its sentence (2026-10-22; the right
+    /// ⌘⌥ pair until then), so `onCleanHold` is told on the edge rather than on
+    /// every `flagsChanged` while it is down. `stateLock`, like the two below.
     private var cleanPairDown = false
+    /// A lone right ⌘ is down and its hold has not fired yet; the generation
+    /// tells a stale timer from the current press.
+    private var rightCmdHoldPending = false
+    private var rightCmdHoldGen = 0
+    /// How long right ⌘ must be held alone before the microphone opens — the
+    /// same 0.35 s that ends a tap of right ⌘ ×2, so the two never overlap.
+    private static let rightCmdHoldSeconds: Double = 0.35
+
+    /// The hold's timer: still the same press, still pending, and the hardware
+    /// still says the right ⌘ is down (a release the tap missed must not open
+    /// a sentence nothing will end).
+    private func rightCmdHoldFired(_ gen: Int) {
+        let hw = CGEventSource.flagsState(.combinedSessionState).rawValue
+        stateLock.lock()
+        guard rightCmdHoldPending, rightCmdHoldGen == gen, (hw & Self.deviceRightCommand) != 0 else {
+            if rightCmdHoldGen == gen { rightCmdHoldPending = false }
+            stateLock.unlock()
+            return
+        }
+        rightCmdHoldPending = false
+        cleanPairDown = true
+        enginePairHeld = true
+        stateLock.unlock()
+        Self.notePairHeld(true)
+        Log.info("🧼 right ⌘ held — a clean dictation on the Engine")
+        onCleanHold?(.press)
+    }
 
     // ── Another app's delivery, watched and (when wrapped) taken ─────────────
 
@@ -3523,10 +3551,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
             padChord(event)
             let raw = event.flags.rawValue
-            // Device-dependent bits, because the pair is specifically the **right**
-            // ⌘ and the **right** ⌥: `.maskCommand` alone would fire on every ⌘ in
-            // the session. `NX_DEVICERCMDKEYMASK` / `NX_DEVICERALTKEYMASK`.
-            let pair = (raw & Self.deviceRightCommand) != 0 && (raw & Self.deviceRightOption) != 0
+            // Device-dependent bits, because the hold is specifically the **right**
+            // ⌘: `.maskCommand` alone would fire on every ⌘ in the session.
+            // `NX_DEVICERCMDKEYMASK`.
+            let rightCmdDown = (raw & Self.deviceRightCommand) != 0
             // **W1 (2026-09-28): this app's own modifier events are not his
             // hands.** Every chord the app posts ends with a stamped
             // `flagsChanged` (fn ⌃ Space's tail, the caret ⌘V's ⌘-up, the ⌘C
@@ -3571,26 +3599,57 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     rightCmdTapUpAt = 0
                 }
             }
-            if !ownPost, pair != cleanPairDown {
-                cleanPairDown = pair
-                Self.notePairHeld(pair)
-                // **The pair is Walkie's alone, whatever the Engine** (Q9, and its
-                // step 2 on 2026-09-28); right ⌥⇧ opens nothing since 2026-10-19.
+            // **Right ⌘ held alone = Walkie's clean dictation** (2026-10-22 —
+            // right ⌘⌥ from 2026-09-25; Victor: *"Eliberează Option-ul … de
+            // dictare … ținut apăsat sau apăsat de două ori să pornească
+            // dictarea"*). The press only **arms** it: `rightCmdHoldSeconds` later,
+            // still alone and with no key typed, the sentence opens. A tap (the
+            // halves of right ⌘ ×2) or ⌘ used as a modifier never opens a
+            // microphone. The **release** ends it; a key under it after the start
+            // is still `.shortcut`, another modifier joining it is not an end.
+            if !ownPost {
+                let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+                let others: CGEventFlags = [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn, .maskAlphaShift]
+                let alone = rightCmdDown && event.flags.intersection(others).isEmpty
+                    && (raw & Self.deviceLeftCommand) == 0
                 stateLock.lock()
-                let was = enginePairHeld
-                enginePairHeld = pair
-                stateLock.unlock()
-                // A release after `.shortcut` already dropped the sentence is not
-                // a second end.
-                if pair || was {
-                    Log.info("🧼 right ⌘⌥ \(pair ? "held — a clean dictation on the Engine" : "released — the clean dictation ends")")
-                    DispatchQueue.global().async { [weak self] in self?.onCleanHold?(pair ? .press : .release) }
+                if alone, keyCode == Self.VK_RIGHT_COMMAND, !cleanPairDown, !rightCmdHoldPending {
+                    rightCmdHoldPending = true
+                    rightCmdHoldGen &+= 1
+                    let gen = rightCmdHoldGen
+                    stateLock.unlock()
+                    DispatchQueue.global().asyncAfter(deadline: .now() + Self.rightCmdHoldSeconds) { [weak self] in
+                        self?.rightCmdHoldFired(gen)
+                    }
+                    return Unmanaged.passUnretained(event)
                 }
-                return Unmanaged.passUnretained(event)
+                if !alone { rightCmdHoldPending = false }
+                let ended = cleanPairDown && !rightCmdDown
+                var was = false
+                if ended {
+                    cleanPairDown = false
+                    was = enginePairHeld
+                    enginePairHeld = false
+                }
+                stateLock.unlock()
+                if ended {
+                    Self.notePairHeld(false)
+                    // A release after `.shortcut` already dropped the sentence is not
+                    // a second end.
+                    if was {
+                        Log.info("🧼 right ⌘ released — the clean dictation ends")
+                        DispatchQueue.global().async { [weak self] in self?.onCleanHold?(.release) }
+                    }
+                    return Unmanaged.passUnretained(event)
+                }
             }
         }
-        // A key between or under the right ⌘ taps is ⌘ used as a modifier.
-        if type == .keyDown { rightCmdTapDownAt = 0; rightCmdTapUpAt = 0 }
+        // A key between or under the right ⌘ taps is ⌘ used as a modifier — and
+        // a key under a right ⌘ still arming its hold makes it no dictation.
+        if type == .keyDown {
+            rightCmdTapDownAt = 0; rightCmdTapUpAt = 0
+            stateLock.lock(); rightCmdHoldPending = false; stateLock.unlock()
+        }
         if type == .keyDown, event.getIntegerValueField(.eventSourceUserData) != Self.trackpadStamp {
             padChordUsedAsShortcut()
         }
@@ -3602,7 +3661,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
            event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp,
            event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
             stateLock.lock(); enginePairHeld = false; stateLock.unlock()
-            Log.info("🧼 a key under right ⌘⌥ — a shortcut, not a dictation; the clean sentence is dropped")
+            Log.info("🧼 a key under the right ⌘ hold — a shortcut, not a dictation; the clean sentence is dropped")
             DispatchQueue.global().async { [weak self] in self?.onCleanHold?(.shortcut) }
         }
         // **This app's own posts are stamped out of it** (2026-09-13), exactly as
@@ -5605,8 +5664,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     static func heldModifierFlags() -> CGEventFlags {
         heldLock.lock(); defer { heldLock.unlock() }
         guard pairHeldByHand else { return [] }
-        return CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | CGEventFlags.maskAlternate.rawValue
-                                      | deviceRightCommand | deviceRightOption)
+        return CGEventFlags(rawValue: CGEventFlags.maskCommand.rawValue | deviceRightCommand)
     }
 
     /// **V**, for the paste another app posts — see `onInjectedPaste`.

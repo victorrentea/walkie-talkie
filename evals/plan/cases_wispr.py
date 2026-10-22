@@ -180,7 +180,7 @@ def tw1():
     desk()
     post("/test/key-trace", {"on": True})
     mark = log_mark(); t0 = time.time()
-    post("/test/modifiers", {"keys": [54, 61], "holdMs": 3000})
+    post("/test/modifiers", {"keys": [54], "holdMs": 3000})
     seen = []
     while time.time() - t0 < 2.6:
         s = state(); seen.append((round(time.time() - t0, 2), s["listening"]))
@@ -217,7 +217,7 @@ def tw2():
     engine (no Wispr needed); cancelled before the real release."""
     mic_override(LOOPBACK)
     mark = log_mark()
-    post("/test/modifiers", {"keys": [54, 61], "holdMs": 1500})
+    post("/test/modifiers", {"keys": [54], "holdMs": 1500})
     time.sleep(0.2)
     post("/test/modifiers", {"keys": [], "stamped": True})
     time.sleep(0.7)
@@ -244,7 +244,7 @@ def tw3():
     gone: `state.wisprStandalone` always answers true). Kept as a body for the record only."""
     e = engine()
     mark = log_mark()
-    post("/test/modifiers", {"keys": [54, 61], "holdMs": 2000})
+    post("/test/modifiers", {"keys": [54], "holdMs": 2000})
     time.sleep(3.0)
     s = state()
     txt = log_since(mark)

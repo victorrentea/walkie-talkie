@@ -114,7 +114,7 @@ and cannot ask anything back, because you are not reading the terminal.
 ### The caret
 
 - **🔼, the forward click**: a prompt at the caret, carrying everything below (screenshots, highlights, picks).
-- **🔽 →, or right ⌘⌥ held**: a plain dictation, the words alone. Wispr Flow's habit, with this app's engine.
+- **🔽 →, right ⌘ held, or right ⌘ ×2**: a plain dictation, the words alone. Wispr Flow's habit, with this app's engine.
 
 ## What rides along with the words
 

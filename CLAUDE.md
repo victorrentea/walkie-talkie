@@ -81,7 +81,7 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
 - **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D dictate, **⌘⌃X = the local model now** (recording or
   waiting on the cloud: this Mac transcribes the take, `via: local-forced`; 2026-09-28). All three
   swallowed. ⌘⌃⌥D and ⌘⌃L belong to Victor Addons, ⌘⌃W to Wispr Flow.
-  Right ⌘⌥ held = Walkie's clean dictation (`54+61`); **right ⌘ ×2 = the plain dictation's toggle** (right ⌥ ×2 until 2026-10-20 — that one is Victor Addons' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
+  **Right ⌘ held alone (0.35 s) = Walkie's clean dictation, right ⌘ ×2 = its toggle** (right ⌥ out of it since 2026-10-22 — the hold was right ⌘⌥, `54+61`; the toggle right ⌥ ×2 until 2026-10-20, Victor Addons' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
 - **Trackpad, under left ⌃⌥⌘** (2026-10-20): one finger (its travel, its click) is 🔼, two fingers
   (scroll, secondary click) are 🔽 — the same F-key branches; held 0.3 s, the corner bar shows both
   crosses with ☝️ / ✌️ in the corner and `⌘⌘` / `⌃P` in the badges — and with no Logitech mouse
