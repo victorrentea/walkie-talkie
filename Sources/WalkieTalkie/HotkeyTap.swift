@@ -4214,9 +4214,13 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // saw would leave the button held for good and read every plain
                 // click as a bind.
                 reconcileButtons()
+                // **…and the bound prompt opens at once** (2026-10-23, Victor:
+                // *"bind-ul automat să pună la sfârșit dictarea … cât mai puține
+                // gesturi"*) — ⬅️ held + 🔼 → 's own call; 🔼 ← cancels it if he
+                // only meant to bind.
                 if leftIsHeld {
-                    Log.info("🎯 ⬅️ held + forward button — binding")
-                    DispatchQueue.global().async { [weak self] in _ = self?.onGestureBind?() }
+                    Log.info("🎯 ⬅️ held + forward button — bind, then dictate at it")
+                    DispatchQueue.global().async { [weak self] in self?.onGestureBindAndDictate?() }
                     return swallow(gesture, type, event)
                 }
                 Log.info("🎙️ forward button — a dictation at the caret")
