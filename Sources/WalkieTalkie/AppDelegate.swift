@@ -6426,10 +6426,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// do the gesture for forward … right … on the surface of the little panel,
     /// that would follow up a question on that, so it would be again in the ask
     /// mode … preserve the conversation context … two or three such turns"*).
-    /// The pop-up stays up while he asks — the answer he is following up is
-    /// on it — and the new one replaces it.
+    /// **The pop-up goes, ❓ bursting over it** (2026-10-22, Victor: *"să apară semne
+    /// de întrebare peste acest dialog pe măsură ce el dispare"* — it stayed up
+    /// while he asked until then); the new answer opens a pop-up of its own.
     private func askFollowUp() {
-        Log.info("⚡ 🔼 → over the quick answer — a follow-up, \(quickThread.count) turn(s) before it")
+        Log.info("⚡ 🔼 → over the quick answer — a follow-up, \(quickThread.count) turn(s) before it; the pop-up goes in ❓")
+        ReplyPanel.shatter(.questions)
         startDictation(paste: true, quick: true, followUp: true)
     }
 
@@ -6478,12 +6480,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 🔎** (2026-10-14, Victor: *"stick with searching and then put the globe
         // to mean searching internet"*). **`+` between the steps, not `·`**
         // (2026-10-15, Victor: *"replace the dot between them with a plus"*).
+        // **🤖 for the —, an angry 🤖 for the 🧐, `Internet` for `searching`/`searched`**
+        // (2026-10-22, Victor: *"în loc de Search pune Internet. Lasă plusuri între"*)
+        // — `ReplyPanel.signed` / `.adversary`, drawn by the pop-up.
         var answer = Self.quickPlaceholder, signature = QuickAsk.shared.answererName
         var steps: [String] = []
         var searched: String?, reviewed: String?
         func compose() -> String {
             guard !signature.isEmpty else { return answer }
-            return answer + "\n— " + ([signature] + steps).joined(separator: " + ")
+            return answer + "\n" + ReplyPanel.signed + " " + ([signature] + steps).joined(separator: " + ")
         }
         // **The pop-up opens the moment he has asked** (2026-10-14, Victor:
         // *"immediately after asking a question, the reply window should
@@ -6509,12 +6514,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let checks = QuickAsk.Checks(web: { text, isDone in
             guard isDone else { return }
             if text.hasPrefix("⚠️") {
-                steps = ["🌐 failed", "🧐 adversarial reviewing" + ReplyPanel.dots]
+                steps = ["🌐 Internet failed", ReplyPanel.adversary + " adversarial reviewing" + ReplyPanel.dots]
             } else {
                 let c = QuickAsk.cited(text)
                 answer = c.text
                 // No ✏️ on the search (same day, *"scoate creionul din Search"*).
-                steps = ["🌐 searched", "🧐 adversarial reviewing" + ReplyPanel.dots]
+                steps = ["🌐 Internet", ReplyPanel.adversary + " adversarial reviewing" + ReplyPanel.dots]
                 searched = ReplyPanel.plain(c.text)
                 remember(searched ?? "")
             }
@@ -6524,11 +6529,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }, review: { text, isDone in
             guard isDone else { return }
             if text.hasPrefix("⚠️") {
-                steps[steps.count - 1] = "🧐 failed"
+                steps[steps.count - 1] = ReplyPanel.adversary + " failed"
             } else {
                 let c = QuickAsk.cited(text)
                 answer = c.text
-                steps[steps.count - 1] = c.changed ? "🧐 adversarial reviewed ✏️" : "🧐 adversarial reviewed"
+                steps[steps.count - 1] = ReplyPanel.adversary + (c.changed ? " adversarial reviewed ✏️" : " adversarial reviewed")
                 reviewed = ReplyPanel.plain(c.text)
                 remember(reviewed ?? "")
             }
@@ -6546,7 +6551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let total = CFAbsoluteTimeGetCurrent() - started
             answer = text ?? "⚠️ \(error ?? "no answer")"
             signature = model
-            if let text { steps = ["🌐 searching" + ReplyPanel.dots]; remember(text) }
+            if let text { steps = ["🌐 Internet" + ReplyPanel.dots]; remember(text) }
             paint(force: true)
             if let text {
                 Log.info(String(format: "⚡ quick answer (%@) — first word %@, whole %.2f s, %d chars",

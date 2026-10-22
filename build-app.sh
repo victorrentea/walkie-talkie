@@ -174,6 +174,8 @@ cp "$DIR/helpers/session_search.py" "$CONTENTS/Resources/session_search.py"
 # resources because this target has none — the bundle is assembled here.
 cp "$DIR/assets/walkie-idle.png" "$CONTENTS/Resources/walkie-idle.png"
 cp "$DIR/assets/walkie-bound.png" "$CONTENTS/Resources/walkie-bound.png"
+# The ⚡ footer's adversarial reviewer, an angry 🤖 cut from Victor's slide (`ReplyPanel.adversary`).
+cp "$DIR/assets/robot-adversarial.png" "$CONTENTS/Resources/robot-adversarial.png"
 
 # The caret halo's film: 25 frames of the ring, packed five across, keyed off
 # black. Same reason as above — no SPM resources on this target, so the bundle is

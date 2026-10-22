@@ -45,8 +45,11 @@ enum ReplyPanel {
     /// read whole, so only a runaway one is cut.
     static let maxChars = 4000
     /// 380 until 2026-10-15 — widened so the ⚡ footer `— Opus 5.5 + 🌐 searched +
-    /// 🧐 adversarial reviewed ✏️` (~400 pt) stays on one line.
-    private static let width: CGFloat = 450
+    /// 🧐 adversarial reviewed ✏️` (~400 pt) stays on one line. **5 % narrower**
+    /// (2026-10-22, Victor: *"micșorează un pic lățimea ferestrei cu 5%"*) — the
+    /// footer is `footerFont` since, so `🤖 Opus 5.5 + 🌐 Internet + 🤖 adversarial
+    /// reviewed ✏️` (~365 pt) still holds on the 386 pt body.
+    private static let width: CGFloat = 428
     /// **Every corner resizes it** (2026-10-09, Victor: *"make the dialog window
     /// … resizable by the right or left bottom corner? Actually all the corners
     /// … in case there's a longer response"*). The size he dragged it to, kept
@@ -475,7 +478,20 @@ enum ReplyPanel {
         }
         return (out + rest, links)
     }
-    static func plain(_ text: String) -> String { parseLinks(text).plain.replacingOccurrences(of: dots, with: "…") }
+    static func plain(_ text: String) -> String {
+        parseLinks(text).plain.replacingOccurrences(of: dots, with: "…")
+            .replacingOccurrences(of: signed, with: "🤖").replacingOccurrences(of: adversary, with: "😠")
+    }
+
+    /// **The ⚡ footer's two robots** (2026-10-22, Victor: *"în loc de minusul din
+    /// fața numelui modelului … această poză [🤖] … în loc de fața cu thinking, cu
+    /// monoclu … această poză"* — an angry robot, cut from his slide):
+    /// `signed` starts the footer and is drawn 🤖 — from it to the end the words
+    /// are `footerFont`; `adversary` is `robot-adversarial.png`, the 🧐's place.
+    static let signed = "\u{5}"
+    static let adversary = "\u{6}"
+    private static let footerFont = NSFont.systemFont(ofSize: 14)
+    private static let adversaryImage: NSImage? = RelayWindow.walkieURL("robot-adversarial").flatMap(NSImage.init(contentsOf:))
 
     /// **Three dots, one lit at a time, for a step still running** (2026-10-10,
     /// Victor: *"o mică animație subtilă … niște punctulețe"*): `🧐 reviewing` +
@@ -573,7 +589,7 @@ enum ReplyPanel {
         var (words, links) = parseLinks(text)
         let body: NSView
         let bodySize: NSSize
-        if links.isEmpty && !words.contains(dots) {
+        if links.isEmpty && !words.contains(dots) && !words.contains(signed) {
             let label = InertLabel(wrappingLabelWithString: text)
             label.isSelectable = false
             label.font = font
@@ -598,6 +614,29 @@ enum ReplyPanel {
             }
             for l in links {
                 styled.addAttribute(.foregroundColor, value: NSColor(calibratedRed: 0.4, green: 0.65, blue: 1, alpha: 1), range: l.range)
+            }
+            // The robots, once all the above is styled — the string carries its
+            // attributes along; the links (`view.links`) are in the answer, above it.
+            let ns = styled.string as NSString
+            let foot = ns.range(of: signed)
+            if foot.location != NSNotFound {
+                styled.addAttribute(.font, value: footerFont, range: NSRange(location: foot.location, length: ns.length - foot.location))
+                styled.replaceCharacters(in: foot, with: "🤖")
+            }
+            var at = (styled.string as NSString).range(of: adversary)
+            while at.location != NSNotFound {
+                if let image = adversaryImage {
+                    let a = NSTextAttachment()
+                    a.image = image
+                    let side = ceil(footerFont.ascender - footerFont.descender)
+                    a.bounds = NSRect(x: 0, y: footerFont.descender + 0.5, width: side, height: side)
+                    let piece = NSMutableAttributedString(attachment: a)
+                    piece.addAttribute(.font, value: footerFont, range: NSRange(location: 0, length: piece.length))
+                    styled.replaceCharacters(in: at, with: piece)
+                } else {
+                    styled.replaceCharacters(in: at, with: "😠")
+                }
+                at = (styled.string as NSString).range(of: adversary)
             }
             let view = LinkedBody(styled, width: inner - 18)
             view.links = links

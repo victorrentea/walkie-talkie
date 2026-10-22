@@ -56,6 +56,23 @@ final class ReplyBurstTests: XCTestCase {
         XCTAssertTrue(shards.allSatisfy { $0.opacity == 0 }, "every shard has faded out")
     }
 
+    /// 🔼 → over a ⚡ answer (2026-10-22): the grains go right as before, and ❓
+    /// pop over them — none at the start, all up mid-way, all gone at the end.
+    func testAFollowUpGoesInQuestionMarks() {
+        let panel = CGSize(width: 380, height: 110)
+        let b = ReplyBurst(image: popUp(panel), scale: 2, panel: panel, style: .questions)
+        let layers = b.host.sublayers ?? []
+        let marks = layers.filter { $0.contentsGravity == .resizeAspect }
+        XCTAssertEqual(marks.count, ReplyBurst.marks)
+        b.apply(0)
+        XCTAssertTrue(marks.allSatisfy { $0.opacity == 0 }, "no ❓ before it starts")
+        b.apply(0.4)
+        XCTAssertTrue(marks.allSatisfy { $0.opacity > 0.5 }, "every ❓ is up mid-way")
+        b.apply(1)
+        XCTAssertTrue(layers.allSatisfy { $0.opacity == 0 }, "grains and ❓ all gone")
+        XCTAssertTrue(marks.allSatisfy { $0.transform.m41 > 20 }, "the ❓ ride right too")
+    }
+
     /// `REPLY_BURST_PNG=<dir> swift test --filter ReplyBurstTests` — the burst and
     /// the blast at six moments, over a desktop-grey background, to look at.
     func testRenderForReview() throws {
@@ -63,6 +80,7 @@ final class ReplyBurstTests: XCTestCase {
         let panel = CGSize(width: 380, height: 110)
         try render(ReplyBurst(image: popUp(panel), scale: 2, panel: panel), "burst", dir)
         try render(ReplyBurst(image: popUp(panel), scale: 2, panel: panel, style: .explode(from: CGPoint(x: 310, y: 92))), "blast", dir)
+        try render(ReplyBurst(image: popUp(panel), scale: 2, panel: panel, style: .questions), "ask", dir)
     }
 
     private func render(_ b: ReplyBurst, _ name: String, _ dir: String) throws {

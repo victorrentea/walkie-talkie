@@ -39,4 +39,9 @@ final class QuickAskCitedTests: XCTestCase {
     func testTheRunningDotsReadAsAnEllipsis() {
         XCTAssertEqual(ReplyPanel.plain("— Opus 5.5 · 🌐 searching" + ReplyPanel.dots), "— Opus 5.5 · 🌐 searching…")
     }
+
+    func testTheFootersRobotsReadAsEmoji() {
+        XCTAssertEqual(ReplyPanel.plain(ReplyPanel.signed + " Opus 5.5 + 🌐 Internet + " + ReplyPanel.adversary + " adversarial reviewing" + ReplyPanel.dots),
+                       "🤖 Opus 5.5 + 🌐 Internet + 😠 adversarial reviewing…")
+    }
 }

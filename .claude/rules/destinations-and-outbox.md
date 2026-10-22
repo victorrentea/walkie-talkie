@@ -397,3 +397,17 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   The ✕ and links still work: the glass ignores the mouse and its cursor is the same transform.
   Log `🔎 ⌥⇧ zoom on — the reply pop-up goes under it`. Not done for Walkie's other top-level panels
   (`TypeInBox`, the spawn menu, the capture effects).
+
+- **🤖 signs the ⚡ footer, an angry 🤖 reviews, `Internet` searches; 428 pt; a follow-up goes in ❓**
+  (2026-10-22, Victor: *"în loc de minusul din fața numelui modelului … această poză [🤖] … în loc de
+  fața cu thinking, cu monoclu … această poză … în loc de Search pune Internet. Lasă plusuri între …
+  micșorează un pic lățimea ferestrei cu 5%"*). The footer reads `🤖 Opus 5.5 + 🌐 Internet… / 🌐
+  Internet + <angry 🤖> adversarial reviewed ✏️`: `ReplyPanel.signed` (`\u{5}`, drawn 🤖, starts the
+  footer, which is 14 pt from there — ~365 pt, the 386 pt body holds it) and `ReplyPanel.adversary`
+  (`\u{6}`, `assets/robot-adversarial.png`, cut from his slide, white keyed out); `plain` reads them
+  `🤖` / `😠`. The pop-up is 428 wide (450 before). **🔼 → over a ⚡ pop-up now dismisses it**
+  (*"să apară semne de întrebare peste acest dialog pe măsură ce el dispare … gestul de tras în
+  dreapta"*): `askFollowUp` → `ReplyPanel.shatter(.questions)` — the dissolve's grains plus 12 ❓
+  (18–38 pt) popping in over the first 0.35 s with a small overshoot, riding right and up, gone at
+  1.0 s; the close stops the old answer's checks. Supersedes *the pop-up stays while he speaks* above.
+  `REPLY_BURST_PNG` renders it (`ask-*.png`).

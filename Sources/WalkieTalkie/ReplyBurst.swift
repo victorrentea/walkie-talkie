@@ -21,16 +21,29 @@ import AppKit
 /// as the blast front reaches it, flies away from the skull — the nearest
 /// fastest, each a little off its ray — spinning, slowed by air, pulled down, fading over the
 /// last half of `blastSeconds`.
+///
+/// **🔼 → over a ⚡ answer: question marks over it as it goes** (2026-10-22,
+/// Victor: *"dacă apăs din nou … semnul de follow-up questions, fac gestul, să
+/// apară semne de întrebare peste acest dialog pe măsură ce el dispare. Simt că
+/// fac gestul de tras în dreapta"*) — `.questions`: the same grains drifting
+/// right, and over them `marks` ❓, each popping up at its own moment (a small
+/// overshoot), then riding right and up with the grains, fading, `askSeconds`.
 final class ReplyBurst {
     enum Style {
         /// 🔼 →: grains drift off to the right.
         case dissolve
         /// ☠️: shards blown out from this point (pop-up points, bottom-left origin).
         case explode(from: CGPoint)
+        /// 🔼 → over a ⚡ answer (a follow-up): the grains, and ❓ over them.
+        case questions
     }
 
     static let seconds = 0.75
     static let blastSeconds = 0.9
+    static let askSeconds = 1.0
+    /// How many ❓, and their size range (points).
+    static let marks = 12
+    static let markSide: ClosedRange<CGFloat> = 18...38
     /// Room round the pop-up for the shards' flight.
     static let blastSide: CGFloat = 520, blastTop: CGFloat = 320, blastBottom: CGFloat = 720
     /// A shard's cell side, in points — larger on a large pop-up (≤ ~90 cells).
@@ -67,6 +80,13 @@ final class ReplyBurst {
     private var tiles: [Tile] = []
     private var shards: [Shard] = []
     private var flash: CALayer?
+    /// A ❓: where it pops, where it goes, when.
+    private struct Mark {
+        let layer: CALayer
+        let dx: CGFloat, dy: CGFloat, spin: CGFloat
+        let delay: Double
+    }
+    private var marks: [Mark] = []
     private static let lag = 0.3
 
     /// `image` is the pop-up at `scale` pixels per point; `panel` its size in points.
@@ -117,6 +137,45 @@ final class ReplyBurst {
                                   span: Double(rng.range(0.35, 0.45)) * Self.seconds / 0.75))
             }
         }
+        if case .questions = style { sprinkle(panel: panel, scale: scale, rng: &rng) }
+    }
+
+    /// The ❓ over the pop-up — one picture of the emoji, every mark a layer of it.
+    private func sprinkle(panel: CGSize, scale: CGFloat, rng: inout SplitMix) {
+        guard let glyph = Self.glyph("❓", side: Self.markSide.upperBound, scale: scale) else { return }
+        for i in 0..<Self.marks {
+            let side = rng.range(Self.markSide.lowerBound, Self.markSide.upperBound)
+            // Spread over the pop-up: one per column of a loose grid, its height random.
+            let fx = (CGFloat(i) + rng.range(0.15, 0.85)) / CGFloat(Self.marks)
+            let l = CALayer()
+            l.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+            l.position = CGPoint(x: fx * panel.width * 0.92 + panel.width * 0.04,
+                                 y: Self.spread + rng.range(0.15, 0.85) * panel.height)
+            l.contents = glyph
+            l.contentsScale = scale
+            l.contentsGravity = .resizeAspect
+            l.opacity = 0
+            l.actions = ["position": NSNull(), "transform": NSNull(), "opacity": NSNull(), "bounds": NSNull()]
+            host.addSublayer(l)
+            marks.append(Mark(layer: l, dx: Self.reach * rng.range(0.6, 1.3), dy: rng.range(4, Self.spread - 6),
+                              spin: rng.range(-0.5, 0.5), delay: Double(fx) * 0.25 + Double(rng.range(0, 0.12))))
+        }
+    }
+
+    /// An emoji drawn once at `side` points.
+    private static func glyph(_ s: String, side: CGFloat, scale: CGFloat) -> CGImage? {
+        let text = NSAttributedString(string: s, attributes: [.font: NSFont.systemFont(ofSize: side * 0.82)])
+        let px = Int(ceil(side * scale))
+        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return nil }
+        ctx.scaleBy(x: scale, y: scale)
+        let was = NSGraphicsContext.current
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
+        let size = text.size()
+        text.draw(at: NSPoint(x: (side - size.width) / 2, y: (side - size.height) / 2))
+        NSGraphicsContext.current = was
+        return ctx.makeImage()
     }
 
     /// Cracks the picture into triangles on a jittered grid — every shard its
@@ -209,12 +268,14 @@ final class ReplyBurst {
         return l
     }
 
-    /// The burst at `u` ∈ 0…1 of `seconds` (`blastSeconds` for a blast).
+    /// The burst at `u` ∈ 0…1 of `seconds` (`blastSeconds` for a blast, `askSeconds` for ❓).
     func apply(_ u: Double) {
         if case .explode = style { return blast(u) }
+        let now: Double
+        if case .questions = style { now = u * Self.askSeconds } else { now = u * Self.seconds }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         for t in tiles {
-            let local = u >= 1 ? 1 : max(0, min(1, (u * Self.seconds - t.delay) / t.span))
+            let local = u >= 1 ? 1 : max(0, min(1, (now - t.delay) / t.span))
             let move = CGFloat(local * local)                  // ease-in: it lifts off, no burst
             var m = CATransform3DMakeTranslation(t.dx * move, t.dy * move, 0)
             m = CATransform3DRotate(m, t.spin * move, 0, 0, 1)
@@ -222,6 +283,19 @@ final class ReplyBurst {
             m = CATransform3DScale(m, k, k, 1)
             t.layer.transform = m
             t.layer.opacity = Float(max(0, 1 - local))
+        }
+        for m in marks {
+            let t = max(0, now - m.delay)
+            // Pops in 0.15 s with a little overshoot, then rides off with the grains.
+            let pop = min(1, t / 0.15)
+            let k = CGFloat(pop < 1 ? 1.18 * sin(pop * .pi / 2) : 1.18 - 0.18 * min(1, (t - 0.15) / 0.1))
+            let ride = CGFloat(max(0, min(1, (t - 0.2) / 0.55)))
+            let move = ride * ride
+            var tr = CATransform3DMakeTranslation(m.dx * move, m.dy * move, 0)
+            tr = CATransform3DRotate(tr, m.spin * move, 0, 0, 1)
+            tr = CATransform3DScale(tr, max(0.01, k * (1 - 0.3 * move)), max(0.01, k * (1 - 0.3 * move)), 1)
+            m.layer.transform = tr
+            m.layer.opacity = u >= 1 || t <= 0 ? 0 : Float(max(0, min(1, (1 - ride) * 1.6)))
         }
         CATransaction.commit()
     }
@@ -260,7 +334,11 @@ final class ReplyBurst {
         let burst = ReplyBurst(image: image, scale: scale, panel: frame.size, style: style,
                                seed: UInt64(truncatingIfNeeded: Int(Date().timeIntervalSince1970 * 1000)))
         let total: Double
-        if case .explode = style { total = blastSeconds } else { total = seconds }
+        switch style {
+        case .explode: total = blastSeconds
+        case .questions: total = askSeconds
+        case .dissolve: total = seconds
+        }
         let w = NSWindow(contentRect: NSRect(x: frame.minX - burst.inset.x, y: frame.minY - burst.inset.y,
                                              width: burst.size.width, height: burst.size.height),
                          styleMask: [.borderless], backing: .buffered, defer: false)
