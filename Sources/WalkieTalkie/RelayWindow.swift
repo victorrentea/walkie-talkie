@@ -4923,10 +4923,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     private var readyShownAt: CFAbsoluteTime = 0
     private var readyHide: DispatchWorkItem?
 
-    func setReadyForNext(_ on: Bool) {
+    /// `hold`: keep a shown row its `readyMinimum` — false when what took it away
+    /// (a start, a refusal) makes it untrue now.
+    func setReadyForNext(_ on: Bool, hold: Bool = true) {
+        if !on, readyHide != nil, hold { return }   // already counting down; the deadline does not move
         readyHide?.cancel()
         readyHide = nil
-        if !on, readyForNext, !Self.shooting {
+        if !on, hold, readyForNext, !Self.shooting {
             let left = Self.readyMinimum - (CFAbsoluteTimeGetCurrent() - readyShownAt)
             if left > 0 {
                 let hide = DispatchWorkItem { [weak self] in

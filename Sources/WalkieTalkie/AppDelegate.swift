@@ -7702,12 +7702,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let parkable = fallingBack && fallbackParkRefusal() == nil && !(liveSentence?.finished ?? true)
             && !(settling && CFAbsoluteTimeGetCurrent() - settlingFrom < Self.queueStartAfterStop)
         let ready = wordsInFlight && !micOpen && (queueAccepts || parkable)
-        if ready != overlay.readyForNext {
+        // Logged on the wanted value's edge — the drawn row may outlive it by the hold.
+        if ready != wantedReady {
+            wantedReady = ready
             Log.info(ready ? "📻 ready — a new sentence may start while the last one's words are in flight"
                            : "📻 ready row down")
         }
-        overlay.setReadyForNext(ready)
+        // **The 2 s hold is only for words that landed** (Fable review 2026-10-22): a
+        // sentence started, or a start that would now be refused, takes it down at once.
+        overlay.setReadyForNext(ready, hold: !micOpen && (queueAccepts || parkable))
     }
+    private var wantedReady = false
 
     private func syncBorrowedGestures() {
         // A parked sentence's answer (Q12) runs on its fields; `run` syncs after the swap-back.

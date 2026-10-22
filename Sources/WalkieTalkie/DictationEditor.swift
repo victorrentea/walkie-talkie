@@ -348,6 +348,18 @@ final class DictationEditor {
         return keptShare(of: e, from: words, vocabulary: vocabulary) >= 0.5 || bare(e).count < 3
     }
 
+    /// `heard → written` applied as whole words, any case.
+    static func applyReplacements(_ text: String, _ v: Vocabulary) -> String {
+        var out = text
+        for r in v.replacements {
+            let pattern = "(?<![\\p{L}\\p{N}])" + NSRegularExpression.escapedPattern(for: r.heard) + "(?![\\p{L}\\p{N}])"
+            guard let re = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { continue }
+            out = re.stringByReplacingMatches(in: out, range: NSRange(out.startIndex..., in: out),
+                                              withTemplate: NSRegularExpression.escapedTemplate(for: r.written))
+        }
+        return out
+    }
+
     /// Shorter sentences go out as they were said.
     static let minimumWords = 3
 
@@ -357,34 +369,18 @@ final class DictationEditor {
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
     }
 
-    /// The share of the edit's words that are his: said (accents and case aside), a
-    /// near spelling of a said word (`devox` → `devoxx`), or a vocabulary word — a
+    /// The share of the edit's words that are his: said (accents and case aside) or a
+    /// vocabulary word — a
     /// corrected name is the edit doing its job (Fable review 2026-10-22: `gvt și
     /// devox` → `JWT și Devoxx` kept 1 of 3 and was refused).
     static func keptShare(of edited: String, from words: String, vocabulary: Vocabulary = Vocabulary()) -> Double {
         let said = Set(bare(words)), out = bare(edited)
         let known = Set((vocabulary.terms + vocabulary.replacements.map(\.written)).flatMap(bare))
-        let his = out.filter { w in
-            said.contains(w) || known.contains(w)
-                || (w.count >= 4 && said.contains { s in s.count >= 3 && near(s, w) })
-        }
+        // No near spellings: Romanian cognates sit at distance 1–2 of the English
+        // (problem/problema, final/finala) and let 5 of 12 technical translations pass
+        // (Fable review 2026-10-22); a corrected name is in `known` anyway.
+        let his = out.filter { said.contains($0) || known.contains($0) }
         return Double(his.count) / Double(max(1, out.count))
-    }
-
-    /// Edit distance ≤ 2 between two short words.
-    static func near(_ a: String, _ b: String) -> Bool {
-        let x = Array(a), y = Array(b)
-        guard abs(x.count - y.count) <= 2 else { return false }
-        var d = Array(0...y.count)
-        for i in 1...max(1, x.count) where !x.isEmpty {
-            var prev = d[0]; d[0] = i
-            for j in stride(from: 1, through: y.count, by: 1) {
-                let cur = d[j]
-                d[j] = min(d[j] + 1, d[j - 1] + 1, prev + (x[i - 1] == y[j - 1] ? 0 : 1))
-                prev = cur
-            }
-        }
-        return d[y.count] <= 2
     }
 
     // MARK: - The model
@@ -416,6 +412,7 @@ final class DictationEditor {
     private func warmLocked() {
         if session?.alive != true {
             session = nil
+            sessionVocabulary = nil   // a new session has nothing to forget
             turns = 0
             busy = false
             if let s = spare, s.alive { session = s; spare = nil }
@@ -560,7 +557,11 @@ final class DictationEditor {
         // Nothing to edit: no letter or digit (tester: `"   "` waited 2.5 s on Haiku), or
         // under three words — too little to misspell, and the wait is felt most there
         // (tester round 2: `uh` took 7.3 s for an edit that was refused).
-        guard Self.bare(words).count >= Self.minimumWords else { return finish(words, "nothing to edit") }
+        // A short sentence still gets its replacements, locally (`gvt token` → `JWT token`).
+        guard Self.bare(words).count >= Self.minimumWords else {
+            let local = Self.applyReplacements(words, Self.vocabulary())
+            return finish(local, local == words ? "nothing to edit" : "«\(words)» → «\(local)» (replacements, no model)")
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + budget) { finish(words, Self.timedOut) }
         DispatchQueue.global(qos: .userInitiated).async {
             let context = Self.readContext(pid: pid)

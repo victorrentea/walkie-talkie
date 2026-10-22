@@ -99,8 +99,19 @@ final class DictationEditorTests: XCTestCase {
         v.replacements = [("GVT", "JWT")]
         XCTAssertTrue(DictationEditor.acceptable("JWT și Devoxx", for: "gvt și devox", vocabulary: v))
         XCTAssertTrue(DictationEditor.acceptable("merg la Devoxx mâine", for: "merg la devox mâine"))
-        XCTAssertTrue(DictationEditor.near("devox", "devoxx"))
-        XCTAssertFalse(DictationEditor.near("dictez", "dictarea"))
+    }
+
+    func testCognateTranslationsAreRefused() {
+        XCTAssertFalse(DictationEditor.acceptable("Metoda este finală și statică.", for: "the method is final and static"))
+        XCTAssertFalse(DictationEditor.acceptable("Funcția returnează lista într-un format corect.",
+                                                  for: "the function returns the list in a correct format"))
+    }
+
+    func testReplacementsApplyLocallyAsWholeWords() {
+        var v = DictationEditor.Vocabulary()
+        v.replacements = [("GVT", "JWT")]
+        XCTAssertEqual(DictationEditor.applyReplacements("gvt token", v), "JWT token")
+        XCTAssertEqual(DictationEditor.applyReplacements("gvtx", v), "gvtx")
     }
 
     func testMarkupHeDidNotSayIsRefused() {
