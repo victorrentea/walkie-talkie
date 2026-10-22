@@ -11029,11 +11029,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let offset = moment.timeIntervalSince(opened)
         let marker = reserveMarkerLocked(.selection, at: moment)
         pendingExtraSelections.append((at: offset, text: text, source: Self.typedSource, marker: marker))
+        let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
         stateLock.unlock()
         if let marker = marker { speakMarker(.selection, marker) }
         Log.info("⌨️ typed at \(Self.stamp(offset)) — \(text.count) chars"
                  + (marker.map { ", marker \($0)" } ?? ", no marker — it goes under the words"))
-        overlay.flash("⌨️ \(text.count > 40 ? String(text.prefix(40)) + "…" : text)", duration: 1.5)
+        // **On the quote row, and it stays** (2026-10-23, Victor: *"vreau să
+        // rămână acea tastare ce am tastat cu afișare în rând"*) — a copy's
+        // treatment (`📋 …`): the 1.5 s flash took the chip over and then left
+        // nothing behind to say the note was attached.
+        overlay.setSelection("⌨️ " + text, count: total)
     }
 
     // MARK: - Copied while a prompt records (2026-10-15, `AutoAttach.clipboard`)

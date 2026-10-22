@@ -302,7 +302,7 @@
     "shape" : "chip",
     "slug" : "listening-change-pulse",
     "title" : "Something just changed: the row flashes yellow",
-    "when" : "For 1.5 s after a tally row's value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. Three blinks, ending dark.",
+    "when" : "For under half a second after a tally row's value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. One short blink (2026-10-23; three until then).",
     "width" : 324
   },
   {

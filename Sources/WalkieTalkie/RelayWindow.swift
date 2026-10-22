@@ -220,8 +220,10 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// When the microphone opened — the automatic first frame lands inside
     /// `changePulseQuiet` of it, and is not news.
     private var listenOpenedAt: CFTimeInterval = 0
-    static let changePulseDuration: CFTimeInterval = 1.5
-    static let changePulseBlinks: Double = 2.5
+    /// **One short blink** (2026-10-23, Victor: *"să fie o singură clipire
+    /// scurtă, nu două, ca acum"*) — it was 2.5 blinks over 1.5 s. Lit at once,
+    /// gone in `changePulseDuration`.
+    static let changePulseDuration: CFTimeInterval = 0.45
     private static let changePulseQuiet: CFTimeInterval = 1
     /// The wall clock the wash is measured from — `listeningSince` is the same
     /// instant, kept separate because the minutes may be pinned to a number by
@@ -4605,8 +4607,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     }
 
     /// One frame of every running flash: the wash spans the icon column and the
-    /// words (not the row's full width, which is the chip's), and blinks
-    /// `changePulseBlinks` times over `changePulseDuration`, ending dark.
+    /// words (not the row's full width, which is the chip's), and blinks once:
+    /// up in the first fifth of `changePulseDuration`, then fades out.
     private func placeChangePulses() {
         let now = CACurrentMediaTime()
         var running = false
@@ -4626,8 +4628,8 @@ private let heardLabel = NSTextField(labelWithString: "")
             let h = max(0, row.frame.height - 2)
             pulse.frame = NSRect(x: 0, y: ((row.frame.height - h) / 2).rounded(),
                                  width: (label.frame.minX + words + 4).rounded(), height: h)
-            let phase = changePulsePinned ? 0 : age / Self.changePulseDuration
-            pulse.alphaValue = CGFloat(0.5 + 0.5 * cos(2 * .pi * Self.changePulseBlinks * phase))
+            let phase = changePulsePinned ? 0.2 : age / Self.changePulseDuration
+            pulse.alphaValue = CGFloat(phase < 0.2 ? phase / 0.2 : (1 - phase) / 0.8)
             pulse.isHidden = false
         }
         if !running || changePulsePinned {

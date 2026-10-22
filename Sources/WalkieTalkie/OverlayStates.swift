@@ -306,7 +306,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "listening-change-pulse", group: "Dictating", title: "Something just changed: the row flashes yellow",
-                 when: "For 1.5 s after a tally row's value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. Three blinks, ending dark.",
+                 when: "For under half a second after a tally row's value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. One short blink (2026-10-23; three until then).",
                  note: "2026-10-22, Victor: *\"când se modifică vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție … pune un fundal flashing … ceva ce să se vadă că se modifică ceva acolo\"*. Amber behind the icon and the words (`ChangePulse`), never in them, like the brick wash on `Listening...`; the copy lands on the quote row as `📋 …` instead of flashing over the whole chip. Shown here at its brightest, on every row at once — in the app only the row that changed blinks.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)

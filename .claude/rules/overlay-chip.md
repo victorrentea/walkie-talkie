@@ -163,8 +163,9 @@ yields to `--label`).
   flashing … ceva ce să se vadă că se modifică ceva acolo"*). `ChangePulse` (drawn like `OverrunWash`:
   systemYellow 35 % to orange, α 0.6, radius 4) behind the icon and the words of `📸 ×N`
   (`setShotCount` going up), the quote row (`setSelection` with new text or a higher count — a copy
-  is `📋 …` there) and the ⌘⇧ row (`setPicks`' `isNew`): 2.5 blinks over 1.5 s
-  (`changePulseDuration`, `changePulseBlinks`), ending dark. **Not the count booked for the automatic first frame** — a
+  is `📋 …` there) and the ⌘⇧ row (`setPicks`' `isNew`): **one short blink** —
+  lit in 90 ms, faded by 0.45 s (`changePulseDuration`; 2026-10-23, *"o singură clipire scurtă, nu
+  două"* — it was 2.5 blinks over 1.5 s). **Not the count booked for the automatic first frame** — a
   count rising inside `changePulseQuiet` (1 s) of the microphone opening is not news; **the frame
   landing on disk is** (same evening, *"să înțeleg că s-a făcut o poză"*): `captureContext` calls
   `RelayWindow.flashShots()` after `context screen captured`, still no flight for picture zero. A 30 Hz timer
