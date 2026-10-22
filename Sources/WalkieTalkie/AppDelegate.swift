@@ -7180,6 +7180,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.publishShotCount()
             guard let path = path else { return }
             Log.info("context screen captured: \((path as NSString).lastPathComponent)")
+            // …but the `📸 ×1` row flashes once it is on disk (2026-10-22) —
+            // queued behind `publishShotCount`'s hop, so the row is laid out.
+            DispatchQueue.main.async { [weak self] in self?.overlay.flashShots() }
             // **No flight for picture zero** (2026-09-23, Victor: *"poza
             // inițială din gesturile de prompting nu o mai anima ca vine spre
             // mouse. pune doar bulina galbenă"*). He did not press a shutter

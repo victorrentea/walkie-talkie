@@ -4168,7 +4168,12 @@ private let heardLabel = NSTextField(labelWithString: "")
         // and for the length of that sentence the bound terminal is not where the
         // words are going — so a chip still naming it would be saying the one
         // thing this line exists to get right, wrongly.
-        if let spawn = spawnLabel { return spawn }
+        // **The caret is the pin alone** (2026-10-22, Victor: *"nu mai vreau să
+        // scrie efectiv caret, doar să apară acea iconiță. E evident că ăla
+        // este … locul în care se inseră"*) — the label stays set, so the row
+        // and the destination are still there, only unsaid. `bind to send` wears
+        // the same pin and keeps its words: no place is there to point at yet.
+        if let spawn = spawnLabel { return spawn == "caret" && spawnIcon === Self.pinGlyph ? "" : spawn }
         guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
         // The terminal's own title first — `✳ walkie-talkie — Fix the tax
         // rounding` names the session, where `walkie-talkie@main` only names the
@@ -4454,6 +4459,16 @@ private let heardLabel = NSTextField(labelWithString: "")
     func clearSelection() { setSelection(nil, count: 0) }
 
     /// Start (or restart) one row's yellow flash — see `shotsPulse`.
+    /// **Picture zero has landed** (2026-10-22, Victor: *"când începe dictarea
+    /// și a făcut prima poză de început, să flash-ui pozele … să înțeleg că s-a
+    /// făcut o poză"*). The count rising at the open is quiet (`changePulseQuiet`)
+    /// because it is booked before the frame exists; the file on disk is the
+    /// news, so `captureContext` flashes the `📸 ×1` row when it is there.
+    func flashShots() {
+        guard listening || transcribing else { return }
+        flashChange(shotsPulse)
+    }
+
     private func flashChange(_ pulse: ChangePulse) {
         if Self.shooting && !changePulsePinned { return }
         pulse.startedAt = CACurrentMediaTime()

@@ -64,7 +64,7 @@ yields to `--label`).
 | dictating | `🎤 Prompting → ⬮...` — the device emoji, then the recogniser's logo (see *The microphone breathes in front of the word*, below); **which microphone is hearing him** (2026-09-22 evening; `Listening(<glyph>/<letter>)...` from 2026-09-19, the letter alone from 2026-09-18). 🎙️ Elgato Wave XLR · 💻 the built-in · 🎤 the DJI receiver · 🎧 Bose. A device that is none of the four leaves the mark empty and the row is the plain `Listening...` — *listening to* with nothing after it is worse than not saying it. **Pushed in as a string by `AppDelegate`** — the chip may not ask which device it means (`RelayWindow.setMicMark`), and it is re-read at every `dictationBegan`, because cables move between sentences. **The glyph is drawn as a picture** (`Glyphs.emoji` → `inline`, cached in `wordGlyphs`), never as a character in the string, and it is **always lit** while the letters ramp: a picture has no unlit state that reads as *not yet*, and dimming it by alpha is the halo problem the opaque grey exists to avoid |
 | transcribing | `Transcribing via <logo>...` — **which recogniser is actually reading it** (2026-09-22 evening). The logo is drawn in **exactly the row's ink** (`Glyphs.Engine` → `Glyphs.engine`, cached per colour in `wordGlyphs`): ElevenLabs' pause-in-a-ring, Wispr Flow's five bars traced off its own icon, 💻 for the local model (with `ᵥ` for non-published weights). Pushed as a string by `AppDelegate` (`setEngineMark`), carried as a **private-use character** so the chip still cannot branch on which engine it is; `transcribeString` gained `applyEngineText`'s *non-ASCII is a picture* branch the day the mark landed on this row, because until then every character in it was ASCII |
 | the dictation was cancelled | `🗑️ Cancelled` in the row `Listening…` was in — 1.5 s, swapped in and out **in one frame**; the oblique wipe that used to carry it both ways was removed on 2026-09-18 (*The chip swaps in one frame*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
-| dictating in Replace Wispr | the drawn map pin + `caret` (`at caret` until 2026-10-04, *"scoate doar at"*) — the same slot a spawn takes, and for the same reason |
+| dictating in Replace Wispr | **the drawn map pin alone** (2026-10-22, *"nu mai vreau să scrie efectiv caret, doar să apară acea iconiță"* — `identity` answers `""` for `caret` behind `pinGlyph` — `bind to send` keeps its words; `caret` behind it until then, `at caret` until 2026-10-04) — the same slot a spawn takes, and for the same reason |
 
 - **Dictating has no title of its own.** The top line stays `🤖 folder@branch` through the whole
   dictation; what changes lives one row down. Liveness is the pulsing 🔴 — a frozen recording row is
@@ -164,8 +164,10 @@ yields to `--label`).
   systemYellow 35 % to orange, α 0.6, radius 4) behind the icon and the words of `📸 ×N`
   (`setShotCount` going up), the quote row (`setSelection` with new text or a higher count — a copy
   is `📋 …` there) and the ⌘⇧ row (`setPicks`' `isNew`): 2.5 blinks over 1.5 s
-  (`changePulseDuration`, `changePulseBlinks`), ending dark. **Not the automatic first frame** — a
-  count rising inside `changePulseQuiet` (1 s) of the microphone opening is not news. A 30 Hz timer
+  (`changePulseDuration`, `changePulseBlinks`), ending dark. **Not the count booked for the automatic first frame** — a
+  count rising inside `changePulseQuiet` (1 s) of the microphone opening is not news; **the frame
+  landing on disk is** (same evening, *"să înțeleg că s-a făcut o poză"*): `captureContext` calls
+  `RelayWindow.flashShots()` after `context screen captured`, still no flight for picture zero. A 30 Hz timer
   on `.common` moves only the washes' frames and alpha, never `layoutContent`; `layoutContent` re-places
   them (a row that moved takes its wash). Shot `listening-change-pulse` (`pinChangePulse`, cleared by
   `unpinChangePulse` in the catalogue's reset — a pin left up put the wash on every later picture).
