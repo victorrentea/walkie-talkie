@@ -2512,7 +2512,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
 
-        hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
+        // **While a screen recording runs the shutter is its stop** (2026-10-23,
+        // Victor: *"butonul de back apăsat simplu nu mai face poză și oprește
+        // înregistrarea … Trebuie să fie ușor să opresc … să fac poză în timpul
+        // unui film nu prea are tare sens"*) — 🔽, ⌃P and the Wheel-mode Return
+        // alike. `film` is main's, so the question is asked there.
+        hotkeys.onScreenshot = { [weak self] cursor in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.film != nil {
+                    Log.info("🎥 the shutter while a screen recording runs — it stops the recording, no picture")
+                    self.toggleFilm()
+                    return
+                }
+                DispatchQueue.global().async { self.plusOneShot(cursor: cursor) }
+            }
+        }
         hotkeys.onPlainToPrompt = { [weak self] cursor in
             DispatchQueue.main.async { self?.promotePlainToPrompt(cursor: cursor) }
         }
