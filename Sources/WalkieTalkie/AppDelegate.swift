@@ -2511,6 +2511,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onRefreshBound = { [weak self] in self?.refreshBoundTitle() }
 
         hotkeys.onScreenshot = { [weak self] cursor in self?.plusOneShot(cursor: cursor) }
+        hotkeys.onPlainToPrompt = { [weak self] cursor in
+            DispatchQueue.main.async { self?.promotePlainToPrompt(cursor: cursor) }
+        }
+        hotkeys.onPlainRefused = { [weak self] what in self?.warnPlain(what) }
         hotkeys.onAreaShot = { [weak self] anchor, at in self?.areaShot(from: anchor, at: at) }
         // **Wheel held and turned over the ring: the next halo** (2026-09-20).
         // The ring itself changing is the feedback; the chip's flash names it,
@@ -7343,10 +7347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash("🎬 start dictating first — a recording rides a sentence", duration: 4)
             return
         }
-        if refusesAttachment("🎬 the screen recording") {
-            overlay.flash(Self.plainAttachesNothing, duration: 3)
-            return
-        }
+        if refusesAttachment("🎬 the screen recording") { return }
         // A click on any of the four `● REC` badges is the stop (2026-10-20) —
         // the gesture is the one he forgets, the badge is the one he sees.
         FilmBorder.onClick = { [weak self] in
@@ -7842,7 +7843,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Both switches in `Auto-attach`** (2026-10-15) — ticked off, the
         // watcher stays down; the shutter still reads the highlight under it.
         syncSelectionWatch(attachable && AutoAttach.isOn(.selection))
-        syncClipboardWatch(attachable && AutoAttach.isOn(.clipboard))
+        // `live`, not `attachable`: a plain sentence gathers copies (2026-10-22, `fileCopied`).
+        syncClipboardWatch(live && AutoAttach.isOn(.clipboard))
     }
 
     // MARK: - The bound terminal
@@ -10632,7 +10634,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to the chip takes `stateLock` from the main queue — the two together
         // are a deadlock with a highlight on one side of it. The cost of asking
         // for a highlight that turns out to be a repeat is one AX call.
-        if refusesAttachment("👁 the highlight") { return }
+        // Quietly: a highlight in the field he dictates into is routine, not a reach for a prompt.
+        if refusesAttachment("👁 the highlight", warn: false) { return }
         let source = WindowContext.describe()
         stateLock.lock()
         // The probe outliving its dictation — the same guard the shutter's ⌘C
@@ -10898,8 +10901,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fileCopied(item, at: moment, opened: opened, window: window)
     }
 
+    /// **A plain dictation gathers what he copies too** (2026-10-22, Victor: *"când
+    /// fac o dictare curată, să preiei totuși orice clipboard adun"*) — the one
+    /// attachment it takes. Plain words still go out alone (`cleanLine`); the
+    /// copies ride the sentence the moment it becomes a prompt (⌃P, 🔼 →, 🔼 ↑),
+    /// which is what he copies them for. Counted on the chip like a prompt's.
     private func fileCopied(_ item: CopiedItem, at moment: Date, opened: Date, window: String?) {
-        if refusesAttachment("📋 the copy") { return }
         switch item {
         case .image(let image):
             fileCopiedImage(image, at: moment, opened: opened, window: window)
@@ -10943,9 +10950,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let marker { speakMarker(.selection, marker) }
         Log.info("📋 copied at \(Self.stamp(offset)) — \(text.count) chars"
                  + (marker.map { ", marker \($0)" } ?? ", no marker — it goes under the words"))
-        let shown = receipt ?? (text.count > 40 ? String(text.prefix(40)) + "…" : text)
+        // **On the quote row, not a flash** (2026-10-22): a flash takes the chip
+        // over and hides the very rows that count what he is gathering; the row
+        // keeps the copy, and its yellow pulse is the *something changed*.
+        let shown = receipt ?? text
+        stateLock.lock()
+        let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
+        stateLock.unlock()
         DispatchQueue.main.async { [weak self] in
-            self?.overlay.flash("📋 \(shown)", duration: 1.5)
+            self?.overlay.setSelection("📋 " + shown, count: total)
         }
     }
 
@@ -11069,13 +11082,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// dictation mode."* `HotkeyTap.cleanSentenceOpen` is lock-guarded, so any
     /// thread may ask, and it turns false the moment the sentence becomes a
     /// prompt (🔼 →, 🔼 ↑ — `relayPromptOpen`).
-    private func refusesAttachment(_ what: String) -> Bool {
+    ///
+    /// **And it says how to get there** (2026-10-22, Victor: *"dacă fac vreo
+    /// mișcare, un gest în timpul dictării curate, care merge doar în timpul
+    /// promptării, fleșuiește un warning … cum să pot trece din dictare în
+    /// promptare"*) — `warnPlain`, unless `warn` is false.
+    private func refusesAttachment(_ what: String, warn: Bool = true) -> Bool {
         guard hotkeys.cleanSentenceOpen else { return false }
-        Log.info("\(what) refused — a plain dictation attaches nothing (🔼 → or 🔼 ↑ makes it a prompt)")
+        Log.info("\(what) refused — a plain dictation attaches nothing (⌃P, 🔼 → or 🔼 ↑ makes it a prompt)")
+        if warn { warnPlain(what) }
         return true
     }
 
-    static let plainAttachesNothing = "🧼 Plain dictation — 🔼 → makes it a prompt"
+    static let plainAttachesNothing = "⚠️ Plain dictation — ⌃P makes it a prompt"
+
+    /// The warning, once per `plainWarnGap`: a drag fires a stream of refusals,
+    /// and one sentence said once is the whole of it. Any thread.
+    func warnPlain(_ what: String) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let now = CFAbsoluteTimeGetCurrent()
+            guard now - self.plainWarnedAt > Self.plainWarnGap else { return }
+            self.plainWarnedAt = now
+            Log.info("⚠️ \(what) over a plain dictation — flashing how to make it a prompt")
+            self.overlay.flash(Self.plainAttachesNothing, duration: 3)
+        }
+    }
+    private var plainWarnedAt: CFAbsoluteTime = 0
+    private static let plainWarnGap: CFAbsoluteTime = 3
+
+    /// **⌃P over a plain dictation: it becomes the caret prompt, and the shot is
+    /// taken** (2026-10-22) — `HotkeyTap.onPlainToPrompt`. The same turn
+    /// `aimAtCaret` makes for a plain sentence that carries attachments: it was
+    /// going to the caret, so it stays there, now with 🔼's whole envelope — and
+    /// it is one-way, since the shot is an attachment. Main thread.
+    private func promotePlainToPrompt(cursor: NSPoint) {
+        guard listening, cleanSentence, !cleanRedirected, !quickAsk else {
+            Log.info("💬 ⌃P — the plain sentence ended first; nothing to promote")
+            return
+        }
+        pasteMode = true
+        cleanSentence = false
+        cleanRedirected = false
+        submitAfterClean = false
+        caretPrompt = true
+        overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph)
+        syncBorrowedGestures()
+        Log.info("💬 a plain dictation became the caret prompt (⌃P) — the shutter follows")
+        overlay.flash("💬 Now a prompt — at the caret", duration: 1.5)
+        DispatchQueue.global().async { [weak self] in self?.plusOneShot(cursor: cursor) }
+    }
 
     private func plusOneShot(cursor: NSPoint) {
         guard hasDestination else { return }

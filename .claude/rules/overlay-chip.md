@@ -158,6 +158,18 @@ yields to `--label`).
   transcribed`. States page: `transcribing-fallback-countdown`, `transcribing-fallback-now`,
   `listening-wispr-starting`.
 
+- **A tally row whose value changed flashes amber behind its words** (2026-10-22, Victor: *"când se
+  modifică vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție … pune un fundal
+  flashing … ceva ce să se vadă că se modifică ceva acolo"*). `ChangePulse` (drawn like `OverrunWash`:
+  systemYellow 35 % to orange, α 0.6, radius 4) behind the icon and the words of `📸 ×N`
+  (`setShotCount` going up), the quote row (`setSelection` with new text or a higher count — a copy
+  is `📋 …` there) and the ⌘⇧ row (`setPicks`' `isNew`): 2.5 blinks over 1.5 s
+  (`changePulseDuration`, `changePulseBlinks`), ending dark. **Not the automatic first frame** — a
+  count rising inside `changePulseQuiet` (1 s) of the microphone opening is not news. A 30 Hz timer
+  on `.common` moves only the washes' frames and alpha, never `layoutContent`; `layoutContent` re-places
+  them (a row that moved takes its wash). Shot `listening-change-pulse` (`pinChangePulse`, cleared by
+  `unpinChangePulse` in the catalogue's reset — a pin left up put the wash on every later picture).
+
 - **`💻 Fell back to local` / `💻 Used local` — a 3 s flash once the local model's words have landed
   for another engine** (2026-10-16, Victor: *"the tooltip should display that thing for 2 or 3 seconds
   … If something else like Wispr was selected, fall back to local mode. I want to know that."*).

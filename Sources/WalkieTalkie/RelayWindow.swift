@@ -200,6 +200,25 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// does not overwrite a meaning already there — and it cannot re-run into
     /// the halo problem, because it draws no glyph at all.
     private let overrunWash = OverrunWash()
+
+    /// **A row whose value just changed flashes yellow behind its words**
+    /// (2026-10-22, Victor: *"când se modifică vreo valoare, de exemplu o poză
+    /// nouă sau un clipboard copiat sau o selecție … pune un fundal flashing …
+    /// ceva ce să se vadă că se modifică ceva acolo"*). One per tally row — the
+    /// shots, the quote (highlights and copies), the ⌘⇧ picks. Behind the text,
+    /// like the brick wash, so the words never flicker; never `layoutContent`.
+    private let shotsPulse = ChangePulse()
+    private let selectionPulse = ChangePulse()
+    private let pickPulse = ChangePulse()
+    private var changePulseTimer: Timer?
+    /// The pictures of the states page hold the flash at its brightest.
+    private var changePulsePinned = false
+    /// When the microphone opened — the automatic first frame lands inside
+    /// `changePulseQuiet` of it, and is not news.
+    private var listenOpenedAt: CFTimeInterval = 0
+    static let changePulseDuration: CFTimeInterval = 1.5
+    static let changePulseBlinks: Double = 2.5
+    private static let changePulseQuiet: CFTimeInterval = 1
     /// The wall clock the wash is measured from — `listeningSince` is the same
     /// instant, kept separate because the minutes may be pinned to a number by
     /// `OverlayStates` while this still has to be nil there.
@@ -1464,6 +1483,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         shotGlyph.imageScaling = .scaleProportionallyUpOrDown
         recordInfo.font = hintFont
         recordInfo.textColor = .secondaryLabelColor
+        recordRow.addSubview(shotsPulse)
         recordRow.addSubview(shotGlyph)
         recordRow.addSubview(recordInfo)
         recordRow.isHidden = true
@@ -1515,6 +1535,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         pickInfo.textColor = .secondaryLabelColor
         pickInfo.lineBreakMode = .byTruncatingHead   // the tail is the element
         pickInfo.maximumNumberOfLines = 1
+        pickRow.addSubview(pickPulse)
         pickRow.addSubview(pickGlyph)
         pickRow.addSubview(pickInfo)
         pickRow.isHidden = true
@@ -1529,6 +1550,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         selectionLabel.cell?.truncatesLastVisibleLine = true
         selectionGlyph.font = chipQuoteFont
         selectionGlyph.alignment = .center
+        selectionRow.addSubview(selectionPulse)
         selectionRow.addSubview(selectionGlyph)
         selectionRow.addSubview(selectionLabel)
         selectionRow.isHidden = true
@@ -1909,6 +1931,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // chip without a wiring of its own (2026-09-29). Not while the states
         // page is being photographed: that app is a camera, not a dictation.
         updateHintBar()
+        // A row that moved takes its yellow flash with it (`flashChange`).
+        defer { if changePulsePinned || changePulseTimer != nil { placeChangePulses() } }
         // A held spawn dialog is the last frame of a state that has already been
         // cleared. Newer state wins the chip — see `releaseSpawnPanel` — but
         // **only state he would be looking for** (2026-10-04): the hold now lasts
@@ -4387,6 +4411,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// not throw a window across his work — applies with equal force to a
     /// highlight caught by the same press.
     func setSelection(_ text: String?, count: Int = 1) {
+        let changed = text?.isEmpty == false && (text != selection || count > selectionCount)
+        defer { if changed { flashChange(selectionPulse) } }
         selection = (text?.isEmpty == false) ? text : nil
         selectionCount = selection == nil ? 0 : max(1, count)
 
@@ -4426,6 +4452,63 @@ private let heardLabel = NSTextField(labelWithString: "")
     }
 
     func clearSelection() { setSelection(nil, count: 0) }
+
+    /// Start (or restart) one row's yellow flash — see `shotsPulse`.
+    private func flashChange(_ pulse: ChangePulse) {
+        if Self.shooting && !changePulsePinned { return }
+        pulse.startedAt = CACurrentMediaTime()
+        placeChangePulses()
+        guard changePulseTimer == nil, !changePulsePinned else { return }
+        let t = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.placeChangePulses() }
+        RunLoop.main.add(t, forMode: .common)
+        changePulseTimer = t
+    }
+
+    /// One frame of every running flash: the wash spans the icon column and the
+    /// words (not the row's full width, which is the chip's), and blinks
+    /// `changePulseBlinks` times over `changePulseDuration`, ending dark.
+    private func placeChangePulses() {
+        let now = CACurrentMediaTime()
+        var running = false
+        for (pulse, row, label) in [(shotsPulse, recordRow, recordInfo),
+                                    (selectionPulse, selectionRow, selectionLabel),
+                                    (pickPulse, pickRow, pickInfo)] {
+            guard let t0 = pulse.startedAt, !row.isHidden else { pulse.isHidden = true; continue }
+            let age = now - t0
+            guard changePulsePinned || age < Self.changePulseDuration else {
+                pulse.startedAt = nil
+                pulse.isHidden = true
+                continue
+            }
+            running = true
+            let words = min(label.frame.width, ceil(label.intrinsicContentSize.width))
+            let h = max(0, row.frame.height - 2)
+            pulse.frame = NSRect(x: 0, y: ((row.frame.height - h) / 2).rounded(),
+                                 width: (label.frame.minX + words + 4).rounded(), height: h)
+            let phase = changePulsePinned ? 0 : age / Self.changePulseDuration
+            pulse.alphaValue = CGFloat(0.5 + 0.5 * cos(2 * .pi * Self.changePulseBlinks * phase))
+            pulse.isHidden = false
+        }
+        if !running || changePulsePinned {
+            changePulseTimer?.invalidate()
+            changePulseTimer = nil
+        }
+    }
+
+    /// The states page's reset: no flash pinned, none running.
+    func unpinChangePulse() {
+        changePulsePinned = false
+        changePulseTimer?.invalidate()
+        changePulseTimer = nil
+        for pulse in [shotsPulse, selectionPulse, pickPulse] { pulse.startedAt = nil; pulse.isHidden = true }
+    }
+
+    /// The states page: every tally row on screen wears its flash at full.
+    func pinChangePulse() {
+        changePulsePinned = true
+        for pulse in [shotsPulse, selectionPulse, pickPulse] { pulse.startedAt = CACurrentMediaTime() }
+        placeChangePulses()
+    }
 
     /// The relay has been pointed at a terminal, or has lost the one it had.
     ///
@@ -4781,7 +4864,9 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// A new sentence may start now — see `readyRow`.
     private(set) var readyForNext = false
-    static let readyText = "Ready"
+    /// `Ready for more` since 2026-10-22 (Victor: *"în loc de ready, scrie
+    /// ready for more"*).
+    static let readyText = "Ready for more"
 
     func setReadyForNext(_ on: Bool) {
         guard readyForNext != on else { return }
@@ -5019,7 +5104,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // The count belongs to one dictation. Zeroing it here rather than when the
         // message is sent means the row never opens showing the last dictation's
         // total for the split second before the first shot lands.
-        if value { shotCount = 0 }
+        if value { shotCount = 0; listenOpenedAt = CACurrentMediaTime() }
         if !value { liveCaption.setOpen(false); opening = false }
         refreshTitle()
         layoutContent()          // the recording row lives and dies with this state
@@ -5058,8 +5143,10 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// a count that omitted the first would disagree with what the agent receives.
     func setShotCount(_ count: Int) {
         guard shotCount != count else { return }
+        let more = count > shotCount
         shotCount = count
         layoutContent()          // the number can widen the row
+        if more, CACurrentMediaTime() - listenOpenedAt > Self.changePulseQuiet { flashChange(shotsPulse) }
     }
 
     /// How many elements are ⌘-picked and waiting, what the newest one was, and
@@ -5097,6 +5184,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             }
         }
         layoutContent()
+        if isNew, count > 0 { flashChange(pickPulse) }
     }
 
     /// `OverlayStates` shoots a state in the millisecond it sets it up, so the
@@ -6109,6 +6197,33 @@ final class OverrunWash: NSView {
         // reads as a field the words sit in, and this is something spreading
         // *over* them.
         NSBezierPath(roundedRect: bounds, xRadius: 3, yRadius: 3).fill()
+    }
+}
+
+/// **The yellow flash behind a tally row whose value just changed** — see
+/// `RelayWindow.shotsPulse`. Drawn like `OverrunWash`, its colour resolved in
+/// `draw(_:)`. Amber rather than pure yellow, for the reason the brick wash
+/// gives: yellow alone vanishes over a white page, and Victor asked for
+/// *"galben, nu galben … ceva ce să se vadă"* — the property, not the hue.
+final class ChangePulse: NSView {
+    var startedAt: CFTimeInterval?
+
+    override var isOpaque: Bool { false }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isHidden = true
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ dirty: NSRect) {
+        let yellow = NSColor.systemYellow.usingColorSpace(.sRGB) ?? .yellow
+        let orange = NSColor.systemOrange.usingColorSpace(.sRGB) ?? .orange
+        let amber = yellow.blended(withFraction: 0.35, of: orange) ?? yellow
+        amber.withAlphaComponent(0.6).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
     }
 }
 

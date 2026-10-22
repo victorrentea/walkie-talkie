@@ -86,8 +86,8 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   (scroll, secondary click) are 🔽 — the same F-key branches; held 0.3 s, the corner bar shows both
   crosses with ☝️ / ✌️ in the corner and `⌘⌘` / `⌃P` in the badges — and with no Logitech mouse
   attached, every sentence's bar is that one; the pointer stands still under the chord
-  (`mouse-gestures.md`, *The trackpad*). **⌃P is the shutter while a prompt records** (Victor
-  Addons' ⌃P steps aside on `~/.walkie-talkie/prompting`).
+  (`mouse-gestures.md`, *The trackpad*). **⌃P is the shutter while a prompt records**, and **over a plain dictation it makes it
+  a prompt first** (2026-10-22; Victor Addons' ⌃P steps aside on `~/.walkie-talkie/prompting`).
 - **The clipboard always holds the finished sentence** (Q17, 2026-09-28): the envelope for a prompt,
   the clean words for a plain one, whatever the engine or destination; never restored. ⌘V re-pastes.
 - **Side buttons** (Options+ → ⌃⌥⌘F3…F12, duplicated in `HotkeyTap`, must not drift;

@@ -163,7 +163,7 @@ the local model … don't feed too small chunks either"*.
 - Log: `✂️ local: chunk N cut at X s …`, `✂️ local: chunk N of take T answered in X s`, `✂️ local:
   take T assembled from N piece(s) — X s after the stop (Y s of Z were left to decode)`.
   Quality and the parameters: `evals/chunked-decode/`.
-- **`📻 Ready` on the chip** (`RelayWindow.readyRow`, top row, the walkie + green `Ready`;
+- **`📻 Ready for more` on the chip** (`Ready` until 2026-10-22, Victor: *"în loc de ready, scrie ready for more"*; `RelayWindow.readyRow`, top row, the walkie + green words;
   `AppDelegate.syncReadyRow`, `GET /test/state.readyForNext`): up while words are in flight and a start
   now would be queued (or a local fallback parked), from 0.8 s after the stop. Shot `transcribing-ready`.
 

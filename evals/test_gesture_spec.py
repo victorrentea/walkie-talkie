@@ -451,7 +451,15 @@ def spec(src: dict):
                  lambda: has(function(src, ad, "refusesAttachment"), r"guard hotkeys\.cleanSentenceOpen else \{ return false \}")),
                 # 2026-10-08: plain words attach nothing at all, not only pictures.
                 ("no crop: the wheel drag does not arm", "HotkeyTap `areaDrag`",
-                 lambda: has(src["HotkeyTap.swift"], r"guard dictating, bare, !promptHeld, !leftIsHeld, !rightIsHeld else \{ return false \}\s*(//[^\n]*\s*)*guard !cleanSentenceOpen else \{ return false \}")),
+                 lambda: has(src["HotkeyTap.swift"], r"guard dictating, bare, !promptHeld, !leftIsHeld, !rightIsHeld else \{ return false \}\s*(//[^\n]*\s*)*guard !cleanSentenceOpen else \{\s*(//[^\n]*\s*)*plainWheelAnchorCG = event\.location\s*return false\s*\}")),
+                ("…but its drag says how to get a prompt (2026-10-22)", "HotkeyTap `areaDrag` / AppDelegate `warnPlain`",
+                 lambda: has(src["HotkeyTap.swift"], r"onPlainRefused\?\(\"✂️ the area crop\"\)")
+                         and has(function(src, ad, "refusesAttachment"), r"if warn \{ warnPlain\(what\) \}")),
+                ("⌃P makes it a prompt at the caret, then the shutter (2026-10-22)", "HotkeyTap ⌃P / AppDelegate `promotePlainToPrompt`",
+                 lambda: has(_strip_comments(src["HotkeyTap.swift"]),
+                             r"relayPlainOpen, !relayPromptOpen, ownDictation \{.*?onPlainToPrompt\?\(cursor\)")
+                         and has(function(src, ad, "promotePlainToPrompt"),
+                                 r"cleanSentence = false.*?caretPrompt = true.*?syncBorrowedGestures\(\).*?plusOneShot\(")),
                 ("…nor does the area shot", "AppDelegate `areaShot`",
                  lambda: has(function(src, ad, "areaShot"), r"refusesAttachment\(")),
                 ("no ⌘⇧ pick, no highlight, no film, no typing box", "AppDelegate `record` / `fileSelection` / `toggleFilm` / `openTypeIn`",
@@ -460,7 +468,7 @@ def spec(src: dict):
                 ("the picker and the highlight watcher ride `attachable`, not `live`", "AppDelegate `syncBorrowedGestures`",
                  lambda: all(has(function(src, ad, "syncBorrowedGestures"), p)
                              for p in (r"let attachable = live && !hotkeys\.cleanSentenceOpen",
-                                       r"picker\.dictating = attachable", r"syncSelectionWatch\(attachable\)"))),
+                                       r"picker\.dictating = attachable", r"syncSelectionWatch\(attachable[ )]"))),
                 ("🔼 → / 🔼 ↑ turn it into a prompt: the tap is told", "AppDelegate `syncBorrowedGestures`",
                  lambda: before(function(src, ad, "syncBorrowedGestures"),
                                 r"hotkeys\.relayPromptOpen = listening && !\(cleanSentence && !cleanRedirected\)",
@@ -485,7 +493,7 @@ def spec(src: dict):
             "checks": [
                 ("the halo-step branch requires the tracked fn key", "HotkeyTap `onHaloStep` branch",
                  lambda: has(_strip_comments(src["HotkeyTap.swift"]),
-                             r"if \(keyCode == VK_F7 \|\| keyCode == VK_F9\) && fnKeyHeld &&[^\n]*\{.*?onHaloStep\?\(step\)")),
+                             r"if \(keyCode == VK_F7 \|\| keyCode == VK_F9\) && \(fnKeyHeld != cmd\) &&[^\n]*\{.*?onHaloStep\?\(step\)")),
                 ("fnKeyHeld follows the fn key's own flagsChanged (keycode 63)", "HotkeyTap `.flagsChanged`",
                  lambda: has(_strip_comments(src["HotkeyTap.swift"]),
                              r"== VK_FUNCTION \{\s*fnKeyHeld = event\.flags\.contains\(\.maskSecondaryFn\)")),
@@ -576,7 +584,7 @@ MUTATIONS = [
     ("plain dictation takes a ⌃⌥P picture", "AppDelegate.swift",
      "        if refusesAttachment(\"📸 the shutter\") { return }", ""),
     ("plain dictation attaches a highlight (2026-10-08)", "AppDelegate.swift",
-     "        if refusesAttachment(\"👁 the highlight\") { return }", ""),
+     "        if refusesAttachment(\"👁 the highlight\", warn: false) { return }", ""),
     ("a plain sentence turned prompt still refuses pictures (2026-10-08)", "HotkeyTap.swift",
      "return !prompt && (own || plain || backStopsWispr)", "return own || plain || backStopsWispr"),
     ("a plain Wispr sentence whose arm expired takes pictures again (2026-10-08)", "HotkeyTap.swift",
@@ -617,7 +625,7 @@ MUTATIONS = [
      "                Log.info(\"🛡️ ⌘V from \\(process) with no capture open and no relay sentence to compare its row with — nothing delivered\")",
      "            rescueFromRow(after: process)"),
     ("plain dictation gets the kamikaze word", "AppDelegate.swift",
-     "if clean { kamikaze = false }", ""),
+     "if clean || quick { kamikaze = false }", "if quick { kamikaze = false }"),
     ("⌘⌃X passes to the front app on autorepeat (acted on twice)", "HotkeyTap.swift",
      "if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow(\"⌘⌃X (autorepeat)\", type, event) }", ""),
     ("⌘⌃X stops the take the ordinary way (the cloud still gets it)", "AppDelegate.swift",
@@ -629,7 +637,7 @@ MUTATIONS = [
      "                    DispatchQueue.global().async { [weak self] in self?.onBackCancel?() }\n",
      ""),
     ("bare F7/F9 swallowed for the halo again (Q10)", "HotkeyTap.swift",
-     "(keyCode == VK_F7 || keyCode == VK_F9) && fnKeyHeld && ", "(keyCode == VK_F7 || keyCode == VK_F9) && "),
+     "(keyCode == VK_F7 || keyCode == VK_F9) && (fnKeyHeld != cmd) && ", "(keyCode == VK_F7 || keyCode == VK_F9) && "),
 ]
 
 

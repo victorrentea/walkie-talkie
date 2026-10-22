@@ -13,8 +13,8 @@ final class GestureHintBarTests: XCTestCase {
 
     func testAPromptIsVictorsSketch() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true)), [
-            Cross(click: "🏁 end", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 shot", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "🏁 end ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
+            Cross(click: "📸 shot ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
         ])
     }
 
@@ -29,7 +29,7 @@ final class GestureHintBarTests: XCTestCase {
     func testAPlainDictationOnlyStopsOrCancels() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false)), [
             Cross(click: "", up: "", down: "", left: "🗑️ cancel", right: nil),
-            Cross(click: "⏹️ + ⏎", up: "", down: "", left: "", right: "⏹️"),
+            Cross(click: "⏹️ + ⏎", up: "", down: "", left: "", right: "⏹️ ⌘⌘"),
         ])
     }
 
@@ -37,9 +37,20 @@ final class GestureHintBarTests: XCTestCase {
     /// it is a prompt — 🔼 asks, 🔽 is the shutter, ↓ the typing box.
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
-            Cross(click: "⚡ ask", up: "", down: "", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 shot", up: "", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "⚡ ask ⌘⌘", up: "", down: "", left: "🗑️ cancel", right: nil),
+            Cross(click: "📸 shot ⌃P", up: "", down: "⌨️ type", left: "", right: ""),
         ])
+    }
+
+    /// The keys with no gesture behind them, under the crosses (2026-10-22):
+    /// ⌃P turns a plain dictation into a prompt, ⌘C files a copy.
+    func testTheKeysRow() {
+        XCTAssertEqual(GestureHintBar.keys(for: .init()), [])
+        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false)),
+                       ["💬 prompt ⌃P", "📋 copy ⌘C"])
+        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true)), ["📋 copy ⌘C"])
+        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true, crop: .selecting)), [])
+        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false, held: true)), [])
     }
 
     func testNothingWhileRightCmdOptIsHeld() {
@@ -119,10 +130,12 @@ final class GestureHintBarTests: XCTestCase {
                 let trackpad = stage.fingers || stage.noMouse
                 let crosses = trackpad ? GestureHintBar.fingerCrosses(for: stage)
                     : mouse == nil ? GestureHintBar.crosses(for: stage) : []
-                let size = GestureHintBar.Board.size(for: crosses, mouse: mouse)
+                let keys = mouse == nil ? GestureHintBar.keys(for: stage) : []
+                let size = GestureHintBar.Board.size(for: crosses, mouse: mouse, keys: keys)
                 let board = GestureHintBar.Board(frame: NSRect(x: 20, y: 20, width: size.width, height: size.height))
                 board.crosses = crosses
                 board.mouse = mouse
+                board.keys = keys
                 let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 40, height: size.height + 40))
                 host.wantsLayer = true
                 host.layer?.backgroundColor = bg.cgColor

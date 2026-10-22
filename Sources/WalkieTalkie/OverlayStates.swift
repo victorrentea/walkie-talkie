@@ -305,6 +305,17 @@ enum OverlayStates {
                 o.setSelection(selection)
             },
 
+            Shot(slug: "listening-change-pulse", group: "Dictating", title: "Something just changed: the row flashes yellow",
+                 when: "For 1.5 s after a tally row's value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. Three blinks, ending dark.",
+                 note: "2026-10-22, Victor: *\"când se modifică vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție … pune un fundal flashing … ceva ce să se vadă că se modifică ceva acolo\"*. Amber behind the icon and the words (`ChangePulse`), never in them, like the brick wash on `Listening...`; the copy lands on the quote row as `📋 …` instead of flashing over the whole chip. Shown here at its brightest, on every row at once — in the app only the row that changed blinks.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.setShotCount(2)
+                o.setSelection("📋 git push --force-with-lease", count: 2)
+                o.pinChangePulse()
+            },
+
             Shot(slug: "listening-selection-multi", group: "Dictating", title: "A highlight, four seconds later",
                  when: "Every highlight ends here — the words have had their seconds and the row is the running count alone. Three of them, here.",
                  note: "`×3` and nothing else. A highlight is read once, at the moment it is caught; from then on the only open question is whether any of them fell out, and a line of somebody else's code beside the cursor for the rest of a two-minute sentence is the widest row on the chip restating something already checked. `×1` is written out too — the number is all that is left, so an empty row would read as a highlight that got lost.",
@@ -358,9 +369,9 @@ enum OverlayStates {
                 o.pinTranscribeWarmth(0.45)
             },
 
-            Shot(slug: "transcribing-ready", group: "Dictating", title: "Ready — talk again while it transcribes",
+            Shot(slug: "transcribing-ready", group: "Dictating", title: "Ready for more — talk again while it transcribes",
                  when: "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
-                 note: "**`📻 Ready` is the top row** (2026-10-21, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
+                 note: "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue) \(Glyphs.loraMark)")
@@ -805,6 +816,7 @@ enum OverlayStates {
         o.setPasteHint(false)
         o.setHeldCount(0)
         o.setReadyForNext(false)
+        o.unpinChangePulse()
         o.setFilming(false)
         o.clearFilmsCarried()
         o.filmFrames = nil

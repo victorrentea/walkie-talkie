@@ -77,6 +77,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *Scope: dictation helper only* — “`canBecomeKey` is false” — the panel becomes key only while the transcript is edited (*⏎ sends it, and clicking the words edits them*)
 - *Two halves, and a line between them (2026-09-08)*, *Where the bottom half comes from* — the five transcript-ranked recents are gone 2026-10-15; the menu's last row is *Workspace ›* (*Workspace instead of the recent half*)
 - *A row carrying `at 0:08` is never folded* and *📸0 leads the words* (2026-09-20 / 2026-09-25) — superseded 2026-09-30 for frames the words do not carry: pointer + clock as a short row under the template, and on Wispr 📸0 is one of them (*On Wispr the prompt starts with his words*)
+- *A plain dictation attaches nothing* (2026-10-08) — copies excepted since 2026-10-22: gathered for the moment it becomes a prompt (*2026-10-22 — Ready for more, a yellow flash on what changed, and ⌃P out of a plain dictation*)
 
 ## Contents
 
@@ -15720,3 +15721,42 @@ deferral is proven only against a fake Wispr — watch for the first live `take 
 two more, fixed: his own cancelled Wispr row held every deferred release for 60 s (the release now waits
 only for a row with a duration, recorded < 15 s ago), and the clip-relative voice bar (capped). It also
 suggested passing the take into `handToLocal` instead of the `handOverTake` field — not done.
+
+## 2026-10-22 — Ready for more, a yellow flash on what changed, and ⌃P out of a plain dictation
+
+Victor, dictated in one go: *"În loc de ready, scrie ready for more în tooltip și când se modifică
+vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție din tooltip, pune un fundal
+flashing … galben, nu galben … ceva ce să se vadă că se modifică ceva acolo. Și doi, când fac o
+dictare curată, să preiei totuși orice clipboard adun. Trei, dacă fac vreo mișcare, un gest în timpul
+dictării curate, care merge doar în timpul promptării, fleșuiește un warning … cum să pot trece din
+dictare în promptare? Și inventează … cum aș putea să fac asta din taste și … să-mi apară în
+tooltip-urile din dreapta … shortcut-urile … Ctrl-C … Ctrl-P."*
+
+- **`📻 Ready for more`** — the word only.
+- **The flash** is `ChangePulse`: amber (yellow 35 % to orange, α 0.6) behind the icon and words of
+  the shots, quote and ⌘⇧ rows, 2.5 blinks over 1.5 s ending dark. Amber, not yellow, for the reason the
+  brick wash gave on 2026-09-20 — he asked for the property (*"ceva ce să se vadă"*), and pure yellow
+  disappears over a white page. The automatic first frame (`×1` inside a second of the microphone
+  opening) does not flash: every bound prompt would start with a blink that means nothing. A copied
+  text used to be a 1.5 s `📋 …` flash that took the whole chip over — hiding the rows that count what
+  he is gathering — and is now the quote row's `📋 …`, flashing.
+- **Copies during a plain dictation are gathered, not refused.** The reading taken: plain words still
+  go out alone (a plain sentence's point is that what he says is what gets typed); the copies are kept
+  for the moment the sentence becomes a prompt, which is why he would copy anything mid-plain. They
+  count as attachments, so 🔼 → back to the caret then stays a prompt (the 2026-10-08 one-way rule).
+  If he meant the copy pasted after the plain words, this is the place to change (`cleanLine`).
+- **The key: ⌃P.** Over a plain dictation it turns the sentence into the caret prompt (the turn
+  `aimAtCaret` already makes for a plain sentence with attachments — it was going to the caret, so it
+  stays there) and then takes the shot. ⌃P is already a prompt's shutter, so the key he reaches for
+  when he wants a picture is the switch, and nothing has to be refused. Victor Addons owns ⌃P outside
+  a prompt; the `prompting` mark is now up for a plain sentence too, so it steps aside.
+- **The warning**: `⚠️ Plain dictation — ⌃P makes it a prompt`, at most once per 3 s, from every
+  attachment door except the highlight watcher, and from a wheel drag the tap used to pass silently.
+- **The corner bar**: the side buttons' crosses now carry `⌘⌘` / `⌃P` as the trackpad's did since
+  10-20, and a keys row under them lists what has no gesture: `💬 prompt ⌃P`, `📋 copy ⌘C`.
+- **The gesture spec had drifted** before this change — three patterns (`syncSelectionWatch(attachable)`,
+  the fn halo branch's `(fnKeyHeld != cmd)`, and the self-test's kamikaze mutation `if clean || quick`)
+  no longer matched the source; brought back in line with it, plus a row for the ⌃P switch and the
+  drag warning.
+- **The states page was rebuilt** — 65 pictures changed, almost all from a walkie icon redrawn since
+  the last shoot (2026-09-25), not from this change.

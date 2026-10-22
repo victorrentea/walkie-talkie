@@ -213,7 +213,13 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
   reordered 2026-10-20; `Selected Text` / `Everything I Copy` before) — all on by default.** Off means *nothing automatic*: Anything I Select off gates `probeRecentSelection`, the
   watcher, the drag-release probe and `finalSelectionRead`; Screenshot off skips 📸0 (and its ripple)
   but keeps `captureContext`'s booking. **The shutter is never gated** — a press is deliberate.
-- **Anything I Copy polls the change count every 250 ms while `attachable`** (`syncClipboardWatch`,
+- **A plain dictation gathers copies too** (2026-10-22, Victor: *"când fac o dictare curată, să preiei
+  totuși orice clipboard adun"*) — the one exception to *a plain dictation attaches nothing*: the
+  watcher runs on `live`, `fileCopied` asks no `refusesAttachment`. Plain words still go out alone
+  (`cleanLine`); the copies ride the sentence once it becomes a prompt (⌃P, 🔼 →, 🔼 ↑), and they
+  count as attachments for `aimAtCaret`'s one-way rule. **A copied text lands on the quote row**
+  (`setSelection("📋 …")`, flashing yellow) instead of the 1.5 s `📋 …` flash over the whole chip.
+- **Anything I Copy polls the change count every 250 ms while `live`** (`attachable` until 2026-10-22; `syncClipboardWatch`,
   `clipboardQueue`), never the ⌘C key — *Copy Image* has none. Skip the relay's own writes
   (`PasteboardTimeline.lastOwnCount`) and its probe's ⌘C (`SelectionCapture.probedRecently`); a new
   synthetic ⌘C anywhere must set that flag too, or its copy files as his. Read only through

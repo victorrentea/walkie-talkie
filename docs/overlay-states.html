@@ -100,7 +100,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 68 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 69 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -397,6 +397,16 @@
         <p class="note">The quotation mark and the highlight on one line, truncated. It rides along as a receipt only — the panel at the end shows it quoted in full, and widening the chip mid-sentence would throw a half-screen window over the thing he is reading. Four seconds later it is the row below.</p>
         <code class="slug">listening-selection</code>
       </section>
+      <section class="card" id="listening-change-pulse">
+        <header>
+          <h3>Something just changed: the row flashes yellow</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">324×117 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-change-pulse.png" width="324" height="117" style="opacity:0.8" alt="Something just changed: the row flashes yellow"></div>
+        <p class="when">For 1.5 s after a tally row&#x27;s value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. Three blinks, ending dark.</p>
+        <p class="note">2026-10-22, Victor: <em>&quot;când se modifică vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție … pune un fundal flashing … ceva ce să se vadă că se modifică ceva acolo&quot;</em>. Amber behind the icon and the words (<code>ChangePulse</code>), never in them, like the brick wash on <code>Listening...</code>; the copy lands on the quote row as <code>📋 …</code> instead of flashing over the whole chip. Shown here at its brightest, on every row at once — in the app only the row that changed blinks.</p>
+        <code class="slug">listening-change-pulse</code>
+      </section>
       <section class="card" id="listening-selection-multi">
         <header>
           <h3>A highlight, four seconds later</h3>
@@ -449,12 +459,12 @@
       </section>
       <section class="card" id="transcribing-ready">
         <header>
-          <h3>Ready — talk again while it transcribes</h3>
+          <h3>Ready for more — talk again while it transcribes</h3>
           <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×117 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-ready.png" width="308" height="117" style="opacity:0.8" alt="Ready — talk again while it transcribes"></div>
+        <div class="shot"><img src="states/transcribing-ready.png" width="308" height="117" style="opacity:0.8" alt="Ready for more — talk again while it transcribes"></div>
         <p class="when">The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).</p>
-        <p class="note"><strong><code>📻 Ready</code> is the top row</strong> (2026-10-21, Victor: <em>&quot;even though it&#x27;s transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready&quot;</em>). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.</p>
+        <p class="note"><strong><code>📻 Ready for more</code> is the top row</strong> (2026-10-21, <code>Ready</code> until 2026-10-22, Victor: <em>&quot;even though it&#x27;s transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready&quot;</em>). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.</p>
         <code class="slug">transcribing-ready</code>
       </section>
       <section class="card" id="transcribing-lora">
@@ -696,9 +706,9 @@
       <section class="card" id="prompt-inline">
         <header>
           <h3>The prompt, with its pictures where they were taken</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×581 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×613 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-inline.png" width="749" height="581" style="opacity:1" alt="The prompt, with its pictures where they were taken"></div>
+        <div class="shot"><img src="states/prompt-inline.png" width="832" height="613" style="opacity:1" alt="The prompt, with its pictures where they were taken"></div>
         <p class="when">Word timings placed the markers (ElevenLabs, local): every <code>[📸N…]</code> token in the words.</p>
         <p class="note">2026-10-07, Victor: the panel must show <em>where</em> each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. <strong>A frame&#x27;s caption no longer prints the pointer&#x27;s pixels</strong> (<code>[📸2]</code>, not <code>[📸2🖱️@1204:388]</code> — 2026-10-17): a yellow dot on the picture says where it was; the agent&#x27;s words keep the numbers.</p>
         <code class="slug">prompt-inline</code>
@@ -726,9 +736,9 @@
       <section class="card" id="prompt-copied">
         <header>
           <h3>The prompt, with what he copied where he copied it</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×411 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×427 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-copied.png" width="749" height="411" style="opacity:1" alt="The prompt, with what he copied where he copied it"></div>
+        <div class="shot"><img src="states/prompt-copied.png" width="832" height="427" style="opacity:1" alt="The prompt, with what he copied where he copied it"></div>
         <p class="when">Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.</p>
         <p class="note">2026-10-17, Victor: <em>&quot;also display the copied text or image from clipboard in the preview&quot;</em>. A copied image is a numbered picture like any other (<code>[📸N 📋 copied]</code>), drawn under its caption; copied text is its own indented paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said.</p>
         <code class="slug">prompt-copied</code>
@@ -736,9 +746,9 @@
       <section class="card" id="prompt-area-context">
         <header>
           <h3>The prompt, a ✂️ area and the screen it was cut from</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">509×321 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">501×319 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-area-context.png" width="509" height="321" style="opacity:1" alt="The prompt, a ✂️ area and the screen it was cut from"></div>
+        <div class="shot"><img src="states/prompt-area-context.png" width="501" height="319" style="opacity:1" alt="The prompt, a ✂️ area and the screen it was cut from"></div>
         <p class="when">A wheel-drag area whose token is in the words.</p>
         <p class="note">2026-10-15, Victor: after the cut-out, the whole screen that goes with it — greyed outside the box, the box lit and ringed red — so it is plain that the entire screen is sent too. Drawn by <code>AreaContext</code>, never written to disk.</p>
         <code class="slug">prompt-area-context</code>
@@ -756,9 +766,9 @@
       <section class="card" id="prompt-move-context">
         <header>
           <h3>The prompt, a ⇧-drag move: red to green</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">651×348 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">644×346 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-move-context.png" width="651" height="348" style="opacity:1" alt="The prompt, a ⇧-drag move: red to green"></div>
+        <div class="shot"><img src="states/prompt-move-context.png" width="644" height="346" style="opacity:1" alt="The prompt, a ⇧-drag move: red to green"></div>
         <p class="when">A wheel-drag area with ⇧ / right-click, then a second box: <em>this, moved to there</em>.</p>
         <p class="note">2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.</p>
         <code class="slug">prompt-move-context</code>
@@ -796,9 +806,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×153 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×153 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="749" height="153" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="832" height="153" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -835,7 +845,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at a78a02f · 21 Oct 2026 · built 21 Oct 2026, 18:55
+  Generated from <code>OverlayStates.swift</code> · repo at 8653edc · 22 Oct 2026 · built 22 Oct 2026, 11:28
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

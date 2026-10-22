@@ -297,6 +297,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
     "height" : 117,
+    "image" : "listening-change-pulse.png",
+    "note" : "2026-10-22, Victor: *\"când se modifică vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție … pune un fundal flashing … ceva ce să se vadă că se modifică ceva acolo\"*. Amber behind the icon and the words (`ChangePulse`), never in them, like the brick wash on `Listening...`; the copy lands on the quote row as `📋 …` instead of flashing over the whole chip. Shown here at its brightest, on every row at once — in the app only the row that changed blinks.",
+    "shape" : "chip",
+    "slug" : "listening-change-pulse",
+    "title" : "Something just changed: the row flashes yellow",
+    "when" : "For 1.5 s after a tally row's value changes — a new picture (the automatic first frame excepted), a highlight or a copy, a ⌘⇧ pick. Three blinks, ending dark.",
+    "width" : 324
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 117,
     "image" : "listening-selection-multi.png",
     "note" : "`×3` and nothing else. A highlight is read once, at the moment it is caught; from then on the only open question is whether any of them fell out, and a line of somebody else's code beside the cursor for the rest of a two-minute sentence is the widest row on the chip restating something already checked. `×1` is written out too — the number is all that is left, so an empty row would read as a highlight that got lost.",
     "shape" : "chip",
@@ -358,10 +370,10 @@
     "group" : "Dictating",
     "height" : 117,
     "image" : "transcribing-ready.png",
-    "note" : "**`📻 Ready` is the top row** (2026-10-21, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
+    "note" : "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and green words, above the wait. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
     "shape" : "chip",
     "slug" : "transcribing-ready",
-    "title" : "Ready — talk again while it transcribes",
+    "title" : "Ready for more — talk again while it transcribes",
     "when" : "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
     "width" : 308
   },
@@ -644,14 +656,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 581,
+    "height" : 613,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
@@ -680,26 +692,26 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 411,
+    "height" : 427,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own indented paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said.",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 321,
+    "height" : 319,
     "image" : "prompt-area-context.png",
     "note" : "2026-10-15, Victor: after the cut-out, the whole screen that goes with it — greyed outside the box, the box lit and ringed red — so it is plain that the entire screen is sent too. Drawn by `AreaContext`, never written to disk.",
     "shape" : "panel",
     "slug" : "prompt-area-context",
     "title" : "The prompt, a ✂️ area and the screen it was cut from",
     "when" : "A wheel-drag area whose token is in the words.",
-    "width" : 509
+    "width" : 501
   },
   {
     "alpha" : 1,
@@ -716,14 +728,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 348,
+    "height" : 346,
     "image" : "prompt-move-context.png",
     "note" : "2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.",
     "shape" : "panel",
     "slug" : "prompt-move-context",
     "title" : "The prompt, a ⇧-drag move: red to green",
     "when" : "A wheel-drag area with ⇧ \/ right-click, then a second box: *this, moved to there*.",
-    "width" : 651
+    "width" : 644
   },
   {
     "alpha" : 1,
@@ -771,7 +783,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,

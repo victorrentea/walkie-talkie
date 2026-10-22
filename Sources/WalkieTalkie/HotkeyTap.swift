@@ -48,6 +48,19 @@ final class HotkeyTap {
     /// The cursor at the instant of the gesture — what he was pointing at.
     var onScreenshot: ((NSPoint) -> Void)?
 
+    /// **⌃P over a plain dictation: make it a prompt, then take the shot**
+    /// (2026-10-22, Victor: *"inventează … cum aș putea să [trec din dictare în
+    /// promptare] din taste"*). The key a prompt already uses as its shutter, so
+    /// the one he reaches for when he wants a picture is also the switch. The
+    /// cursor at the press, as `onScreenshot`'s.
+    var onPlainToPrompt: ((NSPoint) -> Void)?
+
+    /// **A prompt's gesture made over a plain dictation** — the wheel dragged,
+    /// which a plain sentence passes through untouched — so the app can say how
+    /// to get to a prompt (2026-10-22, Victor: *"fleșuiește un warning"*). Once a
+    /// press; the press itself still goes on as at rest.
+    var onPlainRefused: ((String) -> Void)?
+
     /// **The wheel, dragged while dictating: a region instead of the display.**
     /// The corner the drag started from, and the moment the wheel went down —
     /// which is the moment the picture belongs to, exactly as the shutter's
@@ -248,13 +261,18 @@ final class HotkeyTap {
     var relayPromptOpen: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return relayPromptOpenFlag }
         set {
-            stateLock.lock(); let was = relayPromptOpenFlag; relayPromptOpenFlag = newValue; stateLock.unlock()
-            if was != newValue { Self.markPrompting(newValue) }
+            stateLock.lock()
+            let was = relayPromptOpenFlag || relayPlainOpenFlag
+            relayPromptOpenFlag = newValue
+            let now = relayPromptOpenFlag || relayPlainOpenFlag
+            stateLock.unlock()
+            if was != now { Self.markPrompting(now) }
         }
     }
 
     /// **`~/.walkie-talkie/prompting` exists, holding this pid, while a prompt
-    /// records** (2026-10-20) — Victor Addons reads it on ⌃P and lets the key
+    /// records** (2026-10-20) — **and while a plain one does** (2026-10-22: ⌃P
+    /// is the switch to a prompt there, `onPlainToPrompt`) — Victor Addons reads it on ⌃P and lets the key
     /// through instead of taking its own screenshot (Victor: *"take over the
     /// shortcut and block the addon … If I am dictating, it's I'm telling you
     /// first"*). The pid lets a file left by a crash be told from a live prompt.
@@ -279,7 +297,14 @@ final class HotkeyTap {
     /// the photo or drag during the dictation process"*).
     var relayPlainOpen: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return relayPlainOpenFlag }
-        set { stateLock.lock(); relayPlainOpenFlag = newValue; stateLock.unlock() }
+        set {
+            stateLock.lock()
+            let was = relayPromptOpenFlag || relayPlainOpenFlag
+            relayPlainOpenFlag = newValue
+            let now = relayPromptOpenFlag || relayPlainOpenFlag
+            stateLock.unlock()
+            if was != now { Self.markPrompting(now) }
+        }
     }
     private var relayPlainOpenFlag = false
 
@@ -1702,6 +1727,8 @@ final class HotkeyTap {
     /// cursor. Measured on 2026-09-10, seven hours after the crop that caused
     /// it, with an editor tab stuck to the pointer.
     private var areaPressPassed = false
+    /// A wheel press over a plain dictation, watched for a drag — `onPlainRefused`.
+    private var plainWheelAnchorCG: CGPoint?
     /// **Logi mode, a prompt open: the wheel press is held back** (2026-10-08,
     /// Victor: *"when I click down the wheel and start dragging, the
     /// application behind receives the event of wheel click … If I start
@@ -1847,8 +1874,12 @@ final class HotkeyTap {
                     && !event.flags.contains(.maskAlternate) && !event.flags.contains(.maskShift)
             guard dictating, bare, !promptHeld, !leftIsHeld, !rightIsHeld else { return false }
             // **A plain dictation crops nothing** (2026-10-08) — the press goes
-            // on as at rest. Last: it samples Wispr's microphone.
-            guard !cleanSentenceOpen else { return false }
+            // on as at rest. Last: it samples Wispr's microphone. Its drag is
+            // still watched, only to say how to get a prompt (2026-10-22).
+            guard !cleanSentenceOpen else {
+                plainWheelAnchorCG = event.location
+                return false
+            }
             areaAnchor = NSEvent.mouseLocation
             areaAnchorCG = event.location
             areaPressedAt = Date()
@@ -1878,6 +1909,13 @@ final class HotkeyTap {
             // `haloDial`. The hand wobbles while it works the wheel, and a box
             // opening under a halo he is choosing is the collision this guards.
             // A held press's drag events stay here too: the app never saw the down.
+            if let plain = plainWheelAnchorCG, !haloDialed,
+               hypot(event.location.x - plain.x, event.location.y - plain.y) >= Self.areaDragThreshold {
+                plainWheelAnchorCG = nil
+                Log.info("✂️ wheel dragged over a plain dictation — no crop; saying how to make it a prompt")
+                DispatchQueue.global().async { [weak self] in self?.onPlainRefused?("✂️ the area crop") }
+                return false
+            }
             guard let anchor = areaAnchor, dictating, !haloDialed else { return areaPressHeld }
             let now = event.location
             guard hypot(now.x - areaAnchorCG.x, now.y - areaAnchorCG.y) >= Self.areaDragThreshold else { return areaPressHeld }
@@ -1897,6 +1935,7 @@ final class HotkeyTap {
             return true
 
         case .otherMouseUp:
+            plainWheelAnchorCG = nil
             let cropping = areaCropping
             let dialed = haloDialed
             let held = areaPressHeld
@@ -3942,6 +3981,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             Log.info("📸 ⌃P while a prompt records — the shutter")
             DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
             return swallow("⌃P shutter", type, event)
+        }
+        // ⌃P over a plain dictation — **the switch to a prompt** (2026-10-22),
+        // then the shutter, as above. Same bare-⌃ gate; `relayPlainOpen` is the
+        // app's own *still plain* (a Wispr arm alone does not count).
+        if keyCode == VK_P, ctrl, !cmd, !opt, !flags.contains(.maskShift),
+           relayPlainOpen, !relayPromptOpen, ownDictation {
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌃P to prompt (autorepeat)", type, event) }
+            ctrlPTaken = true
+            let cursor = NSEvent.mouseLocation
+            Log.info("💬 ⌃P over a plain dictation — it becomes a prompt, and the shutter")
+            DispatchQueue.global().async { [weak self] in self?.onPlainToPrompt?(cursor) }
+            return swallow("⌃P to prompt", type, event)
         }
 
         // ⌘⌃X — **the local model, now** (2026-09-28): see `onLocalNow`. Swallowed
