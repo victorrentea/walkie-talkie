@@ -5653,7 +5653,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.flash("⏳ Two sentences in flight — wait for one to land", duration: 3)
             }
         }
-        else { startDictation(paste: true) }
+        else {
+            startDictation(paste: true)
+            if listening || speculative || source.isRecording { bindClaudeInFront(prompt: true) }
+        }
     }
 
     /// **When the relay closed the live sentence for him** — its recording ended
@@ -5740,8 +5743,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// beside it, and a yes binds that tab with no flight and turns the sentence
     /// to it the way 🔼 → does (`aimAtBoundTerminal`): 🔽 is still its stop.
     /// VS Code's terminal is not bound this way — a binding there is the IDE's.
-    private func bindClaudeInFront() {
+    ///
+    /// **The 🔼 click's caret prompt too** (2026-10-23, Victor: *"Dacă am
+    /// selectat un terminal de Claude și am dat acolo forward click și atât,
+    /// trebuie să îți faci și bind și să și dictezi tot acolo … nu ar mai trebui
+    /// să mai văd caret"*) — `prompt: true`: the same question, the same bind,
+    /// and the sentence becomes the bound prompt 🔼 → would have opened.
+    private func bindClaudeInFront(prompt: Bool = false) {
         guard !quickAsk else { return }
+        let kind = prompt ? "a 🔼 prompt" : "a plain dictation"
         let sentence = liveSentence
         let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         // Still this plain sentence, still open, not redirected — asked on main,
@@ -5750,7 +5760,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let stillOurs: () -> Bool = { [weak self] in
             guard let self else { return false }
             return (sentence == nil || self.liveSentence === sentence) && (self.listening || self.source.isRecording)
-                && self.cleanSentence && !self.cleanRedirected && !self.quickAsk
+                && !self.quickAsk
+                && (prompt ? self.pasteMode && self.caretPrompt && !self.cleanSentence
+                           : self.cleanSentence && !self.cleanRedirected)
         }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self, let tty = TerminalBinding.frontClaudePromptTTY(bundleID: front) else { return }
@@ -5763,7 +5775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             guard ours else { return }
             guard let bound = already ?? self.terminal.bind(tty: tty) else {
-                Log.info("📍 a plain dictation over Claude Code on \(short) — it could not be bound; the words stay at the caret")
+                Log.info("📍 \(kind) over Claude Code on \(short) — it could not be bound; the words stay at the caret")
                 return
             }
             DispatchQueue.main.async { [weak self] in
@@ -5774,10 +5786,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.showBound(bound)
                 }
                 guard stillOurs() else {
-                    Log.info("📍 bound to Claude Code on \(short), but the plain sentence ended or turned meanwhile — it keeps its course")
+                    Log.info("📍 bound to Claude Code on \(short), but \(kind) ended or turned meanwhile — it keeps its course")
                     return
                 }
-                Log.info("📍 a plain dictation over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there")
+                Log.info("📍 \(kind) over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there")
                 self.aimAtBoundTerminal()
             }
         }
