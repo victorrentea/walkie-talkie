@@ -5337,6 +5337,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // speculative ring 1.5 s after a chord no microphone followed, and the
         // flag it raised lives on this side of the protocol.
         if !bg { speculative = false }
+        // ☠️ with no words — read before the resets below put the flags down.
+        let wordless: Bool
+        switch end {
+        case .silent: wordless = true
+        case .failed(let why, _, _): wordless = why == DictationEnd.heardNothing
+        default: wordless = false
+        }
+        let kamikazeAlone = wordless && kamikaze && !quickAsk && !spawnPending
+            && !(cleanSentence && !cleanRedirected)
+        let aloneAtCaret = latchedAtCaret, aloneTo = latch?.target
         // A sentence that never reached `deliver` must not hand its kind to the
         // next one (`caretPrompt` / `cleanSentence`, 2026-09-23).
         if case .delivered = end {} else {
@@ -5388,6 +5398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             abandonDictation("the recogniser could not be reached")
             clearCancelledDictationState()
         }
+        if kamikazeAlone { kamikazeWithoutWords(atCaret: aloneAtCaret, to: aloneTo) }
         guard !bg else { return }
         if listening {
             listening = false
@@ -9845,6 +9856,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func kamikazeNotSent(to destination: String) {
         Log.error("☠️ kamikaze not sent — no Claude Code prompt on \(destination) any more")
         overlay.flash("☠️ Kamikaze not sent — that session has ended", duration: 3)
+    }
+
+    /// **☠️ with no words sends the word alone** (2026-10-23). Victor: *"Dacă
+    /// fac o dictare la caret sau legată de un terminal și nu vorbesc nimic,
+    /// dar fac semnul de Kamikaze, trimite doar Kamikaze acelui terminal."* The
+    /// sentence he flicked ended `No words heard` and took the flag down with
+    /// it, so nothing went anywhere. Now the recipient latched at the close
+    /// gets `kamikaze` + Return: the terminal (the bound delivery, shell guard
+    /// and all), or a Claude Code prompt at the caret — never the word typed
+    /// into a document. The take stays in Recover either way.
+    private func kamikazeWithoutWords(atCaret: Bool, to latched: TerminalBinding.Target?) {
+        guard atCaret else {
+            guard let target = latched ?? terminal.target else {
+                Log.info("☠️ kamikaze with no words and nothing bound — not sent")
+                overlay.flash("☠️ Kamikaze not sent — nothing bound", duration: 3)
+                return
+            }
+            Log.info("☠️ kamikaze — no words heard, the word alone to \(target.address)")
+            overlay.flash("☠️ Kamikaze sent", duration: 1.5)
+            sendKamikaze(to: target)
+            return
+        }
+        let front = NSWorkspace.shared.frontmostApplication
+        let bundle = front?.bundleIdentifier, pid = front?.processIdentifier
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            if let tty = TerminalBinding.frontClaudePromptTTY(bundleID: bundle) {
+                let ok = TerminalBinding.submitPrompt("kamikaze", toTTY: tty)
+                Log.info(ok ? "☠️ kamikaze — no words heard, typed alone into Claude Code on \(tty)"
+                            : "☠️ kamikaze could not be typed into \(tty)")
+                DispatchQueue.main.async {
+                    self?.overlay.flash(ok ? "☠️ Kamikaze sent" : "☠️ Kamikaze not sent", duration: 1.5)
+                }
+                return
+            }
+            let vscodeTTY = pid.flatMap { TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: $0) }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard let vscodeTTY, let pid else {
+                    Log.info("☠️ kamikaze with no words — the caret is in no Claude Code prompt, not sent")
+                    self.overlay.flash("☠️ Kamikaze not sent — no Claude Code prompt at the caret", duration: 3)
+                    return
+                }
+                Log.info("☠️ kamikaze — no words heard, pasted alone into Claude Code in VS Code on \(vscodeTTY)")
+                self.overlay.flash("☠️ Kamikaze sent", duration: 1.5)
+                self.pasteText("kamikaze", to: pid, settles: false)
+                self.returnAfterVSCodePaste(tty: vscodeTTY, pid: pid, chars: "kamikaze".count)
+            }
+        }
     }
 
     /// The word alone to a terminal — the bound one's own delivery (shell guard,
