@@ -4894,6 +4894,10 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// For `GET /test/state` — the row as drawn, or nil.
     var localNowRowText: String? { localNowShown }
+    /// The countdown as folded onto the Transcribing line, or nil — `GET /test/state.localNow.inline`.
+    var localNowInlineText: String? { localNowFolded ? localNowInline : nil }
+    /// Whether the » over the held sent-prompt dialog is up — `GET /test/state.heldSkip`.
+    var heldSkipVisible: Bool { heldSkip.isVisible }
 
     /// How many sentences wait for a bind — see `heldRow`. Zero takes the row down.
     private(set) var heldCount = 0

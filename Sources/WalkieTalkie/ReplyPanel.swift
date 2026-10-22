@@ -1046,6 +1046,8 @@ private final class ReplyRoot: NSView {
     }
     /// The page's address, without the quote's `#:~:text=` and readable.
     static func shown(_ url: URL) -> String {
+        // More is not a page (tester 2026-10-22: its tip read `walkie-quick:more`).
+        if url == ReplyPanel.moreURL { return "Search the web again, for other sources" }
         var s = url.absoluteString
         if let r = s.range(of: ":~:") { s = String(s[..<r.lowerBound]) }
         if s.hasSuffix("#") { s.removeLast() }

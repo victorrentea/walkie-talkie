@@ -4763,9 +4763,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // cu calculatorul … zici now și efectiv înlocuiești motorul cu local"*):
         // the budget is out and the local words are the ones going in.
         if row.shown, let c = row.countdown, c <= 0 {
-            if !markedLocalNow { overlay.setEngineMark(Self.mark(engine: "whisper")) }
+            overlay.setEngineMark(Self.mark(engine: "whisper"))
             markedLocalNow = true
-        } else if markedLocalNow, !fallingBack, autoLocalWait?.settled != false {
+        } else if markedLocalNow, !fallingBack {
+            // No longer at `now` — the words landed, the decode ahead failed, or a
+            // new sentence took the row (tester 2026-10-22: a failed decode left 💻 up).
             // The wait is over and the local words did not take it (the engine's
             // landed first): the next sentence must not wear 💻 (review 2026-10-22).
             markedLocalNow = false
@@ -5743,9 +5745,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let tty = TerminalBinding.frontClaudePromptTTY(bundleID: front) else { return }
             let short = (tty as NSString).lastPathComponent
             var ours = false
-            DispatchQueue.main.sync { ours = stillOurs() }
+            var already: TerminalBinding.Target?
+            DispatchQueue.main.sync {
+                ours = stillOurs()
+                already = self.terminal.target.flatMap { $0.handle.tty == short ? $0 : nil }
+            }
             guard ours else { return }
-            let already = self.terminal.target.flatMap { $0.handle.tty == short ? $0 : nil }
             guard let bound = already ?? self.terminal.bind(tty: tty) else {
                 Log.info("📍 a plain dictation over Claude Code on \(short) — it could not be bound; the words stay at the caret")
                 return
@@ -6603,10 +6608,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "🌐 Internet" + (round > 1 ? " ×\(round)" : "") + (running ? ReplyPanel.dots : " " + ReplyPanel.more)
         }
         func makeChecks(first: Bool) -> QuickAsk.Checks {
-            QuickAsk.Checks(web: { text, isDone in
+            let mine = round
+            return QuickAsk.Checks(web: { text, isDone in
                 guard isDone else { return }
                 if text.hasPrefix("⚠️") {
-                    steps = ["🌐 Internet failed", ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
+                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + " failed",
+                             ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
                 } else {
                     let c = QuickAsk.cited(text)
                     answer = c.text
@@ -6629,12 +6636,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     reviewed = ReplyPanel.plain(c.text)
                     remember(reviewed ?? "")
                 }
-                // The checks are over: More can be asked for.
-                if steps.count > 1, !steps[0].hasSuffix("failed") { steps[0] = internet(false) }
                 Log.info(String(format: "⚡ 🧐 reviewed answer (round %d) at %.1f s — %@", round, CFAbsoluteTimeGetCurrent() - started,
                                 String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
                 paint(force: true)
             }, end: {
+                // A round that a More click has already replaced ends nothing
+                // (tester 2026-10-22: its late `finishLive` closed the new round's pop-up).
+                guard mine == round else { return }
+                // Whatever still says it is running did not finish (a check that never
+                // started froze the footer on `reviewing…`), and More is offered after
+                // every round — a failed one most of all.
+                steps = steps.map { $0.hasSuffix(ReplyPanel.dots) ? String($0.dropLast(ReplyPanel.dots.count)) + " stopped" : $0 }
+                if let firstStep = steps.first, firstStep.hasPrefix("🌐 Internet"), !firstStep.contains(ReplyPanel.more) {
+                    steps[0] = firstStep + " " + ReplyPanel.more
+                }
+                paint(force: true)
                 ReplyPanel.finishLive(question: token)
                 if first { checked?(searched, reviewed) }
             })
@@ -8588,7 +8604,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let localNow = localNowAvailability()
         out["localNow"] = ["available": localNow.available, "why": localNow.why,
                            "loading": !whisperSource.isReady,
-                           "row": overlay.localNowRowText ?? NSNull()] as [String: Any]
+                           "row": overlay.localNowRowText ?? NSNull(),
+                           "inline": overlay.localNowInlineText ?? NSNull()] as [String: Any]
+        out["engineMark"] = overlay.engineMark
+        out["heldSkip"] = overlay.heldSkipVisible
+        out["editor"] = ["on": DictationEditor.enabled, "inFlight": DictationEditor.shared.inFlight] as [String: Any]
         // The auto fallback (2026-09-28): {on, budget, since, fired, left, engine, samples, wispr…}.
         out["localAuto"] = describeAutoLocal()
         out["autosend"] = autosend

@@ -1340,12 +1340,15 @@ final class ElementPicker {
                 return respond(conn, 400, ["ok": false, "error": "words"])
             }
             let started = CFAbsoluteTimeGetCurrent()
-            let done = DispatchSemaphore(value: 0)
-            var edited = words
-            DispatchQueue.main.async { DictationEditor.shared.edit(words) { text in edited = text; done.signal() } }
-            _ = done.wait(timeout: .now() + DictationEditor.budget + 2)
-            respond(conn, 200, ["ok": true, "words": words, "edited": edited, "changed": edited != words,
-                                "ms": Int((CFAbsoluteTimeGetCurrent() - started) * 1000)])
+            let language = body["language"] as? String
+            // Answered from main, never waited for on the listener's queue (tester
+            // 2026-10-22: requests ran one by one and `/test/state` stalled behind them).
+            DispatchQueue.main.async { [weak self] in
+                DictationEditor.shared.edit(words, language: language) { edited in
+                    self?.respond(conn, 200, ["ok": true, "words": words, "edited": edited, "changed": edited != words,
+                                              "ms": Int((CFAbsoluteTimeGetCurrent() - started) * 1000)])
+                }
+            }
 
         case ("POST", "/test/type-in"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]

@@ -87,6 +87,17 @@ final class DictationEditorTests: XCTestCase {
                                                  for: "Okay, there should be any, there should not be any lower limit to the surface"))
     }
 
+    func testASelfCorrectionMayShortenTheSentenceWhenEveryWordLeftIsHis() {
+        XCTAssertTrue(DictationEditor.acceptable("Send it to Mary.", for: "send it to John no wait no sorry send it to Mary"))
+        XCTAssertTrue(DictationEditor.acceptable("I think it works.", for: "um uh so like basically you know I think um it works"))
+        XCTAssertFalse(DictationEditor.acceptable("Done.", for: "send it to John no wait no sorry send it to Mary please today"))
+    }
+
+    func testMarkupHeDidNotSayIsRefused() {
+        XCTAssertFalse(DictationEditor.acceptable("<br>", for: "uh"))
+        XCTAssertTrue(DictationEditor.acceptable("a <b> tag", for: "a <b> tag"))
+    }
+
     func testAShortSentenceCannotGrowIntoAnAnswer() {
         XCTAssertFalse(DictationEditor.acceptable("Da, sigur, pot să te ajut!", for: "da"))
         XCTAssertTrue(DictationEditor.acceptable("Da.", for: "da"))
