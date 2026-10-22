@@ -67,6 +67,8 @@ final class DictationEditor {
         - Remove fillers (um, uh, ăă, deci deci) and false starts; when the speaker corrects themselves \
         — "X, nu de fapt Y", "X adică Y", "X, I mean Y", "X, actually Y" — keep only Y, in X's place; \
         never keep X, never negate Y.
+        - Write in the language of <dictation> — never translate it, even when the context or earlier \
+        sentences are in another language. \
         - Keep the speaker's words, language (Romanian or English, mixed is fine), tone and meaning. \
         Do not answer, summarise, translate, shorten, add or explain anything.
         - Punctuate and capitalise so the text continues <before_caret> naturally: lowercase start when it \
@@ -284,19 +286,31 @@ final class DictationEditor {
         return v
     }
 
+    static func languageName(_ code: String?) -> String? {
+        switch code?.lowercased().prefix(2) {
+        case "en": return "English"
+        case "ro": return "Romanian"
+        default: return nil
+        }
+    }
+
     /// His name, as the Mac knows it — Wispr sends the account's first and last.
     static var userName: String { NSFullUserName() }
 
     /// The one user message: the context in tags, the dictation last.
     static func message(_ words: String, _ c: Context?, vocabulary v: Vocabulary = Vocabulary(),
-                        user: String = "") -> String {
+                        user: String = "", language: String? = nil) -> String {
         var head = ""
         if !user.isEmpty { head += "<speaker>\(user)</speaker>\n" }
         if !v.terms.isEmpty { head += "<vocabulary>\(v.terms.joined(separator: ", "))</vocabulary>\n" }
         if !v.replacements.isEmpty {
             head += "<replacements>\(v.replacements.map { "\($0.heard) → \($0.written)" }.joined(separator: "; "))</replacements>\n"
         }
-        guard let c else { return head + "<dictation>\(words)</dictation>" }
+        // **The recogniser's language, said outright** (2026-10-22 benchmark): with it
+        // Haiku translated 2 of 200 sentences instead of 9 — a long session full of
+        // Romanian pulled English dictations into Romanian.
+        let lang = languageName(language).map { "<language>\($0)</language>\n" } ?? ""
+        guard let c else { return head + lang + "<dictation>\(words)</dictation>" }
         var m = head + "<app>\(c.app)\(c.window.map { $0 == c.app ? "" : " (\($0))" } ?? "")</app>\n"
         if let url = c.url { m += "<url>\(url.prefix(200))</url>\n" }
         m += "<before_caret>\(c.before)</before_caret>\n"
@@ -304,6 +318,7 @@ final class DictationEditor {
         if !c.after.isEmpty { m += "<after_caret>\(c.after)</after_caret>\n" }
         if !c.names.isEmpty { m += "<names>\(c.names.joined(separator: ", "))</names>\n" }
         if !c.files.isEmpty { m += "<files>\(c.files.joined(separator: ", "))</files>\n" }
+        m += lang
         return m + "<dictation>\(words)</dictation>"
     }
 
@@ -313,7 +328,24 @@ final class DictationEditor {
         let e = edited.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !e.isEmpty, !e.contains("<dictation>"), !e.contains("<before_caret>") else { return false }
         let ratio = Double(e.count) / Double(max(1, words.count))
-        return words.count < 12 ? e.count <= words.count + 6 : (0.45...1.6).contains(ratio)
+        guard words.count < 12 ? e.count <= words.count + 6 : (0.45...1.6).contains(ratio) else { return false }
+        // **Mostly his own words** (2026-10-22 benchmark): Haiku translated 5 of 200
+        // English sentences into Romanian, keeping 0–25 % of the words; Wispr's own
+        // most drastic edit of the same 200 kept 60 %. An edit with ≥ 3 words that
+        // keeps under half of them is not his sentence.
+        return keptShare(of: e, from: words) >= 0.5 || bare(e).count < 3
+    }
+
+    /// Lowercased, accents folded, punctuation dropped.
+    static func bare(_ s: String) -> [String] {
+        s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+    }
+
+    /// The share of the edit's words that were already in the dictation.
+    static func keptShare(of edited: String, from words: String) -> Double {
+        let said = Set(bare(words)), out = bare(edited)
+        return Double(out.filter(said.contains).count) / Double(max(1, out.count))
     }
 
     // MARK: - The model
@@ -451,7 +483,7 @@ final class DictationEditor {
     /// Edits `words` against the screen of `pid` (the app the words go to; the
     /// one in front when nil). `done` on main, exactly once, within `budget`
     /// (plus any earlier sentence's wait): the edit, or the raw words.
-    func edit(_ words: String, pid: pid_t? = nil, budget: TimeInterval = DictationEditor.budget,
+    func edit(_ words: String, pid: pid_t? = nil, language: String? = nil, budget: TimeInterval = DictationEditor.budget,
               done: @escaping (_ text: String) -> Void) {
         let ticket = nextTicket
         nextTicket += 1
@@ -498,7 +530,7 @@ final class DictationEditor {
                         self.warmLocked()
                     }
                 }
-                w.send(Self.message(words, context, vocabulary: Self.vocabulary(), user: Self.userName))
+                w.send(Self.message(words, context, vocabulary: Self.vocabulary(), user: Self.userName, language: language))
             }
         }
     }

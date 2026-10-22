@@ -4474,7 +4474,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // **✍️ Edited against the screen first** (2026-10-22,
                 // `DictationEditor`): the paste waits for it, never past its budget.
                 let submit = submitClean, pid = result.focusPid
-                DictationEditor.shared.edit(line, pid: pid) { [weak self] edited in
+                DictationEditor.shared.edit(line, pid: pid, language: result.language) { [weak self] edited in
                     guard let self else { return }
                     self.pasteText(edited + mic, to: pid)
                     if submit { self.submitAfterCleanWords() }

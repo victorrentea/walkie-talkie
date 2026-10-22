@@ -75,6 +75,18 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(v.terms, ["Devoxx", "C#"])
     }
 
+    func testTheRecognisersLanguageIsSaidBeforeTheDictation() {
+        XCTAssertEqual(DictationEditor.message("hi", nil, language: "en"), "<language>English</language>\n<dictation>hi</dictation>")
+        XCTAssertEqual(DictationEditor.message("hi", nil, language: "pt"), "<dictation>hi</dictation>")
+    }
+
+    func testATranslationIsNotHisSentence() {
+        XCTAssertFalse(DictationEditor.acceptable("Dacă dictez acum, cât de bună este dictarea asta? Mă întreb.",
+                                                  for: "If I dictate now, how good is this dictation? I wonder."))
+        XCTAssertTrue(DictationEditor.acceptable("Okay, there should not be any lower limit to the surface.",
+                                                 for: "Okay, there should be any, there should not be any lower limit to the surface"))
+    }
+
     func testAShortSentenceCannotGrowIntoAnAnswer() {
         XCTAssertFalse(DictationEditor.acceptable("Da, sigur, pot să te ajut!", for: "da"))
         XCTAssertTrue(DictationEditor.acceptable("Da.", for: "da"))
