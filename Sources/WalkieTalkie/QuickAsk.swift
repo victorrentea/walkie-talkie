@@ -560,8 +560,12 @@ final class QuickAsk {
             case "result":
                 let isError = e["is_error"] as? Bool ?? false
                 let result = (e["result"] as? String) ?? text
+                // The next message starts its own text — a process kept for many
+                // (`DictationEditor`) would otherwise stream every answer onto the last.
+                let streamed = text
+                text = ""
                 if isError { onResult?(nil, result.isEmpty ? "the quick model failed" : result) }
-                else { onResult?(result.isEmpty ? text : result, nil) }
+                else { onResult?(result.isEmpty ? streamed : result, nil) }
             default:
                 return
             }

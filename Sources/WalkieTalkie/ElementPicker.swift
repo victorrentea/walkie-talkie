@@ -1330,6 +1330,23 @@ final class ElementPicker {
             let (code, answer) = hook(body)
             respond(conn, code, answer)
 
+        // **✍️ The dictation editor on its own** (2026-10-22): `{"words": "…"}` →
+        // the edit (or the raw words past the budget) and how long it took. Reads
+        // the screen like a real sentence, pastes nothing. Waits on this queue,
+        // never on main — the answer is handed back on main.
+        case ("POST", "/test/editor"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            guard let words = body["words"] as? String, !words.isEmpty else {
+                return respond(conn, 400, ["ok": false, "error": "words"])
+            }
+            let started = CFAbsoluteTimeGetCurrent()
+            let done = DispatchSemaphore(value: 0)
+            var edited = words
+            DictationEditor.shared.edit(words) { text in edited = text; done.signal() }
+            _ = done.wait(timeout: .now() + DictationEditor.budget + 2)
+            respond(conn, 200, ["ok": true, "words": words, "edited": edited, "changed": edited != words,
+                                "ms": Int((CFAbsoluteTimeGetCurrent() - started) * 1000)])
+
         case ("POST", "/test/type-in"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             guard let hook = onTestTypeIn else { return respond(conn, 503, ["ok": false, "error": "no handler"]) }

@@ -628,10 +628,18 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
 - Context through Accessibility at delivery, ≤ 0.15 s: app + window title, 1000 chars before the
   caret / 300 after / the selection, ≤ 50 names from the focused window's tree. Nothing from a secure
   field or a password manager. Never a screenshot.
-- A pre-started `claude -p --model haiku` (`QuickAsk.Worker`), one per sentence. **Budget 4 s**
+- **One Haiku session kept up for 40 sentences** (`sessionTurns`), then replaced by a spare started
+  beforehand; a sentence that finds it busy takes the spare once. Measured: 1.3–2.0 s per sentence
+  in a kept session vs 1.6–4.9 s with a fresh process each (*"nu vreau să trec pe api key-ul în
+  niciun caz"* — the subscription stays). A session silent 30 s is replaced. **Budget 4 s**
   (`WT_EDITOR_BUDGET`): past it the raw words go and the late edit is only logged. An edit of the wrong
   shape (empty, a tag echoed, a length an answer would have) is refused (`acceptable`).
 - Log: `✍️ editor: context …`, `✍️ editor: «raw» → «edited» in N ms`.
+- **Haiku copies the screen** (measured 2026-10-22, 21:40): with `in ziua doi, nu în ziua trei` on
+  screen above the caret, the dictation `în ziua doi nu de fapt în ziua trei` came back inverted
+  2 runs in 3, even with the rule *never copy words … that were not spoken*; Sonnet (low effort) got it
+  right 3/3 at 1.4–3.9 s. **No concrete examples in the prompt** — `marți … miercuri` leaked
+  `miercuri` into an answer. `WT_EDITOR_MODEL=sonnet` switches.
 
 ## Do not
 
