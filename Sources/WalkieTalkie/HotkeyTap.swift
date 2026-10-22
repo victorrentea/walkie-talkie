@@ -243,14 +243,14 @@ final class HotkeyTap {
     /// uses the local model (Q21). The two
     /// modifiers are **watched, never taken**: swallowing half a modifier pair
     /// is the stale-⌘ bug by another door. Hops to main on the other side.
+    /// **The tap no longer raises it** (2026-10-23, Victor: *"Butonul ăsta
+    /// Command din partea dreaptă să funcționeze doar ca toggle de on/off la
+    /// dublu click … Nu țin niciodată tasta aia apăsată. E foarte enervant."*)
+    /// — right ⌘⌥ held until 2026-10-22, right ⌘ held for that one day. Kept
+    /// as `AppDelegate`'s entry point for a held dictation, should one return.
     enum CleanHold { case press, release, shortcut }
     var onCleanHold: ((CleanHold) -> Void)?
 
-    /// Whether the held pair went to `onCleanHold` — tap thread, `stateLock`.
-    /// (`heldPairIsTheEngines`, which kept Wispr from delivering its own copy
-    /// of a hold it heard on `54+61`, went with Q9 step 2 on 2026-09-28: Wispr
-    /// no longer listens on that pair.)
-    private var enginePairHeld = false
 
     /// **The relay's open sentence is a prompt** — written by
     /// `AppDelegate.syncBorrowedGestures`, `listening` and not plain. It is
@@ -351,37 +351,6 @@ final class HotkeyTap {
     /// the source already knows about that one.
     var onWisprMaybeCancelling: (() -> Void)?
 
-    /// Whether the right ⌘ hold has opened its sentence (2026-10-22; the right
-    /// ⌘⌥ pair until then), so `onCleanHold` is told on the edge rather than on
-    /// every `flagsChanged` while it is down. `stateLock`, like the two below.
-    private var cleanPairDown = false
-    /// A lone right ⌘ is down and its hold has not fired yet; the generation
-    /// tells a stale timer from the current press.
-    private var rightCmdHoldPending = false
-    private var rightCmdHoldGen = 0
-    /// How long right ⌘ must be held alone before the microphone opens — the
-    /// same 0.35 s that ends a tap of right ⌘ ×2, so the two never overlap.
-    private static let rightCmdHoldSeconds: Double = 0.35
-
-    /// The hold's timer: still the same press, still pending, and the hardware
-    /// still says the right ⌘ is down (a release the tap missed must not open
-    /// a sentence nothing will end).
-    private func rightCmdHoldFired(_ gen: Int) {
-        let hw = CGEventSource.flagsState(.combinedSessionState).rawValue
-        stateLock.lock()
-        guard rightCmdHoldPending, rightCmdHoldGen == gen, (hw & Self.deviceRightCommand) != 0 else {
-            if rightCmdHoldGen == gen { rightCmdHoldPending = false }
-            stateLock.unlock()
-            return
-        }
-        rightCmdHoldPending = false
-        cleanPairDown = true
-        enginePairHeld = true
-        stateLock.unlock()
-        Self.notePairHeld(true)
-        Log.info("🧼 right ⌘ held — a clean dictation on the Engine")
-        onCleanHold?(.press)
-    }
 
     // ── Another app's delivery, watched and (when wrapped) taken ─────────────
 
@@ -3541,20 +3510,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
         }
 
-        // ── Right ⌘⌥ held: Walkie's clean dictation (and fn, for F7/F9) ───────
+        // ── Right ⌘ ×2: the plain dictation's toggle (and fn, for F7/F9) ──────
         //
-        // Above the `keyDown` gate because it is a `flagsChanged`: the pair is two
-        // modifiers and nothing else, so it never produces a key down at all.
+        // Above the `keyDown` gate because it is a `flagsChanged`: a modifier
+        // tapped alone never produces a key down at all.
         if type == .flagsChanged {
             if CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == VK_FUNCTION {
                 fnKeyHeld = event.flags.contains(.maskSecondaryFn)
             }
             padChord(event)
             let raw = event.flags.rawValue
-            // Device-dependent bits, because the hold is specifically the **right**
-            // ⌘: `.maskCommand` alone would fire on every ⌘ in the session.
-            // `NX_DEVICERCMDKEYMASK`.
-            let rightCmdDown = (raw & Self.deviceRightCommand) != 0
             // **W1 (2026-09-28): this app's own modifier events are not his
             // hands.** Every chord the app posts ends with a stamped
             // `flagsChanged` (fn ⌃ Space's tail, the caret ⌘V's ⌘-up, the ⌘C
@@ -3599,70 +3564,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     rightCmdTapUpAt = 0
                 }
             }
-            // **Right ⌘ held alone = Walkie's clean dictation** (2026-10-22 —
-            // right ⌘⌥ from 2026-09-25; Victor: *"Eliberează Option-ul … de
-            // dictare … ținut apăsat sau apăsat de două ori să pornească
-            // dictarea"*). The press only **arms** it: `rightCmdHoldSeconds` later,
-            // still alone and with no key typed, the sentence opens. A tap (the
-            // halves of right ⌘ ×2) or ⌘ used as a modifier never opens a
-            // microphone. The **release** ends it; a key under it after the start
-            // is still `.shortcut`, another modifier joining it is not an end.
-            if !ownPost {
-                let keyCode = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
-                let others: CGEventFlags = [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn, .maskAlphaShift]
-                let alone = rightCmdDown && event.flags.intersection(others).isEmpty
-                    && (raw & Self.deviceLeftCommand) == 0
-                stateLock.lock()
-                if alone, keyCode == Self.VK_RIGHT_COMMAND, !cleanPairDown, !rightCmdHoldPending {
-                    rightCmdHoldPending = true
-                    rightCmdHoldGen &+= 1
-                    let gen = rightCmdHoldGen
-                    stateLock.unlock()
-                    DispatchQueue.global().asyncAfter(deadline: .now() + Self.rightCmdHoldSeconds) { [weak self] in
-                        self?.rightCmdHoldFired(gen)
-                    }
-                    return Unmanaged.passUnretained(event)
-                }
-                if !alone { rightCmdHoldPending = false }
-                let ended = cleanPairDown && !rightCmdDown
-                var was = false
-                if ended {
-                    cleanPairDown = false
-                    was = enginePairHeld
-                    enginePairHeld = false
-                }
-                stateLock.unlock()
-                if ended {
-                    Self.notePairHeld(false)
-                    // A release after `.shortcut` already dropped the sentence is not
-                    // a second end.
-                    if was {
-                        Log.info("🧼 right ⌘ released — the clean dictation ends")
-                        DispatchQueue.global().async { [weak self] in self?.onCleanHold?(.release) }
-                    }
-                    return Unmanaged.passUnretained(event)
-                }
-            }
         }
-        // A key between or under the right ⌘ taps is ⌘ used as a modifier — and
-        // a key under a right ⌘ still arming its hold makes it no dictation.
-        if type == .keyDown {
-            rightCmdTapDownAt = 0; rightCmdTapUpAt = 0
-            stateLock.lock(); rightCmdHoldPending = false; stateLock.unlock()
-        }
+        // A key between or under the right ⌘ taps is ⌘ used as a modifier.
+        if type == .keyDown { rightCmdTapDownAt = 0; rightCmdTapUpAt = 0 }
         if type == .keyDown, event.getIntegerValueField(.eventSourceUserData) != Self.trackpadStamp {
             padChordUsedAsShortcut()
-        }
-        // **A key under the held pair makes it a shortcut, not a dictation**
-        // (2026-09-25, `onCleanHold`). Right ⌘⌥ + a letter is a chord somebody
-        // else owns; the sentence opened at the press is thrown away and the
-        // key goes on to whoever wanted it.
-        if type == .keyDown, enginePairHeld,
-           event.getIntegerValueField(.eventSourceUserData) != Self.backButtonStamp,
-           event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
-            stateLock.lock(); enginePairHeld = false; stateLock.unlock()
-            Log.info("🧼 a key under the right ⌘ hold — a shortcut, not a dictation; the clean sentence is dropped")
-            DispatchQueue.global().async { [weak self] in self?.onCleanHold?(.shortcut) }
         }
         // **This app's own posts are stamped out of it** (2026-09-13), exactly as
         // the ⌃Escape branch below has always been. It was harmless while the

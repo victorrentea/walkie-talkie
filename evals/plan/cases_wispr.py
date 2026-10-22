@@ -169,8 +169,11 @@ def wav_count():
 
 
 # ---------------------------------------------------------------- TW1–TW3: the held right ⌘⌥ (W-D1, W-C6)
-@case("TW1", covers=_COV, tags=("gesture", "desk"), engine="wispr", pre=needs_standalone(True),
-      expect="right ⌘⌥ held 3 s on Engine=Wispr stays one sentence: no 🧼 release before the real one, listening ≥ 2.5 s")
+def _retired_hold():
+    return "RETIRED 2026-10-23 — no key holds a dictation any more (right ⌘ ×2 is the keyboard's toggle)"
+
+@case("TW1", covers=_COV, tags=("gesture", "desk"), engine="wispr", pre=_retired_hold,
+      expect="RETIRED — was: right ⌘⌥ held 3 s on Engine=Wispr stays one sentence: no 🧼 release before the real one, listening ≥ 2.5 s")
 def tw1():
     """W-D1 / W-C6a (desk). Standalone ON, Engine = Wispr: the held pair is `onCleanHold` →
     `wisprSource.start()` → `postWisprHandsFree`, whose trailing `flagsChanged []` (muted here to
@@ -180,7 +183,7 @@ def tw1():
     desk()
     post("/test/key-trace", {"on": True})
     mark = log_mark(); t0 = time.time()
-    post("/test/modifiers", {"keys": [54], "holdMs": 3000})
+    post("/test/modifiers", {"keys": [54, 61], "holdMs": 3000})
     seen = []
     while time.time() - t0 < 2.6:
         s = state(); seen.append((round(time.time() - t0, 2), s["listening"]))
@@ -208,8 +211,8 @@ def tw1():
     note += f"; listening from {up[0]} s to the end of sampling, never dropped"
     return "PASS", note
 
-@case("TW2", covers=_COV, tags=("gesture", "desk", "unit"), pre=lambda: None if "wisprLive" in state() else "no Wispr hooks in this build",
-      expect="a stamped flagsChanged [] under a held right ⌘⌥ is not its release")
+@case("TW2", covers=_COV, tags=("gesture", "desk", "unit"), pre=_retired_hold,
+      expect="RETIRED — was: a stamped flagsChanged [] under a held right ⌘⌥ is not its release")
 def tw2():
     """W-D1 as a unit test (GW6 → `/test/modifiers {"keys": [], "stamped": true}`): hold right
     ⌘⌥ (unstamped, device bits), post one **stamped** `flagsChanged []` 200 ms in — the tail every
@@ -217,7 +220,7 @@ def tw2():
     engine (no Wispr needed); cancelled before the real release."""
     mic_override(LOOPBACK)
     mark = log_mark()
-    post("/test/modifiers", {"keys": [54], "holdMs": 1500})
+    post("/test/modifiers", {"keys": [54, 61], "holdMs": 1500})
     time.sleep(0.2)
     post("/test/modifiers", {"keys": [], "stamped": True})
     time.sleep(0.7)
@@ -244,7 +247,7 @@ def tw3():
     gone: `state.wisprStandalone` always answers true). Kept as a body for the record only."""
     e = engine()
     mark = log_mark()
-    post("/test/modifiers", {"keys": [54], "holdMs": 2000})
+    post("/test/modifiers", {"keys": [54, 61], "holdMs": 2000})
     time.sleep(3.0)
     s = state()
     txt = log_since(mark)
