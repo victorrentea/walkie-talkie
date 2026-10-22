@@ -371,7 +371,8 @@ yields to `--label`).
 ### Three changes of 2026-10-22, evening
 
 - **`📻 Ready for more` is plain ink**, not green, and flashes the yellow `ChangePulse` when it comes
-  up (`readyPulse`, in `placeChangePulses`' list).
+  up (`readyPulse`, in `placeChangePulses`' list), and **stays at least 2 s once shown** (`readyMinimum`,
+  Victor: *"să se vadă minim 2 s"* — two showings in three lasted ≤ 1 s).
 - **The local countdown is on the `Transcribing` line** while there is one: `Transcribing via <mark>...
   💻 in 3s ⌘⌃X` (`localNowInline`, `AutoLocal.inlineText`, full ink — not part of the bar); the
   `localNowRow` only while the sentence records. At `now` AppDelegate sets the engine mark to 💻.

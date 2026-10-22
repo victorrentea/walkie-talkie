@@ -4916,9 +4916,33 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// ready for more"*).
     static let readyText = "Ready for more"
 
+    /// **Up for at least this long once shown** (2026-10-22, Victor: *"să se vadă
+    /// minim 2 s"*): Wispr answers ~0.3 s after the row comes up at 0.8 s, so 194 of
+    /// 294 showings on Oct 21–22 lasted ≤ 1 s — a yellow blink on a vanishing row.
+    static let readyMinimum: TimeInterval = 2
+    private var readyShownAt: CFAbsoluteTime = 0
+    private var readyHide: DispatchWorkItem?
+
     func setReadyForNext(_ on: Bool) {
+        readyHide?.cancel()
+        readyHide = nil
+        if !on, readyForNext, !Self.shooting {
+            let left = Self.readyMinimum - (CFAbsoluteTimeGetCurrent() - readyShownAt)
+            if left > 0 {
+                let hide = DispatchWorkItem { [weak self] in
+                    guard let self, self.readyForNext else { return }
+                    self.readyHide = nil
+                    self.readyForNext = false
+                    self.layoutContent()
+                }
+                readyHide = hide
+                DispatchQueue.main.asyncAfter(deadline: .now() + left, execute: hide)
+                return
+            }
+        }
         guard readyForNext != on else { return }
         readyForNext = on
+        if on { readyShownAt = CFAbsoluteTimeGetCurrent() }
         layoutContent()
         // **The yellow flash, then the plain row** (2026-10-22, Victor: *"să nu
         // fie cu verde, ci același fond ca de obicei … un flash, cum faci atunci

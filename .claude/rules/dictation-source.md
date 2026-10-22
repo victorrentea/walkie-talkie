@@ -640,6 +640,8 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
   OCR of the screen (off by default, empty in his DB), Slack nouns kept across sentences, `@name` for
   "at X", per-category style. Calendar names, writing samples and voice rules are not dictation
   context there either.
+- **Under 3 words, or no letter/digit, the words go as said** (`minimumWords`) — nothing to fix, and
+  the wait is felt most on a short sentence.
 - **One Haiku session kept up for 40 sentences** (`sessionTurns`), then replaced by a spare started
   beforehand; a sentence that finds it busy takes the spare once. Measured: 1.3–2.0 s per sentence
   in a kept session vs 1.6–4.9 s with a fresh process each (*"nu vreau să trec pe api key-ul în

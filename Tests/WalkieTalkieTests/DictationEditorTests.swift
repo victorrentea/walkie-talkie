@@ -93,6 +93,16 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertFalse(DictationEditor.acceptable("Done.", for: "send it to John no wait no sorry send it to Mary please today"))
     }
 
+    func testCorrectedNamesCountAsHisWords() {
+        var v = DictationEditor.Vocabulary()
+        v.terms = ["Devoxx"]
+        v.replacements = [("GVT", "JWT")]
+        XCTAssertTrue(DictationEditor.acceptable("JWT și Devoxx", for: "gvt și devox", vocabulary: v))
+        XCTAssertTrue(DictationEditor.acceptable("merg la Devoxx mâine", for: "merg la devox mâine"))
+        XCTAssertTrue(DictationEditor.near("devox", "devoxx"))
+        XCTAssertFalse(DictationEditor.near("dictez", "dictarea"))
+    }
+
     func testMarkupHeDidNotSayIsRefused() {
         XCTAssertFalse(DictationEditor.acceptable("<br>", for: "uh"))
         XCTAssertTrue(DictationEditor.acceptable("a <b> tag", for: "a <b> tag"))

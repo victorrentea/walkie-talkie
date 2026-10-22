@@ -329,7 +329,7 @@ final class DictationEditor {
 
     /// An edit that cannot be the same sentence is not used: empty, a tag
     /// echoed back, or a length the rules do not allow (an answer, a summary).
-    static func acceptable(_ edited: String, for words: String) -> Bool {
+    static func acceptable(_ edited: String, for words: String, vocabulary: Vocabulary = Vocabulary()) -> Bool {
         let e = edited.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !e.isEmpty, !e.contains("<dictation>"), !e.contains("<before_caret>") else { return false }
         // Markup he did not say is not his (`uh` → `<br>`, tester 2026-10-22).
@@ -340,13 +340,16 @@ final class DictationEditor {
         // **Shorter is fine when every word left is his** (tester 2026-10-22: `send
         // it to John no wait no sorry send it to Mary` → `send it to Mary` was refused
         // by a 0.45 floor). A much shorter edit must be ≥ 90 % his own words.
-        if !shortWords, ratio < 0.45, keptShare(of: e, from: words) < 0.9 { return false }
+        if !shortWords, ratio < 0.45, keptShare(of: e, from: words, vocabulary: vocabulary) < 0.9 { return false }
         // **Mostly his own words** (2026-10-22 benchmark): Haiku translated 5 of 200
         // English sentences into Romanian, keeping 0–25 % of the words; Wispr's own
         // most drastic edit of the same 200 kept 60 %. An edit with ≥ 3 words that
         // keeps under half of them is not his sentence.
-        return keptShare(of: e, from: words) >= 0.5 || bare(e).count < 3
+        return keptShare(of: e, from: words, vocabulary: vocabulary) >= 0.5 || bare(e).count < 3
     }
+
+    /// Shorter sentences go out as they were said.
+    static let minimumWords = 3
 
     /// Lowercased, accents folded, punctuation dropped.
     static func bare(_ s: String) -> [String] {
@@ -354,10 +357,34 @@ final class DictationEditor {
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
     }
 
-    /// The share of the edit's words that were already in the dictation.
-    static func keptShare(of edited: String, from words: String) -> Double {
+    /// The share of the edit's words that are his: said (accents and case aside), a
+    /// near spelling of a said word (`devox` → `devoxx`), or a vocabulary word — a
+    /// corrected name is the edit doing its job (Fable review 2026-10-22: `gvt și
+    /// devox` → `JWT și Devoxx` kept 1 of 3 and was refused).
+    static func keptShare(of edited: String, from words: String, vocabulary: Vocabulary = Vocabulary()) -> Double {
         let said = Set(bare(words)), out = bare(edited)
-        return Double(out.filter(said.contains).count) / Double(max(1, out.count))
+        let known = Set((vocabulary.terms + vocabulary.replacements.map(\.written)).flatMap(bare))
+        let his = out.filter { w in
+            said.contains(w) || known.contains(w)
+                || (w.count >= 4 && said.contains { s in s.count >= 3 && near(s, w) })
+        }
+        return Double(his.count) / Double(max(1, out.count))
+    }
+
+    /// Edit distance ≤ 2 between two short words.
+    static func near(_ a: String, _ b: String) -> Bool {
+        let x = Array(a), y = Array(b)
+        guard abs(x.count - y.count) <= 2 else { return false }
+        var d = Array(0...y.count)
+        for i in 1...max(1, x.count) where !x.isEmpty {
+            var prev = d[0]; d[0] = i
+            for j in stride(from: 1, through: y.count, by: 1) {
+                let cur = d[j]
+                d[j] = min(d[j] + 1, d[j - 1] + 1, prev + (x[i - 1] == y[j - 1] ? 0 : 1))
+                prev = cur
+            }
+        }
+        return d[y.count] <= 2
     }
 
     // MARK: - The model
@@ -446,8 +473,10 @@ final class DictationEditor {
         // **A changed vocabulary starts a fresh session** (tester 2026-10-22): the old
         // one remembers removed terms and replacements from its history.
         let stamp = Self.vocabularyStamp()
-        if stamp != sessionVocabulary, !busy, let s = session {
-            if sessionVocabulary != nil { Log.info("✍️ the vocabulary changed — a fresh editor session") }
+        // Unknown (the session's first sentence) adopts the stamp; only a change
+        // retires it (Fable review: `Date??` made every launch's first sentence kill it).
+        if let known = sessionVocabulary, known != stamp, !busy, let s = session {
+            Log.info("✍️ the vocabulary changed — a fresh editor session")
             s.stop()
             session = nil
             warmLocked()
@@ -528,13 +557,16 @@ final class DictationEditor {
             Log.info("✍️ editor: \(why) in \(ms) ms")
             DispatchQueue.main.async { self.deliverInOrder(ticket) { done(text) } }
         }
-        // Nothing to edit: no letter, no digit (tester: `"   "` waited 2.5 s on Haiku).
-        guard words.contains(where: { $0.isLetter || $0.isNumber }) else { return finish(words, "nothing to edit") }
+        // Nothing to edit: no letter or digit (tester: `"   "` waited 2.5 s on Haiku), or
+        // under three words — too little to misspell, and the wait is felt most there
+        // (tester round 2: `uh` took 7.3 s for an edit that was refused).
+        guard Self.bare(words).count >= Self.minimumWords else { return finish(words, "nothing to edit") }
         DispatchQueue.main.asyncAfter(deadline: .now() + budget) { finish(words, Self.timedOut) }
         DispatchQueue.global(qos: .userInitiated).async {
             let context = Self.readContext(pid: pid)
             self.queue.async {
                 guard let (w, once) = self.takeWorker() else { return finish(words, "no editor process") }
+                let vocabulary = Self.vocabulary()
                 if let c = context {
                     Log.info("✍️ editor: context \(c.app), \(c.before.count) before / \(c.after.count) after the caret, \(c.names.count) names, \(c.files.count) files\(c.url == nil ? "" : ", a URL"), read in \(c.readMs) ms")
                 } else {
@@ -542,7 +574,7 @@ final class DictationEditor {
                 }
                 w.onResult = { text, error in
                     self.queue.async { self.release(w, once: once) }
-                    guard let text, Self.acceptable(text, for: words) else {
+                    guard let text, Self.acceptable(text, for: words, vocabulary: vocabulary) else {
                         return finish(words, "edit refused (\(error ?? "not the same sentence: \(text?.prefix(80) ?? "")"))")
                     }
                     let edited = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -556,7 +588,7 @@ final class DictationEditor {
                         self.warmLocked()
                     }
                 }
-                w.send(Self.message(words, context, vocabulary: Self.vocabulary(), user: Self.userName, language: language))
+                w.send(Self.message(words, context, vocabulary: vocabulary, user: Self.userName, language: language))
             }
         }
     }
