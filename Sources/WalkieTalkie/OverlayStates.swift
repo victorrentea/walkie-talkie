@@ -570,7 +570,7 @@ enum OverlayStates {
 
             Shot(slug: "prompt-shots", group: "The held prompt", title: "The prompt, with its frames",
                  when: "Any dictation carrying screenshots — which is most of them, since one is taken automatically.",
-                 note: "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. The first frame is bare: the automatic context shot is always 0:00. **The yellow dot is where the pointer was** (2026-10-17, Victor: *\"pună o bulină galbenă pe captura ecranului acolo unde era mouse\"*) — drawn on the thumbnail only; the frames the agent reads stay clean.",
+                 note: "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. **The automatic context shot (📸0) is not in the strip since 2026-10-23** — it is drawn above the words, twice the strip's height, with its dot (Victor: *\"nu se vede bula galbenă … mută acea poză deasupra dictării efective\"*). **The yellow dot is where the pointer was** (2026-10-17, Victor: *\"pună o bulină galbenă pe captura ecranului acolo unde era mouse\"*) — drawn on the thumbnail only; the frames the agent reads stay clean.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
@@ -591,7 +591,7 @@ enum OverlayStates {
 
             Shot(slug: "prompt-inline", group: "The held prompt", title: "The prompt, with its pictures where they were taken",
                  when: "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-                 note: "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
+                 note: "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 let frames = mockShots(3)
@@ -604,9 +604,9 @@ enum OverlayStates {
                                  pointers: [0: CGPoint(x: 0.55, y: 0.35), 2: CGPoint(x: 0.63, y: 0.36)])
             },
 
-            Shot(slug: "prompt-recipient", group: "The held prompt", title: "The first line says who the words go to",
+            Shot(slug: "prompt-recipient", group: "The held prompt", title: "The footer says who the words go to",
                  when: "Bound to a Claude Code session whose tab title carries only its task.",
-                 note: "2026-10-17, Victor: *\"the first line should say to who it goes\"*. The folder the session started in, then the task its tab title carries — the reply pop-up's header wording. The title alone (`✳ Fix the tax rounding`) never said which folder.",
+                 note: "2026-10-17, Victor: *\"the first line should say to who it goes\"*; **moved to the footer on 2026-10-23** — `To:` under `Engine:`, in its font (*\"Terminalul destinat … în footer-ul de jos după Microfon, Engine … același font\"*). The folder the session started in, then the task its tab title carries — the reply pop-up's header wording. The title alone (`✳ Fix the tax rounding`) never said which folder.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)

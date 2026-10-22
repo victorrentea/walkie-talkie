@@ -12385,6 +12385,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     pointers[n] = CGPoint(x: mouse.x / size.width, y: mouse.y / size.height)
                 }
             }
+            // 📸0's dot went missing once (2026-10-23) with no trace of why.
+            if let first = screen, pointers[0] == nil {
+                Log.info("🖼️ 📸0 has no pointer for the panel's dot — mouse \(mice[first].map { "\($0)" } ?? "nil"), size \(sizes[first].map { "\($0)" } ?? "nil")")
+            }
             if self.overlay.showSentPrompt(shown, hold: hold, shots: frames,
                                            stamps: stamps,
                                            selection: selection,

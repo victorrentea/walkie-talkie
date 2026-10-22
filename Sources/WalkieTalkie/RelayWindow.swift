@@ -28,6 +28,8 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
 /// The frozen selection, quoted, at the very top of the prompt panel.
 private let quoteLabel = NSTextField(labelWithString: "")
 private let heardLabel = NSTextField(labelWithString: "")
+    /// **📸0, above the words** (2026-10-23) — see `contextShot`.
+    private let contextShotView = NSImageView()
     private let promptLabel = PromptField(wrappingLabelWithString: "")
     /// The pictures this message is carrying, drawn under the words it is
     /// carrying them with.
@@ -1580,6 +1582,15 @@ private let heardLabel = NSTextField(labelWithString: "")
         heardLabel.isHidden = true
         root.addSubview(heardLabel)
 
+        contextShotView.imageScaling = .scaleProportionallyUpOrDown
+        contextShotView.wantsLayer = true
+        contextShotView.layer?.cornerRadius = 4
+        contextShotView.layer?.masksToBounds = true
+        contextShotView.layer?.borderWidth = 1
+        contextShotView.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.35).cgColor
+        contextShotView.isHidden = true
+        root.addSubview(contextShotView)
+
         promptLabel.font = promptFont
         promptLabel.textColor = .labelColor
         promptLabel.isHidden = true
@@ -2139,6 +2150,9 @@ private let heardLabel = NSTextField(labelWithString: "")
                 let widest = heard.split(separator: "\n").map { measure(String($0), font: font) }.max() ?? 0
                 contextWidth = max(contextWidth, widest + pad * 2 + 12)
             }
+            if let recipient = recipientText() {
+                contextWidth = max(contextWidth, ceil(recipient.size().width) + pad * 2 + 12)
+            }
         }
         let width = sentPrompt != nil
             ? min(max(natural, max(promptWidth, contextWidth)), screenWidth / 3 * 1.3)
@@ -2219,7 +2233,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         // line is still the honest answer to *where do the words go*.
         let names = boundLabel != nil || spawnLabel != nil || sentPrompt != nil || listening
         let mutedByFlash = collapsed && flashMessage != nil
-        if names, !mutedByFlash, !spawnCollapsed {
+        // **Not on the prompt panel** (2026-10-23): there the recipient is the
+        // last line of the footer, under `Engine:` — `recipientText`.
+        if names, !mutedByFlash, !spawnCollapsed, sentPrompt == nil {
             layoutTitleRow(width: innerWidth)
             titleRow.isHidden = false
             rows.append((titleRow, titleRowHeight))
@@ -2353,6 +2369,17 @@ private let heardLabel = NSTextField(labelWithString: "")
             pickRow.isHidden = true
         }
 
+        // 📸0 right above the words — see `contextPicture`.
+        let context = sentPrompt != nil ? contextPicture(width: innerWidth) : nil
+        if let picture = context {
+            contextShotView.image = picture
+            contextShotView.frame.size = picture.size
+            contextShotView.isHidden = false
+            rows.append((contextShotView, picture.size.height))
+        } else {
+            contextShotView.isHidden = true
+        }
+
         if let prompt = sentPrompt, !prompt.isEmpty {
             // Vertically: whatever it takes to show the prompt whole, bounded
             // only by the screen so a very long dictation can't grow an overlay
@@ -2363,11 +2390,12 @@ private let heardLabel = NSTextField(labelWithString: "")
             // that is actually free instead of 80 fewer.
             let below = (promptWarning != nil ? 16 + rowGap : 0)
                 + (stripShots.isEmpty ? 0 : Self.shotThumbHeight + rowGap)
-                + (promptHeard != nil ? Self.heardHeight + rowGap : 0)
+                + (footerLines > 0 ? footerHeight + rowGap : 0)
+                + (context.map { $0.size.height + rowGap } ?? 0)
                 + cancelButton.frame.height + rowGap
                 + (hintText != nil ? 22 + rowGap : 0)
             let maxHeight = ((panel.screen ?? NSScreen.main)?.visibleFrame.height ?? 800)
-                - margin * 2 - pad * 2 - titleRowHeight - rowGap - below
+                - margin * 2 - pad * 2 - below
             // While he is in the field the field owns its text: writing
             // `sentPrompt` back over it on the next layout pass would undo his
             // last keystroke, and layout runs on every keystroke precisely so the
@@ -2431,11 +2459,23 @@ private let heardLabel = NSTextField(labelWithString: "")
         // The last line of the manifest, right above the buttons: how the words
         // were heard. Full names, not the chip's logos — this is read once, at
         // leisure, and it has to say it to someone who does not know the glyphs.
-        if let heard = promptHeard, sentPrompt != nil {
-            heardLabel.stringValue = heard
-            heardLabel.frame.size = NSSize(width: innerWidth, height: Self.heardHeight)
+        // `To:` is the third line of the same label (2026-10-23) — one label, so
+        // one ink, one font and one line pitch for the three.
+        if sentPrompt != nil, footerLines > 0 {
+            let footer = NSMutableAttributedString()
+            if let heard = promptHeard {
+                footer.append(NSAttributedString(string: heard, attributes: [
+                    .font: heardLabel.font ?? hintFont, .foregroundColor: NSColor.labelColor]))
+            }
+            if let recipient = recipientText() {
+                if footer.length > 0 { footer.append(NSAttributedString(string: "\n")) }
+                footer.append(recipient)
+            }
+            heardLabel.attributedStringValue = footer
+            heardLabel.maximumNumberOfLines = footerLines
+            heardLabel.frame.size = NSSize(width: innerWidth, height: footerHeight)
             heardLabel.isHidden = false
-            rows.append((heardLabel, Self.heardHeight))
+            rows.append((heardLabel, footerHeight))
         } else {
             heardLabel.isHidden = true
         }
@@ -3059,10 +3099,84 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// The recordings come last, newest last, as they were made after the
     /// screenshots they ride with or at least after the context shot.
     private var stripShots: [(path: String, stamp: String, film: (seconds: TimeInterval, frames: Int)?, number: Int?)] {
-        let drawn = Set(inlineShotNumbers(in: sentPrompt ?? ""))
+        var drawn = Set(inlineShotNumbers(in: sentPrompt ?? ""))
+        // 📸0 is drawn above the words (`contextPicture`), so not here too.
+        if contextShotPath != nil { drawn.insert(0) }
         return promptShots.filter { ScreenCapture.number(of: $0.path).map { !drawn.contains($0) } ?? true }
             .map { (path: $0.path, stamp: $0.stamp, film: nil, number: ScreenCapture.number(of: $0.path)) }
             + promptFilms.map { (path: $0.poster, stamp: "", film: (seconds: $0.seconds, frames: $0.frames), number: nil) }
+    }
+
+    /// **The automatic frame is drawn above the words, with its yellow dot**
+    /// (2026-10-23, Victor: *"în poza originală … inițială la începutul dictării,
+    /// nu se vede bula galbenă unde a fost mouse-ul și totodată mută acea poză
+    /// deasupra dictării efective"*). 📸0 is the screen he was looking at when
+    /// he opened his mouth — what the words are about — so it leads them, as
+    /// the frozen selection does, instead of trailing as the strip's first
+    /// 65 pt thumbnail, where a 4 pt dot was too small to find. Nil when there
+    /// is no 📸0, or when the words already draw it in place.
+    private var contextShotPath: String? {
+        guard !inlineShotNumbers(in: sentPrompt ?? "").contains(0),
+              let shot = promptShots.first(where: { ScreenCapture.number(of: $0.path) == 0 })
+        else { return nil }
+        // The agent's 800 px copy when there is one: drawn at ~130 pt, the
+        // retina original is 3456 px decoded for nothing.
+        return promptInlineShots[0] ?? shot.path
+    }
+
+    /// Tall enough to recognise the screen and find the dot — twice the
+    /// strip's 65 — and never wider than the panel.
+    private static let contextShotHeight: CGFloat = 130
+
+    /// 📸0 at its size on the panel, the pointer's dot drawn on it.
+    private func contextPicture(width: CGFloat) -> NSImage? {
+        guard let path = contextShotPath, let image = NSImage(contentsOfFile: path),
+              image.size.width > 0, image.size.height > 0 else { return nil }
+        let scale = min(Self.contextShotHeight / image.size.height, width / image.size.width)
+        let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+        guard let at = promptPointers[0] else {
+            return NSImage(size: size, flipped: false) { rect in
+                image.draw(in: rect); return true
+            }
+        }
+        return Self.pointerDot(on: image, at: at, size: size)
+    }
+
+    /// `Mic:`, `Engine:` and `To:` — the lines the footer label carries.
+    private var footerLines: Int {
+        (promptHeard?.split(separator: "\n").count ?? 0) + (recipientText() != nil ? 1 : 0)
+    }
+    private var footerHeight: CGFloat { CGFloat(footerLines) * Self.heardHeight / 2 }
+
+    /// **Who the words go to, as the footer's last line** (2026-10-23, Victor:
+    /// *"Terminalul destinat … în footer-ul de jos după Microfon, Engine … tot
+    /// același font"*). It was the panel's first line (`panelRecipient`, since
+    /// 2026-10-17), in the chip's 17 pt beside the terminal's icon; now it is
+    /// `To:`, the icon and the same words, under `Engine:` in its font — the
+    /// three facts about where the sentence came from and where it goes, read
+    /// together, and the words he dictated start the panel. Nil off the panel.
+    private func recipientText() -> NSAttributedString? {
+        guard sentPrompt != nil else { return nil }
+        let name = titleText
+        let icon = panelSpawning ? (spawnIcon ?? Self.sparkleGlyph)
+            : (boundLabel != nil || spawnIcon != nil) ? (spawnIcon ?? boundIcon ?? Self.pinGlyph) : nil
+        guard !name.isEmpty || icon != nil else { return nil }
+        let font = heardLabel.font ?? hintFont
+        let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.labelColor]
+        let out = NSMutableAttributedString(string: "To: ", attributes: attrs)
+        if let icon, icon.size.height > 0 {
+            // Fitted into a box the size of the text's emoji, the way the
+            // chip's glyph column fits every icon into `glyphBox`.
+            let side = font.pointSize + 2
+            let scale = min(side / icon.size.width, side / icon.size.height)
+            let fitted = NSImage(size: NSSize(width: (icon.size.width * scale).rounded(),
+                                              height: (icon.size.height * scale).rounded()),
+                                 flipped: false) { rect in icon.draw(in: rect); return true }
+            out.append(Self.inline(fitted, font: font))
+            if !name.isEmpty { out.append(NSAttributedString(string: " ", attributes: attrs)) }
+        }
+        out.append(NSAttributedString(string: name, attributes: attrs))
+        return out
     }
 
     /// `[📸N…]`, `[selected: "…"…]`, `[copied: "…"…]`, `[chrome-selection-N: …]`,
@@ -3110,8 +3224,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         let tokenFont = NSFont.monospacedSystemFont(ofSize: promptFont.pointSize * 0.7, weight: .medium)
         let token: [NSAttributedString.Key: Any] = [.font: tokenFont, .foregroundColor: NSColor.systemTeal]
         let block = NSMutableParagraphStyle()
-        block.firstLineHeadIndent = 14
-        block.headIndent = 14
+        // Flush with the words, like the highlight's quote (2026-10-23); 14 before.
+        block.firstLineHeadIndent = 0
+        block.headIndent = 0
         block.paragraphSpacing = 4
         block.paragraphSpacingBefore = 4
         let picture = NSMutableParagraphStyle()
@@ -3208,16 +3323,19 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// selected text should be without selected in a square bracket, same font size
     /// as the rest, grayed out italic and prefixed by a double quote that reads like
     /// a quote … and a bit indented to the right"*). `“` then the words, in
-    /// `promptFont`'s italic and secondary ink, indented past the other blocks, the
-    /// wrapped lines hanging under the words rather than under the mark; the app
+    /// `promptFont`'s italic and secondary ink, flush with the words since
+    /// 2026-10-23, the wrapped lines hanging under the words rather than under the mark; the app
     /// trails as the quote's attribution. Panel only: the agent's words keep the token.
     private func quotedSelection(_ text: String, app: String?) -> NSAttributedString {
         let italic = NSFontManager.shared.convert(promptFont, toHaveTrait: .italicFontMask)
         let attrs: [NSAttributedString.Key: Any] = [.font: italic, .foregroundColor: NSColor.secondaryLabelColor]
         let mark = "“ "
         let style = NSMutableParagraphStyle()
-        style.firstLineHeadIndent = 28
-        style.headIndent = 28 + (mark as NSString).size(withAttributes: attrs).width
+        // Flush with the words (2026-10-23, Victor: *"aliniază frumos … nu lăsa
+        // spațiu gol în fața lui"*) — indented 28 until then; the wrap still
+        // hangs under the words, not under the mark.
+        style.firstLineHeadIndent = 0
+        style.headIndent = (mark as NSString).size(withAttributes: attrs).width
         style.paragraphSpacing = 4
         style.paragraphSpacingBefore = 4
         var line = mark + text

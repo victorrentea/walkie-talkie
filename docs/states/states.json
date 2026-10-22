@@ -596,7 +596,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 136,
+    "height" : 132,
     "image" : "prompt.png",
     "note" : "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so.",
     "shape" : "panel",
@@ -608,7 +608,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 106,
+    "height" : 102,
     "image" : "prompt-autosend.png",
     "note" : "No Send and no Cancel, and the row they sat on goes with them: two buttons up for one second are two buttons nobody can reach, an invitation to press something that will not be there when the hand arrives. What is left is the receipt — a dictation that vanished into a terminal with nothing shown is the one state where a delivery cannot be told from a drop.",
     "shape" : "panel",
@@ -620,7 +620,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 106,
+    "height" : 102,
     "image" : "prompt-autosend-paused.png",
     "note" : "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
     "shape" : "panel",
@@ -632,9 +632,9 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 203,
+    "height" : 331,
     "image" : "prompt-shots.png",
-    "note" : "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. The first frame is bare: the automatic context shot is always 0:00. **The yellow dot is where the pointer was** (2026-10-17, Victor: *\"pună o bulină galbenă pe captura ecranului acolo unde era mouse\"*) — drawn on the thumbnail only; the frames the agent reads stay clean.",
+    "note" : "The strip is the receipt, oldest first: the same order the agent reads them in. It grew from 54 to 65 tall when the shot *count* came off the recording row. Each frame carries the m:ss it was taken at, written into its corner — the stamps used to be a line of text above the strip, which had to be counted across to be read as captions. **The automatic context shot (📸0) is not in the strip since 2026-10-23** — it is drawn above the words, twice the strip's height, with its dot (Victor: *\"nu se vede bula galbenă … mută acea poză deasupra dictării efective\"*). **The yellow dot is where the pointer was** (2026-10-17, Victor: *\"pună o bulină galbenă pe captura ecranului acolo unde era mouse\"*) — drawn on the thumbnail only; the frames the agent reads stay clean.",
     "shape" : "panel",
     "slug" : "prompt-shots",
     "title" : "The prompt, with its frames",
@@ -644,7 +644,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 203,
+    "height" : 331,
     "image" : "prompt-film.png",
     "note" : "2026-10-08, Victor: the film shows in the strip like a picture, at the end — its middle frame, a red rim, and a red ● with its length where a screenshot carries its m:ss.",
     "shape" : "panel",
@@ -656,31 +656,31 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 581,
+    "height" : 674,
     "image" : "prompt-inline.png",
-    "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take (here the automatic one) stay in the strip. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
+    "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 136,
+    "height" : 132,
     "image" : "prompt-recipient.png",
-    "note" : "2026-10-17, Victor: *\"the first line should say to who it goes\"*. The folder the session started in, then the task its tab title carries — the reply pop-up's header wording. The title alone (`✳ Fix the tax rounding`) never said which folder.",
+    "note" : "2026-10-17, Victor: *\"the first line should say to who it goes\"*; **moved to the footer on 2026-10-23** — `To:` under `Engine:`, in its font (*\"Terminalul destinat … în footer-ul de jos după Microfon, Engine … același font\"*). The folder the session started in, then the task its tab title carries — the reply pop-up's header wording. The title alone (`✳ Fix the tax rounding`) never said which folder.",
     "shape" : "panel",
     "slug" : "prompt-recipient",
-    "title" : "The first line says who the words go to",
+    "title" : "The footer says who the words go to",
     "when" : "Bound to a Claude Code session whose tab title carries only its task.",
     "width" : 385
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 136,
+    "height" : 132,
     "image" : "prompt-spawn.png",
     "note" : "2026-10-17, Victor: *\"if it's a new session, not only the stars … similar to what I've picked in the session list\"*. The ✨ is the icon, the picked folder as its menu row spells it, then `new session`; the green button says `Start New`. Unpicked, the folder is `workspace`. 2026-10-20, Victor: *\"it displayed a robot icon and a slash\"* — the folder now rides in with the prompt (`spawnFolder:`), because the chip has already let its spawn label go by the time the panel is up; this shot sets no spawn label, as in the app.",
     "shape" : "panel",
@@ -692,19 +692,19 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 411,
+    "height" : 488,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own indented paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said.",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 321,
+    "height" : 382,
     "image" : "prompt-area-context.png",
     "note" : "2026-10-15, Victor: after the cut-out, the whole screen that goes with it — greyed outside the box, the box lit and ringed red — so it is plain that the entire screen is sent too. Drawn by `AreaContext`, never written to disk.",
     "shape" : "panel",
@@ -716,7 +716,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 304,
+    "height" : 365,
     "image" : "prompt-area-context-right.png",
     "note" : "2026-10-21, Victor: the zoomed-in cut stays on the side its box is nearer — here the screen comes first and the cut after it, the lines from its left corners to the box's right ones.",
     "shape" : "panel",
@@ -728,7 +728,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 348,
+    "height" : 409,
     "image" : "prompt-move-context.png",
     "note" : "2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.",
     "shape" : "panel",
@@ -740,7 +740,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 176,
+    "height" : 172,
     "image" : "prompt-selection.png",
     "note" : "Set as a quotation — big mark, one line, ellipsis — rather than folded into the words, which made the passage he is approving indistinguishable from the sentence he spoke about it. One line on purpose: a selection can be a whole file.",
     "shape" : "panel",
@@ -752,7 +752,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 154,
+    "height" : 150,
     "image" : "prompt-warning.png",
     "note" : "The note sits between the words and the frames, because it is *about* the words. It is the panel saying it does not trust what it is showing — which is exactly when the edit and the Cancel are worth their pixels.",
     "shape" : "panel",
@@ -764,7 +764,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 261,
+    "height" : 389,
     "image" : "prompt-everything.png",
     "note" : "The tallest the overlay ever gets. Rows in the order the envelope is packed: what he said, what the app thinks of it, what it is carrying, where he was, which microphone and engine heard it — then the two buttons.",
     "shape" : "panel",
@@ -776,19 +776,19 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 153,
+    "height" : 149,
     "image" : "prompt-long.png",
     "note" : "Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.",
     "shape" : "panel",
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 155,
+    "height" : 151,
     "image" : "prompt-selection-only.png",
     "note" : "There is no transcript row — and the panel is still held, because a highlight sent by accident deserves the same Cancel the words get. It stopped being part of the text when it moved above it, so without this it would have gone straight out.",
     "shape" : "panel",
@@ -800,7 +800,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 203,
+    "height" : 331,
     "image" : "prompt-hover.png",
     "note" : "The ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
     "shape" : "panel",
@@ -812,7 +812,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 136,
+    "height" : 132,
     "image" : "prompt-editing.png",
     "note" : "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
     "shape" : "panel",

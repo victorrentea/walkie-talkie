@@ -458,6 +458,16 @@ yields to `--label`).
   `spawnLabel`** (2026-10-20, Victor: *"a robot icon and a slash that made no sense"*): the spawn is
   consumed as the words leave, the chip lets its label go, and the panel fell through to the
   unbound `🤖 /`. The shot sets no spawn label, as in the app.
+- **The panel's recipient is the footer's last line, 📸0 leads the words, quotes are flush**
+  (2026-10-23, Victor: *"în poza originală … nu se vede bula galbenă … mută acea poză deasupra
+  dictării efective … Terminalul destinat … în footer-ul de jos după Microfon, Engine … același font
+  … citatul … nu lăsa spațiu gol în fața lui"*). No title row on the panel: `To: <icon> <recipient>`
+  is the third line of the `Mic:`/`Engine:` label (`recipientText`, one label so one ink and pitch —
+  a separate label drew lighter and 6 pt lower). The automatic frame is drawn above the words at
+  130 pt tall with the yellow dot (`contextPicture`, the 800 px copy) and leaves the strip. The
+  highlight's `“` and the `[copied:]` / `[chrome-selection-N:]` blocks start at the words' left
+  edge (were indented 28 / 14). Supersedes *the panel's first line says who the words go to* above.
+  A missing 📸0 pointer logs `🖼️ 📸0 has no pointer for the panel's dot`.
 - **Every dictated prompt panel ends with `Mic: <glyph> <device>` over `Engine: <name>`** (2026-10-06,
   Victor: *"clearly mention the engine that was used and the microphone that was used"*), right above
   the buttons. `AppDelegate.heardLine` builds it from the sentence's `via` (a local fallback, ⌘⌃X or
