@@ -384,6 +384,14 @@ pin`, and it was **not** the asleep tree: with VS Code in front `kAXFocusedUIEle
 - **VS Code's editor pane gives the line, not the column**: with `editor.accessibilitySupport: off`
   Monaco's `inputarea` is 0×40 at the **line start** whatever the column (measured cols 1/20/40 →
   same x). The pin stands at the start of the caret's line. Nothing outside the app knows the column.
+- **Copilot's chat input (and any short field) puts the pin at its last line's start** (2026-10-22,
+  Victor: *"când dictez în Visual Studio Code în chat … același simbol de Google Maps pin … în Visual
+  Code în general"*). Every chat sentence logged `focused AXTextArea 378×35, no bounds for its caret`:
+  the input is Monaco on `native-edit-context`, AX value empty (*"The editor is not accessible at this
+  time"*), and `AXBoundsForTextMarkerRange` on `AXSelectedTextMarkerRange` answers the whole field
+  (measured 584×30 both ways). After the caret-sized branch, a text-role element ≤ `caretLineField`
+  (120 pt) tall stands in: `(minX, maxY − min(h/2, 15))` — exact for an empty input, the line start
+  otherwise. An editor pane (hundreds of points) still shows no pin.
 - **IntelliJ's terminal is unmeasured** (no terminal tool window was open). The log line now says
   why a caret was missed — `no caret found in it (no focused element (-25212))`, `(focused AXTextArea
   1569×840, no bounds for its caret)`, `(its caret … is outside the window)` — read it from his next

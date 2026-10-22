@@ -1535,6 +1535,11 @@ final class TerminalBinding {
     /// anything the size of a document is not a caret.
     static let caretSized = CGSize(width: 60, height: 60)
 
+    /// The tallest focused text field whose last line is taken for the caret's
+    /// when nothing finer answers — a chat input of up to ~5 lines; an editor
+    /// pane is hundreds of points tall and keeps no pin.
+    static let caretLineField: CGFloat = 120
+
     /// Roles that take typed text — a small focused button or Finder icon is
     /// not a caret, and must still reach `focusTakesNoText`'s crossed pin.
     static let textRoles: Set<String> = [kAXTextAreaRole, kAXTextFieldRole, kAXComboBoxRole,
@@ -1615,6 +1620,17 @@ final class TerminalBinding {
         if caret == nil, textRoles.contains(role), let own, own.height > 0,
            own.width <= caretSized.width, own.height <= caretSized.height {
             caret = CGPoint(x: own.minX, y: own.midY)
+        }
+        // **A field a few lines tall is the caret's line** (2026-10-22, Victor:
+        // *"când dictez în Visual Studio Code în chat … același simbol de Google
+        // Maps pin … în Visual Code în general"*). Copilot's chat input is a
+        // Monaco editor on `native-edit-context`: a 584×30 `AXTextArea` (378×35,
+        // 598×51 as it grows) with no value, and `AXBoundsForTextMarkerRange` on
+        // its selection answers the whole field (measured) — the column is known
+        // to nobody outside the app. The pin stands at the start of its last
+        // line, where an empty input's caret is and where dictation appends.
+        if caret == nil, textRoles.contains(role), let own, own.height > 0, own.height <= caretLineField {
+            caret = CGPoint(x: own.minX, y: own.maxY - min(own.height / 2, 15))
         }
         guard let caret else {
             let size = own.map { String(format: " %.0f×%.0f", $0.width, $0.height) } ?? ""
