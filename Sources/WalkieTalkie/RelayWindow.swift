@@ -4612,10 +4612,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     private func placeChangePulses() {
         let now = CACurrentMediaTime()
         var running = false
-        for (pulse, row, label) in [(shotsPulse, recordRow, recordInfo),
-                                    (selectionPulse, selectionRow, selectionLabel),
-                                    (pickPulse, pickRow, pickInfo),
-                                    (readyPulse, readyRow, readyInfo)] {
+        // **`Ready` alone is washed on its row** (2026-10-23, Victor: *"să pui
+        // highlight … cuvântul ready, nu și ready for more"*) — `lead` is the
+        // part of the label the wash covers; nil, the whole label.
+        for (pulse, row, label, lead) in [(shotsPulse, recordRow, recordInfo, nil),
+                                          (selectionPulse, selectionRow, selectionLabel, nil),
+                                          (pickPulse, pickRow, pickInfo, nil),
+                                          (readyPulse, readyRow, readyInfo, Self.readyLead)] as [(ChangePulse, NSView, NSTextField, String?)] {
             guard let t0 = pulse.startedAt, !row.isHidden else { pulse.isHidden = true; continue }
             let age = now - t0
             guard changePulsePinned || age < Self.changePulseDuration else {
@@ -4624,7 +4627,8 @@ private let heardLabel = NSTextField(labelWithString: "")
                 continue
             }
             running = true
-            let words = min(label.frame.width, ceil(label.intrinsicContentSize.width))
+            let words = min(label.frame.width, ceil(lead.map { measure($0, font: label.font ?? hintFont) }
+                                                    ?? label.intrinsicContentSize.width))
             let h = max(0, row.frame.height - 2)
             pulse.frame = NSRect(x: 0, y: ((row.frame.height - h) / 2).rounded(),
                                  width: (label.frame.minX + words + 4).rounded(), height: h)
@@ -5035,6 +5039,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `Ready for more` since 2026-10-22 (Victor: *"în loc de ready, scrie
     /// ready for more"*).
     static let readyText = "Ready for more"
+    /// The word the yellow wash covers on that row — see `placeChangePulses`.
+    static let readyLead = "Ready"
 
     /// **Up for at least this long once shown** (2026-10-22, Victor: *"să se vadă
     /// minim 2 s"*): Wispr answers ~0.3 s after the row comes up at 0.8 s, so 194 of
