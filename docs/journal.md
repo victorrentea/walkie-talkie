@@ -15796,3 +15796,27 @@ started at once after another session finished.
 - **The caret pin has no outer glow while the words travel** — only the progress in its hole.
 - **A plain dictation started over a Claude Code tab binds it, no flight, and goes there** as 🔼 →
   would (`bindClaudeInFront`, Terminal.app only; the microphone does not wait for the check).
+
+### What Wispr Flow sends with a dictation — read in its code (2026-10-22, late)
+
+Victor: *"mai studiază ce alte surse de informații își mai trage Wispr Flow … dacă poți … chiar din cod"*.
+Read in the installed app (`app.asar` unpacked to a scratch folder and deleted after, the Swift helper's
+strings, its migrations) and in what its local DB holds for his last 682 dictations.
+
+- **Per dictation** (`additionalContext`, and the gRPC `context`): text box ≤ 500 chars before and after
+  the caret, word-cut, and the selection (AX `AXSelectedTextRange`/`AXStringForRange`, text markers in
+  web views); the **visible window text, raw** (`content_text`, a capped walk of visible AX elements),
+  and 4–12 proper nouns pulled out of it **by gpt-4o-mini on their server** (`/llm/extract_asr_words`);
+  the conversation title from the window title; app, bundle id, **URL** (AX, no AppleScript) and a
+  category (AI / Email / Terminal / Other) by prefix; **~50 personal dictionary words** (starred, team,
+  personal) plus replacements and snippets; the user's first and last name; in Cursor, Windsurf and VS
+  Code the file names and regex-extracted variables, classes and functions.
+- **Not per dictation**: OCR of the whole display (`shouldOCRScreenCapture: false` by default; empty in
+  all 200 of his rows looked at), screenshots (column empty), earlier dictations (only chunks of the
+  same one), calendar participants (meetings only), writing samples and voice rules (the Polish feature).
+- **After**: in 345 of 682 dictations it watched the field after pasting, which is how its dictionary
+  learns words (`observedSource`).
+- **Copied** into `DictationEditor`: 500/500 around the caret, the URL, the file names in code editors,
+  his vocabulary (`~/.walkie-talkie/vocabulary.txt`, seeded from his Wispr dictionary) and his name.
+  Not copied: the raw window text (~500–1,500 tokens a sentence; our local name extraction stands in),
+  the server noun extraction, OCR.

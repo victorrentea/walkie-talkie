@@ -62,7 +62,8 @@ final class DictationEditor {
         Return the dictation as the user meant to type it, and nothing else.
         Rules:
         - Fix recognition errors only: misheard words, names and identifiers — spell them as they appear \
-        in <names>, <before_caret> or <after_caret> when the sound matches.
+        in <vocabulary>, <names>, <files>, <before_caret> or <after_caret> when the sound matches; \
+        apply <replacements> (heard → written).
         - Remove fillers (um, uh, ăă, deci deci) and false starts; when the speaker corrects themselves \
         — "X, nu de fapt Y", "X adică Y", "X, I mean Y", "X, actually Y" — keep only Y, in X's place; \
         never keep X, never negate Y.
@@ -87,12 +88,23 @@ final class DictationEditor {
         var selection = ""
         var after = ""
         var names: [String] = []
+        /// The page's address, from the window's web area (`AXURL`) — Wispr reads
+        /// it the same way, never through AppleScript.
+        var url: String?
+        /// In a code editor: the file names visible in it (tabs, explorer).
+        var files: [String] = []
         var readMs = 0
     }
 
-    /// Characters kept before and after the caret (Wispr publishes no limit;
-    /// these are the research's suggestion, enough for a sentence or two).
-    static let beforeLimit = 1000, afterLimit = 300
+    /// Characters kept before and after the caret — Wispr's own
+    /// `MAX_TEXTBOX_CONTENTS_LENGTH`, read in its code (2026-10-22; 1000/300 until then).
+    static let beforeLimit = 500, afterLimit = 500
+    /// Code editors whose visible text names files (Wispr: VS Code, Cursor,
+    /// Windsurf; JetBrains added here).
+    static let codeEditors: Set<String> = ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92",
+                                           "com.exafunction.windsurf", "com.jetbrains.intellij",
+                                           "com.jetbrains.intellij.ce"]
+    static let fileLimit = 30
     /// Names off the screen: at most this many, from at most `nodeLimit`
     /// elements read within `readBudget`.
     static let nameLimit = 50, nodeLimit = 400
@@ -133,7 +145,10 @@ final class DictationEditor {
             }
         }
         if let window: AXUIElement = attr(axApp, kAXFocusedWindowAttribute) {
-            ctx.names = names(in: window, deadline: started + readBudget)
+            let seen = walk(window, deadline: started + readBudget)
+            ctx.names = nameTokens(in: seen.texts)
+            ctx.url = seen.url
+            if let id = app.bundleIdentifier, codeEditors.contains(id) { ctx.files = fileNames(in: seen.texts) }
         }
         ctx.readMs = Int((CFAbsoluteTimeGetCurrent() - started) * 1000)
         return ctx
@@ -145,15 +160,20 @@ final class DictationEditor {
         return ref as? T
     }
 
-    /// The visible words of the window, breadth first, cut down to what a
-    /// recogniser misspells: capitalised words and identifiers.
-    private static func names(in window: AXUIElement, deadline: CFAbsoluteTime) -> [String] {
+    /// The visible words of the window, breadth first, and the page's address
+    /// when a web area is met on the way.
+    private static func walk(_ window: AXUIElement, deadline: CFAbsoluteTime) -> (texts: [String], url: String?) {
         var queue: [AXUIElement] = [window]
         var text: [String] = []
+        var url: String?
         var visited = 0
         while !queue.isEmpty, visited < nodeLimit, CFAbsoluteTimeGetCurrent() < deadline {
             let e = queue.removeFirst()
             visited += 1
+            if url == nil, (attr(e, kAXRoleAttribute) as String?) == "AXWebArea",
+               let u: URL = attr(e, kAXURLAttribute) {
+                url = u.absoluteString
+            }
             for key in [kAXTitleAttribute, kAXValueAttribute, kAXDescriptionAttribute] {
                 if let s: String = attr(e, key), !s.isEmpty, s.count < 400 { text.append(s) }
             }
@@ -161,7 +181,7 @@ final class DictationEditor {
                 queue.append(contentsOf: kids.prefix(60))
             }
         }
-        return nameTokens(in: text)
+        return (text, url)
     }
 
     /// `Ionuț`, `VisitController`, `relay-restart.sh`, `GPT-5` — not `The` at
@@ -193,14 +213,92 @@ final class DictationEditor {
         return out
     }
 
+    /// `OwnerController.java`, `relay-restart.sh`, `docs/journal.md` — a dot,
+    /// no space, a short extension, not an address. Order of appearance, unique.
+    static func fileNames(in texts: [String]) -> [String] {
+        var seen = Set<String>(), out: [String] = []
+        for t in texts {
+            // Not split on `:` — an address must stay whole to be recognised and dropped.
+            for raw in t.split(whereSeparator: { $0.isWhitespace || "()[]{},;\"'|<>●•".contains($0) }) {
+                let w = String(raw)
+                guard w.count <= 100, !w.contains(":"), !w.hasPrefix("www."), !seen.contains(w),
+                      let dot = w.lastIndex(of: "."), dot != w.startIndex else { continue }
+                let ext = w[w.index(after: dot)...]
+                guard (1...5).contains(ext.count), ext.allSatisfy({ $0.isLetter || $0.isNumber }),
+                      ext.contains(where: \.isLetter), w[..<dot].contains(where: \.isLetter) else { continue }
+                seen.insert(w)
+                out.append(w)
+                if out.count == fileLimit { return out }
+            }
+        }
+        return out
+    }
+
+    // MARK: - His vocabulary (`~/.walkie-talkie/vocabulary.txt`)
+
+    /// **Victor's own words, with every sentence** (2026-10-22) — Wispr sends
+    /// ~50 of its dictionary each time (`dictionary_context`). One term a line,
+    /// `heard → written` for a replacement, `#` a comment; seeded from his Wispr
+    /// dictionary, his to edit, re-read when it changes.
+    struct Vocabulary: Equatable {
+        var terms: [String] = []
+        var replacements: [(heard: String, written: String)] = []
+        static func == (a: Vocabulary, b: Vocabulary) -> Bool {
+            a.terms == b.terms && a.replacements.map { $0.heard + "→" + $0.written }
+                == b.replacements.map { $0.heard + "→" + $0.written }
+        }
+    }
+
+    static func parseVocabulary(_ text: String) -> Vocabulary {
+        var v = Vocabulary()
+        for line in text.split(whereSeparator: \.isNewline) {
+            let l = line.trimmingCharacters(in: .whitespaces)
+            guard !l.isEmpty, !l.hasPrefix("#") else { continue }
+            if let arrow = l.range(of: "→") ?? l.range(of: "->") {
+                let heard = l[..<arrow.lowerBound].trimmingCharacters(in: .whitespaces)
+                let written = l[arrow.upperBound...].trimmingCharacters(in: .whitespaces)
+                if !heard.isEmpty, !written.isEmpty { v.replacements.append((heard, written)) }
+            } else {
+                v.terms.append(l)
+            }
+        }
+        return v
+    }
+
+    static var vocabularyFile: URL { Outbox.home.appendingPathComponent("vocabulary.txt") }
+    private static var vocabularyCache: (stamp: Date, value: Vocabulary)?
+    private static let vocabularyLock = NSLock()
+
+    static func vocabulary() -> Vocabulary {
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: vocabularyFile.path)[.modificationDate]) as? Date
+        vocabularyLock.lock(); defer { vocabularyLock.unlock() }
+        guard let stamp else { vocabularyCache = nil; return Vocabulary() }
+        if let c = vocabularyCache, c.stamp == stamp { return c.value }
+        let v = parseVocabulary((try? String(contentsOf: vocabularyFile, encoding: .utf8)) ?? "")
+        vocabularyCache = (stamp, v)
+        return v
+    }
+
+    /// His name, as the Mac knows it — Wispr sends the account's first and last.
+    static var userName: String { NSFullUserName() }
+
     /// The one user message: the context in tags, the dictation last.
-    static func message(_ words: String, _ c: Context?) -> String {
-        guard let c else { return "<dictation>\(words)</dictation>" }
-        var m = "<app>\(c.app)\(c.window.map { $0 == c.app ? "" : " (\($0))" } ?? "")</app>\n"
+    static func message(_ words: String, _ c: Context?, vocabulary v: Vocabulary = Vocabulary(),
+                        user: String = "") -> String {
+        var head = ""
+        if !user.isEmpty { head += "<speaker>\(user)</speaker>\n" }
+        if !v.terms.isEmpty { head += "<vocabulary>\(v.terms.joined(separator: ", "))</vocabulary>\n" }
+        if !v.replacements.isEmpty {
+            head += "<replacements>\(v.replacements.map { "\($0.heard) → \($0.written)" }.joined(separator: "; "))</replacements>\n"
+        }
+        guard let c else { return head + "<dictation>\(words)</dictation>" }
+        var m = head + "<app>\(c.app)\(c.window.map { $0 == c.app ? "" : " (\($0))" } ?? "")</app>\n"
+        if let url = c.url { m += "<url>\(url.prefix(200))</url>\n" }
         m += "<before_caret>\(c.before)</before_caret>\n"
         if !c.selection.isEmpty { m += "<selection_replaced>\(c.selection)</selection_replaced>\n" }
         if !c.after.isEmpty { m += "<after_caret>\(c.after)</after_caret>\n" }
         if !c.names.isEmpty { m += "<names>\(c.names.joined(separator: ", "))</names>\n" }
+        if !c.files.isEmpty { m += "<files>\(c.files.joined(separator: ", "))</files>\n" }
         return m + "<dictation>\(words)</dictation>"
     }
 
@@ -337,7 +435,7 @@ final class DictationEditor {
             self.queue.async {
                 guard let (w, once) = self.takeWorker() else { return finish(words, "no editor process") }
                 if let c = context {
-                    Log.info("✍️ editor: context \(c.app), \(c.before.count) before / \(c.after.count) after the caret, \(c.names.count) names, read in \(c.readMs) ms")
+                    Log.info("✍️ editor: context \(c.app), \(c.before.count) before / \(c.after.count) after the caret, \(c.names.count) names, \(c.files.count) files\(c.url == nil ? "" : ", a URL"), read in \(c.readMs) ms")
                 } else {
                     Log.info("✍️ editor: no context (a private field, or Accessibility did not answer)")
                 }
@@ -357,7 +455,7 @@ final class DictationEditor {
                         self.warmLocked()
                     }
                 }
-                w.send(Self.message(words, context))
+                w.send(Self.message(words, context, vocabulary: Self.vocabulary(), user: Self.userName))
             }
         }
     }

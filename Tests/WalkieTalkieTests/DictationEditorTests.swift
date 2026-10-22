@@ -48,6 +48,42 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(DictationEditor.message("x", nil), "<dictation>x</dictation>")
     }
 
+    func testFileNamesAreDottedWordsWithAShortExtensionNotAddresses() {
+        let files = DictationEditor.fileNames(in: [
+            "OwnerController.java ● relay-restart.sh docs/journal.md",
+            "https://github.com/x.git www.example.com 3.14 version 1.2.3 OwnerController.java",
+            "e.g. the end.",
+        ])
+        XCTAssertEqual(files, ["OwnerController.java", "relay-restart.sh", "docs/journal.md"])
+    }
+
+    func testTheVocabularyFileHasTermsReplacementsAndComments() {
+        let v = DictationEditor.parseVocabulary("""
+            # a comment
+            Devoxx
+              VoxxedDays
+
+            GVT → JWT
+            jee -> JEE
+            """)
+        XCTAssertEqual(v.terms, ["Devoxx", "VoxxedDays"])
+        XCTAssertEqual(v.replacements.map { "\($0.heard)|\($0.written)" }, ["GVT|JWT", "jee|JEE"])
+    }
+
+    func testTheSpeakerAndHisVocabularyLeadTheMessage() {
+        var v = DictationEditor.Vocabulary()
+        v.terms = ["Devoxx", "Rentea"]
+        v.replacements = [("GVT", "JWT")]
+        var c = DictationEditor.Context(app: "Google Chrome", window: "Google Chrome — Gmail")
+        c.url = "https://mail.google.com/mail/u/0/#inbox"
+        c.files = ["OwnerController.java"]
+        let m = DictationEditor.message("hi", c, vocabulary: v, user: "Victor Rentea")
+        XCTAssertTrue(m.hasPrefix("<speaker>Victor Rentea</speaker>\n<vocabulary>Devoxx, Rentea</vocabulary>\n<replacements>GVT → JWT</replacements>\n<app>"))
+        XCTAssertTrue(m.contains("<url>https://mail.google.com/mail/u/0/#inbox</url>"))
+        XCTAssertTrue(m.contains("<files>OwnerController.java</files>"))
+        XCTAssertEqual(DictationEditor.message("x", nil, vocabulary: v), "<vocabulary>Devoxx, Rentea</vocabulary>\n<replacements>GVT → JWT</replacements>\n<dictation>x</dictation>")
+    }
+
     func testTheCountdownReadsOnTheTranscribingLine() {
         XCTAssertEqual(AutoLocal.inlineText(countdown: 2.4, loading: false, keys: "⌘⌃X"), "💻 in 3s ⌘⌃X")
         XCTAssertEqual(AutoLocal.inlineText(countdown: 0, loading: false, keys: "⌘⌃X"), "💻 now ⌘⌃X")

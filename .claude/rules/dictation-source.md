@@ -625,9 +625,21 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
 
 - Plain dictations from ElevenLabs or the local model only (Wispr edited its own); prompts never.
   Engine menu `✍️ Edit plain dictation (Haiku)`, `UserDefaults dictationEditor`, `WT_EDITOR=0|1`.
-- Context through Accessibility at delivery, ≤ 0.15 s: app + window title, 1000 chars before the
-  caret / 300 after / the selection, ≤ 50 names from the focused window's tree. Nothing from a secure
-  field or a password manager. Never a screenshot.
+- Context through Accessibility at delivery, ≤ 0.15 s: app + window title, **500 chars before the
+  caret / 500 after** (Wispr's `MAX_TEXTBOX_CONTENTS_LENGTH`) / the selection, ≤ 50 names from the
+  focused window's tree, **the page's `AXURL`** (its `AXWebArea`), and **in VS Code / Cursor /
+  Windsurf / IntelliJ the file names on screen** (`fileNames`, ≤ 30). Nothing from a secure field or a
+  password manager. Never a screenshot.
+- **His vocabulary and name with every sentence** (Wispr sends ~50 dictionary words, starred first,
+  and the account's first/last name): `~/.walkie-talkie/vocabulary.txt`, one term a line, `heard →
+  written` for a replacement, re-read on change — seeded 2026-10-22 from his Wispr dictionary (own and
+  default entries, the clear technical terms Wispr learned from his edits; no snippets, no numerals) and
+  the local model's prompt; `<speaker>` is `NSFullUserName()`.
+- **What Wispr does that is not copied** (its code read 2026-10-22, journal): the raw visible text of
+  the window (`content_text`) and its AX tree as HTML, nouns extracted by gpt-4o-mini on its server,
+  OCR of the screen (off by default, empty in his DB), Slack nouns kept across sentences, `@name` for
+  "at X", per-category style. Calendar names, writing samples and voice rules are not dictation
+  context there either.
 - **One Haiku session kept up for 40 sentences** (`sessionTurns`), then replaced by a spare started
   beforehand; a sentence that finds it busy takes the spare once. Measured: 1.3–2.0 s per sentence
   in a kept session vs 1.6–4.9 s with a fresh process each (*"nu vreau să trec pe api key-ul în
