@@ -527,3 +527,18 @@ take and keeps it for Recover.
 - Cirrus image templates (auto-login, TCC rows, guest-agent plists): https://github.com/cirruslabs/macos-image-templates
 - Two-VM limit: https://eclecticlight.co/2022/08/04/virtualisation-on-apple-silicon-macs-8-how-apple-limits-vms/
 - macOS Sequoia SLA §2B(iii): https://www.apple.com/legal/sla/docs/macOSSequoia.pdf
+
+## How the batch is actually run (since October 2026)
+
+Not the §14 LaunchAgent: a host kit in `~/tart/wispr-batch/` (outside this repo).
+`~/tart/wispr-batch/start-night.sh "YYYY-MM-DD 07:00"` boots `wt-lab` (`--no-audio`, shares `corpus` ro
+and `out` = `~/tart/wt-wispr-out`), merges, copies a fresh `corpus.db` into the guest, hides near-silent
+clips there, writes the deadline (host and guest) and starts `guard.sh`. The guard starts the guest batch
+(`run-batch.sh` → `teacher_label.py --all --stop-after <hours left> --device "BlackHole 2ch"`) after 5 min
+with no dictation on the host (a fresh corpus WAV or a Wispr History row), pauses it whenever he dictates,
+merges into the host `corpus.db` every 30 min (only empty rows, backup first) and stops relaunching under
+10 min before the deadline. Watch: `~/tart/wt-wispr-out/teacher.log`, `guard.log`, `merge.log`. Stop:
+`stop.sh` (final merge), then `g 'sudo shutdown -h now'`.
+**2026-10-23:** both scripts had `TART_HOME=~/tart` hardcoded from before the VM moved back to Vic
+(2026-10-21) — fixed to `/Volumes/Vic/tart`. The first Wispr launch right after a cold boot from Vic
+failed (`Launch failed`, RBS code 5); the second worked. That night: 542 labels (1.53 h), 413 new clips left.

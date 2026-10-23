@@ -15820,3 +15820,16 @@ strings, its migrations) and in what its local DB holds for his last 682 dictati
   his vocabulary (`~/.walkie-talkie/vocabulary.txt`, seeded from his Wispr dictionary) and his name.
   Not copied: the raw window text (~500–1,500 tokens a sentence; our local name extraction stands in),
   the server noun extraction, OCR.
+
+## 2026-10-23 night — the evening's work on the real app, and a teacher round
+
+Victor asleep, exhaustive tests authorised. Three testers in turn drove the installed app with real
+chords under hands-off, a corpus clip into the WT Inject loopback, the fake whisper helper (now with a
+`mean` rule) and WisprSink / a fresh Terminal tab: N1–N19 in `evals/plan/cases_night.py` /
+`cases_night2.py`, registered in the harness. All pass after two fixes: the » followed the dialog's
+pre-slide frame (now tracks it at 20 Hz), and "now" showed two laptops. 43 older cases: no regression
+from the 22–23 Oct code. Left for Victor: a caret prompt drops the low-confidence warning; consecutive
+plain sentences join without a space (both older). Incidents: the real Elgato opened ~0.3 s (silence,
+nothing filed); one run without hands-off; the ElevenLabs cost counter counted fake-Scribe seconds
+(restored). Then the Wispr teacher batch in `wt-lab` (`docs/vm-wispr.md`, *How the batch is actually
+run*): 542 labels, 1.53 h, VM stopped 07:07. Report: https://claude.ai/artifact/YAn2HmRmMNeUgQr3YQsJW7
