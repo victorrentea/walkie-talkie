@@ -239,11 +239,19 @@ me to dismiss it explicitly"*.
   or left bottom corner? Actually all the corners … in case there's a longer response"*): a press
   within 12 pt of a corner (`ReplyRoot.Grip`, the system's diagonal resize cursor there — macOS 15's
   `NSCursor.frameResize`) is tracked by the window (`trackEvents`, the content is rebuilt at every
-  step) and the opposite corner stays put; ≥ 240 × 90 pt. The size is kept while it is open
-  (`userSize` — a streaming ⚡ answer too) and forgotten at the close. **Long answers scroll**: fitted,
-  the words take ≤ 45 % of the screen's height; past what they are given they scroll (overlay
-  scroller, the wheel works on the never-key panel, opened at the beginning — a text field is
-  flipped). `maxChars` 400 → 4000. Desk: `POST /test/quick {"resize": {w, h}}`.
+  step) and the opposite corner stays put; ≥ 240 × 90 pt. `maxChars` 400 → 4000. Desk: `POST
+  /test/quick {"resize": {w, h}}` (the bottom-right corner). *Superseded 2026-10-23: the drag zooms,
+  the size is the words' — below.*
+- **Never cut: the pop-up is always its words' fitted size; a corner zooms it** (2026-10-23, Victor:
+  *"niciodată să nu poți să dimensionezi dialogul în așa fel încât să trunchezi răspunsul. Mereu să
+  facă fit, să fie minim cât. Și dacă măresc fereastra să meargă și textul"*). The size is
+  `baseWidth × scale` wide and exactly as tall as the words wrap to (`ReplyPanel.build`); a corner
+  drag and the wheel change only `scale` (the drag by the larger of its two ratios, from the scale at
+  the press — `resizing`), so the words grow and shrink with the window and no box is ever smaller
+  than them. `ReplyPanel.fit` keeps it on the screen: wider than the visible frame → smaller; taller →
+  smaller while zoomed, else `baseWidth` +15 % (from 428) — the 45 % height cap and its scroller are
+  gone; a scroller is left only when the whole screen width cannot hold the answer. A streaming ⚡
+  answer is re-fitted at every word and moved, not cut, to stay on screen (`onScreen`).
 - **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble should be able to show
   images. As much as they fit that window, small, but when clicked, opened up"*):
   `walkie-reply "<answer>" --image <path>` (repeatable, ≤ 8; text optional with a picture) posts

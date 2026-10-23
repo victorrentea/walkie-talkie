@@ -50,14 +50,15 @@ enum ReplyPanel {
     /// footer is `footerFont` since, so `🤖 Opus 5.5 + 🌐 Internet + 🤖 adversarial
     /// reviewed ✏️` (~365 pt) still holds on the 386 pt body.
     private static let width: CGFloat = 428
-    /// **Every corner resizes it** (2026-10-09, Victor: *"make the dialog window
-    /// … resizable by the right or left bottom corner? Actually all the corners
-    /// … in case there's a longer response"*). The size he dragged it to, kept
-    /// while it is open (a streaming ⚡ answer included); nil = fitted to the words.
-    private static var userSize: NSSize?
-    /// Unscrolled, the words take at most this share of the screen's height;
-    /// past it they scroll, and a corner gives them more.
-    private static let bodyShare: CGFloat = 0.45
+    /// **Always the whole answer, in the least room it needs** (2026-10-23,
+    /// Victor: *"niciodată să nu poți să dimensionezi dialogul în așa fel încât
+    /// să trunchezi răspunsul. Mereu să facă fit, să fie minim cât. Și dacă măresc
+    /// fereastra să meargă și textul"*). The pop-up is its words' fitted size at
+    /// `scale`: `baseWidth × scale` wide, as tall as they wrap to — a corner and
+    /// the wheel change only `scale`, so the words grow with the window. An answer
+    /// too tall for the screen at 428 pt widens `baseWidth` instead of scrolling
+    /// (`fit`); the scroller is left for one no width on the screen can hold.
+    private static var baseWidth: CGFloat = width
     /// The pictures, read once per pop-up — a corner drag rebuilds it per event.
     private static var pictureCache: [URL: NSImage] = [:]
     /// **Everything in the pop-up is drawn `scale` times larger** while the wheel
@@ -308,12 +309,12 @@ enum ReplyPanel {
         if text.isEmpty { text = "…" }
         if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
         if let p = panel, liveOpen {
-            let root = build(text, from: label, tty: nil, size: userSize)
+            let root = fit(text, from: label, tty: nil)
             // The size first: assigning the content view resizes it to the
             // window's old frame, and the answer stayed cut to its first line.
             let size = root.frame.size
-            p.setFrame(NSRect(x: p.frame.minX, y: p.frame.maxY - size.height,
-                              width: size.width, height: size.height), display: false)
+            p.setFrame(onScreen(NSRect(x: p.frame.minX, y: p.frame.maxY - size.height,
+                                       width: size.width, height: size.height)), display: false)
             p.contentView = root
             p.invalidateShadow()
             // The pointer may be on a link: its tip again, on the new view.
@@ -441,10 +442,11 @@ enum ReplyPanel {
         shownDead = tty.map(isDoomed) == true
         // A new pop-up opens at its fitted size — the last one's wheel or corner
         // is forgotten (a ⚡ one replaced in place never passed through `close`).
-        userSize = nil
         wheel = nil
+        resizing = nil
         scale = 1
-        let root = build(text, from: label, tty: tty, images: images)
+        baseWidth = width
+        let root = fit(text, from: label, tty: tty, images: images)
 
         let p = ReplyWindow(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
@@ -467,19 +469,57 @@ enum ReplyPanel {
         Log.info("💬 answer from \(label ?? "agent") — \(text.count) chars\(images.isEmpty ? "" : ", \(images.count) picture(s)"); up until the ✕\(queue.isEmpty ? "" : ", \(queue.count) waiting")")
     }
 
-    /// **A corner was dragged**: the pop-up rebuilt at that size, the edges the
-    /// hand did not move kept where they were (`keepTop`: the top edge, when a
-    /// bottom corner is the one moving).
-    fileprivate static func resize(_ p: NSPanel, to f: NSRect, keepTop: Bool, stretch: Bool = false) {
+    /// The visible frame of the pop-up's screen — the pointer's, before it is up.
+    private static var visible: NSRect {
+        (panel?.screen ?? screen(at: arrivedAt))?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+    }
+
+    /// `r` moved, not resized, into the visible frame.
+    private static func onScreen(_ r: NSRect) -> NSRect {
+        let v = visible
+        return NSRect(x: max(v.minX, min(r.minX, v.maxX - r.width)), y: max(v.minY, min(r.minY, v.maxY - r.height)),
+                      width: r.width, height: r.height)
+    }
+
+    /// **The words built whole, on the screen**: wider than the screen at this
+    /// `scale` → smaller; taller → smaller while zoomed, wider (`baseWidth`) at
+    /// its own size. Only an answer the whole width cannot hold keeps a scroller.
+    private static func fit(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
+        let v = visible
+        var root = build(text, from: label, tty: tty, images: images)
+        for _ in 0..<40 {
+            let size = root.frame.size
+            if size.width > v.width + 0.5 { scale *= 0.95 }
+            else if size.height <= v.height + 0.5 { break }
+            else if scale > 1 { scale = max(1, scale * 0.95) }
+            else if baseWidth * scale < v.width - 0.5 { baseWidth = min(v.width / scale, baseWidth * 1.15) }
+            else { break }
+            root = build(text, from: label, tty: tty, images: images)
+        }
+        return root
+    }
+
+    /// **A corner drag zooms it** (2026-10-23): the words grow or shrink with the
+    /// window by how far the hand pulled it (the larger of its two ratios), the
+    /// size is theirs, and the corner opposite the hand stays put. `start` is
+    /// the frame and `scale` when the press began.
+    fileprivate static func resize(_ p: NSPanel, from start: (frame: NSRect, scale: CGFloat), to f: NSRect,
+                                   corner: ReplyRoot.Corner) {
         guard panel === p, let text = shownRaw ?? shown else { return }
-        let root = build(text, from: openLabel, tty: shownTTY, images: shownImages, size: f.size, stretch: stretch)
+        let k = max(f.width / start.frame.width, f.height / start.frame.height)
+        scale = max(minWidth / baseWidth, start.scale * k)
+        let root = fit(text, from: openLabel, tty: shownTTY, images: shownImages)
         let size = root.frame.size
-        userSize = size
-        let y = keepTop ? f.maxY - size.height : f.minY
-        p.setFrame(NSRect(x: f.minX, y: y, width: size.width, height: size.height), display: false)
+        let left = corner == .topLeft || corner == .bottomLeft
+        let top = corner == .topLeft || corner == .topRight
+        let x = left ? start.frame.maxX - size.width : start.frame.minX
+        let y = top ? start.frame.minY : start.frame.maxY - size.height
+        p.setFrame(onScreen(NSRect(x: x, y: y, width: size.width, height: size.height)), display: false)
         p.contentView = root
         p.invalidateShadow()
     }
+    /// The drag in progress: its first frame and the scale then.
+    private static var resizing: (frame: NSRect, scale: CGFloat)?
 
     /// **The wheel over it grows it, up to the whole screen** (2026-10-23, Victor:
     /// *"dacă sunt cu mouse-ul pe acest popup, când dau scroll … să se mărească
@@ -493,7 +533,8 @@ enum ReplyPanel {
     /// meets the screen's visible frame — so the room can read it. `t` runs 0 → 1:
     /// the magnification goes 1 → `most` geometrically, the centre slides to the
     /// screen's. A drag of the pop-up moves `centre` so the next notch does not
-    /// jump; a corner drag starts over from there, at the scale it had.
+    /// jump; a corner drag starts over from there, at the scale it had. The size
+    /// at each notch is the words' (`fit`), never a box they are cut to.
     private static var wheel: (size: NSSize, scale: CGFloat, centre: NSPoint, t: CGFloat, set: NSRect)?
     /// A wheel notch moves `t` this much — ~8 notches to the whole screen; a
     /// trackpad's points are divided by `wheelPoints`.
@@ -502,8 +543,8 @@ enum ReplyPanel {
 
     /// Took the wheel event (false: the words scroll instead).
     fileprivate static func grow(_ p: NSPanel, by dy: CGFloat, precise: Bool) -> Bool {
-        guard panel === p, shown != nil, dy != 0,
-              let v = (p.screen ?? screen(at: NSEvent.mouseLocation))?.visibleFrame else { return false }
+        guard panel === p, let text = shownRaw ?? shown, dy != 0 else { return false }
+        let v = visible
         let f = p.frame
         var w = wheel ?? (f.size, scale, NSPoint(x: f.midX, y: f.midY), 0, f)
         if f.size != w.set.size {
@@ -516,16 +557,14 @@ enum ReplyPanel {
         guard most > 1.01 else { return false }
         let t = min(1, max(0, w.t + (precise ? dy / wheelPoints : dy * wheelStep)))
         guard t != w.t else { return false }
-        let k = pow(most, t)
-        scale = w.scale * k
-        let width = min(v.width, (w.size.width * k).rounded()), height = min(v.height, (w.size.height * k).rounded())
+        scale = w.scale * pow(most, t)
+        let root = fit(text, from: openLabel, tty: shownTTY, images: shownImages)
+        let size = root.frame.size
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
-        let x = max(v.minX, min(lerp(w.centre.x, v.midX) - width / 2, v.maxX - width))
-        let y = max(v.minY, min(lerp(w.centre.y, v.midY) - height / 2, v.maxY - height))
-        resize(p, to: NSRect(x: x, y: y, width: width, height: height), keepTop: false, stretch: true)
-        // The words may wrap a line longer at the new size (`stretch`): back on the screen.
-        let g = p.frame
-        if g.maxY > v.maxY { p.setFrameOrigin(NSPoint(x: g.minX, y: max(v.minY, v.maxY - g.height))) }
+        p.setFrame(onScreen(NSRect(x: lerp(w.centre.x, v.midX) - size.width / 2, y: lerp(w.centre.y, v.midY) - size.height / 2,
+                                   width: size.width, height: size.height)), display: false)
+        p.contentView = root
+        p.invalidateShadow()
         w.t = t
         w.set = p.frame
         wheel = w
@@ -538,11 +577,12 @@ enum ReplyPanel {
         _ = grow(p, by: CGFloat(notches), precise: false)
     }
 
-    /// Desk route: what a corner drag to this size does, the top edge kept.
+    /// Desk route: what a drag of the bottom-right corner to this size does.
     static func resizeOpen(to size: NSSize) {
         guard let p = panel else { return }
-        resize(p, to: NSRect(x: p.frame.minX, y: p.frame.maxY - size.height, width: size.width, height: size.height),
-               keepTop: true)
+        let f = p.frame
+        resize(p, from: (f, scale), to: NSRect(x: f.minX, y: f.maxY - size.height, width: size.width, height: size.height),
+               corner: .bottomRight)
     }
 
     /// **A link in the words** (2026-10-10, `QuickAsk.cited`): `\u{1}(site)\u{2}url\u{3}`
@@ -649,14 +689,11 @@ enum ReplyPanel {
     }
 
     /// The pop-up's content for these words — the header, the body, the buttons —
-    /// fitted to them, or at `size` when a corner has been dragged. Every length
-    /// is `scale` times its own (`grow`); `stretch` lets the words have the one
-    /// more line a zoom can wrap them to, rather than a scroller for it.
-    private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = [],
-                              size: NSSize? = nil, stretch: Bool = false) -> ReplyRoot {
+    /// fitted to them, `baseWidth` wide. Every length is `scale` times its own.
+    private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
         let s = scale
         let pad: CGFloat = 12 * s
-        let width = max(minWidth, size?.width ?? Self.width * s)
+        let width = (baseWidth * s).rounded()
         let inner = width - 2 * pad
         let gutter = 18 * s
         // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
@@ -762,14 +799,10 @@ enum ReplyPanel {
                      height: laid.height * s, hidden: laid.hidden)
         let stripH = strip.height > 0 ? strip.height + (text.isEmpty ? 0 : 8 * s) : 0
         let chrome = pad + headerH + 6 * s + stripH + pad
-        // The words' room: what the corner left them, or all they need up to
-        // `bodyShare` of the screen. Less than they need → they scroll.
+        // All the words need — cut to the screen only when `fit` has no width
+        // left to give them; then, and only then, they scroll.
         let natural = ceil(bodySize.height)
-        var bodyH: CGFloat
-        if let size {
-            bodyH = max(text.isEmpty ? 0 : 22 * s, size.height - chrome)
-            if stretch, natural > bodyH, natural - bodyH < font.pointSize * 1.6 { bodyH = natural }
-        } else { bodyH = min(natural, ((NSScreen.main?.visibleFrame.height ?? 900) * bodyShare).rounded()) }
+        let bodyH = min(natural, max(22 * s, visible.height - chrome))
         let height = chrome + bodyH
 
         let root = ReplyRoot(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -895,7 +928,11 @@ enum ReplyPanel {
                 return linked.rects().map { root.convert($0, from: linked) }
             }
         }
-        root.onResize = { p, f, keepTop in wheel = nil; resize(p, to: f, keepTop: keepTop) }
+        root.onResize = { p, start, f, corner in
+            wheel = nil
+            if resizing?.frame != start { resizing = (start, scale) }
+            resize(p, from: resizing ?? (start, scale), to: f, corner: corner)
+        }
         return root
     }
 
@@ -947,8 +984,8 @@ enum ReplyPanel {
         watchTimer?.invalidate()
         watchTimer = nil
         shownImages = []
-        userSize = nil
         wheel = nil
+        resizing = nil
         pictureCache = [:]
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
@@ -1063,8 +1100,8 @@ private final class ReplyRoot: NSView {
     /// app that is not frontmost, and this one never is.
     private var tip: NSTextField?
     private var tipFor: URL?
-    /// A corner dragged to `frame`; `keepTop` when a bottom corner moved.
-    var onResize: ((NSPanel, NSRect, Bool) -> Void)?
+    /// A corner dragged: the frame when the press began, the frame the hand asks for.
+    var onResize: ((NSPanel, NSRect, NSRect, Corner) -> Void)?
     private var press = PressOrDrag()
     private var onLink = false
 
@@ -1133,7 +1170,7 @@ private final class ReplyRoot: NSView {
             else { maxX = max(f0.maxX + dx, minX + ReplyPanel.minWidth) }
             if movesTop { maxY = max(f0.maxY + dy, minY + ReplyPanel.minHeight) }
             else { minY = min(f0.minY + dy, maxY - ReplyPanel.minHeight) }
-            report?(window, NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY), !movesTop)
+            report?(window, f0, NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY), c)
         }
     }
     override func updateTrackingAreas() {
