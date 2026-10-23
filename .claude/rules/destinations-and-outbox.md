@@ -411,3 +411,14 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   (18–38 pt) popping in over the first 0.35 s with a small overshoot, riding right and up, gone at
   1.0 s; the close stops the old answer's checks. Supersedes *the pop-up stays while he speaks* above.
   `REPLY_BURST_PNG` renders it (`ask-*.png`).
+
+- **`Dig more`, and the wheel grows the pop-up to the whole screen** (2026-10-23, Victor: *"să se
+  cheamă linkul dig more … dacă sunt cu mouse-ul pe acest popup, când dau scroll … să se mărească
+  dimensiunea acestei ferestre până când devine mare cât tot ecranul, dar dimensiunea inițială să
+  rămână … când deschide un nou modal"*). The 🌐 footer link reads `Dig more` (`ReplyPanel.more`).
+  Every wheel event over any reply pop-up goes first to `ReplyPanel.grow` (`ReplyWindow.sendEvent`):
+  rolled up (zoom in; natural scrolling undone via `isDirectionInvertedFromDevice`) grows it, rolled
+  down shrinks it back to the size it had at the first notch — size and centre slide linearly to the
+  screen's visible frame, ~8 notches (0.12 each; a trackpad's points / 500). Past either end the
+  wheel scrolls the words as before. A new pop-up always opens fitted (`present` clears `userSize`
+  and `wheel`). Desk: `POST /test/quick {"wheel": n}`.

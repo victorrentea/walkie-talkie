@@ -342,8 +342,9 @@ enum ReplyPanel {
     /// apare să zică more, prin care să mai solicit mai mult research pe
     /// internet"*): a link in the ⚡ footer, right after `🌐 Internet`, that is
     /// not a page — `openLink` hands it to `onMore` (`AppDelegate.askQuick`).
+    /// **It reads `Dig more`** (2026-10-23, Victor: *"să se cheamă linkul dig more"*).
     static let moreURL = URL(string: "walkie-quick:more")!
-    static var more: String { link("More", moreURL) }
+    static var more: String { link("Dig more", moreURL) }
     static var onMore: (() -> Void)?
     /// The finished ⚡ pop-up is being written again (🌐 More): later `live`
     /// calls rewrite it in place instead of opening a new one. False when it
@@ -429,10 +430,14 @@ enum ReplyPanel {
         openLabel = label
         arrivedAt = NSEvent.mouseLocation
         shownDead = tty.map(isDoomed) == true
+        // A new pop-up opens at its fitted size — the last one's wheel or corner
+        // is forgotten (a ⚡ one replaced in place never passed through `close`).
+        userSize = nil
+        wheel = nil
         let root = build(text, from: label, tty: tty, images: images)
 
-        let p = NSPanel(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
-                        backing: .buffered, defer: false)
+        let p = ReplyWindow(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
+                            backing: .buffered, defer: false)
         p.isOpaque = false
         p.backgroundColor = .clear
         p.hasShadow = true
@@ -464,6 +469,50 @@ enum ReplyPanel {
         p.setFrame(NSRect(x: f.minX, y: y, width: size.width, height: size.height), display: false)
         p.contentView = root
         p.invalidateShadow()
+    }
+
+    /// **The wheel over it grows it, up to the whole screen** (2026-10-23, Victor:
+    /// *"dacă sunt cu mouse-ul pe acest popup, când dau scroll … să se mărească
+    /// dimensiunea acestei ferestre până când devine mare cât tot ecranul"*). The
+    /// wheel rolled up (zoom in, as in a map) grows it, rolled down shrinks it back
+    /// to the size it had at the first notch; past either end the wheel scrolls the
+    /// words, as before. `t` runs 0 → 1: the size and the centre slide from that
+    /// size to the screen's visible frame. A drag of the pop-up moves `centre` so
+    /// the next notch does not jump; a corner drag starts over from there.
+    private static var wheel: (size: NSSize, centre: NSPoint, t: CGFloat, set: NSRect)?
+    /// A wheel notch moves `t` this much — ~8 notches to the whole screen; a
+    /// trackpad's points are divided by `wheelPoints`.
+    private static let wheelStep: CGFloat = 0.12
+    private static let wheelPoints: CGFloat = 500
+
+    /// Took the wheel event (false: the words scroll instead).
+    fileprivate static func grow(_ p: NSPanel, by dy: CGFloat, precise: Bool) -> Bool {
+        guard panel === p, shown != nil, dy != 0,
+              let v = (p.screen ?? screen(at: NSEvent.mouseLocation))?.visibleFrame else { return false }
+        let f = p.frame
+        var w = wheel ?? (f.size, NSPoint(x: f.midX, y: f.midY), 0, f)
+        if f.size != w.set.size {
+            w = (f.size, NSPoint(x: f.midX, y: f.midY), 0, f)
+        } else if f.origin != w.set.origin, w.t < 1 {
+            w.centre = NSPoint(x: (f.midX - w.t * v.midX) / (1 - w.t), y: (f.midY - w.t * v.midY) / (1 - w.t))
+        }
+        let t = min(1, max(0, w.t + (precise ? dy / wheelPoints : dy * wheelStep)))
+        guard t != w.t else { return false }
+        func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
+        let width = min(v.width, lerp(w.size.width, v.width)), height = min(v.height, lerp(w.size.height, v.height))
+        let x = max(v.minX, min(lerp(w.centre.x, v.midX) - width / 2, v.maxX - width))
+        let y = max(v.minY, min(lerp(w.centre.y, v.midY) - height / 2, v.maxY - height))
+        resize(p, to: NSRect(x: x, y: y, width: width, height: height), keepTop: false)
+        w.t = t
+        w.set = p.frame
+        wheel = w
+        return true
+    }
+
+    /// Desk route: `notches` of the wheel over the open pop-up (+ = rolled up).
+    static func wheelOpen(_ notches: Double) {
+        guard let p = panel else { return }
+        _ = grow(p, by: CGFloat(notches), precise: false)
     }
 
     /// Desk route: what a corner drag to this size does, the top edge kept.
@@ -813,7 +862,7 @@ enum ReplyPanel {
                 return linked.rects().map { root.convert($0, from: linked) }
             }
         }
-        root.onResize = { p, f, keepTop in resize(p, to: f, keepTop: keepTop) }
+        root.onResize = { p, f, keepTop in wheel = nil; resize(p, to: f, keepTop: keepTop) }
         return root
     }
 
@@ -865,6 +914,7 @@ enum ReplyPanel {
         watchTimer = nil
         shownImages = []
         userSize = nil
+        wheel = nil
         pictureCache = [:]
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
@@ -938,6 +988,20 @@ enum ReplyPanel {
     }
 }
 
+
+/// The pop-up's window: every wheel event over it — the scrolling words'
+/// included — is offered to `ReplyPanel.grow` first.
+private final class ReplyWindow: NSPanel {
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .scrollWheel {
+            // The wheel as the hand rolled it: up = positive, natural scrolling or not.
+            let dy = event.isDirectionInvertedFromDevice ? -event.scrollingDeltaY : event.scrollingDeltaY
+            if abs(dy) > abs(event.scrollingDeltaX),
+               ReplyPanel.grow(self, by: dy, precise: event.hasPreciseScrollingDeltas) { return }
+        }
+        super.sendEvent(event)
+    }
+}
 
 @_silgen_name("_CGSDefaultConnection")
 private func _CGSDefaultConnection() -> Int32

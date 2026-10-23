@@ -2141,6 +2141,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let r = body["resize"] as? [String: Double], let w = r["w"], let h = r["h"] {
                 DispatchQueue.main.sync { ReplyPanel.resizeOpen(to: NSSize(width: w, height: h)) }
             }
+            // `wheel: n` — n notches of the wheel over the open pop-up (+ = rolled up, grows it).
+            if let n = body["wheel"] as? Double { DispatchQueue.main.sync { ReplyPanel.wheelOpen(n) } }
             // `link: {index, click?}` — the pointer over the open pop-up's
             // index-th link, through the same handlers as the real one, then
             // pressed and released when `click` (the opened URL is answered
@@ -2156,7 +2158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if let linkOut { return (200, linkOut.merging(["frame": frame]) { a, _ in a }) }
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
-                return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil
+                return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil || body["wheel"] != nil
                     ? (200, ["ok": true, "frame": frame]) : (400, ["ok": false, "error": "text required"])
             }
             // `wait: "all"` waits for the 🔎 web check and the 🧐 review too.
