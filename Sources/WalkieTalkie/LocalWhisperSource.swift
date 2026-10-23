@@ -510,8 +510,10 @@ final class LocalWhisperSource: DictationSource {
             }
             return
         }
-        Log.info(String(format: "local whisper: %@ (%.2f, cr %.2f) — %d chars",
-                        r.language ?? "?", r.avgLogprob, r.compressionRatio, r.text.count)
+        // The mean and the 🎤 decision too (night test 2026-10-23: a 🎤 the line could not explain).
+        Log.info(String(format: "local whisper: %@ (%.2f, mean %@, cr %.2f) — %d chars%@",
+                        r.language ?? "?", r.avgLogprob, r.meanLogprob.map { String(format: "%.2f", $0) } ?? "–",
+                        r.compressionRatio, r.text.count, LocalWhisper.isUnsure(r) ? " — unsure, a plain sentence ends with 🎤" : "")
                  + Self.coverageNote(r.coverage))
         answer(t) {
             didTranscribe?(DictationResult(

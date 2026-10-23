@@ -140,7 +140,7 @@ final class DictationEditorTests: XCTestCase {
 
     func testTheCountdownReadsOnTheTranscribingLine() {
         XCTAssertEqual(AutoLocal.inlineText(countdown: 2.4, loading: false, keys: "⌘⌃X"), "💻 in 3s ⌘⌃X")
-        XCTAssertEqual(AutoLocal.inlineText(countdown: 0, loading: false, keys: "⌘⌃X"), "💻 now ⌘⌃X")
+        XCTAssertEqual(AutoLocal.inlineText(countdown: 0, loading: false, keys: "⌘⌃X"), "now ⌘⌃X")
         XCTAssertEqual(AutoLocal.inlineText(loading: true, keys: "⌘⌃X"), "💻 local (loading) ⌘⌃X")
     }
 

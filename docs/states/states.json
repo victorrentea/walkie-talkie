@@ -430,12 +430,12 @@
     "group" : "Dictating",
     "height" : 93,
     "image" : "transcribing-fallback-now.png",
-    "note" : "**At `now` the engine on the line is this Mac** (2026-10-22, Victor: *\"când treci la modelul local, în transcribing să înlocuiești … cu calculatorul … zici now și efectiv înlocuiești motorul cu local\"*): `Transcribing via 💻... 💻 now ⌘⌃X`. `now`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
+    "note" : "**At `now` the engine on the line is this Mac** (2026-10-22, Victor: *\"când treci la modelul local, în transcribing să înlocuiești … cu calculatorul … zici now și efectiv înlocuiești motorul cu local\"*): `Transcribing via 💻... now ⌘⌃X` (one laptop: the mark says it, 2026-10-23). `now`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
     "shape" : "chip",
     "slug" : "transcribing-fallback-now",
     "title" : "Fallback to local — the budget ran out",
     "when" : "The count reached zero with the engine's words still out and the local decode not quite done.",
-    "width" : 312
+    "width" : 308
   },
   {
     "alpha" : 0.80000000000000004,

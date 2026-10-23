@@ -8640,6 +8640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                            "inline": overlay.localNowInlineText ?? NSNull()] as [String: Any]
         out["engineMark"] = overlay.engineMark
         out["heldSkip"] = overlay.heldSkipVisible
+        out["heldSkipFrames"] = overlay.heldSkipFrames
         out["editor"] = ["on": DictationEditor.enabled, "inFlight": DictationEditor.shared.inFlight] as [String: Any]
         // The auto fallback (2026-09-28): {on, budget, since, fired, left, engine, samples, wispr…}.
         out["localAuto"] = describeAutoLocal()

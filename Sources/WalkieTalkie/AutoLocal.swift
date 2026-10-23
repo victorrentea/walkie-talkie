@@ -71,12 +71,13 @@ enum AutoLocal {
     }
 
     /// **The countdown as it reads on the `Transcribing...` line** (2026-10-22,
-    /// `RelayWindow.localNowInline`): `💻 in 3s ⌘⌃X`, `💻 now ⌘⌃X`,
+    /// `RelayWindow.localNowInline`): `💻 in 3s ⌘⌃X`, `now ⌘⌃X` (the mark is 💻 by then),
     /// `💻 local ⌘⌃X` with no budget running (`(loading)` while the weights are down).
     static func inlineText(countdown: TimeInterval? = nil, loading: Bool, keys: String) -> String {
         if let c = countdown {
             let s = Int(c.rounded(.up))
-            return "💻 " + (s > 0 ? "in \(s)s" : "now") + " " + keys
+            // At `now` the line's engine mark is already 💻 (`syncLocalNow`): no second laptop.
+            return (s > 0 ? "💻 in \(s)s" : "now") + " " + keys
         }
         return "💻 local" + (loading ? " (loading)" : "") + " " + keys
     }

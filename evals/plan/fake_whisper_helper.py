@@ -35,7 +35,8 @@ moves it). All optional:
                 the Nth request of that kind in this epoch) · words (bool) · minSeconds / maxSeconds
         action: delay · perSecond · fail (true｜"why" → ok:false) · empty (text "") · text (override) ·
                 hang (true｜seconds: never answers — the app's 300 s budget kills it, or /test/whisper kill) ·
-                die (exit code; after the delay, without answering) · language · logprob · cr
+                die (exit code; after the delay, without answering) · language · logprob · cr ·
+                mean (the whole take's `mean_logprob`; absent unless asked)
 
 **Every request is logged** to `~/.walkie-talkie/fake-whisper.jsonl` (`WT_FAKE_WHISPER_LOG`), under an
 `flock`, one `request` line at arrival and one `answer`｜`die`｜`hang` line after:
@@ -283,6 +284,10 @@ def _answer(line):
         "decode_s": round(decode_s, 3),
         "memory": {"active_mb": 0.0, "cache_mb": 0.0, "peak_mb": 0.0, "cache_limit_mb": 0},
     }
+    # The whole take's confidence (2026-10-22, the 🎤): sent only when a rule asks, so the
+    # app's fall-back to the worst segment stays testable too.
+    if "mean" in act:
+        out["mean_logprob"] = float(act["mean"])
     if req.get("words"):
         out["words"] = _words(text, seconds)
     if segments:

@@ -38,6 +38,7 @@ final class HeldPromptSkip {
     func hide() { panel?.orderOut(nil) }
 
     var isVisible: Bool { panel?.isVisible == true }
+    var frame: NSRect? { panel?.isVisible == true ? panel?.frame : nil }
 
     private func make() -> NSPanel {
         let p = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Self.side, height: Self.side),

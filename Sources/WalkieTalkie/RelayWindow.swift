@@ -5022,6 +5022,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     var localNowInlineText: String? { localNowFolded ? localNowInline : nil }
     /// Whether the » over the held sent-prompt dialog is up — `GET /test/state.heldSkip`.
     var heldSkipVisible: Bool { heldSkip.isVisible }
+    /// Both frames, Cocoa points — the » must sit in the dialog's top-right corner.
+    var heldSkipFrames: [String: Any] {
+        func r(_ f: NSRect) -> [String: Double] { ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height] }
+        return ["panel": r(panel.frame), "skip": heldSkip.frame.map(r) ?? NSNull(), "held": spawnPanelHeld]
+    }
 
     /// How many sentences wait for a bind — see `heldRow`. Zero takes the row down.
     private(set) var heldCount = 0
@@ -5963,8 +5968,14 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// long as the hold, a click fades the dialog now — the delivery goes on.
     private let heldSkip = HeldPromptSkip()
 
+    private var heldSkipFollow: Timer?
+
     private func syncHeldSkip() {
-        guard spawnPanelHeld, !Self.shooting else { return heldSkip.hide() }
+        guard spawnPanelHeld, !Self.shooting else {
+            heldSkipFollow?.invalidate()
+            heldSkipFollow = nil
+            return heldSkip.hide()
+        }
         heldSkip.onClick = { [weak self] in
             guard let self, self.spawnPanelHeld else { return }
             Log.info("⏩ the sent prompt's dialog taken down by its » — the delivery carries on")
@@ -5976,6 +5987,20 @@ private let heardLabel = NSTextField(labelWithString: "")
             guard let self, self.spawnPanelHeld, self.panel.isVisible else { return }
             self.heldSkip.show(over: self.panel.frame, level: self.panel.level, sharing: self.panel.sharingType)
         }
+        // **It follows the dialog** (night test 2026-10-23: the dialog still moved and
+        // resized after the » went up — 44 pt in 0.3 s — and the » stayed behind, over
+        // the words). 20 Hz while held; a frame that did not change costs a comparison.
+        heldSkipFollow?.invalidate()
+        var shownFor = NSRect.zero
+        let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] t in
+            guard let self, self.spawnPanelHeld, self.panel.isVisible else { t.invalidate(); return }
+            let f = self.panel.frame
+            guard f != shownFor else { return }
+            shownFor = f
+            self.heldSkip.show(over: f, level: self.panel.level, sharing: self.panel.sharingType)
+        }
+        RunLoop.main.add(t, forMode: .common)
+        heldSkipFollow = t
     }
     /// The half second between the outline leaving and the panel being gone.
     private var spawnPanelFading = false
