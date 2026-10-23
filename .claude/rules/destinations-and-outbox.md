@@ -422,3 +422,18 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   screen's visible frame, ~8 notches (0.12 each; a trackpad's points / 500). Past either end the
   wheel scrolls the words as before. A new pop-up always opens fitted (`present` clears `userSize`
   and `wheel`). Desk: `POST /test/quick {"wheel": n}`.
+
+- **The wheel zooms it — words, icons, margins — and `🪏 dig more` comes with the web's answer**
+  (2026-10-23, later, Victor: *"să se mărească și fereastra și textul … să se vadă pe tot ecranul
+  centrat la maxim zoom … mărești tot, practic"*; *"link-ul de dig more trebuie să apară imediat după
+  ce internet termină, în timp ce reviewer-ul lucrează și să întrerupă reviewer-ul … un emoji de
+  lopată în fața lu D, d mic"*). `ReplyPanel.scale` multiplies every length `build` uses (fonts,
+  `headerH`, `iconSide`, pad, gaps, thumbnails — laid out at 1× then magnified); `grow` keeps the
+  proportions and goes 1 → `min(visible.w / w, visible.h / h)` geometrically over the same ~8
+  notches, centre sliding to the screen's (measured: 428×127 → 1920×570 on a 1920 screen, and back
+  to 428×127 where it was). `stretch` gives the words the one line a zoom may wrap them to instead
+  of a scroller. **Rebuilds use `shownRaw`** — `shown` is the plain reading, and a resize from it
+  dropped every link and the footer's robots. The link reads `🪏 dig more` and is in the footer from
+  the web's answer on; a click while 😠 reviews stops it (`QuickAsk.more` → `cancelLocked`); a
+  replaced round's late `web` / `review` paint nothing (`mine == round`). Desk: `POST /test/quick
+  {"peek": true}` answers the words on screen.

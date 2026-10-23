@@ -2158,8 +2158,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             if let linkOut { return (200, linkOut.merging(["frame": frame]) { a, _ in a }) }
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
+                // `peek: true` — only the open pop-up's frame and words (`shown`).
+                let shown: Any = DispatchQueue.main.sync { ReplyPanel.shown ?? NSNull() }
                 return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil || body["wheel"] != nil
-                    ? (200, ["ok": true, "frame": frame]) : (400, ["ok": false, "error": "text required"])
+                    || body["peek"] != nil
+                    ? (200, ["ok": true, "frame": frame, "shown": shown]) : (400, ["ok": false, "error": "text required"])
             }
             // `wait: "all"` waits for the 🔎 web check and the 🧐 review too.
             let waitAll = body["wait"] as? String == "all"
@@ -6631,22 +6634,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // acelui robot sugerează că e adversar"*). **`🌐 More` after `Internet`**
         // once the checks are over (same day — `ReplyPanel.more`): one more web
         // round from other sources, then the review again; `Internet ×2` says it.
-        var round = 1
+        // **Offered the moment the web has answered, while the reviewer works, and
+        // a click cuts the review short** (2026-10-23, Victor: *"link-ul de dig
+        // more trebuie să apară imediat după ce internet termină, în timp ce
+        // reviewer-ul lucrează și să întrerupă reviewer-ul dacă apăs butonul"*) —
+        // `QuickAsk.more` ends the round still running. `digOffered` is the link on screen.
+        var round = 1, digOffered = false, checkedSent = false
         func internet(_ running: Bool) -> String {
             "🌐 Internet" + (round > 1 ? " ×\(round)" : "") + (running ? ReplyPanel.dots : " " + ReplyPanel.more)
+        }
+        func sendChecked() {
+            guard !checkedSent else { return }
+            checkedSent = true
+            checked?(searched, reviewed)
         }
         func makeChecks(first: Bool) -> QuickAsk.Checks {
             let mine = round
             return QuickAsk.Checks(web: { text, isDone in
-                guard isDone else { return }
+                // A round a dig more has replaced paints nothing more (its answer was already in flight).
+                guard isDone, mine == round else { return }
+                digOffered = true
                 if text.hasPrefix("⚠️") {
-                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + " failed",
+                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + " failed " + ReplyPanel.more,
                              ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
                 } else {
                     let c = QuickAsk.cited(text)
                     answer = c.text
                     // No ✏️ on the search (same day, *"scoate creionul din Search"*).
-                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : ""), ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
+                    steps = [internet(false), ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
                     searched = ReplyPanel.plain(c.text)
                     remember(searched ?? "")
                 }
@@ -6654,7 +6669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 String(text.prefix(80)).replacingOccurrences(of: "\n", with: " ")))
                 paint(force: true)
             }, review: { text, isDone in
-                guard isDone else { return }
+                guard isDone, mine == round else { return }
                 if text.hasPrefix("⚠️") {
                     steps[steps.count - 1] = ReplyPanel.adversary + " failed"
                 } else {
@@ -6678,15 +6693,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let firstStep = steps.first, firstStep.hasPrefix("🌐 Internet"), !firstStep.contains(ReplyPanel.more) {
                     steps[0] = firstStep + " " + ReplyPanel.more
                 }
+                digOffered = true
                 paint(force: true)
                 ReplyPanel.finishLive(question: token)
-                if first { checked?(searched, reviewed) }
+                if first { sendChecked() }
             })
         }
         let checks = makeChecks(first: true)
         ReplyPanel.onMore = { [weak self] in
-            guard let self, self.quickToken == token, !QuickAsk.shared.isAnswering,
+            guard let self, self.quickToken == token, digOffered,
                   ReplyPanel.reopenLive(question: token) else { return }
+            if QuickAsk.shared.isAnswering { Log.info("⚡ 🪏 dig more while the reviewer works — the review is stopped") }
+            // The first round's desk caller is answered now: its `end` will not come.
+            sendChecked()
+            digOffered = false
             round += 1
             steps = [internet(true)]
             paint(force: true)

@@ -60,12 +60,15 @@ enum ReplyPanel {
     private static let bodyShare: CGFloat = 0.45
     /// The pictures, read once per pop-up — a corner drag rebuilds it per event.
     private static var pictureCache: [URL: NSImage] = [:]
-    private static let font = NSFont.systemFont(ofSize: 15)
+    /// **Everything in the pop-up is drawn `scale` times larger** while the wheel
+    /// has zoomed it (`grow`, 2026-10-23); 1 for every new pop-up.
+    private static var scale: CGFloat = 1
+    private static var font: NSFont { .systemFont(ofSize: 15 * scale) }
     /// 26, up from 20, to carry the 26 pt walkie (2026-10-08, *"make the icon
     /// slightly larger … so I can click it easier"*); the name and the ✕ are
     /// centred in it.
-    private static let headerH: CGFloat = 26
-    private static let iconSide: CGFloat = 26
+    private static var headerH: CGFloat { 26 * scale }
+    private static var iconSide: CGFloat { 26 * scale }
 
     private static let walkie: NSImage? = RelayWindow.walkieURL("walkie-bound").flatMap { NSImage(contentsOf: $0) }
 
@@ -89,6 +92,9 @@ enum ReplyPanel {
 
     /// What is on screen — `GET /test/state`.
     static var shown: String?
+    /// The open pop-up's words as built — links, dots and robots still marked;
+    /// `shown` is them read plain, and a rebuild from it lost the links.
+    private static var shownRaw: String?
     /// The terminal the open pop-up came from.
     private static var shownTTY: String?
     /// The pictures on the open pop-up.
@@ -313,6 +319,7 @@ enum ReplyPanel {
             // The pointer may be on a link: its tip again, on the new view.
             root.refreshHover()
             shown = plain(text)
+            shownRaw = text
             // A follow-up asked while the last answer was still being checked
             // writes into the same pop-up — it is this question's now, or its
             // `finishLive` never matches and the pop-up stays `liveOpen`.
@@ -342,9 +349,10 @@ enum ReplyPanel {
     /// apare să zică more, prin care să mai solicit mai mult research pe
     /// internet"*): a link in the ⚡ footer, right after `🌐 Internet`, that is
     /// not a page — `openLink` hands it to `onMore` (`AppDelegate.askQuick`).
-    /// **It reads `Dig more`** (2026-10-23, Victor: *"să se cheamă linkul dig more"*).
+    /// **It reads `🪏 dig more`** (2026-10-23, Victor: *"să se cheamă linkul dig more"*,
+    /// then *"un emoji de lopată în fața lu D, d mic să fie"*).
     static let moreURL = URL(string: "walkie-quick:more")!
-    static var more: String { link("Dig more", moreURL) }
+    static var more: String { link("🪏 dig more", moreURL) }
     static var onMore: (() -> Void)?
     /// The finished ⚡ pop-up is being written again (🌐 More): later `live`
     /// calls rewrite it in place instead of opening a new one. False when it
@@ -425,6 +433,7 @@ enum ReplyPanel {
     private static func present(_ text: String, from label: String?, tty: String?, images: [URL] = []) {
         allowCursorInBackground
         shown = plain(text)
+        shownRaw = text
         shownTTY = tty
         shownImages = images
         openLabel = label
@@ -434,6 +443,7 @@ enum ReplyPanel {
         // is forgotten (a ⚡ one replaced in place never passed through `close`).
         userSize = nil
         wheel = nil
+        scale = 1
         let root = build(text, from: label, tty: tty, images: images)
 
         let p = ReplyWindow(contentRect: root.frame, styleMask: [.borderless, .nonactivatingPanel],
@@ -460,9 +470,9 @@ enum ReplyPanel {
     /// **A corner was dragged**: the pop-up rebuilt at that size, the edges the
     /// hand did not move kept where they were (`keepTop`: the top edge, when a
     /// bottom corner is the one moving).
-    fileprivate static func resize(_ p: NSPanel, to f: NSRect, keepTop: Bool) {
-        guard panel === p, let text = shown else { return }
-        let root = build(text, from: openLabel, tty: shownTTY, images: shownImages, size: f.size)
+    fileprivate static func resize(_ p: NSPanel, to f: NSRect, keepTop: Bool, stretch: Bool = false) {
+        guard panel === p, let text = shownRaw ?? shown else { return }
+        let root = build(text, from: openLabel, tty: shownTTY, images: shownImages, size: f.size, stretch: stretch)
         let size = root.frame.size
         userSize = size
         let y = keepTop ? f.maxY - size.height : f.minY
@@ -476,10 +486,15 @@ enum ReplyPanel {
     /// dimensiunea acestei ferestre până când devine mare cât tot ecranul"*). The
     /// wheel rolled up (zoom in, as in a map) grows it, rolled down shrinks it back
     /// to the size it had at the first notch; past either end the wheel scrolls the
-    /// words, as before. `t` runs 0 → 1: the size and the centre slide from that
-    /// size to the screen's visible frame. A drag of the pop-up moves `centre` so
-    /// the next notch does not jump; a corner drag starts over from there.
-    private static var wheel: (size: NSSize, centre: NSPoint, t: CGFloat, set: NSRect)?
+    /// words, as before. **A zoom, not a bigger window** (same day, Victor: *"să se
+    /// mărească și fereastra și textul … să se vadă pe tot ecranul centrat la maxim
+    /// zoom … mărești tot, practic"*): the words, the icons and the margins grow with
+    /// the window (`scale`), its proportions kept, until its width or its height
+    /// meets the screen's visible frame — so the room can read it. `t` runs 0 → 1:
+    /// the magnification goes 1 → `most` geometrically, the centre slides to the
+    /// screen's. A drag of the pop-up moves `centre` so the next notch does not
+    /// jump; a corner drag starts over from there, at the scale it had.
+    private static var wheel: (size: NSSize, scale: CGFloat, centre: NSPoint, t: CGFloat, set: NSRect)?
     /// A wheel notch moves `t` this much — ~8 notches to the whole screen; a
     /// trackpad's points are divided by `wheelPoints`.
     private static let wheelStep: CGFloat = 0.12
@@ -490,19 +505,27 @@ enum ReplyPanel {
         guard panel === p, shown != nil, dy != 0,
               let v = (p.screen ?? screen(at: NSEvent.mouseLocation))?.visibleFrame else { return false }
         let f = p.frame
-        var w = wheel ?? (f.size, NSPoint(x: f.midX, y: f.midY), 0, f)
+        var w = wheel ?? (f.size, scale, NSPoint(x: f.midX, y: f.midY), 0, f)
         if f.size != w.set.size {
-            w = (f.size, NSPoint(x: f.midX, y: f.midY), 0, f)
+            w = (f.size, scale, NSPoint(x: f.midX, y: f.midY), 0, f)
         } else if f.origin != w.set.origin, w.t < 1 {
             w.centre = NSPoint(x: (f.midX - w.t * v.midX) / (1 - w.t), y: (f.midY - w.t * v.midY) / (1 - w.t))
         }
+        // As much as it can grow whole: until one side meets the screen's.
+        let most = min(v.width / w.size.width, v.height / w.size.height)
+        guard most > 1.01 else { return false }
         let t = min(1, max(0, w.t + (precise ? dy / wheelPoints : dy * wheelStep)))
         guard t != w.t else { return false }
+        let k = pow(most, t)
+        scale = w.scale * k
+        let width = min(v.width, (w.size.width * k).rounded()), height = min(v.height, (w.size.height * k).rounded())
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
-        let width = min(v.width, lerp(w.size.width, v.width)), height = min(v.height, lerp(w.size.height, v.height))
         let x = max(v.minX, min(lerp(w.centre.x, v.midX) - width / 2, v.maxX - width))
         let y = max(v.minY, min(lerp(w.centre.y, v.midY) - height / 2, v.maxY - height))
-        resize(p, to: NSRect(x: x, y: y, width: width, height: height), keepTop: false)
+        resize(p, to: NSRect(x: x, y: y, width: width, height: height), keepTop: false, stretch: true)
+        // The words may wrap a line longer at the new size (`stretch`): back on the screen.
+        let g = p.frame
+        if g.maxY > v.maxY { p.setFrameOrigin(NSPoint(x: g.minX, y: max(v.minY, v.maxY - g.height))) }
         w.t = t
         w.set = p.frame
         wheel = w
@@ -556,7 +579,7 @@ enum ReplyPanel {
     /// are `footerFont`; `adversary` is `robot-adversarial.png`, the 🧐's place.
     static let signed = "\u{5}"
     static let adversary = "\u{6}"
-    private static let footerFont = NSFont.systemFont(ofSize: 14)
+    private static var footerFont: NSFont { .systemFont(ofSize: 14 * scale) }
     private static let adversaryImage: NSImage? = RelayWindow.walkieURL("robot-adversarial").flatMap(NSImage.init(contentsOf:))
 
     /// **Three dots, one lit at a time, for a step still running** (2026-10-10,
@@ -626,12 +649,16 @@ enum ReplyPanel {
     }
 
     /// The pop-up's content for these words — the header, the body, the buttons —
-    /// fitted to them, or at `size` when a corner has been dragged.
+    /// fitted to them, or at `size` when a corner has been dragged. Every length
+    /// is `scale` times its own (`grow`); `stretch` lets the words have the one
+    /// more line a zoom can wrap them to, rather than a scroller for it.
     private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = [],
-                              size: NSSize? = nil) -> ReplyRoot {
-        let pad: CGFloat = 12
-        let width = max(minWidth, size?.width ?? Self.width)
+                              size: NSSize? = nil, stretch: Bool = false) -> ReplyRoot {
+        let s = scale
+        let pad: CGFloat = 12 * s
+        let width = max(minWidth, size?.width ?? Self.width * s)
         let inner = width - 2 * pad
+        let gutter = 18 * s
         // **The walkie, not 💬** (Victor: *"change the 💬 icon with the one of
         // walkie"*) — `walkie-bound.png`, the menu bar's own picture.
         // **As large as the answer, cut with … at the end** (Victor, 2026-10-08:
@@ -666,10 +693,10 @@ enum ReplyPanel {
             label.isSelectable = false
             label.font = font
             label.textColor = .white
-            label.preferredMaxLayoutWidth = inner - 18
+            label.preferredMaxLayoutWidth = inner - gutter
             body = label
             bodySize = text.isEmpty ? .zero
-                : label.sizeThatFits(NSSize(width: inner - 18, height: .greatestFiniteMagnitude))
+                : label.sizeThatFits(NSSize(width: inner - gutter, height: .greatestFiniteMagnitude))
         } else {
             // The dots: three, one lit — and the links after them moved by two.
             var lit: [NSRange] = []
@@ -717,10 +744,10 @@ enum ReplyPanel {
                 }
                 at = (styled.string as NSString).range(of: adversary)
             }
-            let view = LinkedBody(styled, width: inner - 18)
+            let view = LinkedBody(styled, width: inner - gutter)
             view.links = links
             body = view
-            bodySize = NSSize(width: inner - 18, height: view.naturalHeight)
+            bodySize = NSSize(width: inner - gutter, height: view.naturalHeight)
         }
         // **The pictures under the words**, as many as fit (2026-10-09).
         let pictures = images.compactMap { url -> (URL, NSImage)? in
@@ -729,15 +756,20 @@ enum ReplyPanel {
             pictureCache[url] = image
             return (url, image)
         }
-        let strip = thumbLayout(pictures.map(\.1.size), inner: inner)
-        let stripH = strip.height > 0 ? strip.height + (text.isEmpty ? 0 : 8) : 0
-        let chrome = pad + headerH + 6 + stripH + pad
+        // Laid out at their own size, then magnified with the rest.
+        let laid = thumbLayout(pictures.map(\.1.size), inner: inner / s)
+        let strip = (frames: laid.frames.map { NSRect(x: $0.minX * s, y: $0.minY * s, width: $0.width * s, height: $0.height * s) },
+                     height: laid.height * s, hidden: laid.hidden)
+        let stripH = strip.height > 0 ? strip.height + (text.isEmpty ? 0 : 8 * s) : 0
+        let chrome = pad + headerH + 6 * s + stripH + pad
         // The words' room: what the corner left them, or all they need up to
         // `bodyShare` of the screen. Less than they need → they scroll.
         let natural = ceil(bodySize.height)
-        let bodyH: CGFloat
-        if let size { bodyH = max(text.isEmpty ? 0 : 22, size.height - chrome) }
-        else { bodyH = min(natural, ((NSScreen.main?.visibleFrame.height ?? 900) * bodyShare).rounded()) }
+        var bodyH: CGFloat
+        if let size {
+            bodyH = max(text.isEmpty ? 0 : 22 * s, size.height - chrome)
+            if stretch, natural > bodyH, natural - bodyH < font.pointSize * 1.6 { bodyH = natural }
+        } else { bodyH = min(natural, ((NSScreen.main?.visibleFrame.height ?? 900) * bodyShare).rounded()) }
         let height = chrome + bodyH
 
         let root = ReplyRoot(frame: NSRect(x: 0, y: 0, width: width, height: height))
@@ -756,19 +788,20 @@ enum ReplyPanel {
             }
         }
         root.addSubview(icon)
-        let textX = pad + iconSide + 6
+        let gap = 6 * s
+        let textX = pad + iconSide + gap
         let pinned = tty.map { !(isBound?($0) ?? false) } ?? false
         let buttons: CGFloat = tty == nil ? 1 : (pinned ? 3 : 2)
-        header.frame = NSRect(x: textX, y: height - pad - headerH + 3,
-                              width: inner - (textX - pad) - buttons * (iconSide + 6), height: 20)
+        header.frame = NSRect(x: textX, y: height - pad - headerH + 3 * s,
+                              width: inner - (textX - pad) - buttons * (iconSide + gap), height: 20 * s)
         root.addSubview(header)
         if !text.isEmpty {
-            let box = NSRect(x: pad, y: pad + stripH, width: inner - 18, height: bodyH)
+            let box = NSRect(x: pad, y: pad + stripH, width: inner - gutter, height: bodyH)
             if natural > bodyH + 1 {
                 // **Scrolls when there is more than the room** — the wheel works on
                 // a panel that is never key; a press still drags (it reaches
                 // `ReplyRoot` through the clip view).
-                body.frame = NSRect(x: 0, y: 0, width: inner - 18, height: natural)
+                body.frame = NSRect(x: 0, y: 0, width: inner - gutter, height: natural)
                 let scroll = NSScrollView(frame: box)
                 scroll.frame.size.width += 14
                 scroll.drawsBackground = false
@@ -782,7 +815,7 @@ enum ReplyPanel {
                 scroll.contentView.scroll(to: NSPoint(x: 0, y: body.isFlipped ? 0 : natural - bodyH))
                 root.addSubview(scroll)
             } else {
-                body.frame = NSRect(x: pad, y: pad + stripH + bodyH - natural, width: inner - 18, height: natural)
+                body.frame = NSRect(x: pad, y: pad + stripH + bodyH - natural, width: inner - gutter, height: natural)
                 root.addSubview(body)
             }
         }
@@ -805,7 +838,7 @@ enum ReplyPanel {
         var hot = [x.frame] + thumbs
         if tty != nil { hot.append(icon.frame) }
         if let tty = tty {
-            let skull = ReplyCloseButton(frame: x.frame.offsetBy(dx: -(iconSide + 6), dy: 0))
+            let skull = ReplyCloseButton(frame: x.frame.offsetBy(dx: -(iconSide + gap), dy: 0))
             skull.glyph = "☠️"
             skull.dead = shownDead
             // **The 🪦's words, on hover** — drawn under it: a tooltip never
@@ -834,7 +867,7 @@ enum ReplyPanel {
             // **📍 left of the ☠️, only while another terminal is bound** — the
             // caret's map pin (`Glyphs.mapPin`), not 💬.
             if pinned {
-                let pin = ReplyCloseButton(frame: skull.frame.offsetBy(dx: -(iconSide + 6), dy: 0))
+                let pin = ReplyCloseButton(frame: skull.frame.offsetBy(dx: -(iconSide + gap), dy: 0))
                 pin.image = Glyphs.mapPin(height: (iconSide * 0.6).rounded())
                 pin.onClick = {
                     Log.info("💬 the reply pop-up's 📍 clicked — binding \(tty), pop-up closed")
@@ -908,6 +941,7 @@ enum ReplyPanel {
         }
         liveOpen = false
         shown = nil
+        shownRaw = nil
         shownTTY = nil
         shownDead = false
         watchTimer?.invalidate()
