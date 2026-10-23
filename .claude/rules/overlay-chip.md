@@ -479,8 +479,9 @@ yields to `--label`).
 - **The panel draws what the words point at, where they point** (2026-10-07, Victor: *"if a picture
   is inserted in text … the picture interrupts the paragraph … left aligned and then more text … the
   same for selections and for drags … so that I can visually check the quality of your annotation"*).
-  `RelayWindow.richPrompt`: a `[📸N…]` token ends its paragraph, stays verbatim as the caption (teal,
-  monospaced 0.7×), and its picture is drawn under it left-aligned (`NSTextAttachment`, ≤ 220 pt tall,
+  `RelayWindow.richPrompt`: a `[📸N…]` token ends its paragraph and its picture is drawn in its place,
+  left-aligned, **with no `[📸N…]` caption** (2026-10-24, Victor: *"nu vreau să mai pun între paranteze
+  pătrate numărul pozei"*; the caption was teal monospaced 0.7× until then) (`NSTextAttachment`, ≤ 220 pt tall,
   ≤ 30 % of the panel's width — `inlineShotMaxWidthShare`, 2026-10-07) — the ✂️ cut-out, else the 800 px frame (`AppDelegate` hands `inlineShots:
   [N: path]`). `[selected: …]`, `[copied: …]` (2026-10-17 — it ran on as plain words until then;
   a copied image is already a `[📸N 📋 copied]` picture) and `[chrome-selection-N: …]` are their own
@@ -514,17 +515,17 @@ yields to `--label`).
   draws cut + screen as **one** attachment (`calloutGap` 32 pt between them, both on the bottom edge)
   so a line can cross from one to the other — the cut's right corners to the red box's left ones,
   1.5 pt, dark halo. Two attachments on a line cannot draw across each other.
-  **The cut sits on its box's side** (2026-10-21, Victor: *"if the cropped area is more towards the
-  left hand side or the right hand side of the screen … the zoomed in image should stay on that …
-  respective side, which is closer"*): a box whose centre is right of the screen's middle
-  (`AreaContext.cutsOnRight`) draws the screen first and the cut after it, the lines from the cut's
-  left corners to the box's right ones.
+  **The screen always left, the cut always right** (2026-10-24, Victor: *"mereu ecranul complet să fie
+  în partea stângă atunci când fac un decupaj sau o mutare, iar mereu partea mărită … în partea
+  dreaptă"*): the lines run from the red box's right corners to the cut's left ones. Supersedes
+  2026-10-21's *the cut sits on its box's side* (`cutsOnRight` is gone) — the screens line up on the
+  panel's left edge, and a cut that changed sides broke that column.
   **The cut wears the same red ring** (2026-10-16, Victor: *"the large image picked also surrounded
   by a red rectangle … the small box on the big screen becomes the large box at the side of it"*):
   `ringWidth` 2 pt, inside the cut's edge so the lines still leave from its outer corners.
   **No caption over an area** (2026-10-20, Victor: *"you don't need to specify the text part showing
   the crop … It's enough to show the images … Don't put that square bracket. Doesn't help."*): the
-  `[📸N✂️…]` token is not written above the callout; other pictured tokens keep theirs. Panel only —
+  `[📸N✂️…]` token is not written above the callout (nor, since 2026-10-24, over any picture). Panel only —
   the agent's words keep the token.
   Shots `prompt-area-context`, `prompt-move-context`; `AREA_CONTEXT_PNG=<dir> swift test --filter
   AreaContextTests` renders both drawings.

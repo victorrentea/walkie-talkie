@@ -653,7 +653,7 @@ enum OverlayStates {
 
             Shot(slug: "prompt-area-context-right", group: "The held prompt", title: "The prompt, a ✂️ area on the right of the screen",
                  when: "A wheel-drag area whose box's centre is right of the screen's middle.",
-                 note: "2026-10-21, Victor: the zoomed-in cut stays on the side its box is nearer — here the screen comes first and the cut after it, the lines from its left corners to the box's right ones.",
+                 note: "2026-10-24, Victor: the whole screen always on the left, the zoomed-in cut always on its right — wherever the box is (it changed sides with the box from 2026-10-21). The lines run from the box's right corners to the cut's left ones.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 let frames = mockShots(2)

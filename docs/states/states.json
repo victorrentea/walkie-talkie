@@ -656,7 +656,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 642,
+    "height" : 632,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
@@ -692,7 +692,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 479,
+    "height" : 469,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
     "shape" : "panel",
@@ -718,7 +718,7 @@
     "group" : "The held prompt",
     "height" : 365,
     "image" : "prompt-area-context-right.png",
-    "note" : "2026-10-21, Victor: the zoomed-in cut stays on the side its box is nearer — here the screen comes first and the cut after it, the lines from its left corners to the box's right ones.",
+    "note" : "2026-10-24, Victor: the whole screen always on the left, the zoomed-in cut always on its right — wherever the box is (it changed sides with the box from 2026-10-21). The lines run from the box's right corners to the cut's left ones.",
     "shape" : "panel",
     "slug" : "prompt-area-context-right",
     "title" : "The prompt, a ✂️ area on the right of the screen",

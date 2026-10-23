@@ -94,29 +94,27 @@ enum AreaContext {
     /// **The cut-out and the screen it came from as one picture, joined by two
     /// lines** (2026-10-15, Victor: *"two lines that go from the corner of the
     /// cropped image to the circled red rectangle on the screen thumbnail, so
-    /// it's clear that it comes from that part of the screen"*). The cut on the
-    /// left, the screen (`image(…)`) `calloutGap` to its right, both standing on
-    /// the same bottom edge like two attachments on one line would; the lines
-    /// run from the cut's right corners to the red box's left ones, a funnel
-    /// that narrows into the place it was cut from. `box` is the red box in the
-    /// screen picture's own points.
+    /// it's clear that it comes from that part of the screen"*). Both stand on
+    /// the same bottom edge like two attachments on one line would, and the
+    /// lines run from the red box's right corners to the cut's left ones — a
+    /// funnel that widens out of the place it was cut from. `box` is the red box
+    /// in the screen picture's own points.
     ///
-    /// **The cut sits on the side its box is nearer** (2026-10-21, Victor: *"if
-    /// the cropped area is more towards the left hand side or the right hand
-    /// side of the screen … the zoomed in image should stay on the respective
-    /// side, which is closer"*): a box whose centre is right of the screen's
-    /// middle puts the cut after the screen, the lines from its left corners to
-    /// the box's right ones — the funnel mirrored, never crossing the screen.
+    /// **The screen always on the left, the cut always after it** (2026-10-24,
+    /// Victor: *"mereu ecranul complet să fie în partea stângă atunci când fac un
+    /// decupaj sau o mutare, iar mereu partea mărită … în partea dreaptă a
+    /// ecranului întreg"*). Supersedes 2026-10-21's *the cut sits on the side its
+    /// box is nearer*: the screens line up on the left edge of the panel whatever
+    /// the box, and a cut that changed sides broke that column.
     static func callout(cut: NSImage, cutSize: NSSize, screen: NSImage, box: CGRect) -> NSImage {
         let screenSize = screen.size
         let size = NSSize(width: cutSize.width + calloutGap + screenSize.width,
                           height: max(cutSize.height, screenSize.height))
-        let cutOnRight = cutsOnRight(box: box, screenWidth: screenSize.width)
         return NSImage(size: size, flipped: true) { bounds in
-            let cutRect = CGRect(x: cutOnRight ? screenSize.width + calloutGap : 0,
+            let cutRect = CGRect(x: screenSize.width + calloutGap,
                                  y: bounds.height - cutSize.height,
                                  width: cutSize.width, height: cutSize.height)
-            let screenRect = CGRect(x: cutOnRight ? 0 : cutSize.width + calloutGap,
+            let screenRect = CGRect(x: 0,
                                     y: bounds.height - screenSize.height,
                                     width: screenSize.width, height: screenSize.height)
             cut.draw(in: cutRect, from: .zero, operation: .sourceOver, fraction: 1,
@@ -133,8 +131,8 @@ enum AreaContext {
             sourceColor.setStroke()
             ring.stroke()
             let target = box.offsetBy(dx: screenRect.minX, dy: screenRect.minY)
-            let cutEdge = cutOnRight ? cutRect.minX : cutRect.maxX
-            let boxEdge = cutOnRight ? target.maxX : target.minX
+            let cutEdge = cutRect.minX
+            let boxEdge = target.maxX
             let lines = NSBezierPath()
             lines.move(to: CGPoint(x: cutEdge, y: cutRect.minY))
             lines.line(to: CGPoint(x: boxEdge, y: target.minY))
@@ -153,12 +151,6 @@ enum AreaContext {
             NSGraphicsContext.restoreGraphicsState()
             return true
         }
-    }
-
-    /// True when the box's centre is right of the screen's middle — the cut
-    /// then goes after the screen, not before it.
-    static func cutsOnRight(box: CGRect, screenWidth: CGFloat) -> Bool {
-        box.midX > screenWidth / 2
     }
 
     /// A white shaft and a filled head, with a dark halo so it reads on a white
