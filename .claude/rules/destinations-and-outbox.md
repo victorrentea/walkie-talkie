@@ -239,19 +239,27 @@ me to dismiss it explicitly"*.
   or left bottom corner? Actually all the corners … in case there's a longer response"*): a press
   within 12 pt of a corner (`ReplyRoot.Grip`, the system's diagonal resize cursor there — macOS 15's
   `NSCursor.frameResize`) is tracked by the window (`trackEvents`, the content is rebuilt at every
-  step) and the opposite corner stays put; ≥ 240 × 90 pt. `maxChars` 400 → 4000. Desk: `POST
-  /test/quick {"resize": {w, h}}` (the bottom-right corner). *Superseded 2026-10-23: the drag zooms,
-  the size is the words' — below.*
-- **Never cut: the pop-up is always its words' fitted size; a corner zooms it** (2026-10-23, Victor:
-  *"niciodată să nu poți să dimensionezi dialogul în așa fel încât să trunchezi răspunsul. Mereu să
-  facă fit, să fie minim cât. Și dacă măresc fereastra să meargă și textul"*). The size is
-  `baseWidth × scale` wide and exactly as tall as the words wrap to (`ReplyPanel.build`); a corner
-  drag and the wheel change only `scale` (the drag by the larger of its two ratios, from the scale at
-  the press — `resizing`), so the words grow and shrink with the window and no box is ever smaller
-  than them. `ReplyPanel.fit` keeps it on the screen: wider than the visible frame → smaller; taller →
-  smaller while zoomed, else `baseWidth` +15 % (from 428) — the 45 % height cap and its scroller are
-  gone; a scroller is left only when the whole screen width cannot hold the answer. A streaming ⚡
-  answer is re-fitted at every word and moved, not cut, to stay on screen (`onScreen`).
+  step) and the opposite corner stays put; ≥ 240 × 90 pt. `maxChars` 400 → 4000. *Superseded
+  2026-10-23: no corner resizes it, the size is the words' — below.*
+- **Never cut, never resized by hand: the pop-up is always its words' fitted size** (2026-10-23,
+  Victor: *"niciodată să nu poți să dimensionezi dialogul în așa fel încât să trunchezi răspunsul.
+  Mereu să facă fit"*, then the same evening: *"nici nu nevoie de redimensionare acelui dialog. Nu
+  are sens … dau scroll wheel și ăsta mărește cu tot fereastra, cu tot cu text … fereastra trebuie
+  să conțină întregul răspuns … să facă mai lungă fereastra în jos"*). **The corner drag is gone**
+  (and `POST /test/quick {"resize"}` with it). The size is `baseWidth × scale` wide and exactly as
+  tall as the words wrap to (`ReplyPanel.build`), growing down; only the wheel changes `scale`.
+  `ReplyPanel.fit` keeps it on the screen: wider than the visible frame → smaller; taller → smaller
+  while zoomed, else `baseWidth` +15 % (from 428) — the 45 % height cap and its scroller are gone; a
+  scroller is left only when the whole screen width cannot hold the answer. A streaming ⚡ answer is
+  re-fitted at every word and moved, not cut, to stay on screen (`onScreen`). **Corners rounder**:
+  radius 16 × `scale`, 10 until then.
+- **🪏 dig more digs for new information, not a second confirmation** (2026-10-23, Victor: *"nu
+  doar să îmi susții sau să-mi infirmi … ci să cauți cumva mai profund, mai multe surse, nu doar cu
+  scopul de a valida informația, ci de a mai aduna alte informații noi"*). `QuickAsk.morePrompt`
+  asks for what the answer does not say yet (details, numbers, causes, context, exceptions, recent
+  changes) from sources other than the ones used, and both it and the review after it
+  (`digReviewPrompt`) write at `digCiteFormat`'s length — the question in one sentence, then the new
+  findings, at most six sentences — not the first round's one sentence + one fact.
 - **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble should be able to show
   images. As much as they fit that window, small, but when clicked, opened up"*):
   `walkie-reply "<answer>" --image <path>` (repeatable, ≤ 8; text optional with a picture) posts

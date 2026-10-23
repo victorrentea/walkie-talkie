@@ -58,10 +58,18 @@ final class QuickAsk {
     /// treimi din ei locuiesc în regiunea capitalei. Atât"*; *"nu vreau citat
     /// verbatim din site"*): the quote is written only inside the marker, for
     /// the link to select it on the page.
-    static let citeFormat = """
-        Reply in the language of the question, plain text, no markdown. As short as \
-        possible: what was asked, in one short sentence, plus at most one closely \
-        related fact worth knowing. Never quote or translate the sources in the \
+    static let citeFormat = cite(length: """
+        As short as possible: what was asked, in one short sentence, plus at most \
+        one closely related fact worth knowing.
+        """)
+    /// **🪏 dig more is longer**: the new things it found are the point of it.
+    static let digCiteFormat = cite(length: """
+        What was asked, in one short sentence, then what the new sources add, in \
+        a few short sentences (at most six in all), the most useful first.
+        """)
+    private static func cite(length: String) -> String { """
+        Reply in the language of the question, plain text, no markdown. \(length) \
+        Never quote or translate the sources in the \
         answer, and never mention the checking, the sources or what changed. Right \
         after each claim put a marker [n: "<quote>"], where the quote is a short \
         passage (under 15 words) copied character for character, in the page's own \
@@ -69,7 +77,7 @@ final class QuickAsk {
         that passage when the page opens. After the answer, one line per source, \
         nothing else on it: [n] <url>. Last, only if the substance of your answer \
         differs from the one you were given, a line with just: CHANGED
-        """
+        """ }
     static let webPrompt = """
         You were given a spoken question by Victor and a quick answer to it, written \
         from memory without any checking. Search the web for evidence, writing \
@@ -77,7 +85,10 @@ final class QuickAsk {
         corrected where the sources say otherwise, completed where they add \
         something that matters.
         """ + " " + citeFormat
-    static let reviewPrompt = """
+    static let reviewPrompt = reviewTask + " " + citeFormat
+    /// The review after a 🪏 dig more keeps what it found, at its length.
+    static let digReviewPrompt = reviewTask + " Keep the new information that holds up. " + digCiteFormat
+    private static let reviewTask = """
         You are an adversarial reviewer. You get a spoken question by Victor and an \
         answer to it with quotes and sources. Assume it is wrong somewhere and try \
         to prove it: open the cited pages and check that each quote is really \
@@ -85,19 +96,26 @@ final class QuickAsk {
         about something else, a weak source); look for what is missing and \
         changes the answer. Write nothing before your checks are done, then write \
         the answer again, fixed.
-        """ + " " + citeFormat
+        """
     /// **🌐 More: one more round on the web** (2026-10-22, Victor: *"un buton mic …
     /// more, prin care să mai solicit mai mult research pe internet … mai multe
     /// dovezi și alte surse"*). Given the answer already checked and the sources it
     /// used, so the round goes looking somewhere else.
+    /// **To learn more, not only to confirm** (2026-10-23, Victor: *"când îți spun
+    /// să dig deeper … nu doar să îmi susții sau să-mi infirmi … ci să cauți cumva
+    /// mai profund, mai multe surse, nu doar cu scopul de a valida informația, ci
+    /// de a mai aduna alte informații noi"*) — at `digCiteFormat`'s length.
     static let morePrompt = """
         You get a spoken question by Victor and an answer to it already checked on \
-        the web, with the sources it used. Search further: more evidence, from \
-        sources other than the ones listed (other sites, primary sources, more \
-        recent ones), and anything that contradicts or completes the answer. Write \
-        nothing before your searches are done, then write the answer again on all \
-        the evidence, the old sources included where they still hold.
-        """ + " " + citeFormat
+        the web, with the sources it used. He wants to know more: dig deeper, in \
+        sources other than the ones listed (other sites, primary sources, \
+        specialised and more recent ones), not to confirm the answer again but to \
+        find what it does not say yet — details, numbers, causes, context, \
+        exceptions, what changed lately, what follows from it. Correct anything \
+        the new sources contradict. Write nothing before your searches are done, \
+        then write the answer again with the new information, the old sources \
+        included where they still hold.
+        """ + " " + digCiteFormat
     /// A question with no answer by then is given up.
     static let timeout: TimeInterval = 45
     /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
@@ -376,19 +394,21 @@ final class QuickAsk {
             Log.info("⚡ 🌐 more: another web round, \(sources.count) source(s) to look past")
             self.check(run, question: asked, pictures: pictures, answer: answer, web: web, checks: checks,
                        webInput: "Question: \(asked)\n\nAnswer so far, already checked on the web:\n\(answer)"
-                           + (used.isEmpty ? "" : "\n\nSources already used — find others:\n\(used)"))
+                           + (used.isEmpty ? "" : "\n\nSources already used — find others:\n\(used)"),
+                       review: Self.digReviewPrompt)
         }
     }
 
     /// 🔎 then 🧐, on `queue`. `webInput` replaces the web stage's message (🌐 More).
     private func check(_ run: Run, question: String, pictures: [(label: String, path: String)],
-                       answer: String, web: Worker?, checks: Checks, webInput: String? = nil) {
+                       answer: String, web: Worker?, checks: Checks, webInput: String? = nil,
+                       review: String = QuickAsk.reviewPrompt) {
         guard let web else {
             DispatchQueue.main.async { checks.web("⚠️ the web check did not start", true) }
             return endLocked(run)
         }
         // The reviewer starts while the web is searched.
-        let reviewer = start(run, prompt: Self.reviewPrompt, tools: Self.webTools)
+        let reviewer = start(run, prompt: review, tools: Self.webTools)
         let asked = webInput ?? "Question: \(question)\n\nQuick answer, from memory: \(answer)"
         stage(run, web, Self.content(asked, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
             DispatchQueue.main.async { checks.web(text, false) }

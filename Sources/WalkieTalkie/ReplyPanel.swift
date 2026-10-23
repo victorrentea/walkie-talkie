@@ -41,8 +41,8 @@ enum ReplyPanel {
     private static var queue: [(text: String, label: String?, tty: String?, images: [URL])] = []
     private static var arrivedAt: NSPoint = .zero
 
-    /// 400 until 2026-10-09; with the corners resizable a long answer can be
-    /// read whole, so only a runaway one is cut.
+    /// 400 until 2026-10-09; the pop-up holds a long answer whole, so only a
+    /// runaway one is cut.
     static let maxChars = 4000
     /// 380 until 2026-10-15 — widened so the ⚡ footer `— Opus 5.5 + 🌐 searched +
     /// 🧐 adversarial reviewed ✏️` (~400 pt) stays on one line. **5 % narrower**
@@ -54,12 +54,14 @@ enum ReplyPanel {
     /// Victor: *"niciodată să nu poți să dimensionezi dialogul în așa fel încât
     /// să trunchezi răspunsul. Mereu să facă fit, să fie minim cât. Și dacă măresc
     /// fereastra să meargă și textul"*). The pop-up is its words' fitted size at
-    /// `scale`: `baseWidth × scale` wide, as tall as they wrap to — a corner and
-    /// the wheel change only `scale`, so the words grow with the window. An answer
+    /// `scale`: `baseWidth × scale` wide, as tall as they wrap to, growing down —
+    /// only the wheel changes `scale`, the words with the window. **No corner
+    /// resizes it** (the same evening: *"nici nu nevoie de redimensionare acelui
+    /// dialog. Nu are sens"* — the corners resized it since 2026-10-09). An answer
     /// too tall for the screen at 428 pt widens `baseWidth` instead of scrolling
     /// (`fit`); the scroller is left for one no width on the screen can hold.
     private static var baseWidth: CGFloat = width
-    /// The pictures, read once per pop-up — a corner drag rebuilds it per event.
+    /// The pictures, read once per pop-up — every wheel notch rebuilds it.
     private static var pictureCache: [URL: NSImage] = [:]
     /// **Everything in the pop-up is drawn `scale` times larger** while the wheel
     /// has zoomed it (`grow`, 2026-10-23); 1 for every new pop-up.
@@ -255,9 +257,6 @@ enum ReplyPanel {
     }
 
     static let maxImages = 8
-    /// The smallest a corner may make it.
-    static let minWidth: CGFloat = 240
-    static let minHeight: CGFloat = 90
     /// One picture: up to this tall, across the pop-up's width. Several: one
     /// row this tall, as many as fit, the last one saying how many did not.
     private static let singleImageMax: CGFloat = 170
@@ -440,10 +439,9 @@ enum ReplyPanel {
         openLabel = label
         arrivedAt = NSEvent.mouseLocation
         shownDead = tty.map(isDoomed) == true
-        // A new pop-up opens at its fitted size — the last one's wheel or corner
-        // is forgotten (a ⚡ one replaced in place never passed through `close`).
+        // A new pop-up opens at its own size — the last one's wheel is
+        // forgotten (a ⚡ one replaced in place never passed through `close`).
         wheel = nil
-        resizing = nil
         scale = 1
         baseWidth = width
         let root = fit(text, from: label, tty: tty, images: images)
@@ -499,27 +497,6 @@ enum ReplyPanel {
         return root
     }
 
-    /// **A corner drag zooms it** (2026-10-23): the words grow or shrink with the
-    /// window by how far the hand pulled it (the larger of its two ratios), the
-    /// size is theirs, and the corner opposite the hand stays put. `start` is
-    /// the frame and `scale` when the press began.
-    fileprivate static func resize(_ p: NSPanel, from start: (frame: NSRect, scale: CGFloat), to f: NSRect,
-                                   corner: ReplyRoot.Corner) {
-        guard panel === p, let text = shownRaw ?? shown else { return }
-        let k = max(f.width / start.frame.width, f.height / start.frame.height)
-        scale = max(minWidth / baseWidth, start.scale * k)
-        let root = fit(text, from: openLabel, tty: shownTTY, images: shownImages)
-        let size = root.frame.size
-        let left = corner == .topLeft || corner == .bottomLeft
-        let top = corner == .topLeft || corner == .topRight
-        let x = left ? start.frame.maxX - size.width : start.frame.minX
-        let y = top ? start.frame.minY : start.frame.maxY - size.height
-        p.setFrame(onScreen(NSRect(x: x, y: y, width: size.width, height: size.height)), display: false)
-        p.contentView = root
-        p.invalidateShadow()
-    }
-    /// The drag in progress: its first frame and the scale then.
-    private static var resizing: (frame: NSRect, scale: CGFloat)?
 
     /// **The wheel over it grows it, up to the whole screen** (2026-10-23, Victor:
     /// *"dacă sunt cu mouse-ul pe acest popup, când dau scroll … să se mărească
@@ -533,7 +510,7 @@ enum ReplyPanel {
     /// meets the screen's visible frame — so the room can read it. `t` runs 0 → 1:
     /// the magnification goes 1 → `most` geometrically, the centre slides to the
     /// screen's. A drag of the pop-up moves `centre` so the next notch does not
-    /// jump; a corner drag starts over from there, at the scale it had. The size
+    /// jump; a new answer streamed into it starts over from there. The size
     /// at each notch is the words' (`fit`), never a box they are cut to.
     private static var wheel: (size: NSSize, scale: CGFloat, centre: NSPoint, t: CGFloat, set: NSRect)?
     /// A wheel notch moves `t` this much — ~8 notches to the whole screen; a
@@ -575,14 +552,6 @@ enum ReplyPanel {
     static func wheelOpen(_ notches: Double) {
         guard let p = panel else { return }
         _ = grow(p, by: CGFloat(notches), precise: false)
-    }
-
-    /// Desk route: what a drag of the bottom-right corner to this size does.
-    static func resizeOpen(to size: NSSize) {
-        guard let p = panel else { return }
-        let f = p.frame
-        resize(p, from: (f, scale), to: NSRect(x: f.minX, y: f.maxY - size.height, width: size.width, height: size.height),
-               corner: .bottomRight)
     }
 
     /// **A link in the words** (2026-10-10, `QuickAsk.cited`): `\u{1}(site)\u{2}url\u{3}`
@@ -807,7 +776,8 @@ enum ReplyPanel {
 
         let root = ReplyRoot(frame: NSRect(x: 0, y: 0, width: width, height: height))
         root.wantsLayer = true
-        root.layer?.cornerRadius = 10
+        // **Rounder** (2026-10-23, Victor: *"colțurile un pic mai rotunjite"*) — 10 until then.
+        root.layer?.cornerRadius = 16 * s
         root.layer?.masksToBounds = true
         root.layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.95).cgColor
         let icon = ReplyIcon(frame: NSRect(x: pad, y: height - pad - headerH, width: iconSide, height: iconSide))
@@ -928,11 +898,6 @@ enum ReplyPanel {
                 return linked.rects().map { root.convert($0, from: linked) }
             }
         }
-        root.onResize = { p, start, f, corner in
-            wheel = nil
-            if resizing?.frame != start { resizing = (start, scale) }
-            resize(p, from: resizing ?? (start, scale), to: f, corner: corner)
-        }
         return root
     }
 
@@ -985,7 +950,6 @@ enum ReplyPanel {
         watchTimer = nil
         shownImages = []
         wheel = nil
-        resizing = nil
         pictureCache = [:]
         guard !queue.isEmpty else { return }
         let next = queue.removeFirst()
@@ -1100,39 +1064,9 @@ private final class ReplyRoot: NSView {
     /// app that is not frontmost, and this one never is.
     private var tip: NSTextField?
     private var tipFor: URL?
-    /// A corner dragged: the frame when the press began, the frame the hand asks for.
-    var onResize: ((NSPanel, NSRect, NSRect, Corner) -> Void)?
     private var press = PressOrDrag()
     private var onLink = false
 
-    /// **The four corners resize it** (2026-10-09): `grip` points in from each.
-    enum Corner { case topLeft, topRight, bottomLeft, bottomRight }
-    private static let grip: CGFloat = 12
-    private func corner(at p: NSPoint) -> Corner? {
-        let g = Self.grip
-        let left = p.x < g, right = p.x > bounds.width - g
-        let bottom = p.y < g, top = p.y > bounds.height - g
-        switch (left, right, top, bottom) {
-        case (true, _, true, _): return .topLeft
-        case (_, true, true, _): return .topRight
-        case (true, _, _, true): return .bottomLeft
-        case (_, true, _, true): return .bottomRight
-        default: return nil
-        }
-    }
-    private func cursor(for c: Corner) -> NSCursor {
-        if #available(macOS 15.0, *) {
-            let pos: NSCursor.FrameResizePosition
-            switch c {
-            case .topLeft: pos = .topLeft
-            case .topRight: pos = .topRight
-            case .bottomLeft: pos = .bottomLeft
-            case .bottomRight: pos = .bottomRight
-            }
-            return NSCursor.frameResize(position: pos, directions: .all)
-        }
-        return .crosshair
-    }
     /// After the view replaced its predecessor under a still pointer.
     func refreshHover() {
         guard let w = window else { return }
@@ -1141,7 +1075,6 @@ private final class ReplyRoot: NSView {
     }
     private func arrow(_ event: NSEvent) { arrow(at: convert(event.locationInWindow, from: nil)) }
     private func arrow(at p: NSPoint) {
-        if let c = corner(at: p) { hideTip(); cursor(for: c).set(); return }
         if let hit = bodyLink?(p) {
             NSCursor.pointingHand.set()
             showTip(for: hit.url, under: hit.rect)
@@ -1151,28 +1084,6 @@ private final class ReplyRoot: NSView {
         if !hot.contains(where: { $0.contains(p) }) { NSCursor.arrow.set() }
     }
 
-    /// The drag, tracked by the window — the view is replaced at every step.
-    private func resize(from c: Corner) {
-        guard let window = window as? NSPanel else { return }
-        let f0 = window.frame, m0 = NSEvent.mouseLocation
-        let cursor = cursor(for: c)
-        let report = onResize
-        window.trackEvents(matching: [.leftMouseDragged, .leftMouseUp], timeout: .infinity, mode: .eventTracking) { e, stop in
-            guard let e else { return }
-            if e.type == .leftMouseUp { stop.pointee = true; return }
-            cursor.set()
-            let m = NSEvent.mouseLocation
-            let dx = m.x - m0.x, dy = m.y - m0.y
-            var minX = f0.minX, maxX = f0.maxX, minY = f0.minY, maxY = f0.maxY
-            let movesLeft = c == .topLeft || c == .bottomLeft
-            let movesTop = c == .topLeft || c == .topRight
-            if movesLeft { minX = min(f0.minX + dx, maxX - ReplyPanel.minWidth) }
-            else { maxX = max(f0.maxX + dx, minX + ReplyPanel.minWidth) }
-            if movesTop { maxY = max(f0.maxY + dy, minY + ReplyPanel.minHeight) }
-            else { minY = min(f0.minY + dy, maxY - ReplyPanel.minHeight) }
-            report?(window, f0, NSRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY), c)
-        }
-    }
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for a in trackingAreas { removeTrackingArea(a) }
@@ -1232,7 +1143,6 @@ private final class ReplyRoot: NSView {
     override func mouseMoved(with event: NSEvent) { arrow(event) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func mouseDown(with event: NSEvent) {
-        if let c = corner(at: convert(event.locationInWindow, from: nil)) { return resize(from: c) }
         let p = convert(event.locationInWindow, from: nil)
         pressedURL = bodyLink?(p)?.url
         onLink = pressedURL != nil || link?.rect.contains(p) == true

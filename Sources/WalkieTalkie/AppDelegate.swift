@@ -2137,10 +2137,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let c = body["capturable"] as? Bool { DispatchQueue.main.sync { ReplyPanel.capturable = c } }
             // `close` takes the open reply pop-up down, as its ✕ would.
             if body["close"] as? Bool == true { DispatchQueue.main.sync { ReplyPanel.close() } }
-            // `resize: {w, h}` — what a corner drag to that size does.
-            if let r = body["resize"] as? [String: Double], let w = r["w"], let h = r["h"] {
-                DispatchQueue.main.sync { ReplyPanel.resizeOpen(to: NSSize(width: w, height: h)) }
-            }
             // `wheel: n` — n notches of the wheel over the open pop-up (+ = rolled up, grows it).
             if let n = body["wheel"] as? Double { DispatchQueue.main.sync { ReplyPanel.wheelOpen(n) } }
             // `link: {index, click?}` — the pointer over the open pop-up's
@@ -2160,7 +2156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
                 // `peek: true` — only the open pop-up's frame and words (`shown`).
                 let shown: Any = DispatchQueue.main.sync { ReplyPanel.shown ?? NSNull() }
-                return body["capturable"] != nil || body["close"] != nil || body["resize"] != nil || body["wheel"] != nil
+                return body["capturable"] != nil || body["close"] != nil || body["wheel"] != nil
                     || body["peek"] != nil
                     ? (200, ["ok": true, "frame": frame, "shown": shown]) : (400, ["ok": false, "error": "text required"])
             }
