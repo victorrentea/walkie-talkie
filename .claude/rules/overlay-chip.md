@@ -488,7 +488,7 @@ yields to `--label`).
   (2026-10-19, Victor: *"without selected in a square bracket, same font size as the rest, grayed out
   italic and prefixed by a double quote … a bit indented"*): `RelayWindow.quotedSelection` draws
   `“ <words> — <app>` in `promptFont` italic, `secondaryLabelColor`, indented 28 with the wrap hanging
-  under the words; `[copied: …]` and `[chrome-selection-N: …]` keep the teal token. Shot `prompt-copied`. A frame drawn in the words leaves the strip (`stripShots`, matched by **shot number** since
+  under the words; `[chrome-selection-N: …]` keeps the teal token. **A copy leads with 📋, never `“`** (2026-10-23, Victor: *"atunci când iei clipboard-ul nu afișa citat … să fie iconița de clipboard … left most. Iar dacă iei selecție … lasă citat"*): `[copied: …]` is the same italic paragraph with a drawn 📋 where the mark stands (`quotedSelection(copied:)`), and on the chip a `📋 …` handed to `setSelection` puts `selectionCopyGlyph` in the icon column instead of `selectionGlyph`. Shot `prompt-copied`. A frame drawn in the words leaves the strip (`stripShots`, matched by **shot number** since
   2026-10-07 — by path the cut-out never equalled the frame, so every inlined picture came back in the strip); the
   automatic 📸0 is not in the preview's words, so it stays there. Editing swaps back to the plain
   words. Shot `prompt-inline`.

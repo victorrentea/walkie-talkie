@@ -622,7 +622,7 @@ enum OverlayStates {
 
             Shot(slug: "prompt-copied", group: "The held prompt", title: "The prompt, with what he copied where he copied it",
                  when: "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-                 note: "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own indented paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said.",
+                 note: "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 let frames = mockShots(2)

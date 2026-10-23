@@ -24,6 +24,13 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     /// the chip: the quotation mark in the column, his own words beside it.
     private let selectionRow = NSView()
     private let selectionGlyph = NSTextField(labelWithString: "")
+    /// **📋 in the quote mark's place when the row is a copy** (2026-10-23, Victor:
+    /// *"atunci când iei clipboard-ul nu afișa citat în tooltip … să fie iconița de
+    /// clipboard … left most. Iar dacă iei selecție … lasă citat ca până acum"*).
+    /// `AppDelegate` hands a copy over as `📋 <text>`; the lead moves into the
+    /// icon column and the `“` steps aside.
+    private let selectionCopyGlyph = NSImageView()
+    static let copiedLead = "📋 "
     private let selectionLabel = NSTextField(labelWithString: "")
 /// The frozen selection, quoted, at the very top of the prompt panel.
 private let quoteLabel = NSTextField(labelWithString: "")
@@ -1560,6 +1567,10 @@ private let heardLabel = NSTextField(labelWithString: "")
         selectionGlyph.alignment = .center
         selectionRow.addSubview(selectionPulse)
         selectionRow.addSubview(selectionGlyph)
+        selectionCopyGlyph.image = Glyphs.emoji("📋", ink: iconInk)
+        selectionCopyGlyph.imageScaling = .scaleProportionallyUpOrDown
+        selectionCopyGlyph.isHidden = true
+        selectionRow.addSubview(selectionCopyGlyph)
         selectionRow.addSubview(selectionLabel)
         selectionRow.isHidden = true
         selectionLabel.isHidden = false
@@ -2085,7 +2096,11 @@ private let heardLabel = NSTextField(labelWithString: "")
             // `applySelectionText` concatenates the two and an empty head must
             // not indent the quote.
             selectionHead = selectionCount > 1 ? "×\(selectionCount - 1) + " : ""
-            selectionBody = Self.fitHead(singleLine(selection), 34)
+            let copied = selection.hasPrefix(Self.copiedLead)
+            selectionCopyGlyph.isHidden = !copied
+            selectionGlyph.isHidden = copied
+            selectionBody = Self.fitHead(singleLine(copied ? String(selection.dropFirst(Self.copiedLead.count))
+                                                           : selection), 34)
             applySelectionText()
             // Off the label rather than the font: the mark is in the icon column
             // now, so the text is plain `hintFont` — but it is set as an
@@ -2353,8 +2368,8 @@ private let heardLabel = NSTextField(labelWithString: "")
             // clips. That equality is the whole point: an extra six points of
             // height read as deliberate air above the quotation, in the one
             // shape that is meant to be a flat stack of one-line facts.
-            layoutGlyphRow(selectionRow, glyph: selectionGlyph, label: selectionLabel,
-                           width: innerWidth)
+            layoutGlyphRow(selectionRow, glyph: selectionCopyGlyph.isHidden ? selectionGlyph : selectionCopyGlyph,
+                           label: selectionLabel, width: innerWidth)
             selectionRow.isHidden = false
             rows.append((selectionRow, selectionRowHeight))
         } else {
@@ -3290,7 +3305,7 @@ private let heardLabel = NSTextField(labelWithString: "")
                 startParagraph = true
             } else if let quote = Self.selectionQuote(raw) {
                 breakParagraph()
-                out.append(quotedSelection(quote.text, app: quote.app))
+                out.append(quotedSelection(quote.text, app: quote.app, copied: quote.copied))
                 startParagraph = true
             } else if raw.hasPrefix("[copied:") || raw.hasPrefix("[chrome-selection-") {
                 breakParagraph()
@@ -3310,16 +3325,18 @@ private let heardLabel = NSTextField(labelWithString: "")
         return out
     }
 
-    /// The highlighted text and its app out of a `[selected: "…" from app X]` token —
-    /// nil for any other token.
-    static func selectionQuote(_ token: String) -> (text: String, app: String?)? {
+    /// The highlighted (or copied) text and its app out of a `[selected: "…" from
+    /// app X]` / `[copied: "…" from app X]` token — nil for any other token.
+    static func selectionQuote(_ token: String) -> (text: String, app: String?, copied: Bool)? {
         let whole = NSRange(token.startIndex..., in: token)
         guard let m = selectionPattern?.firstMatch(in: token, range: whole),
-              let text = Range(m.range(at: 1), in: token) else { return nil }
-        return (String(token[text]), Range(m.range(at: 2), in: token).map { String(token[$0]) })
+              let kind = Range(m.range(at: 1), in: token),
+              let text = Range(m.range(at: 2), in: token) else { return nil }
+        return (String(token[text]), Range(m.range(at: 3), in: token).map { String(token[$0]) },
+                token[kind] == "copied")
     }
     private static let selectionPattern = try? NSRegularExpression(
-        pattern: #"^\[selected: "([\s\S]*)"(?: from app ([^\]\n]*))?\]$"#)
+        pattern: #"^\[(selected|copied): "([\s\S]*)"(?: from app ([^\]\n]*))?\]$"#)
 
     /// **A highlight reads as a quote, not as a token** (2026-10-19, Victor: *"the
     /// selected text should be without selected in a square bracket, same font size
@@ -3328,23 +3345,35 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `promptFont`'s italic and secondary ink, flush with the words since
     /// 2026-10-23, the wrapped lines hanging under the words rather than under the mark; the app
     /// trails as the quote's attribution. Panel only: the agent's words keep the token.
-    private func quotedSelection(_ text: String, app: String?) -> NSAttributedString {
+    ///
+    /// **A copy leads with 📋, not `“`** (2026-10-23, Victor: *"atunci când iei
+    /// clipboard-ul nu afișa citat … să fie iconița de clipboard … left most. Iar
+    /// dacă iei selecție … lasă citat ca până acum"*) — the same italic paragraph,
+    /// the clipboard drawn where the quote mark stands; `[copied:]` was a teal
+    /// token until then.
+    private func quotedSelection(_ text: String, app: String?, copied: Bool = false) -> NSAttributedString {
         let italic = NSFontManager.shared.convert(promptFont, toHaveTrait: .italicFontMask)
         let attrs: [NSAttributedString.Key: Any] = [.font: italic, .foregroundColor: NSColor.secondaryLabelColor]
-        let mark = "“ "
+        let out = NSMutableAttributedString()
+        if copied {
+            out.append(Self.inline(Glyphs.emoji("📋", ink: ceil(promptFont.pointSize * 1.2)), font: italic))
+            out.append(NSAttributedString(string: " ", attributes: attrs))
+        } else {
+            out.append(NSAttributedString(string: "“ ", attributes: attrs))
+        }
         let style = NSMutableParagraphStyle()
         // Flush with the words (2026-10-23, Victor: *"aliniază frumos … nu lăsa
         // spațiu gol în fața lui"*) — indented 28 until then; the wrap still
         // hangs under the words, not under the mark.
         style.firstLineHeadIndent = 0
-        style.headIndent = (mark as NSString).size(withAttributes: attrs).width
+        style.headIndent = ceil(out.size().width)
         style.paragraphSpacing = 4
         style.paragraphSpacingBefore = 4
-        var line = mark + text
+        var line = text
         if let app, !app.isEmpty { line += " — \(app)" }
-        var paragraph = attrs
-        paragraph[.paragraphStyle] = style
-        return NSAttributedString(string: line + "\n", attributes: paragraph)
+        out.append(NSAttributedString(string: line + "\n", attributes: attrs))
+        out.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: out.length))
+        return out
     }
 
     /// The whole-screen thumbnail for a ✂️ token, capped like every picture in
