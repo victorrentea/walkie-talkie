@@ -5993,7 +5993,13 @@ private let heardLabel = NSTextField(labelWithString: "")
         heldSkipFollow?.invalidate()
         var shownFor = NSRect.zero
         let t = Timer(timeInterval: 0.05, repeats: true) { [weak self] t in
-            guard let self, self.spawnPanelHeld, self.panel.isVisible else { t.invalidate(); return }
+            guard let self, self.spawnPanelHeld, self.panel.isVisible else {
+                // The dialog went: the » with it, never left alone (Fable review 2026-10-23).
+                t.invalidate()
+                self?.heldSkip.hide()
+                self?.heldSkipFollow = nil
+                return
+            }
             let f = self.panel.frame
             guard f != shownFor else { return }
             shownFor = f

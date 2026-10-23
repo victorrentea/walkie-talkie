@@ -3,7 +3,7 @@
 installed app's fake whisper helper (`cases_chunks`' block) and, for ElevenLabs, the fake Scribe.
 
     N8   ElevenLabs 8 s late, budget 2 s (forced), local decode 5 s → `💻 in Ns ⌘⌃X` folded on the
-         Transcribing line (no row), then `💻 now ⌘⌃X` + engineMark 💻; local words go in
+         Transcribing line (no row), then `now ⌘⌃X` + engineMark 💻; local words go in
          (via local-auto); the mark is ElevenLabs' again, and the next sentence transcribes under it
     N9   same, ElevenLabs 4 s late, local 9 s → ElevenLabs' words land at `now`: mark back to ElevenLabs
     N10  same, ElevenLabs 8 s late, the local decode fails at ~4 s → mark back to ElevenLabs while
@@ -12,7 +12,7 @@ installed app's fake whisper helper (`cases_chunks`' block) and, for ElevenLabs,
     N12  📻 Ready for more, words 6 s late, a new sentence started while it shows → down ≤ 0.3 s
 
 Every timeline row: ms since the stop, engineMark, localNow.inline / row, readyForNext, busyWhy."""
-import os, re, shutil, signal, subprocess, threading, time
+import json, os, re, shutil, signal, subprocess, threading, time
 from harness import *
 from harness import (get, post, state, log_mark, log_since, log_has, wait_for, gesture, play, CLIP_EN,
                      relay_busy, tmo, case, BEFORE_CASE, CLEANUPS)
@@ -22,8 +22,8 @@ import cases_night as NI
 import fake_whisper_helper as FW
 
 TAGS = ("gesture", "audio", "local", "night")
-SNAPS = ("/private/tmp/claude-501/-Users-victorrentea-workspace-walkie-talkie/"
-         "6c83e2fa-5399-4257-8430-c69d197035d6/scratchpad/night/snaps")
+# Under the harness's work folder (`WT_WORK`), not a session's scratchpad (Fable review 2026-10-23).
+SNAPS = os.path.join(WORK, "night", "snaps")
 ELEVEN, MAC, WISPR = "", "", ""
 TL_OUT = os.path.join(os.path.dirname(SNAPS), "timelines")
 
@@ -100,7 +100,7 @@ class Timeline:
                        chip=[str(r) for r in (s.get("chip") or [])][:4], wall=time.time())
             self.rows.append(row)
             inl = row["inline"] or ""
-            for key, cond in (("in", " in " in inl), ("now", " now " in inl)):
+            for key, cond in (("in", " in " in inl), ("now", inl.startswith("now ") or " now " in inl)):
                 if cond and key not in self.snapped:
                     self.snapped.add(key)
                     snap(f"{self.name}-{key}")
@@ -187,7 +187,7 @@ def _a_case(name, el_delay, rules, want):
         mark_end = mark_name(state().get("engineMark"))
         tr = (state().get("localAuto") or {}).get("trace")
         t_in = tl.first(lambda r: r["inline"] and " in " in r["inline"])
-        t_now = tl.first(lambda r: r["inline"] and " now " in r["inline"])
+        t_now = tl.first(lambda r: r["inline"] and (r["inline"].startswith("now ") or " now " in r["inline"]))
         t_mac = tl.first(lambda r: r["t"] > 0 and r["mark"] == "mac")
         t_back = None
         if t_mac is not None:
@@ -214,7 +214,7 @@ def pre():
 
 
 @case("N8", TAGS, pre=pre, engine="eleven",
-      expect="ElevenLabs 8 s late, budget 2 s, local decode 5 s: `💻 in Ns ⌘⌃X` folded (row null) then `💻 now ⌘⌃X` "
+      expect="ElevenLabs 8 s late, budget 2 s, local decode 5 s: `💻 in Ns ⌘⌃X` folded (row null) then `now ⌘⌃X` "
              "+ engineMark 💻; local words go in (local-auto); mark back to ElevenLabs; next sentence under ElevenLabs")
 def n8():
     def want(r):
@@ -477,3 +477,221 @@ def n14():
         for t in new:
             if t != "ttys008":
                 close_tty_tab(t)
+
+
+# ================================================================ N15–N19: auto-bind of a plain dictation
+# (2026-10-23) `AppDelegate.bindClaudeInFront`, called from `HotkeyTap.onCleanToggle` after a 🔽 → start.
+# The "Claude Code" tab is a NEW Terminal window whose foreground is `cat >> file` (a non-shell) and
+# whose cat pid owns a fresh `~/.claude/cwd/.last-<pid>` naming an existing folder — exactly the two
+# facts `TerminalBinding.claudePromptOn` reads (`foregroundCommand` + `publishedDirectory(ownedBy:)`),
+# without a real Claude Code (its folder-trust dialog would eat the words) and with a witness file
+# that shows byte for byte what the tab received. The fake `.last-<pid>` is removed at the end.
+NIGHT = os.path.dirname(SNAPS)
+AB_TEXT = "Night test. Reply OK and do nothing else."
+PLACE = re.compile(r"📍")
+
+
+def _front_bundle():
+    out = subprocess.run(["lsappinfo", "info", "-only", "bundleid", subprocess.run(
+        ["lsappinfo", "front"], capture_output=True, text=True).stdout.strip()], capture_output=True, text=True).stdout
+    m = re.search(r'"([^"]+)"\s*$', out.strip())
+    return m.group(1) if m else out.strip()
+
+
+class FakeClaudeTab:
+    """A NEW Terminal window running `cat >> <file>`; `claude=True` publishes `.last-<catpid>`."""
+    def __init__(self, name, claude=True, shell=False):
+        self.name, self.claude, self.shell = name, claude, shell
+        self.file = os.path.join(NIGHT, f"{name}.txt")
+        self.tty = self.pid = self.win = self.last = None
+
+    def __enter__(self):
+        open(self.file, "w").close()
+        if self.shell:
+            script = f"printf '\\\\e]0;{self.name}\\\\a'"
+        else:
+            # NO `stty -echo`: Terminal treats a canonical tty with echo off as a password prompt and
+            # turns Secure Input on — every event tap goes blind, the 🔽 → chord is never seen (N15/N17,
+            # 2026-10-23 03:08 and 03:11: /test/gesture answered `hidden: Secure Input is on … Terminal`)
+            script = f"printf '\\\\e]0;{self.name}\\\\a'; exec cat >> {self.file}"
+        self.tty = osa(f'tell application "Terminal" to set t to do script "{script}"',
+                       'tell application "Terminal" to get tty of t').replace("/dev/", "")
+        self.win = osa('tell application "Terminal" to get id of front window')
+        if not self.tty.startswith("ttys") or self.tty == "ttys008":
+            raise RuntimeError(f"bad tty {self.tty!r}")
+        time.sleep(1.0)
+        ps = subprocess.run(["ps", "-t", self.tty, "-o", "pid=,comm="], capture_output=True, text=True).stdout
+        want = "zsh" if self.shell else "cat"
+        for ln in ps.splitlines():
+            pid, _, comm = ln.strip().partition(" ")
+            if want in comm:
+                self.pid = int(pid)
+        if self.claude and self.pid:
+            time.sleep(1.1)   # strictly newer than the process start (lstart has 1 s resolution)
+            self.last = os.path.expanduser(f"~/.claude/cwd/.last-{self.pid}")
+            with open(self.last, "w") as f:
+                f.write(NIGHT + "\n")
+        return self
+
+    def front(self):
+        osa('tell application "Terminal" to activate',
+            f'tell application "Terminal" to set index of window id {self.win} to 1')
+        wait_for(lambda: _front_bundle() == "com.apple.Terminal", 3, 0.1)
+        time.sleep(0.4)
+        return _front_bundle()
+
+    def text(self):
+        if self.shell:
+            return osa(f'tell application "Terminal" to get history of (first tab of window id {self.win})')
+        hist = osa(f'tell application "Terminal" to get history of (first tab of window id {self.win})')
+        return open(self.file, errors="replace").read() + " ‖tab: " + hist[-200:]
+
+    def __exit__(self, *exc):
+        if self.last and os.path.exists(self.last):
+            os.remove(self.last)
+        if self.tty:
+            close_tty_tab(self.tty)
+        return False
+
+
+def _ab_pre():
+    why = CC._pre()
+    return why
+
+
+def _target():
+    return _quiet(get, "/target") or {}
+
+
+def _ab_run(tab, text=AB_TEXT, cancel_at_once=False, editor_off=False):
+    """🔽 → over `tab` in front; returns facts. Mic on the Loopback, fake helper answering `text`."""
+    f = {}
+    mic_override(NI.INJECT)
+    try:
+        if editor_off:
+            NI.editor(False)
+        ep = FW.arm(rules=[{"text": text, "mean": -0.05}])
+        f["front"] = tab.front()
+        n0, prev = outbox_count(), (state().get("lastDelivery") or {}).get("at")
+        m = log_mark()
+        t0 = time.time()
+        f["gesture"] = gesture("back-right")
+        if cancel_at_once:
+            # the cancel must land AFTER the start (a cancel posted 2 ms after the chord reached the app
+            # before the chord did and cancelled nothing), but before the bind check returns (~0.4–1 s)
+            wait_for(lambda: log_has(m, r"🧼 a plain dictation"), 3, 0.01)
+            f["start_seen_ms"] = round((time.time() - t0) * 1000)
+            code, _ = post("/test/cancel")
+            f["cancel_ms"] = round((time.time() - t0) * 1000)
+            f["cancel_code"] = code
+            tl = []
+            while time.time() - t0 < 3:
+                tl.append((round((time.time() - t0) * 1000), _target().get("bound"), _target().get("session")))
+                time.sleep(0.25)
+            f["target_tl"] = [tl[0], tl[len(tl) // 2], tl[-1]]
+            time.sleep(1.5)
+        else:
+            if not wait_for(lambda: log_has(m, NI.OPENED), tmo("mic_open"), 0.05):
+                f["why"] = "the microphone never opened"
+                return f, m
+            f["bound_ms"] = None
+            if wait_for(lambda: log_has(m, r"📍 .*(bound to it|already bound|could not be bound)"), 3, 0.05):
+                f["bound_ms"] = round((time.time() - t0) * 1000)
+            time.sleep(0.3)
+            s = state()
+            f["mid"] = {k: s.get(k) for k in ("pasteMode", "atCaret", "spawnPending", "latchedTarget", "bound", "awaitingBind")}
+            f["mid"]["chip"] = [str(r) for r in (s.get("chip") or [])][:4]
+            f["target_mid"] = _target()
+            play(CLIP_EN, lead=0.3, tail=0.0)
+            time.sleep(0.15)
+            gesture("back-right")
+            wait_for(lambda: outbox_count() > n0 or (state().get("lastDelivery") or {}).get("at") != prev, 25, 0.2)
+            wait_for(lambda: not relay_busy(), 20, 0.2)
+            time.sleep(1.5)
+        f["lastDelivery"] = state().get("lastDelivery")
+        f["new_delivery"] = (f["lastDelivery"] or {}).get("at") != prev
+        f["outbox_new"] = outbox_count() - n0
+        f["tab_text"] = tab.text()[-300:]
+        f["target_end"] = _target()
+        f["log"] = [l[-200:] for l in log_since(m).splitlines()
+                    if re.search(r"📍|🧼|delivered|📦|caret|cancel|🗑", l)][-10:]
+        return f, m
+    finally:
+        s = _quiet(state) or {}
+        if s.get("listening") or s.get("isRecording"):
+            _quiet(post, "/test/cancel")   # never clear the Loopback override under a live recording
+            _quiet(wait_for, lambda: not (state().get("listening") or state().get("isRecording")), 5, 0.1)
+        _quiet(mic_override, None)
+        if editor_off:
+            NI.editor(None)
+
+
+@case("N15", ("night", "tty", "gesture", "audio", "local"), pre=_ab_pre,
+      expect="UNBOUND, a fake Claude tab (cat + fresh .last-<pid>) in front, 🔽 → → within ~2 s /target bound to its "
+             "tty, log `📍 … bound to it (no flight)`, pasteMode false; on stop the words reach the tab, delivery to terminal")
+def n15():
+    _quiet(post, "/unbind")
+    with FakeClaudeTab("wt-night-claude") as tab:
+        f, m = _ab_run(tab)
+        if f.get("why"):
+            return "FAIL", f"{f}"
+        _quiet(post, "/unbind")
+    t = f.get("target_mid") or {}
+    ok = (f.get("bound_ms") is not None and f["bound_ms"] < 2500 and t.get("bound") and tab.tty in json.dumps(t)
+          and log_has(m, rf"📍 a plain dictation over Claude Code on {tab.tty} — bound to it \(no flight\)")
+          and not (f["mid"] or {}).get("pasteMode") and "Night test" in f["tab_text"]
+          and str((f["lastDelivery"] or {}).get("to", "")).endswith(tab.tty))
+    return ("PASS" if ok else "FAIL"), f"tty {tab.tty}; {f}"
+
+
+@case("N16", ("night", "tty", "gesture", "audio", "local"), pre=_ab_pre,
+      expect="already bound to the fake Claude tab: 🔽 → → log `already bound`, no `bound to it`, words reach the tab")
+def n16():
+    with FakeClaudeTab("wt-night-claude2") as tab:
+        code, _ = post("/bind", {"tty": tab.tty})
+        wait_for(lambda: _target().get("bound"), 5, 0.1)
+        before = _target()
+        f, m = _ab_run(tab)
+        _quiet(post, "/unbind")
+    ok = (log_has(m, rf"📍 a plain dictation over Claude Code on {tab.tty} — already bound")
+          and not log_has(m, r"bound to it \(no flight\)") and "Night test" in f.get("tab_text", "")
+          and str((f.get("lastDelivery") or {}).get("to", "")).endswith(tab.tty))
+    return ("PASS" if ok else "FAIL"), f"tty {tab.tty}; bind {code}; target before {before}; {f}"
+
+
+@case("N17", ("night", "tty", "gesture", "audio", "local"), pre=_ab_pre,
+      expect="UNBOUND, a NON-Claude tab (cat, no .last file) in front: 🔽 → → no 📍 line, /target unbound, "
+             "words go to the caret (pasted into that tab)")
+def n17():
+    _quiet(post, "/unbind")
+    with FakeClaudeTab("wt-night-plain", claude=False) as tab:
+        f, m = _ab_run(tab, text="Night test caret words.")
+    ok = (not log_has(m, r"📍 a plain dictation over Claude Code") and not (f.get("target_end") or {}).get("bound")
+          and not (f.get("target_mid") or {}).get("bound") and (f.get("lastDelivery") or {}).get("to") == "caret"
+          and "Night test caret" in f.get("tab_text", ""))
+    return ("PASS" if ok else "FAIL"), f"tty {tab.tty}; {f}"
+
+
+@case("N18", ("night", "tty", "gesture", "audio", "local"), pre=_ab_pre,
+      expect="UNBOUND, a zsh tab whose zsh pid owns a fresh .last-<pid> (shell guard must refuse): no bind, words "
+             "at the caret (zsh runs `echo night test ok`), editor off")
+def n18():
+    _quiet(post, "/unbind")
+    with FakeClaudeTab("wt-night-zsh", claude=True, shell=True) as tab:
+        f, m = _ab_run(tab, text="echo night test ok", editor_off=True)
+    ok = (not log_has(m, r"📍 a plain dictation over Claude Code") and not (f.get("target_mid") or {}).get("bound")
+          and (f.get("lastDelivery") or {}).get("to") == "caret")
+    return ("PASS" if ok else "FAIL"), f"tty {tab.tty} pid {tab.pid}; {f}"
+
+
+@case("N19", ("night", "tty", "gesture", "local"), pre=_ab_pre,
+      expect="UNBOUND, fake Claude tab in front, 🔽 → then /test/cancel at once: no delivery, nothing in the tab; "
+             "record whether /target moved")
+def n19():
+    _quiet(post, "/unbind")
+    with FakeClaudeTab("wt-night-cancel") as tab:
+        f, m = _ab_run(tab, cancel_at_once=True)
+        _quiet(post, "/unbind")
+    f["log_all"] = [l[-200:] for l in log_since(m).splitlines() if re.search(r"📍|🗑|cancel|mic: closed", l)][-8:]
+    ok = not f.get("new_delivery") and f.get("outbox_new") == 0 and "Night" not in f.get("tab_text", "")
+    return ("PASS" if ok else "FAIL"), f"tty {tab.tty}; {f}"
