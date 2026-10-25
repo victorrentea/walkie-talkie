@@ -656,14 +656,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 632,
+    "height" : 642,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
@@ -692,50 +692,50 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 469,
+    "height" : 485,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 382,
+    "height" : 421,
     "image" : "prompt-area-context.png",
     "note" : "2026-10-15, Victor: after the cut-out, the whole screen that goes with it — greyed outside the box, the box lit and ringed red — so it is plain that the entire screen is sent too. Drawn by `AreaContext`, never written to disk.",
     "shape" : "panel",
     "slug" : "prompt-area-context",
     "title" : "The prompt, a ✂️ area and the screen it was cut from",
     "when" : "A wheel-drag area whose token is in the words.",
-    "width" : 509
+    "width" : 643
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 365,
+    "height" : 421,
     "image" : "prompt-area-context-right.png",
     "note" : "2026-10-24, Victor: the whole screen always on the left, the zoomed-in cut always on its right — wherever the box is (it changed sides with the box from 2026-10-21). The lines run from the box's right corners to the cut's left ones.",
     "shape" : "panel",
     "slug" : "prompt-area-context-right",
     "title" : "The prompt, a ✂️ area on the right of the screen",
     "when" : "A wheel-drag area whose box's centre is right of the screen's middle.",
-    "width" : 419
+    "width" : 532
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 409,
+    "height" : 421,
     "image" : "prompt-move-context.png",
     "note" : "2026-10-15, Victor: the whole screen in a thumbnail, the first box red, the second green, a white arrow from red to green — the same three colours the live overlay draws while he makes the gesture.",
     "shape" : "panel",
     "slug" : "prompt-move-context",
     "title" : "The prompt, a ⇧-drag move: red to green",
     "when" : "A wheel-drag area with ⇧ \/ right-click, then a second box: *this, moved to there*.",
-    "width" : 651
+    "width" : 662
   },
   {
     "alpha" : 1,
@@ -783,7 +783,7 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 749
+    "width" : 832
   },
   {
     "alpha" : 1,

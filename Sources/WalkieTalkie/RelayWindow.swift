@@ -1596,11 +1596,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         root.addSubview(heardLabel)
 
         contextShotView.imageScaling = .scaleProportionallyUpOrDown
-        contextShotView.wantsLayer = true
-        contextShotView.layer?.cornerRadius = 4
-        contextShotView.layer?.masksToBounds = true
-        contextShotView.layer?.borderWidth = 1
-        contextShotView.layer?.borderColor = NSColor.secondaryLabelColor.withAlphaComponent(0.35).cgColor
+        // Its rounded corners and hairline are drawn into the picture
+        // (`AreaContext.framed`), the same as every screen in the words.
         contextShotView.isHidden = true
         root.addSubview(contextShotView)
 
@@ -2154,10 +2151,21 @@ private let heardLabel = NSTextField(labelWithString: "")
             }
             // A picture in the words asks for its own width, up to the cap —
             // a cut-out squeezed into a four-word panel is a cut-out he cannot check.
-            for n in inlineShotNumbers(in: sentPrompt ?? "") {
+            for (n, raw) in inlineShotTokens(in: sentPrompt ?? "") {
                 guard let path = promptInlineShots[n], let image = NSImage(contentsOfFile: path),
-                      image.size.width > 0 else { continue }
-                let w = min(image.size.width, Self.inlineShotMaxHeight * image.size.width / max(image.size.height, 1))
+                      image.size.width > 0, image.size.height > 0 else { continue }
+                let unbounded = CGFloat.greatestFiniteMagnitude
+                let w: CGFloat
+                if raw.contains("✂️"), let frame = promptInlineFrames[n],
+                   let screen = NSImage(contentsOfFile: frame.path), screen.size.height > 0 {
+                    // The screen as wide as 📸0, the cut as tall as that screen.
+                    let s = Self.screenPictureSize(screen.size, width: unbounded)
+                    w = s.width + AreaContext.calloutGap + (s.height * image.size.width / image.size.height).rounded()
+                } else if Self.isWholeScreen(raw) {
+                    w = Self.screenPictureSize(image.size, width: unbounded).width
+                } else {
+                    w = min(image.size.width, Self.inlineShotMaxHeight * image.size.width / image.size.height)
+                }
                 contextWidth = max(contextWidth, w + pad * 2 + 8)
             }
             if let heard = promptHeard {
@@ -2592,7 +2600,10 @@ private let heardLabel = NSTextField(labelWithString: "")
         var y = height - pad
         for row in rows {
             y -= row.height
-            row.view.frame.origin = NSPoint(x: pad, y: y)
+            // 📸0 on the column the pictures in the words stand on: a text
+            // field draws its first glyph 2 pt in (the line fragment padding).
+            let inset: CGFloat = row.view === contextShotView ? 2 : 0
+            row.view.frame.origin = NSPoint(x: pad + inset, y: y)
             y -= gapBelow(row.view)
         }
 
@@ -3149,14 +3160,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     private func contextPicture(width: CGFloat) -> NSImage? {
         guard let path = contextShotPath, let image = NSImage(contentsOfFile: path),
               image.size.width > 0, image.size.height > 0 else { return nil }
-        let scale = min(Self.contextShotHeight / image.size.height, width / image.size.width)
-        let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
-        guard let at = promptPointers[0] else {
-            return NSImage(size: size, flipped: false) { rect in
-                image.draw(in: rect); return true
-            }
-        }
-        return Self.pointerDot(on: image, at: at, size: size)
+        let size = Self.screenPictureSize(image.size, width: width)
+        let dotted = promptPointers[0].map { Self.pointerDot(on: image, at: $0, size: size) } ?? image
+        return AreaContext.framed(dotted, size: size)
     }
 
     /// `Mic:`, `Engine:` and `To:` — the lines the footer label carries.
@@ -3203,15 +3209,35 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// The shot numbers whose token is in `text` and which have a picture to draw.
     private func inlineShotNumbers(in text: String) -> [Int] {
+        inlineShotTokens(in: text).map(\.n)
+    }
+
+    /// The same, with each one's token as written.
+    private func inlineShotTokens(in text: String) -> [(n: Int, raw: String)] {
         guard let regex = Self.tokenPattern, !promptInlineShots.isEmpty else { return [] }
         return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { m in
             guard let r = Range(m.range(at: 1), in: text), let n = Int(text[r]),
-                  promptInlineShots[n] != nil else { return nil }
-            return n
+                  promptInlineShots[n] != nil, let all = Range(m.range, in: text) else { return nil }
+            return (n, String(text[all]))
         }
     }
 
+    /// A `[📸N…]` that is a whole frame — not a ✂️ cut, not a 📋 copied image.
+    private static func isWholeScreen(_ token: String) -> Bool {
+        !token.contains("✂️") && !token.contains("📋")
+    }
+
+    /// **Every whole screen on the panel is 📸0's size** (2026-10-25, Victor:
+    /// *"the initial screenshot … should have the same width as the screenshots
+    /// of cropped areas"*): `contextShotHeight` tall, never wider than `width`.
+    private static func screenPictureSize(_ image: NSSize, width: CGFloat) -> NSSize {
+        let scale = min(contextShotHeight / image.height, width / image.width)
+        return NSSize(width: (image.width * scale).rounded(), height: (image.height * scale).rounded())
+    }
+
     /// Never taller than this, so a full-screen frame does not push the buttons off.
+    /// A copied image, or a cut whose screen is not on disk; a whole screen is
+    /// `screenPictureSize`, a cut beside its screen is that screen's height.
     private static let inlineShotMaxHeight: CGFloat = 220
     /// Never wider than this share of the panel (2026-10-07, Victor: *"make the
     /// width of any inserted picture never exceed thirty percent of that panel"*).
@@ -3274,8 +3300,10 @@ private let heardLabel = NSTextField(labelWithString: "")
                 // preview nu vreau să mai pun între paranteze pătrate numărul
                 // pozei"* — *"am văzut ceva gen [📸1"*); a ✂️ area had none since
                 // 2026-10-20. The picture is the token; the agent's words keep it.
+                let whole = Self.isWholeScreen(raw)
                 let scale = min(1, width * Self.inlineShotMaxWidthShare / image.size.width, Self.inlineShotMaxHeight / image.size.height)
-                let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+                var size = whole ? Self.screenPictureSize(image.size, width: width)
+                    : NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
                 var drawn = image
                 // The pointer is a yellow dot on the frame, not pixels in its
                 // caption (2026-10-17). Only a whole frame's picture is what the
@@ -3290,7 +3318,17 @@ private let heardLabel = NSTextField(labelWithString: "")
                 // the cut's corners to the red box. One picture, so the lines can
                 // cross from one to the other. `AreaContext`.
                 if let context = areaContext(shot: n, token: raw, width: width) {
+                    // The cut zoomed to its screen's height, never taller
+                    // (2026-10-25, Victor: *"the zoomed cropped area … should
+                    // never be taller than the screenshot itself … zoomed in as
+                    // large as the height of the screen"*); narrower only when
+                    // the line has no room left for it.
+                    let room = max(1, width - context.image.size.width - AreaContext.calloutGap)
+                    let zoom = min(context.image.size.height / image.size.height, room / image.size.width)
+                    size = NSSize(width: (image.size.width * zoom).rounded(), height: (image.size.height * zoom).rounded())
                     drawn = AreaContext.callout(cut: image, cutSize: size, screen: context.image, box: context.box)
+                } else {
+                    drawn = AreaContext.framed(drawn, size: size)
                 }
                 let attachment = NSTextAttachment()
                 attachment.image = drawn
@@ -3373,16 +3411,14 @@ private let heardLabel = NSTextField(labelWithString: "")
         return out
     }
 
-    /// The whole-screen thumbnail for a ✂️ token, capped like every picture in
+    /// The whole-screen thumbnail for a ✂️ token, at 📸0's size like every screen in
     /// the words, and the red box in its points — nil for a token that is not
     /// an area or a frame not on disk.
     private func areaContext(shot n: Int, token: String, width: CGFloat) -> (image: NSImage, box: CGRect)? {
         guard let frame = promptInlineFrames[n], let corners = AreaContext.corners(in: token),
               let image = NSImage(contentsOfFile: frame.path), image.size.width > 0, image.size.height > 0
         else { return nil }
-        let scale = min(1, width * Self.inlineShotMaxWidthShare / image.size.width,
-                        Self.inlineShotMaxHeight / image.size.height)
-        let size = NSSize(width: (image.size.width * scale).rounded(), height: (image.size.height * scale).rounded())
+        let size = Self.screenPictureSize(image.size, width: width)
         return (AreaContext.image(frame: image, pixels: frame.pixels, box: corners.box,
                                   movedTo: corners.movedTo, size: size),
                 AreaContext.scaled(corners.box, pixels: frame.pixels, width: size.width))

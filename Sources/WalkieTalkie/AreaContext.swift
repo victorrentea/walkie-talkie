@@ -91,6 +91,36 @@ enum AreaContext {
     /// The space between the cut-out and the screen, where the lines cross.
     static let calloutGap: CGFloat = 32
 
+    /// **Every picture of a screen on the panel has one shape** (2026-10-25,
+    /// Victor: *"there is a border I think around the initial screenshot but not
+    /// around the latter ones. Make sure … the shape of the screenshot is the
+    /// same across all of them"*): 📸0's and the strip's — corners rounded 4 pt
+    /// and a 1 pt hairline. The cut keeps its red ring, rounded the same way.
+    static let cornerRadius: CGFloat = 4
+    static var hairline: NSColor { NSColor.secondaryLabelColor.withAlphaComponent(0.35) }
+
+    /// `image` at `size` in that shape, hairline round it.
+    static func framed(_ image: NSImage, size: NSSize) -> NSImage {
+        NSImage(size: size, flipped: true) { rect in
+            drawFramed(image, in: rect, ring: hairline, width: 1)
+            return true
+        }
+    }
+
+    /// Clipped to the rounded rect, the ring stroked inside its edge.
+    private static func drawFramed(_ image: NSImage, in rect: CGRect, ring color: NSColor, width: CGFloat) {
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).addClip()
+        image.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1,
+                   respectFlipped: true, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
+        let inner = cornerRadius - width / 2
+        let ring = NSBezierPath(roundedRect: rect.insetBy(dx: width / 2, dy: width / 2), xRadius: inner, yRadius: inner)
+        ring.lineWidth = width
+        color.setStroke()
+        ring.stroke()
+    }
+
     /// **The cut-out and the screen it came from as one picture, joined by two
     /// lines** (2026-10-15, Victor: *"two lines that go from the corner of the
     /// cropped image to the circled red rectangle on the screen thumbnail, so
@@ -106,6 +136,10 @@ enum AreaContext {
     /// ecranului întreg"*). Supersedes 2026-10-21's *the cut sits on the side its
     /// box is nearer*: the screens line up on the left edge of the panel whatever
     /// the box, and a cut that changed sides broke that column.
+    ///
+    /// The caller sizes both (2026-10-25): the screen as wide as 📸0, the cut
+    /// zoomed to the screen's height and never taller, so the callout is never
+    /// taller than its screen.
     static func callout(cut: NSImage, cutSize: NSSize, screen: NSImage, box: CGRect) -> NSImage {
         let screenSize = screen.size
         let size = NSSize(width: cutSize.width + calloutGap + screenSize.width,
@@ -117,19 +151,13 @@ enum AreaContext {
             let screenRect = CGRect(x: 0,
                                     y: bounds.height - screenSize.height,
                                     width: screenSize.width, height: screenSize.height)
-            cut.draw(in: cutRect, from: .zero, operation: .sourceOver, fraction: 1,
-                     respectFlipped: true, hints: nil)
-            screen.draw(in: screenRect, from: .zero, operation: .sourceOver, fraction: 1,
-                        respectFlipped: true, hints: nil)
+            drawFramed(screen, in: screenRect, ring: hairline, width: 1)
             // The cut ringed in the same red as its box on the screen
             // (2026-10-16, Victor: *"the large image picked also surrounded by
             // a red rectangle … the small box on the big screen becomes the
             // large box at the side of it"*). Inside its edge, so the lines
             // still leave from its outer corners.
-            let ring = NSBezierPath(rect: cutRect.insetBy(dx: ringWidth / 2, dy: ringWidth / 2))
-            ring.lineWidth = ringWidth
-            sourceColor.setStroke()
-            ring.stroke()
+            drawFramed(cut, in: cutRect, ring: sourceColor, width: ringWidth)
             let target = box.offsetBy(dx: screenRect.minX, dy: screenRect.minY)
             let cutEdge = cutRect.minX
             let boxEdge = target.maxX

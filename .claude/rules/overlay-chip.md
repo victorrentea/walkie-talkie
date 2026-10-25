@@ -520,6 +520,17 @@ yields to `--label`).
   dreaptă"*): the lines run from the red box's right corners to the cut's left ones. Supersedes
   2026-10-21's *the cut sits on its box's side* (`cutsOnRight` is gone) — the screens line up on the
   panel's left edge, and a cut that changed sides broke that column.
+  **Every screen is 📸0's size, the cut as tall as its screen, every picture one shape** (2026-10-25,
+  Victor: *"the initial screenshot … should have the same width as the screenshots of cropped areas …
+  the zoomed cropped area … should never be taller … than the screenshot itself … zoomed in as large
+  as the height of the screen"*, then *"there is a border … around the initial screenshot but not
+  around the latter ones"*): `RelayWindow.screenPictureSize` (`contextShotHeight` 130 tall, ≤ the panel)
+  sizes 📸0, the callout's screen and every whole frame in the words — the 30 % / 220 pt caps are left
+  only for a 📋 copied image or a cut whose screen is not on disk. The cut is zoomed to the screen's
+  height (narrower only if the line runs out), so a callout is never taller than its screen; the panel
+  asks for screen + gap + cut. `AreaContext.framed` draws the 4 pt rounded corners and 1 pt hairline the
+  strip's thumbnails wear onto every picture (📸0's layer border went; the cut's red ring is rounded the
+  same), and 📸0 sits 2 pt in, on the words' column.
   **The cut wears the same red ring** (2026-10-16, Victor: *"the large image picked also surrounded
   by a red rectangle … the small box on the big screen becomes the large box at the side of it"*):
   `ringWidth` 2 pt, inside the cut's edge so the lines still leave from its outer corners.
