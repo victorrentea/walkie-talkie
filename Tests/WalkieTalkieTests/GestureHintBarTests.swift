@@ -14,31 +14,38 @@ final class GestureHintBarTests: XCTestCase {
     func testAPromptIsVictorsSketch() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true)), [
             Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "🗑️ cancel", right: ""),
         ])
     }
 
     func testTheFilmKamikazeAndSpawnFollowTheirState() {
         let c = GestureHintBar.crosses(for: .init(listening: true, prompting: true, filming: true,
                                                   kamikaze: true, spawn: true))
-        XCTAssertEqual(c[0].up, "", "a new session already marked: the box stays, empty")
+        XCTAssertEqual(c[0].up, "📂 folder", "a new session already marked: 🔼 ↑ opens the folder menu again")
+        XCTAssertEqual(c[0].right, "🏁 end", "a spawn has nothing to flip to: 🔼 → ends it")
         XCTAssertEqual(c[0].down, "~☠️", "crossed out, no words")
         XCTAssertEqual(c[1].up, "⏹️ video")
+        XCTAssertEqual(c[1].click, "⏹️ / ⌃P", "while a film runs the shutter is its stop (2026-10-23)")
     }
 
-    func testAPlainDictationOnlyStopsOrCancels() {
+    /// 2026-10-25 (the hint audit): every gesture a plain sentence answers is
+    /// drawn — 🔼 and 🔽 ↓ stop it, 🔼 → / 🔼 ↑ make it a prompt, 🔼 ↓ is the last
+    /// prompt's kamikaze, 🔽 ← cancels.
+    func testAPlainDictationShowsEveryGestureItAnswers() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false)), [
-            Cross(click: "", up: "", down: "", left: "🗑️ cancel", right: nil),
-            Cross(click: "⏹️ + ⏎", up: "", down: "", left: "", right: "⏹️ ⌘⌘"),
+            Cross(click: "⏹️", up: "✨ new", down: "☠️ last", left: "🗑️ cancel", right: "💻 terminal"),
+            Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "🗑️ cancel", right: "⏹️ ⌘⌘"),
         ])
     }
 
     /// 2026-10-09: a quick question's stop asks — no ⏎ promised. 2026-10-15:
     /// it is a prompt — 🔼 asks, 🔽 is the shutter, ↓ the typing box.
+    /// 2026-10-25: 🔼 ↑ / 🔼 → send it to an agent instead, 🔽 ← cancels, 🔽 →
+    /// Googles it.
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
-            Cross(click: "⚡ ask ⌘⌘", up: "", down: "", left: "🗑️ cancel", right: nil),
-            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "", right: ""),
+            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: "", left: "🗑️ cancel", right: "💻 terminal"),
+            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "🗑️ cancel", right: "🔎 google"),
         ])
     }
 
@@ -66,7 +73,7 @@ final class GestureHintBarTests: XCTestCase {
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
             Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ cancel", right: nil, corner: "☝️"),
-            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: "", corner: "✌️"),
+            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "🗑️ cancel", right: "", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: false, noMouse: true))[1].right, "⏹️ ⌘⌘")
     }
@@ -117,6 +124,7 @@ final class GestureHintBarTests: XCTestCase {
             ("prompt", .init(listening: true, prompting: true)),
             ("prompt-filming", .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true)),
             ("plain", .init(listening: true, prompting: false)),
+            ("quick", .init(listening: true, prompting: false, quick: true)),
             ("crop", .init(listening: true, prompting: true, crop: .selecting)),
             ("crop-locked", .init(listening: true, prompting: true, crop: .locked)),
             ("crop-parked", .init(listening: true, prompting: true, crop: .parked)),

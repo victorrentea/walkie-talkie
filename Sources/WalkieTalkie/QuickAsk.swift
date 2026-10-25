@@ -377,6 +377,49 @@ final class QuickAsk {
         }
     }
 
+    /// **The question as a Google query** (2026-10-25, 🔽 → over a ⚡ question —
+    /// `AppDelegate.googleQuestion`). The waiting process gets the envelope and
+    /// its pictures with an order not to answer: one line, the few words he would
+    /// type into Google, in the question's language — what a picture shows (a
+    /// font, a product, an error) named in words. nil and why after
+    /// `searchTimeout`, or when no process is up. On main.
+    static let searchOrder = """
+        Do not answer. Write only the Google search query for what I ask below — one line, \
+        3 to 8 words, in the language I asked in, no quotes, no explanation. Name in words \
+        whatever my pictures show that the search needs (the font, product, error message, place).
+        """
+    static let searchTimeout: TimeInterval = 8
+
+    func searchQuery(_ question: String, images: [String] = [],
+                     done: @escaping (_ query: String?, _ error: String?) -> Void) {
+        queue.async {
+            // A new question ends whatever the last one was still doing.
+            self.cancelLocked()
+            self.failedStarts = 0
+            self.warmLocked()
+            guard let w = self.ready, w.alive else {
+                DispatchQueue.main.async { done(nil, "the quick model did not start") }
+                return
+            }
+            self.ready = nil
+            let run = Run()
+            run.workers = [w]
+            self.current = run
+            let asked = Self.searchOrder + "\n\n" + question
+            let pictures = Self.pictures(images, history: [])
+            self.stage(run, w, Self.content(asked, pictures: pictures), timeout: Self.searchTimeout, onText: { _ in },
+                       onDone: { query, error in
+                let line = query?.split(separator: "\n").first
+                    .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " \"'`*")) }
+                self.endLocked(run)
+                DispatchQueue.main.async {
+                    if let line, !line.isEmpty { done(line, nil) } else { done(nil, error ?? "an empty query") }
+                }
+            })
+            self.warmLocked()
+        }
+    }
+
     /// **🌐 More** (2026-10-22): another web round on the last answer, from
     /// sources other than `sources`, then the 🧐 review again — the same
     /// `checks` callbacks as the first round. Ends whatever is still running.

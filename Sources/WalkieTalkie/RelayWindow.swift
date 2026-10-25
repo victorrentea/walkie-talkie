@@ -1065,7 +1065,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// either way, so the warmth bar keeps its step count. `AppDelegate`
     /// writes it with the destination, before the row goes up.
     var prompting = true {
-        didSet { if prompting != oldValue { applyEngineText() } }
+        didSet { if prompting != oldValue { applyEngineText(); updateHintBar() } }
     }
 
     /// **A ⚡ quick question is `Asking`** (2026-10-09, Victor: *"let's call it

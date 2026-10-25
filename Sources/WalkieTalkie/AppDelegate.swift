@@ -1168,6 +1168,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **A follow-up to the ⚡ answer on screen** (2026-10-15): 🔼 → over its
     /// pop-up opens it (`askFollowUp`), and `askQuick` sends `quickThread` with it.
     private var quickFollowUp = false
+    /// **🔽 → over a ⚡ question: Google it instead** (2026-10-25, Victor: *"dacă
+    /// în timpul întrebării fac … butonul back și swipe la dreapta, se deschidă în
+    /// loc de dialogul mic inline … Google Search cu … un query extras din ce am
+    /// spus"*). Set by `HotkeyTap.onQuickGoogle`, which also ends the sentence;
+    /// `deliver` sends the envelope to `googleQuestion` instead of `askQuick`.
+    private var quickGoogle = false
 
     /// Somewhere for this dictation to go: a terminal already bound, one it is
     /// about to open for itself, the caret — or, since 2026-09-11, one he has
@@ -2165,6 +2171,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let wait = body["wait"] as? Bool == true || waitAll
             let done = DispatchSemaphore(value: 0)
             var out: [String: Any] = ["ok": true]
+            // `google: true` — the query 🔽 → would Google, and its URL; opens
+            // nothing unless `open: true` (2026-10-25).
+            if body["google"] as? Bool == true {
+                DispatchQueue.main.async {
+                    self.googleQuestion(text, prompt: text, images: body["images"] as? [String] ?? [],
+                                        open: body["open"] as? Bool == true) { q, url in
+                        out = ["ok": true, "query": q, "url": url.absoluteString]
+                        done.signal()
+                    }
+                }
+                _ = done.wait(timeout: .now() + 30)
+                return (200, out)
+            }
             DispatchQueue.main.async {
                 // `images: [path]` and `followUp: true` — a prompt's pictures, and a
                 // question asked over the ⚡ answer on screen (2026-10-15).
@@ -2774,6 +2793,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Right ⌘ ×2 over an open prompt (2026-10-09; right ⌥ ×2 until 10-20) — a stop and only a
         // stop: by the time this hop lands the sentence may have ended, and then
         // nothing starts.
+        // **🔽 → over a ⚡ question: end it, and Google it** (2026-10-25) — see
+        // `quickGoogle`. The stop is 🔼's (`endDictation`); only where the words
+        // go changes.
+        hotkeys.onQuickGoogle = { [weak self] in
+            DispatchQueue.main.async {
+                guard let self, self.quickAsk, self.listening || self.source.isRecording else { return }
+                Log.info("🔎 🔽 → over the ⚡ question — it ends, and goes to Google instead of the reply pop-up")
+                self.quickGoogle = true
+                self.overlay.flash("🔎 Google", duration: 1.5)
+                self.endDictation()
+            }
+        }
         hotkeys.onKeyboardEndsSentence = { [weak self] in
             DispatchQueue.main.async {
                 guard let self, self.listening || self.source.isRecording else { return }
@@ -4295,8 +4326,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // flag there (`retarget`, `convertDictationToSpawn`).
         let quick = quickAsk
         let followUp = quickFollowUp
+        let google = quick && quickGoogle
         quickAsk = false
         quickFollowUp = false
+        quickGoogle = false
         cleanSentence = false
         caretPrompt = false
         submitAfterClean = false
@@ -4393,7 +4426,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.clearSelection()
             }
             holdOnClipboard(line, why: "a ⚡ quick question")
-            askQuick(spokenText, prompt: line, images: pictures, followUp: followUp)
+            if google { googleQuestion(spokenText, prompt: line, images: pictures) }
+            else { askQuick(spokenText, prompt: line, images: pictures, followUp: followUp) }
             return
         }
         pendingPromptWarning = result.warning
@@ -5370,6 +5404,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cleanSentence = false
             quickAsk = false
             quickFollowUp = false
+            quickGoogle = false
             submitAfterClean = false
         }
         if !bg { hotkeys.ownCleanSentence = false }
@@ -5908,6 +5943,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard quickAsk else { return }
         quickAsk = false
         quickFollowUp = false
+        quickGoogle = false
         Log.info("⚡ the question goes to \(label) as a prompt — no quick answer")
     }
 
@@ -6030,6 +6066,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cleanSentence = clean
         quickAsk = quick
         quickFollowUp = quick && followUp
+        quickGoogle = false
         hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
@@ -6096,6 +6133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             cleanSentence = false
             quickAsk = false
             quickFollowUp = false
+            quickGoogle = false
             hotkeys.ownCleanSentence = false
             // W19: none of this gesture's flags outlive its refusal.
             clearSpawn()
@@ -6548,6 +6586,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("⚡ 🔼 → over the quick answer — a follow-up, \(quickThread.count) turn(s) before it; the pop-up goes in ❓")
         ReplyPanel.shatter(.questions)
         startDictation(paste: true, quick: true, followUp: true)
+    }
+
+    /// **The question, as a Google search** (2026-10-25, `quickGoogle`): the
+    /// waiting quick model turns the envelope and its pictures into a query
+    /// (`QuickAsk.searchQuery`), and the default browser opens it. Its words as
+    /// they are when the model fails or is slow. No reply pop-up, no checks.
+    private func googleQuestion(_ question: String, prompt: String, images: [String],
+                                open: Bool = true, done: ((String, URL) -> Void)? = nil) {
+        QuickAsk.shared.searchQuery(prompt, images: images) { query, error in
+            let q = query ?? question
+            if let error { Log.info("🔎 no query from the model (\(error)) — Googling the words as said") }
+            var c = URLComponents(string: "https://www.google.com/search")!
+            c.queryItems = [URLQueryItem(name: "q", value: q)]
+            guard let url = c.url else { return }
+            Log.info("🔎 Google: \"\(q)\"")
+            if open { NSWorkspace.shared.open(url) }
+            done?(q, url)
+        }
     }
 
     /// The `Asking` row on the chip while a question is spoken.
@@ -7528,6 +7584,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         if refusesAttachment("🎬 the screen recording") { return }
+        // **Not over a ⚡ question** (2026-10-25, the hint audit): its envelope
+        // carries pictures, never a film — one started here was never sent and
+        // kept running after the answer. The corner hints leave 🔽 ↑ grey.
+        if quickAsk {
+            overlay.flash("🎬 No screen recording in a question — 📸 takes a picture", duration: 3)
+            return
+        }
         // A click on any of the four `● REC` badges is the stop (2026-10-20) —
         // the gesture is the one he forgets, the badge is the one he sees.
         FilmBorder.onClick = { [weak self] in
@@ -7807,6 +7870,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // expires 12 s in when Wispr never opens its microphone, and the shutter
         // then took two pictures into a plain sentence (14:30:34/39, 2026-10-08).
         hotkeys.relayPlainOpen = listening && cleanSentence && !cleanRedirected
+        // 🔽 → over a ⚡ question Googles it (2026-10-25, `onQuickGoogle`).
+        hotkeys.relayQuickOpen = listening && quickAsk
         let attachable = live && !hotkeys.cleanSentenceOpen
         picker.dictating = attachable
         // The in-page badge that says ⌘⇧ is live — the chip's old `⌘⇧` row,
@@ -7987,7 +8052,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret
             if ringUp { caretHalo.setDestination(destination) }
-            overlay.prompting = destination != .wispr && destination != .quick
+            // **A plain sentence 🔼 → / 🔼 ↑ made a prompt is a prompt on the
+            // corner hints** (2026-10-25, the hint audit): the halo keeps the clean
+            // dress, but the tap already reads it as a prompt (`relayPromptOpen`) —
+            // 🔽 is its shutter, 🔼 its stop — and the bar said `⏹️ + ⏎`.
+            let plainWords = destination == .wispr && !(cleanSentence && cleanRedirected)
+            overlay.prompting = !plainWords && destination != .quick
             overlay.asking = quickAsk
         }
         caretHalo.setActive(ringUp,
@@ -11366,6 +11436,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         pasteMode = true
         cleanSentence = false
+        // The tap's `ownClean` must go down with it, or right ⌘ ×2 asks
+        // `onCleanToggle` to stop a clean sentence that is no longer one — and
+        // nothing ends (2026-10-25, the hint audit: `🏁 / ⌘⌘` was a false promise).
+        hotkeys.ownCleanSentence = false
         cleanRedirected = false
         submitAfterClean = false
         caretPrompt = true
@@ -13162,7 +13236,7 @@ extension AppDelegate {
         var kamikaze = false, contextAtWheelRelease = false
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
-        var quickAsk = false, quickFollowUp = false
+        var quickAsk = false, quickFollowUp = false, quickGoogle = false
         var latchedAtCaret = false, cleanRedirected = false
         var latch: Latch?
         var latchedMouse: CGPoint?
@@ -13204,6 +13278,7 @@ extension AppDelegate {
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
+        e.quickGoogle = quickGoogle
         e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
@@ -13218,7 +13293,7 @@ extension AppDelegate {
         kamikaze = false
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
-        quickAsk = false; quickFollowUp = false
+        quickAsk = false; quickFollowUp = false; quickGoogle = false
         latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
         pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
         pendingAffect = nil
@@ -13262,6 +13337,7 @@ extension AppDelegate {
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp
+        quickGoogle = e.quickGoogle
         latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning

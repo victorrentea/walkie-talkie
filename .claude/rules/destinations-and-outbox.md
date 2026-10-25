@@ -453,3 +453,13 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   the web's answer on; a click while 😠 reviews stops it (`QuickAsk.more` → `cancelLocked`); a
   replaced round's late `web` / `review` paint nothing (`mine == round`). Desk: `POST /test/quick
   {"peek": true}` answers the words on screen.
+
+- **🔽 → over a question Googles it instead** (2026-10-25, Victor: *"dacă în timpul întrebării fac …
+  butonul back și swipe la dreapta, se deschidă în loc de dialogul mic inline … Google Search cu …
+  un query extras din ce am spus"*). `HotkeyTap.onQuickGoogle` → `quickGoogle` (an `Envelope` field)
+  + `endDictation`; `deliver`'s quick branch calls `googleQuestion` instead of `askQuick`: the waiting
+  `claude -p` gets `QuickAsk.searchOrder` + the envelope + its pictures (so *"what font is this"*
+  names the font), answers one line in ≤ 8 s (`searchTimeout`), and `NSWorkspace.open` opens
+  `https://www.google.com/search?q=…`; a failure Googles the words as said. Flash `🔎 Google`, the
+  envelope still goes on the clipboard (Q17), no pop-up, no checks. Desk: `POST /test/quick {"text",
+  "google": true, "open"?: true}` → `{query, url}`. Log `🔎 Google: "…"`.

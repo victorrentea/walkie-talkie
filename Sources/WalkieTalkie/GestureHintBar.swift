@@ -100,7 +100,9 @@ final class GestureHintBar {
             // (2026-10-19, `CropSelectionOverlay.leftClicked`).
             return MouseHint(left: "📍 drop", wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
         case .drawing:
-            return MouseHint(wheel: "🎯 drag there", body: "Esc cancel")
+            // The right button is not taken while the destination is drawn: it
+            // cancels, as parked (2026-10-25, the hint audit).
+            return MouseHint(wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
         }
     }
 
@@ -124,13 +126,24 @@ final class GestureHintBar {
         var front = Cross(right: nil)
         var back = Cross()
         front.left = "🗑️ cancel"
+        // **Every gesture that acts, labelled, in every stage** (2026-10-25, Victor:
+        // *"Am dat Forward sus și mi-a trecut ask în modul de terminal nou. Am dat
+        // back stânga și mi-a făcut cancel. Ăsta n-apar pe … diagrama de butoane
+        // live"*). Three audits traced each F-key to its handler: 🔽 ← cancels any
+        // open microphone (2026-10-21) and 🔼 ↑ makes any sentence a new-session
+        // prompt — neither was drawn outside a prompt, 🔽 ← nowhere.
+        back.left = "🗑️ cancel"
+        front.up = s.spawn ? "📂 folder" : "✨ new"
         if s.prompting {
             front.click = "🏁 end"
-            front.up = s.spawn ? "" : "✨ new"
             // Kamikaze is its emoji alone, crossed out once it is on (2026-09-30,
             // Victor: *"instead of 'no kamikaze', kamikaze crossed out"*).
             front.down = s.kamikaze ? Self.struck + "☠️" : "☠️"
-            back.click = "📸 shot"
+            // 🔼 → flips bound ⇄ caret, which the chip shows — no box; a spawn has
+            // nothing to flip to, and ends (`toggleDictation(flipsDestination:)`).
+            if s.spawn { front.right = "🏁 end" }
+            // While a film runs the shutter is its stop (2026-10-23, `onScreenshot`).
+            back.click = s.filming ? "⏹️ video" : "📸 shot"
             // Stop is ⏹️, never the word (2026-09-30).
             back.up = s.filming ? "⏹️ video" : "🔴 video"
             // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
@@ -138,16 +151,26 @@ final class GestureHintBar {
             back.down = "⌨️ type"
         } else if s.quick {
             // **A question is a prompt** (2026-10-15): 🔼 asks, 🔽 is the
-            // shutter and ↓ the typing box, as while prompting; no new session,
-            // no kamikaze, no film — a question's answer is the reply pop-up.
+            // shutter and ↓ the typing box, as while prompting; no kamikaze, no
+            // film (`toggleFilm` refuses it) — a question's answer is the reply
+            // pop-up. 🔼 → sends it to the terminal as a prompt (`dropQuestion`),
+            // 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`).
             front.click = "⚡ ask"
-            front.up = ""
             front.down = ""
+            front.right = "💻 terminal"
             back.click = "📸 shot"
             back.up = ""
             back.down = "⌨️ type"
+            back.right = "🔎 google"
         } else {
+            // A plain sentence: 🔼 and 🔽 ↓ stop it without a Return, 🔼 → makes it
+            // a prompt to the terminal (`retarget`), 🔼 ↓ is the last prompt's
+            // kamikaze (`kamikazeAfterTheWords`).
+            front.click = "⏹️"
+            front.down = "☠️ last"
+            front.right = "💻 terminal"
             back.click = "⏹️ + ⏎"
+            back.down = "⏹️"
             back.right = "⏹️"
         }
         // **The keyboard's way beside the gesture it stands for** (2026-10-20 on
@@ -161,6 +184,7 @@ final class GestureHintBar {
         if front.click == "🏁 end" { front.click = "🏁 / ⌘⌘" }
         else if s.prompting || s.quick { front.click = (front.click ?? "") + " ⌘⌘" }
         if back.click == "📸 shot" { back.click = "📸 / ⌃P" }
+        else if s.prompting, s.filming { back.click = "⏹️ / ⌃P" }
         if !s.prompting && !s.quick { back.right = "⏹️ ⌘⌘" }
         return [front, back]
     }

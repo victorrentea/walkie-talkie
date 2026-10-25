@@ -416,6 +416,24 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-10-25: "dacă în timpul întrebării fac … butonul back și
+            # swipe la dreapta, se deschidă în loc de dialogul mic inline … Google
+            # Search cu … un query extras din ce am spus".
+            "row": ("🔽 back", "drag right over a ⚡ question"),
+            "does": "END the question and GOOGLE it — a query the quick model makes of it; no reply pop-up",
+            "checks": [
+                ("F5 over an open question raises the Google, before the plain toggle", "HotkeyTap `case VK_F5`",
+                 lambda: before(gesture_case(src, "VK_F5"),
+                                r"if relayQuickOpen, ownMicOpen \{.*?onQuickGoogle\?\(\)", r"return plainToggle\(")),
+                ("the app marks the sentence and ends it as 🔼 would", "AppDelegate `onQuickGoogle`",
+                 lambda: before(closure(src, "hotkeys.onQuickGoogle"),
+                                r"self\.quickGoogle = true", r"self\.endDictation\(\)")),
+                ("its words go to Google instead of the reply pop-up", "AppDelegate `deliver`",
+                 lambda: has(function(src, ad, "deliver"),
+                             r"if google \{ googleQuestion\(spokenText, prompt: line, images: pictures\) \}\s*else \{ askQuick\(")),
+            ],
+        },
+        {
             # Victor, 2026-10-05: "If I do the gesture for back and swipe to the
             # left at any point, this means an Enter." A cancel until then.
             # 2026-10-21: "during a dictation or a prompt … either the Forward

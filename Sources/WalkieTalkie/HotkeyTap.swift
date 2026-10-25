@@ -121,6 +121,11 @@ final class HotkeyTap {
     /// always was. Raised on the tap thread, so the other end hops.
     var onBackCancel: (() -> Void)?
 
+    /// **🔽 → over a ⚡ question — Google it** (2026-10-25): the question ends as
+    /// 🔼 would end it, and its words go to a Google search instead of the reply
+    /// pop-up (`AppDelegate.quickGoogle`). Raised on the tap thread.
+    var onQuickGoogle: (() -> Void)?
+
     /// **Wispr Flow is probably about to start listening** — its own start
     /// gesture, seen on the wire, ahead of any microphone opening.
     ///
@@ -307,6 +312,15 @@ final class HotkeyTap {
         }
     }
     private var relayPlainOpenFlag = false
+
+    /// **The relay's open sentence is a ⚡ question** — pushed beside
+    /// `relayPromptOpen` (2026-10-25): 🔽 → over it is `onQuickGoogle`, not the
+    /// plain toggle's refusal.
+    var relayQuickOpen: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return relayQuickOpenFlag }
+        set { stateLock.lock(); relayQuickOpenFlag = newValue; stateLock.unlock() }
+    }
+    private var relayQuickOpenFlag = false
 
     /// A clean sentence is open, whichever engine is hearing it — and still
     /// plain: one turned into a prompt is not (`relayPromptOpen`). **Every
@@ -4256,6 +4270,20 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // it), and the 2 s dwell before a stop (a slow flick must not start
             // and end the same sentence — F10's `gestureStopDwellSeconds`).
             case VK_F5:
+                // **Over a ⚡ question: Google it** (2026-10-25, Victor: *"dacă în
+                // timpul întrebării fac … butonul back și swipe la dreapta, se
+                // deschidă în loc de dialogul mic inline … Google Search"*). Where
+                // the plain toggle would refuse — a second microphone over the
+                // question's.
+                if relayQuickOpen, ownMicOpen {
+                    // The motion's re-fires find the question gone: they must be
+                    // dropped as re-fires, not open a plain dictation.
+                    lastF5At = CACurrentMediaTime()
+                    lastBackToggleAt = lastF5At
+                    Log.info("🔎 🔽 → over the ⚡ question — Google it")
+                    DispatchQueue.global().async { [weak self] in self?.onQuickGoogle?() }
+                    return swallow(gesture, type, event)
+                }
                 return plainToggle(gesture, type, event)
 
             // The back button **clicked** — **at rest, the plain dictation's
