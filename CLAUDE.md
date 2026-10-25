@@ -78,7 +78,7 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
 
 ## Gestures, in one screen
 
-- **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D dictate, **⌘⌃X = the local model now** (recording or
+- **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D only stops an open dictation (starts nothing since 2026-10-25 — at rest it passes through), **⌘⌃X = the local model now** (recording or
   waiting on the cloud: this Mac transcribes the take, `via: local-forced`; 2026-09-28). All three
   swallowed. ⌘⌃⌥D and ⌘⌃L belong to Victor Addons, ⌘⌃W to Wispr Flow.
   **Right ⌘ ×2 = the plain dictation's toggle — the only keyboard way; no key held dictates** (2026-10-23: the right ⌘⌥ hold, `54+61`, and the one-day right ⌘ hold are gone; the toggle was right ⌥ ×2 until 2026-10-20, Victor Addons' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).

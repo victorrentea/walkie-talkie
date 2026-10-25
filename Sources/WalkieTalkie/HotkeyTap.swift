@@ -2744,7 +2744,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         let ctrl = flags.contains(.maskControl), opt = flags.contains(.maskAlternate), cmd = flags.contains(.maskCommand)
         let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
         if ctrl && opt && cmd { return Self.gestureNames[code] != nil }
-        return ctrl && cmd && !opt && (code == VK_B || code == VK_D || code == VK_X)
+        // ⌘⌃D left the list on 2026-10-25: at rest it is nobody's here any more.
+        return ctrl && cmd && !opt && (code == VK_B || code == VK_X)
     }
 
     /// **The freeze photographs itself.** The 17:12 one was only understood
@@ -3939,7 +3940,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         //
         // Autorepeat swallowed for the same reason as above — a held key would
         // open the microphone and close it again on the next repeat.
-        if keyCode == VK_D && cmd && ctrl && !opt {
+        //
+        // **It no longer starts one** (2026-10-25, Victor: *"ctr-cmd-d sa nu mai
+        // porneasca dictarea"*): at rest the key goes through untouched; only an
+        // open sentence of this app's own is still ended by it.
+        if keyCode == VK_D && cmd && ctrl && !opt, ownMicOpen {
             if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌘⌃D (autorepeat)", type, event) }
             queueToggle()
             DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
