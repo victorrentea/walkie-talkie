@@ -2385,7 +2385,6 @@ final class HotkeyTap {
     private let stateLock = NSLock()
 
     private let VK_B: CGKeyCode = 0x0B
-    private let VK_D: CGKeyCode = 0x02
 private let VK_X: CGKeyCode = 0x07
     private let VK_RETURN: CGKeyCode = 0x24        // Return
     private let VK_KEYPAD_ENTER: CGKeyCode = 0x4C  // Enter (keypad / Fn-Return)
@@ -3925,31 +3924,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             return swallow("⌘⌃B bind", type, event)
         }
 
-        // ⌘⌃D — **dictate**: the wheel's click, from the keyboard. Same call, so
-        // it is the same toggle, and a dictation started with the key can be
-        // ended with the wheel and the other way round.
-        //
-        // Not ⌘⌃⌥D — that one is Victor Addons' dark-mode toggle, and the two are
-        // told apart by ⌥ alone. It shadows the system-wide ⌘⌃D "look up in
-        // dictionary", which it inherited from the bind it replaced.
-        //
-        // Ungated on purpose, unlike the bare wheel: `startLocalRecording` keeps
-        // the `hasDestination` guard, so a press with nothing bound costs
-        // nothing, and the key is swallowed either way rather than sometimes
-        // falling through to the dictionary.
-        //
-        // Autorepeat swallowed for the same reason as above — a held key would
-        // open the microphone and close it again on the next repeat.
-        //
-        // **It no longer starts one** (2026-10-25, Victor: *"ctr-cmd-d sa nu mai
-        // porneasca dictarea"*): at rest the key goes through untouched; only an
-        // open sentence of this app's own is still ended by it.
-        if keyCode == VK_D && cmd && ctrl && !opt, ownMicOpen {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌘⌃D (autorepeat)", type, event) }
-            queueToggle()
-            DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }
-            return swallow("⌘⌃D dictate", type, event)
-        }
+        // ⌘⌃D — **nobody's here since 2026-10-25** (Victor: *"ctr-cmd-d sa nu mai
+        // porneasca dictarea"*, then that it should not stop one either): the key
+        // goes through untouched. It dictated from 2026-09-01, bound before that.
 
         // ⌃P — **the shutter while a prompt records** (2026-10-20, Victor: *"when
         // I'm prompting with trackpad, also allow control P as a way to take the

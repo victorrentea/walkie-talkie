@@ -11,7 +11,7 @@ What `HotkeyTap` may and may not do with the two keyboard chords and with the mo
 | key | call | note |
 |---|---|---|
 | **⌘⌃B** | `onBindHotkey` → `bindFrontmostTerminal` | was ⌘⌃D until 2026-09-01 |
-| **⌘⌃D** | `onLocalToggle` → `toggleLocalRecording` | **only while this app's microphone is open — its stop; at rest it passes through and starts nothing** (2026-10-25, Victor: *"ctr-cmd-d sa nu mai porneasca dictarea"*); supersedes *ungated* and *swallow unconditionally* below, and it is no longer dropped while frozen |
+| **⌘⌃D** | `onLocalToggle` → `toggleLocalRecording` | **gone 2026-10-25 — the key passes through, starts and stops nothing** (Victor: *"ctr-cmd-d sa nu mai porneasca dictarea"*, then *no stop either*); supersedes every ⌘⌃D bullet below |
 
 - **Swallow both unconditionally, autorepeat included.** A held ⌘⌃D would open the microphone and shut it again on the next repeat; a held ⌘⌃B would bind and then immediately stop the session it started. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
 - **⌘⌃D is ungated at the tap.** A key that sometimes falls through to macOS's "look up in dictionary" would be worse than one that never does; with nothing bound the sentence is held for five minutes and delivered when a bind lands (`awaitingBind`, 2026-09-11), so the press costs nothing. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
