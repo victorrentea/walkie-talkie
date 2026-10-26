@@ -1,15 +1,14 @@
 ---
 paths:
   - "Sources/WalkieTalkie/StatusItem.swift"
-  - "Sources/WalkieTalkie/MenuBarMirror.swift"
   - "Sources/WalkieTalkie/MessageLog.swift"
   - "Sources/WalkieTalkie/AboutWindow.swift"
 ---
 
 # The menu bar item
 
-Rules for the 🤖 in the menu bar and its menu (`StatusItem`), the mirrors on the other screens
-(`MenuBarMirror`), the Prompt Log page (`MessageLog`) and the About panel (`AboutWindow`).
+Rules for the 🤖 in the menu bar and its menu (`StatusItem`), the Prompt Log page (`MessageLog`)
+and the About panel (`AboutWindow`).
 Full history and reasoning: docs/journal.md — see the sections named after each rule below.
 
 ## The header and the menu's job
@@ -501,17 +500,14 @@ and source should be selectable via menu too. those unavailable disabled"* — a
 - **The row carries no callback into `AppDelegate`.** It needs nothing but the file on disk.
   → journal: *Prompt Log: the outbox read back as a page*
 
-## `MenuBarMirror`
+## No mirror on the other screens (2026-10-26)
 
-- **One borderless click-through panel per screen at `.statusBar` (above `.mainMenu`), carrying
-  the same string `refreshGlyph` puts in the real item, on every space including full-screen.**
-  Indicator only, no menu — opening one is a focus change away.
-  → journal: *The 🤖 on the other screens*
-- **Centred in the strip; `NSScreen.main` polled every 500 ms; hidden on the active screen.** The
-  right end is the clock and Control Center, the left the front app's menus, the middle the only
-  part of an inactive menu bar reliably empty. `NSScreen.main` moves with the focus and posts
-  nothing.
-  → journal: *The 🤖 on the other screens*
+- **`MenuBarMirror` is gone.** From 2026-08 it drew a dimmed copy of the status glyph at the centre
+  of every inactive display's menu bar, believing an `NSStatusItem` shows only on the focused
+  display. It shows in every menu bar, so Victor saw the robot twice on every screen he was not
+  typing on (*"iconița … cu galben în jur, de două ori, fix pe centru menu barului … doar pe
+  ecranurile care nu sunt selectate"*). Do not bring it back; the real item is already everywhere.
+  → journal: *The 🤖 on the other screens* (superseded)
 
 ## Do not
 

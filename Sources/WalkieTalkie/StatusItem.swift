@@ -914,11 +914,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// picture in the menu bar and the line inside the menu cannot disagree.
     private var isBound = false
 
-    /// The same 🤖, on every other screen. `NSStatusItem` only ever appears in the
-    /// menu bar of the display with the focus, and that is the one display Victor
-    /// is *not* looking at whenever this matters.
-    private let mirror = MenuBarMirror()
-
     override init() {
         super.init()
         // The states shooter shows nothing, the menu bar included (`Offstage`).
@@ -1307,7 +1302,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         layOutGestures(in: menu)
 
         item.menu = menu
-        mirror.start()
     }
 
     /// **What the shortcut column draws for one row**: the glyph, and the
@@ -2131,10 +2125,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let icon = Self.boundIcon
         item.button?.image = icon
         item.button?.title = badge
-        // The same picture and badge, repeated on the displays macOS will not put
-        // a status item on. One call site, so the copies cannot say something the
-        // original does not — see `MenuBarMirror`.
-        mirror.set(icon: icon, badge: badge)
+        // No copy of this on the other screens: `MenuBarMirror` drew one at the
+        // centre of every inactive display's menu bar until 2026-10-26, on the
+        // belief that an `NSStatusItem` shows only on the focused display. It
+        // shows on every display, so the mirror was a second robot in every
+        // bar Victor was not typing on (*"iconița … de două ori, fix pe centru"*).
     }
 
     /// The two menu-bar pictures, scaled to the bar's height once.

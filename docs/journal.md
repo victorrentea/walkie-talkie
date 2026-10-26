@@ -17,6 +17,7 @@ The journal contradicts itself over time, because it was written as things chang
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
 
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
+- *The 🤖 on the other screens* (`MenuBarMirror`, 2026-08) — superseded 2026-10-26: an `NSStatusItem` shows in every display's menu bar, so the mirror was a second robot at the centre of every inactive bar; deleted (Victor: *"iconița … de două ori, fix pe centru menu barului sus … doar pe ecranurile care nu sunt selectate"*)
 - *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
 - *Q7 — F8 on a caret sentence: stays ignored* (2026-09-26) — reversed 2026-10-04: *🔼 ↑ turns a caret sentence into a spawn*, folder menu included
 - *🔼 ↑ turns a caret sentence into a spawn*'s *a sentence already a spawn still ignores the gesture* (2026-10-04) — superseded 2026-10-05 by *🔼 ↑ on a spawn sentence offers the folder menu again*
