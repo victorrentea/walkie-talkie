@@ -1,5 +1,12 @@
 # The lab — a headless macOS guest for the live tests
 
+> **Since 2026-10-26 `wt-lab` lives on the new Mac's internal disk again: `TART_HOME=~/tart`**
+> (set in `~/.zshenv`; the migration to the new MacBook Pro left 1.4 TB free). Copied from Vic with
+> the VM stopped (`rsync -a --partial --exclude control.sock`, same image, so Wispr's sign-in inside
+> it survives). **The copy on `/Volumes/Vic/tart/vms/wt-lab` is the backup** — `wt-base` and
+> `fx-lab` stay on Vic and were not copied. `tools/vm-lab.sh` still defaults to `/Volumes/Vic/tart`
+> when `TART_HOME` is unset, so run it from a login shell (or export it).
+
 > **Since 2026-10-21 `wt-lab` lives on Vic again: `TART_HOME=/Volumes/Vic/tart`** (Victor: the internal
 > disk was full — 6 GB free — and the VM held 39 GB of it). Moved with the VM stopped
 > (`rsync -aS --exclude control.sock`, the same image, so Wispr's sign-in inside it survives), booted
