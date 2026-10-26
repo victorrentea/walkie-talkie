@@ -361,3 +361,18 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   binding with a one-second curl timeout.
 - Do not let the Dock tile's restart take the front: `open` without `-g` leaves the replacement
   frontmost over whatever he was typing in.
+
+## A crash opens its own investigator (2026-10-26)
+
+- **`CrashAgent.checkAtLaunch()`** (Victor: *"ridică automat un debug agent după orice crash walkie
+  de acum"*): at every launch, the newest `~/Library/Logs/DiagnosticReports/Walkie Talkie-*.ips`
+  newer than `<home>/crash-seen` opens a Claude Code session in `~/workspace/walkie-talkie`
+  (`WT_REPO` overrides) through `SpawnTerminal.launchClaude` — tiled like a spawn, **not bound** —
+  with a brief naming the report and the log. The marker is written before the window opens: one
+  report, one agent. Skipped under `RELAY_SHOOT`. Log `💥 … opening a debug session on <name>`.
+- **`/test/state` answers `{"ok": false, "quitting": true}` once a quit is under way**
+  (`AppDelegate.terminating`): the restart gate polls through the quit, and a snapshot taken
+  mid-teardown produced a value `JSONSerialization` aborts on (12:47 that day, pid 71057, SIGABRT
+  in `ElementPicker.respond`). **`respond` repairs any non-JSON body and logs its key paths**
+  (`🧹 an answer that was not JSON, repaired — …`) instead of aborting — `try?` never catches the
+  Objective-C exception it throws. The value that went bad is not known; the next one is logged.

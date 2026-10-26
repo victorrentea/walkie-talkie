@@ -15912,3 +15912,23 @@ culoare cu pin-ul roșu, să se înțeleagă că e aceeași poveste"*. `FocusFra
 Also that morning: `MenuBarMirror` deleted (the status item is in every menu bar; the mirror
 was a second robot at the centre of every inactive one), and the envelope's microphone is the
 glyph alone (`· 🎙️`), not *heard through Elgato Wave XLR*.
+
+## The 12:47 crash, and a crash opens its own investigator (2026-10-26)
+
+`relay-restart.sh --build` at 12:47 sent the 11:33 instance (pid 71057) a SIGTERM and polled its
+`/test/state` while waiting for it to go. The report
+(`DiagnosticReports/Walkie Talkie-2026-10-26-124728.ips`): SIGABRT on the inspect queue,
+`ElementPicker.respond` → `JSONSerialization.dataWithJSONObject` → `_writeJSONObject` twice →
+`_writeJSONValue` → `objc_exception_throw`. A nested dictionary of the snapshot held a value the
+writer refuses — a NaN/infinite number or a non-JSON object — and `try?` cannot catch an
+Objective-C exception, so the process aborted. The old instance logged nothing after 12:44 (its
+`SIGTERM — treated as Quit` line never reached the file), consistent with a snapshot built while
+the app was tearing down. Which key went bad is not known.
+
+Three changes: `respond` validates with `isValidJSONObject`, repairs the body (non-finite numbers
+and foreign objects become strings) and logs every offending key path; `describeState` answers
+`{"ok": false, "quitting": true}` once `terminating` is set (the SIGTERM handler with no blockers,
+`applicationWillTerminate`); and `CrashAgent` — at launch, a report newer than `<home>/crash-seen`
+opens a Claude Code session in the repo with the report's path and a brief (Victor: *"ridică
+automat un debug agent după orice crash walkie de acum"*). The marker was seeded with the 12:47
+report, which this session already investigated.

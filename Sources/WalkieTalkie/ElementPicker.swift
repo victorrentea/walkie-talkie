@@ -1365,8 +1365,46 @@ final class ElementPicker {
         }
     }
 
+    /// **A body that is not JSON is repaired and logged, never written** (2026-10-26).
+    /// `JSONSerialization.data` throws an *Objective-C* exception — not a Swift
+    /// error, so `try?` does not catch it — for a `Double` that is NaN or
+    /// infinite and for any value that is not a string, number, bool, array,
+    /// dictionary or null; the process aborts. That was the 12:47 crash: the
+    /// old instance, asked for `/test/state` by the restart gate while it was
+    /// tearing down, built a snapshot with one such value in a nested
+    /// dictionary (`_writeJSONObject` → `_writeJSONObject` → `_writeJSONValue`,
+    /// SIGABRT, pid 71057). Every offending key path is logged, so the next
+    /// one names itself; the value is written as a string so the answer still
+    /// goes out.
+    static func sanitised(_ value: Any, path: String, bad: inout [String]) -> Any {
+        switch value {
+        case let d as [String: Any]:
+            var out: [String: Any] = [:]
+            for (k, v) in d { out[k] = sanitised(v, path: path.isEmpty ? k : "\(path).\(k)", bad: &bad) }
+            return out
+        case let a as [Any]:
+            return a.enumerated().map { sanitised($0.element, path: "\(path)[\($0.offset)]", bad: &bad) }
+        case let n as NSNumber:
+            // A bool is an NSNumber too, and never non-finite.
+            if n.doubleValue.isFinite { return n }
+            bad.append("\(path) = \(n)")
+            return "\(n)"
+        case is String, is NSNull:
+            return value
+        default:
+            bad.append("\(path) is \(type(of: value))")
+            return String(describing: value)
+        }
+    }
+
     private func respond(_ conn: NWConnection, _ status: Int, _ body: [String: Any]?) {
-        let payload = body.flatMap { try? JSONSerialization.data(withJSONObject: $0) } ?? Data()
+        var checked = body
+        if let b = body, !JSONSerialization.isValidJSONObject(b) {
+            var bad: [String] = []
+            checked = Self.sanitised(b, path: "", bad: &bad) as? [String: Any]
+            Log.error("🧹 an answer that was not JSON, repaired — \(bad.joined(separator: "; "))")
+        }
+        let payload = checked.flatMap { try? JSONSerialization.data(withJSONObject: $0) } ?? Data()
         var head = "HTTP/1.1 \(status) \(Self.reason(status))\r\n"
         head += "Content-Type: application/json\r\n"
         head += "Content-Length: \(payload.count)\r\n"

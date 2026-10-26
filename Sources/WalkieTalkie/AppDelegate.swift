@@ -3144,6 +3144,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // timeout answers with what it has rather than hanging the listener.
         picker.describeState = { [weak self] in
             guard let self else { return [:] }
+            // **Nothing is described while the app is leaving** (2026-10-26): the
+            // restart gate polls this through the quit, and a snapshot taken
+            // mid-teardown is what crashed the 12:47 instance (`respond`).
+            if self.terminating { return ["ok": false, "quitting": true, "quitPending": false, "busy": false] }
             let box = StateBox()
             let done = DispatchSemaphore(value: 0)
             DispatchQueue.main.async {
@@ -3531,6 +3535,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             restoreBinding(tty: tty)
         }
         Log.info("ready — label \(SessionLabel.value), outbox at \(Outbox.outboxURL.path)")
+        CrashAgent.checkAtLaunch()
         Log.info("voice corpus at \(VoiceCorpus.root.path)")
 
         // **The model comes up here, at launch, not on the first gesture.**
@@ -12174,6 +12179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Set when a deferred quit is finally let through; the one way past the gate.
     private var quitApproved = false
     private var quitDeferredSince: Date?
+    /// Set the moment a quit is under way — see `describeState`.
+    private(set) var terminating = false
 
     /// **A quit mid-sentence waits for the sentence** — see `QuitGate` for why this
     /// refuses and retries rather than answering `.terminateLater`.
@@ -12230,8 +12237,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func routeSIGTERMThroughQuit() {
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
-        source.setEventHandler {
+        source.setEventHandler { [weak self] in
             Log.info("SIGTERM — treated as Quit")
+            if self?.quitBlockers.isEmpty ?? true { self?.terminating = true }
             NSApp.terminate(nil)
         }
         source.resume()
@@ -12310,6 +12318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// asked for a fresh session — the one failure mode worth writing code to
     /// avoid, since it is silent and he would only notice by talking into a void.
     func applicationWillTerminate(_ notification: Notification) {
+        terminating = true
         // Before either branch: a relay that quits mid-sentence must not leave
         // Chrome silent. The extension also resumes on a dead socket, but that is
         // the safety net for a crash, not the way an orderly quit should look.
