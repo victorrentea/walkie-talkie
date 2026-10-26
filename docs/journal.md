@@ -15833,3 +15833,13 @@ plain sentences join without a space (both older). Incidents: the real Elgato op
 nothing filed); one run without hands-off; the ElevenLabs cost counter counted fake-Scribe seconds
 (restored). Then the Wispr teacher batch in `wt-lab` (`docs/vm-wispr.md`, *How the batch is actually
 run*): 542 labels, 1.53 h, VM stopped 07:07. Report: https://claude.ai/artifact/YAn2HmRmMNeUgQr3YQsJW7
+
+## 2026-10-26 — the shot's receipt flies above everything
+
+`CaptureFlash.flyIntoChip` sat one level below `.statusBar` (so it could slide under the chip at the
+end), which is under every NSMenu, popover and sheet: a shot taken with a dialog open showed its frame
+*behind* that dialog, as if it had not caught it. Victor: *"să vină deasupra la absolut orice … orice
+dialog ar fi fost deschis, menu, orice"*. The panel is now at `CGWindowLevelForKey(.maximumWindow)`
+(+ `.transient`) for the flight and drops to `.statusBar − 1` only for the last fifth, at the glyph,
+so the slide beneath the counter is kept. Victor Addons' ⌃P flash (`ScreenCaptureFlash`) was already
+at `maximumWindow` on all three panels — nothing to change there.

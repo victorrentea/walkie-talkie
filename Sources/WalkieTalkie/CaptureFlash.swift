@@ -36,9 +36,14 @@ enum CaptureFlash {
     /// or the dragged area), so the flight starts pixel for pixel on top of what
     /// it is a picture of; `target` is the chip's `📸` (`RelayWindow.shotLanding`).
     ///
-    /// It arrives at the glyph's size with the picture's own aspect, under the
-    /// chip (one level below `.statusBar`, like `BindFlight`), so the last thing
-    /// it does is slide beneath the counter rather than cover it.
+    /// It arrives at the glyph's size with the picture's own aspect. **It flies
+    /// above everything** (2026-10-26, `maximumWindow`): one level below
+    /// `.statusBar` put it under every open menu, popover and sheet, and the frame
+    /// is the receipt that the shot *caught* the open dialog — Victor: *"să vină
+    /// deasupra la absolut orice … orice dialog ar fi fost deschis, menu, orice"*.
+    /// Only for the last fifth of the flight, when it is at the glyph and fading,
+    /// does it drop to one level below `.statusBar` (like `BindFlight`), so the
+    /// last thing it does is still slide beneath the counter rather than cover it.
     ///
     /// One panel on the screen the picture came from: the chip rides the pointer,
     /// and the pointer is on that screen for every shutter path.
@@ -64,8 +69,8 @@ enum CaptureFlash {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle, .transient]
         panel.sharingType = .none
 
         let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
@@ -136,6 +141,10 @@ enum CaptureFlash {
         life.keyTimes = [0, 0.8, 1]
         life.duration = intoChipDuration
         frame.add(life, forKey: "life")
+        // At the glyph and fading: under the chip for the slide-in (see above).
+        DispatchQueue.main.asyncAfter(deadline: .now() + intoChipDuration * 0.8) {
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + intoChipDuration) {
             panel.orderOut(nil)
