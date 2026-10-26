@@ -302,6 +302,10 @@ final class LocalWhisper {
             return override
         }
         var candidates: [String] = []
+        // The relay's own venv first (2026-10-26, the new Mac): `uv venv --python 3.12
+        // ~/.walkie-talkie/venv && uv pip install mlx-whisper` — no python.org framework,
+        // no Homebrew site-packages (PEP 668 refuses them), nothing on a GUI app's PATH.
+        candidates.append(NSHomeDirectory() + "/.walkie-talkie/venv/bin/python3")
         // A `swift build` run from a terminal already has the right one on PATH;
         // looking there first keeps a developer run on the same interpreter the
         // shell would have picked.
