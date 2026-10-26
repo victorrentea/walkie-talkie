@@ -551,8 +551,15 @@ per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py
   - `AudioBridge.noteMarker`: the marker is never dropped as a pause and plays at 1.0; the pacer
     then catches up on the voice queued behind it (`🔀 caught up after the marker in N s`).
   - `ShotMarker.resolveStrict` reads the numbers from the row's `asrText` (`DictationResult.asr`,
-    `said`). It places every marker, aligned into the formatted words, or places none (the footer
-    with clocks), and strips the phrases either way.
+    `said`). It places every heard marker, aligned into the formatted words, and strips the phrases.
+    **A marker Wispr dropped is placed by its clock** (2026-10-26, Victor: *"nu ai injectat pozele în
+    locul în care trebuia … trebuiau puse la punctul în care le-am făcut"* — ten areas in a 126 s
+    sentence, seven heard, all ten in the footer): `Said.at` is the take's clock at the splice
+    (`meter.meterHops.last.t`), `resolveStrict(duration:)` interpolates by word count between the
+    nearest anchors (start, a heard marker, end); no clock or no duration → that one keeps its footer
+    row. **A phantom, a swap or a number heard twice still fails the whole sentence** — those are wrong
+    markers, not missing ones. Log `📣 markers placed, some by the clock: … dropped by the recogniser,
+    placed by the clock`. Tests `ShotMarkerStrictTests`.
   - With nothing said, nothing in a Wispr transcript is rewritten.
   - **The local model standing in (Q14, ⌘⌃X) gets them too** (2026-10-12): the WAV holds every
     marker spliced in a pause (`saidInRecording`; one handed over at the stop is Wispr's only), so

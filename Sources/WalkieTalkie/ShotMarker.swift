@@ -722,6 +722,19 @@ enum ShotMarker {
     struct Said: Equatable, Hashable {
         let kind: Kind
         let index: Int
+        /// **When it was spliced, on the recording's own clock** (2026-10-26) —
+        /// seconds from the start of the take; nil for a marker whose moment was
+        /// not kept (a test, an older path). What `resolveStrict` places a
+        /// marker by when the recogniser dropped its words.
+        var at: TimeInterval? = nil
+
+        init(kind: Kind, index: Int, at: TimeInterval? = nil) {
+            self.kind = kind; self.index = index; self.at = at
+        }
+        // Identity is what was said, never when: the sets and lookups compare
+        // a heard phrase against a spliced one.
+        static func == (a: Said, b: Said) -> Bool { a.kind == b.kind && a.index == b.index }
+        func hash(into h: inout Hasher) { h.combine(kind); h.combine(index) }
     }
 
     /// A marker phrase found in a text: what it names and where it stands.
@@ -781,10 +794,25 @@ enum ShotMarker {
     /// Only phrases of a kind that was said in this sentence are ever removed —
     /// his *screenshot three* is only touched in a sentence a shot marker was
     /// spliced into.
+    ///
+    /// **A dropped marker is placed by its time, between the ones that were heard**
+    /// (2026-10-26, Victor: *"nu ai injectat pozele în locul în care trebuia …
+    /// trebuiau puse la punctul în care le-am făcut"* — ten areas in a two-minute
+    /// sentence, Wispr heard seven, and the all-or-nothing rule put all ten in
+    /// the footer). The heard ones are still placed exactly where the recogniser
+    /// heard them. One the recogniser dropped — its words are nowhere in `asr` —
+    /// goes where its clock says: `Said.at` against the `duration` of the take,
+    /// interpolated by word count between the nearest anchors (the start, a
+    /// heard marker whose `at` is known, the end). A marker with no clock, or a
+    /// sentence with no duration, keeps its footer row. A **phantom**, a swap or
+    /// a number heard twice still fails the whole sentence: those are not
+    /// missing markers, they are wrong ones, and a wrong position is worse than
+    /// a footer row. `clean` is true only when every marker was heard.
     static func resolveStrict(text: String, asr: String?, said: [Said],
                               shots: [Int: String] = [:],
                               selections: [Int: String] = [:],
-                              elements: [Int: String] = [:])
+                              elements: [Int: String] = [:],
+                              duration: TimeInterval? = nil)
         -> (text: String, shots: [Int], selections: [Int], elements: [Int], clean: Bool, why: String) {
         guard !said.isEmpty, !text.isEmpty else { return (text, [], [], [], true, "no marker said") }
         let saidSet = Set(said)
@@ -793,18 +821,24 @@ enum ShotMarker {
         let inHeard = found(in: heard).filter { saidKinds.contains($0.kind) }
         let inText = found(in: text).filter { saidSet.contains(Said(kind: $0.kind, index: $0.index)) }
 
+        var dropped: [Said] = []
         for kind in Kind.allCases where saidKinds.contains(kind) {
             let want = said.filter { $0.kind == kind }.map(\.index)
             let have = inHeard.filter { $0.kind == kind }.map(\.index)
-            guard want == have else {
-                // Every phrase of a kind that was said goes, whatever its number: a
-                // phantom (`screenshot-3.wav` also says *screenshot four*) is ours.
-                // Numbers past `maximumIndex` are never a marker — Wispr merged a
-                // `screenshot two` into his *forty* as `screenshot 240`.
-                let ours = found(in: text).filter { saidKinds.contains($0.kind) && $0.index <= maximumIndex }
-                return (stripping(ours, from: text), [], [], [], false,
-                        "\(kind.rawValue): said \(want), heard \(have)")
+            if want == have { continue }
+            // Heard in the order said, each at most once, nothing that was not
+            // said: the rest were dropped and go in by their clock.
+            if Set(have).count == have.count, isSubsequence(have, want) {
+                dropped += said.filter { $0.kind == kind && !have.contains($0.index) }
+                continue
             }
+            // Every phrase of a kind that was said goes, whatever its number: a
+            // phantom (`screenshot-3.wav` also says *screenshot four*) is ours.
+            // Numbers past `maximumIndex` are never a marker — Wispr merged a
+            // `screenshot two` into his *forty* as `screenshot 240`.
+            let ours = found(in: text).filter { saidKinds.contains($0.kind) && $0.index <= maximumIndex }
+            return (stripping(ours, from: text), [], [], [], false,
+                    "\(kind.rawValue): said \(want), heard \(have)")
         }
 
         // Where each marker stood in what was heard: the number of heard words in
@@ -813,13 +847,43 @@ enum ShotMarker {
         let textWords = words(text, without: inText)
         let pairs = align(heardWords.map(\.norm), textWords.map(\.norm))
         var inserts: [(at: String.Index, found: Found)] = []
+        // Where each heard marker lands, as a word index into `textWords` — the
+        // anchors a dropped one is interpolated between.
+        var landed: [(word: Int, said: Said)] = []
         for marker in inHeard {
             let before = heardWords.prefix { $0.range.lowerBound < marker.range.lowerBound }.count
             // The first heard word at or after the marker that has a partner in
             // the formatted text; the marker goes in front of that partner.
             let j = pairs.first(where: { $0.key >= before }).map { $0.value } ?? textWords.count
             inserts.append((j < textWords.count ? textWords[j].range.lowerBound : text.endIndex, marker))
+            if let s = said.first(where: { $0.kind == marker.kind && $0.index == marker.index }) {
+                landed.append((j, s))
+            }
         }
+        var byClock: [Said] = [], unplaced: [Said] = []
+        if !dropped.isEmpty, let duration, duration > 0 {
+            var anchors: [(t: TimeInterval, word: Int)] = [(0, 0), (duration, textWords.count)]
+            anchors += landed.compactMap { l in l.said.at.map { (min(max($0, 0), duration), l.word) } }
+            anchors.sort { $0.t < $1.t }
+            for d in dropped {
+                guard let t = d.at else { unplaced.append(d); continue }
+                let tt = min(max(t, 0), duration)
+                guard let hi = anchors.firstIndex(where: { $0.t >= tt }) else { unplaced.append(d); continue }
+                let lo = max(hi - 1, 0)
+                let a = anchors[lo], b = anchors[hi]
+                let frac = b.t > a.t ? (tt - a.t) / (b.t - a.t) : 0
+                let word = Int((Double(a.word) + Double(b.word - a.word) * frac).rounded())
+                let j = min(max(word, 0), textWords.count)
+                let at = j < textWords.count ? textWords[j].range.lowerBound : text.endIndex
+                inserts.append((at, Found(kind: d.kind, index: d.index, range: at..<at)))
+                byClock.append(d)
+            }
+        } else {
+            unplaced = dropped
+        }
+        // In the order they stand in the words — a dropped one may sit between
+        // two heard ones.
+        inserts.sort { $0.at < $1.at }
 
         var pieces: [(text: String, verbatim: Bool)] = []
         var foundShots: [Int] = [], foundSelections: [Int] = [], foundElements: [Int] = []
@@ -855,8 +919,25 @@ enum ShotMarker {
         }
         emit(upTo: text.endIndex)
         let out = pieces.map { $0.verbatim ? $0.text : tidy($0.text) }.joined()
-        return (tidySeams(out), foundShots, foundSelections, foundElements, true,
-                "every marker back, once, in order")
+        if dropped.isEmpty {
+            return (tidySeams(out), foundShots, foundSelections, foundElements, true,
+                    "every marker back, once, in order")
+        }
+        let name = { (m: Said) in "\(m.kind.rawValue) \(m.index)" }
+        var why = "\(inHeard.count) heard and placed"
+        if !byClock.isEmpty { why += "; \(byClock.map(name).joined(separator: ", ")) dropped by the recogniser, placed by the clock" }
+        if !unplaced.isEmpty { why += "; \(unplaced.map(name).joined(separator: ", ")) dropped and without a clock — the footer carries them" }
+        return (tidySeams(out), foundShots, foundSelections, foundElements, false, why)
+    }
+
+    /// `a` read in order inside `b`, gaps allowed.
+    static func isSubsequence(_ a: [Int], _ b: [Int]) -> Bool {
+        var i = b.startIndex
+        for x in a {
+            guard let j = b[i...].firstIndex(of: x) else { return false }
+            i = j + 1
+        }
+        return true
     }
 
     /// `text` with the given marker phrases taken out — the fallback's words.

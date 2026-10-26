@@ -4165,7 +4165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// could reach.
     private func resolvingMarkers(_ text: String, words: [TimedWord]? = nil,
                                   inline: Bool = true,
-                                  said: [ShotMarker.Said] = [], asr: String? = nil) -> String {
+                                  said: [ShotMarker.Said] = [], asr: String? = nil,
+                                  duration: TimeInterval? = nil) -> String {
         stateLock.lock()
         // **The tokens, built here because here is where the facts are** — the
         // pointer, the dragged rectangle and the number the file is named by.
@@ -4264,8 +4265,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return ShotMarker.stripping(ours, from: text)
             }
             let strict = ShotMarker.resolveStrict(text: text, asr: asr, said: said, shots: marked,
-                                                  selections: selections, elements: elements)
-            Log.info("📣 markers \(strict.clean ? "placed" : "NOT placed — the footer carries them"): "
+                                                  selections: selections, elements: elements,
+                                                  duration: duration)
+            let placed = !strict.shots.isEmpty || !strict.selections.isEmpty || !strict.elements.isEmpty
+            Log.info("📣 markers \(strict.clean ? "placed" : placed ? "placed, some by the clock" : "NOT placed — the footer carries them"): "
                      + "\(strict.why) (said \(said.map { "\($0.kind.rawValue) \($0.index)" }.joined(separator: ", ")); "
                      + "read from \(asr?.isEmpty == false ? "asrText" : "the delivered words"))")
             resolved = (strict.text, strict.shots, strict.selections, strict.elements)
@@ -4403,7 +4406,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // No marker rewrite for it either: that is what splices a highlight
         // into the middle of the words.
         result.text = clean ? spokenText : resolvingMarkers(result.text, words: result.words,
-                                                            said: result.said, asr: result.asr)
+                                                            said: result.said, asr: result.asr,
+                                                            duration: result.duration)
         // **The corpus gets neither the marker nor the paragraph.** Wispr's
         // recording heard the marker and the relay's did not; *neither* of them
         // heard the text he had highlighted, which this app has just written

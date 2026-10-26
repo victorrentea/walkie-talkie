@@ -34,13 +34,44 @@ final class ShotMarkerStrictTests: XCTestCase {
         XCTAssertTrue(r.text.hasPrefix("Să presupunem că folosesc Opus pe High. La ce câștig"), r.text)
     }
 
-    /// One of two lost in `asrText`: the whole sentence falls back.
+    /// **Ten areas, seven heard** — the 2026-10-26 16:28 sentence (Wispr's
+    /// formatted words stand in for its `asrText` here): 1–6 and 10 are placed
+    /// where they were heard, 7, 8, 9 by their clock between 6 and 10.
+    func testDroppedMarkersArePlacedByTheirClockBetweenTheHeardOnes() {
+        let text = "Stai, bă, două săgeți aici, în jos: Screenshot 1. Upvotezi și vreau să înștiințești primul cuvânt. La primele două cuvinte să fie cheie, de exemplu, „code review”, și apoi două puncte: „waiting”. Screenshot 2: „or doing meetings”. Doopunte. Long to many use. Screenshot 3. Bureaucracy shuttled. Screenshot 4. No, virgulă: process bureaucracy bold, na? Lack of tests, uneștru colegi și cod technical debt. Screenshot 5. Unclear requirements. Să poți pui requirements doopunte. Unclear. Slash volatile context switching without the interruptions. Doar context switching. Și să-i bagi un context adițional la final, ca să pasti într-o drumă free. Screenshot 6. Adicional dat enter pe el. Aparon lista tuturor de upvote și de non-vote. Iar aici, sus, în inimile să apară doar după ce bifați prima opțiune și să apară textul este de aici în lateral aici. Cumva să apară cumva frumos, iar inimile să apară cele gri, dar după ce bifați măcar una dintre ele, dintre opțiunile din checkbox. Screenshot 10."
+        let clocks: [Int: TimeInterval] = [1: 20, 2: 29, 3: 35, 4: 38, 5: 52, 6: 80, 7: 96, 8: 104, 9: 109, 10: 115]
+        let said = (1...10).map { ShotMarker.Said(kind: .shot, index: $0, at: clocks[$0]) }
+        let all = Dictionary(uniqueKeysWithValues: (1...10).map { ($0, "[📸\($0)]") })
+        let r = ShotMarker.resolveStrict(text: text, asr: text, said: said, shots: all, duration: 126)
+        XCTAssertFalse(r.clean)
+        XCTAssertEqual(r.shots, (1...10).map { $0 }, r.why)
+        XCTAssertFalse(r.text.lowercased().contains("screenshot"), r.text)
+        // 7, 8, 9 stand between 6 and 10, in order, after the clause 6 ends.
+        let order = (1...10).compactMap { n in r.text.range(of: "[📸\(n)]")?.lowerBound }
+        XCTAssertEqual(order, order.sorted(), r.text)
+        XCTAssertTrue(r.text.contains("[📸6] Adicional dat enter"), r.text)
+        XCTAssertTrue(r.why.contains("shot 7, shot 8, shot 9 dropped by the recogniser, placed by the clock"), r.why)
+    }
+
+    /// A dropped marker with no clock keeps its footer row; the heard ones are still placed.
+    func testADroppedMarkerWithoutAClockStaysInTheFooter() {
+        let asr = "Deci și cu Escape și cu click din nou. Screenshot five. Că e un pic, mă distrage."
+        let text = "Deci, și cu Escape, și cu click din nou. Screenshot five. Că e un pic, mă distrage."
+        let r = ShotMarker.resolveStrict(text: text, asr: asr, said: [shot(5), shot(6)], shots: tokens, duration: 10)
+        XCTAssertFalse(r.clean)
+        XCTAssertEqual(r.shots, [5], r.why)
+        XCTAssertTrue(r.text.contains("din nou. [📸5] Că e un pic") || r.text.contains("din nou [📸5] Că e un pic"), r.text)
+        XCTAssertTrue(r.why.contains("shot 6 dropped and without a clock"), r.why)
+    }
+
+    /// One of two lost in `asrText`, no clocks, no duration: the heard one is placed, the lost one keeps its row.
     func testALostMarkerFallsBack() {
         let asr = "Deci și cu Escape și cu click din nou. Screenshot five. Că e un pic, mă distrage."
         let text = "Deci, și cu Escape, și cu click din nou. Screenshot five. Că e un pic, mă distrage."
         let r = ShotMarker.resolveStrict(text: text, asr: asr, said: [shot(10), shot(5)], shots: tokens)
         XCTAssertFalse(r.clean)
-        XCTAssertEqual(r.text, "Deci, și cu Escape, și cu click din nou. Că e un pic, mă distrage.")
+        XCTAssertEqual(r.shots, [5], r.why)
+        XCTAssertEqual(r.text, "Deci, și cu Escape, și cu click din nou. [📸5] Că e un pic, mă distrage.")
     }
 
     /// Swapped order is not the order said.

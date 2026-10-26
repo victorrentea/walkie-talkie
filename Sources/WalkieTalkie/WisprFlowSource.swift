@@ -549,8 +549,12 @@ final class WisprFlowSource: DictationSource {
         markerLock.lock()
         let batch = waitingMarkers
         waitingMarkers = []
-        said += batch.map(\.said)
-        saidInRecording += batch.map(\.said)
+        // The take's own clock at the splice (the last metered hop, 64 ms
+        // steps) — what places this marker if Wispr drops its words.
+        let clock = meter.meterHops.last.map { TimeInterval($0.t) }
+        let stamped = batch.map { ShotMarker.Said(kind: $0.said.kind, index: $0.said.index, at: clock) }
+        said += stamped
+        saidInRecording += stamped
         markerLock.unlock()
         let level = Self.voiceLevel(meter.meterHops)
         for (n, m) in batch.enumerated() {

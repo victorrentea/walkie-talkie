@@ -15932,3 +15932,21 @@ and foreign objects become strings) and logs every offending key path; `describe
 opens a Claude Code session in the repo with the report's path and a brief (Victor: *"ridică
 automat un debug agent după orice crash walkie de acum"*). The marker was seeded with the 12:47
 report, which this session already investigated.
+
+## A dropped marker is placed by its clock (2026-10-26)
+
+16:28, a 126 s sentence with ten ✂️ areas: Wispr's row said `Screenshot 1 … 6` and `Screenshot
+10`; 7, 8 and 9 — spliced at 16:28:25, :33 and :38 while he kept talking — left no trace in its
+words. The 2026-09-30 rule (*every marker back, or none*) then put all ten in the footer, and
+Victor read the prompt with no picture where he had made one: *"nu ai injectat pozele în locul în
+care trebuia … trebuiau puse la punctul în care le-am făcut. Fă un plan și apucă-te de treabă."*
+
+The all-or-nothing rule guarded against a *wrong* marker — a phantom from a mis-cut clip, a swap,
+a number merged into his forty. A dropped marker is a different failure: the heard ones are still
+exactly where the recogniser heard them, and the dropped one has a clock. So `resolveStrict`
+splits the two: heard in the order said, each once, nothing unsaid → the heard ones are placed as
+before and each dropped one goes where its clock says, interpolated by word count between the
+nearest anchors (the start, a heard marker with a clock, the end of the take); any other
+disagreement still fails the sentence. `Said.at` is stamped at the splice from the take's own
+meter; `DictationResult.duration` is the ruler. A marker without a clock keeps its footer row.
+The log says which were heard and which were placed by the clock. Tests on the 16:28 sentence.
