@@ -419,10 +419,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Wispr's own microphone (`pushMicMark`'s rule); every other one the device
     /// the recorder opened (`MicRecorder.lastOpened`).
     private func heardLine(via: String, engineLabel: String) -> String {
+        "Mic: \(micLabel(via: via))\nEngine: \(Self.engineName(via: via, engineLabel: engineLabel))"
+    }
+
+    /// The microphone half of `heardLine` — `🎤 DJI`, `🎙️ <CoreAudio name>`.
+    private func micLabel(via: String) -> String {
         let wispr = via.hasPrefix("wispr") || via == "pasteboard"
-        let mic = wispr ? InputDevice.label(wisprName: wisprMicName)
-                        : InputDevice.label(opened: MicRecorder.lastOpened?.device)
-        return "Mic: \(mic)\nEngine: \(Self.engineName(via: via, engineLabel: engineLabel))"
+        return wispr ? InputDevice.label(wisprName: wisprMicName)
+                     : InputDevice.label(opened: MicRecorder.lastOpened?.device)
+    }
+
+    /// **The microphone back out of a `heardLine`** — the `Mic:` row, for the
+    /// envelope (`Message.mic`, 2026-10-26). Read back from the line rather than
+    /// kept beside it because that line is what the held sentence already
+    /// carries across a bind, a panel and a restart (`pendingHeard`); a second
+    /// field would be a second thing to lose.
+    static func mic(inHeard heard: String?) -> String {
+        guard let row = heard?.components(separatedBy: "\n").first, row.hasPrefix("Mic: ") else { return "" }
+        return String(row.dropFirst("Mic: ".count))
     }
 
     /// The engine that wrote a sentence, by the route its words came — the
@@ -1413,6 +1427,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// back from there — which is where a question about *which recogniser
         /// heard that sentence* is actually asked, after the fact.
         var engine: String = ""
+        /// **Which microphone heard it**, as the panel's `Mic:` row says it
+        /// (`🎤 DJI`) — rides in the envelope's `[Transcribed …]` clause so the
+        /// `walkie-inbox` mod can draw the real device instead of a stock 🎙️
+        /// (2026-10-26, Victor: *"sursa reală de microfon … doar emoji-ul"*).
+        var mic: String = ""
         /// **Wispr gives text and no word timings, so no token stands in its
         /// words** — not even 📸0 in front of them (2026-09-30). Every frame
         /// then says when, in the footer, after what he said.
@@ -9527,8 +9546,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// longer costs him a line of every transcript, and the engine is named the
     /// way the panel's `Engine:` row names it (`engineName`). The mod matches
     /// both spellings.
+    ///
+    /// **`, heard through <mic>`** (2026-10-26): the device, as the panel's `Mic:`
+    /// row names it — the mod shows its emoji under the words (*"sursa reală de
+    /// microfon … doar emoji-ul"*), where a stock 🎙️ had stood whatever was open.
+    /// Unknown (empty) → the clause is as before, and the mod keeps the 🎙️.
     private static func dictatedHint(_ m: Message) -> String {
-        "[Transcribed in RO or EN by \(engineName(via: m.via, engineLabel: m.engine))]"
+        let mic = m.mic.isEmpty || m.mic == "unknown" ? "" : ", heard through \(m.mic)"
+        return "[Transcribed in RO or EN by \(engineName(via: m.via, engineLabel: m.engine))\(mic)]"
     }
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only
@@ -9679,7 +9704,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             shotNumbers: markerNumbers,
                             app: nil, elements: picks, startedAt: since,
                             via: pendingVia ?? "test",
-                            engine: pendingEngine ?? "", affect: affect)
+                            engine: pendingEngine ?? "", mic: Self.mic(inHeard: pendingHeard),
+                            affect: affect)
             return Self.terminalLine(m)
         }
 
@@ -12444,6 +12470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               shotNumbers: markerNumbers,
                               app: app, elements: picks, startedAt: since, spawn: spawn,
                               directory: directory, via: via, engine: engine,
+                              mic: Self.mic(inHeard: heard),
                               deliveryKind: deliveryKind, target: spawn ? nil : target,
                               affect: affect)
 

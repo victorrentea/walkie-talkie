@@ -720,6 +720,15 @@ enum OverlayStates {
                 o.showSentPrompt(long, hold: 6, words: long, heard: heard)
             },
 
+            Shot(slug: "prompt-scrolling", group: "The held prompt", title: "A transcript taller than the screen",
+                 when: "A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.",
+                 note: "The words sit in a scroll view (2026-10-26, Victor: *\"dacă prompt preview panel devine prea înalt, să-i apară scrollbar\"*): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.",
+                 shape: "panel", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                let wall = (1...260).map { "Propoziția \($0) a unei dictări care nu se mai termină, ca să treacă de ecran." }.joined(separator: " ")
+                o.showSentPrompt(wall, hold: 6, words: wall, heard: heard)
+            },
+
             Shot(slug: "prompt-selection-only", group: "The held prompt", title: "A highlight with nothing said",
                  when: "He stashed a selection and said nothing at all.",
                  note: "There is no transcript row — and the panel is still held, because a highlight sent by accident deserves the same Cancel the words get. It stopped being part of the text when it moved above it, so without this it would have gone straight out.",

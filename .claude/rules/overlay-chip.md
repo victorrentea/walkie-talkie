@@ -470,6 +470,15 @@ yields to `--label`).
   highlight's `“` and the `[copied:]` / `[chrome-selection-N:]` blocks start at the words' left
   edge (were indented 28 / 14). Supersedes *the panel's first line says who the words go to* above.
   A missing 📸0 pointer logs `🖼️ 📸0 has no pointer for the panel's dot`.
+- **The words scroll when they would not fit the screen** (2026-10-26, Victor: *"dacă prompt preview
+  panel devine prea înalt, să-i apară scrollbar"*). `promptLabel` is inside `promptScroll` (an
+  `NSScrollView`, no border, no background, overlay scroller re-asserted every layout — a legacy one
+  takes 15 pt off the clip and cut the words mid-word); its document is `promptDoc`, a **flipped**
+  box, so the top of the words is the anchor: the panel opens on the first word and a relayout (the
+  countdown ticks once a second) keeps his scroll position — a text field as the document anchored
+  the *last* line and reopened on the end each tick. The row is `min(words, room)`; on the edge
+  where the words outgrow it the scroller flashes once (`promptScrolls`). The field used to clip the
+  tail silently. `GET /test/state.prompt.scrolls` / `.scrollGeometry`. Shot `prompt-scrolling`.
 - **Every dictated prompt panel ends with `Mic: <glyph> <device>` over `Engine: <name>`** (2026-10-06,
   Victor: *"clearly mention the engine that was used and the microphone that was used"*), right above
   the buttons. `AppDelegate.heardLine` builds it from the sentence's `via` (a local fallback, ⌘⌃X or

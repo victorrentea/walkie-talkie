@@ -15843,3 +15843,39 @@ dialog ar fi fost deschis, menu, orice"*. The panel is now at `CGWindowLevelForK
 (+ `.transient`) for the flight and drops to `.statusBar − 1` only for the last fifth, at the glyph,
 so the slide beneath the counter is kept. Victor Addons' ⌃P flash (`ScreenCaptureFlash`) was already
 at `maximumWindow` on all three panels — nothing to change there.
+
+## 2026-10-26 — the strip says which microphone, and the panel's words scroll
+
+Two asks from the morning's dictation, both small.
+
+**The transcript's one-line footer (`🎙️ · ☁️ · 📸 ×3`) opened with a stock 🎙️ whatever had been
+open.** Victor: *"sursa reală de microfon. Momentan microfonul nu cred că e comunicat … doar
+iconița, nu text mult, doar emoji-ul"*. The microphone was already on the panel (`Mic: 🎤 DJI`,
+2026-10-06) and in nothing the agent received. Now `Message.mic` carries that row's text — read
+back out of `pendingHeard` rather than kept as a third pending field, because that line is what
+already survives the bind, the panel and a restart — and `dictatedHint` appends `, heard through
+🎤 DJI` to the `[Transcribed in RO or EN by …]` clause (empty / `unknown` → nothing). The
+`walkie-inbox` mod (`victor-skills-private/mods/walkie-inbox`) takes the first pictograph after
+`heard through` for the strip's first slot and keeps 🎙️ when there is none, so an older Walkie or
+an unknown device changes nothing; its `WALKIE_CLAUSE` / `engineIcon` regexes match the prefix, so a
+session still on the old mod keeps hiding the envelope and shows 🎙️. Checked on the installed app:
+the test route's line reads `[Transcribed in RO or EN by test, heard through 🎙️ Elgato Wave XLR]`;
+mod tests 16/16 (`claude plugin test .` from the mod's folder — the alias in front of `claude`
+refuses any other spelling).
+
+**The panel's words scroll past the screen** (*"dacă prompt preview panel devine prea înalt, să-i
+apară scrollbar"*). `promptLabel` went into an `NSScrollView` whose row is `min(words, room)`.
+Two things it took to get right, both seen on a 139-sentence test prompt: the overlay scroller
+style has to be re-asserted at every layout — AppKit follows the system's "show scroll bars"
+setting on its own, and a legacy scroller took 15 pt off the clip, cutting every line mid-word;
+and the document must be a **flipped** box holding the label, because a text field's y = 0 is its
+last line, so the clip anchored there, the panel opened on the end of the words and every
+once-a-second countdown relayout put it back there. Flipped, the top is the anchor and his own
+scrolling survives a relayout. Shot `prompt-scrolling`; `GET /test/state.prompt.scrolls`.
+
+**A test that misfired, twice.** `POST /test/dictation` with the long text, meant to be held on
+the panel for a cancel, was sent straight into the Claude Code session bound on ttys005 — the
+restart had re-bound it — and, after an `/unbind`, was *held for the next bind* and delivered
+again by the `/bind` that put the binding back (`no prompt on the panel` to the cancel: a held
+sentence has none). Panel states are photographed through `OverlayStates` from now on, never
+through a live test dictation (memory `unbind-before-test-dictation`).

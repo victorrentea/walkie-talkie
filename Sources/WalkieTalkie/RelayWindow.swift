@@ -38,6 +38,24 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// **📸0, above the words** (2026-10-23) — see `contextShot`.
     private let contextShotView = NSImageView()
     private let promptLabel = PromptField(wrappingLabelWithString: "")
+    /// **The words scroll when they would not fit the screen** (2026-10-26, Victor:
+    /// *"dacă prompt preview panel devine prea înalt, să-i apară scrollbar"*). The
+    /// label is this view's document; the row is as tall as the words up to the
+    /// room the screen leaves, and past that an overlay scroller appears over the
+    /// words instead of the text field clipping them silently (no ellipsis — the
+    /// sentence just stopped). Chrome-less: no border, no background of its own.
+    private let promptScroll = NSScrollView()
+    /// The scroll view's document: a **flipped** box holding the label at its
+    /// top. A text field is not flipped, so as a document its y = 0 is the last
+    /// line — every relayout (the countdown ticks once a second) re-tiled the clip
+    /// anchored there and the panel kept opening on the end of the words, and
+    /// any scrolling he did was undone a second later. Flipped, the top is the
+    /// anchor: the panel opens on the first word and a scroll position survives
+    /// a relayout.
+    private let promptDoc = FlippedBox()
+    /// Whether the words outgrow their row — the edge on which the scroller is
+    /// flashed so he sees there is more.
+    private var promptScrolls = false
     /// The pictures this message is carrying, drawn under the words it is
     /// carrying them with.
     ///
@@ -1603,12 +1621,21 @@ private let heardLabel = NSTextField(labelWithString: "")
 
         promptLabel.font = promptFont
         promptLabel.textColor = .labelColor
-        promptLabel.isHidden = true
         promptLabel.maximumNumberOfLines = 0        // wrap freely; the height follows
         promptLabel.focusRingType = .none           // the panel is chrome-less; a ring on it would be the only box on the card
         promptLabel.delegate = self
         promptLabel.onClickWhenIdle = { [weak self] in self?.handleClick(onWords: true) }
-        root.addSubview(promptLabel)
+        promptDoc.addSubview(promptLabel)
+        promptScroll.documentView = promptDoc
+        promptScroll.drawsBackground = false
+        promptScroll.borderType = .noBorder
+        promptScroll.hasVerticalScroller = true
+        promptScroll.hasHorizontalScroller = false
+        promptScroll.autohidesScrollers = true
+        promptScroll.scrollerStyle = .overlay
+        promptScroll.verticalScrollElasticity = .none
+        promptScroll.isHidden = true
+        root.addSubview(promptScroll)
 
         shotsRow.isHidden = true
         root.addSubview(shotsRow)
@@ -2446,12 +2473,37 @@ private let heardLabel = NSTextField(labelWithString: "")
             // A hair of slack on top, for the same reason the width carries some:
             // measuring a line and laying it out disagree by a fraction, and a
             // fraction is a whole last line when it rounds the wrong way.
-            let h = min(ceil(measured) + 2, maxHeight)
-            promptLabel.frame.size = NSSize(width: innerWidth, height: h)
-            promptLabel.isHidden = false
-            rows.append((promptLabel, h))
+            let full = ceil(measured) + 2
+            let h = min(full, maxHeight)
+            // The label keeps its whole height inside the scroll view; the row
+            // is the part of it the screen has room for. Taller than the row →
+            // the scroller shows (`autohidesScrollers`), and the view starts at
+            // the top of the words, not at their end, where AppKit puts a fresh
+            // document.
+            promptLabel.frame = NSRect(x: 0, y: 0, width: innerWidth, height: full)
+            promptDoc.frame = promptLabel.frame
+            // Overlay, re-asserted every pass: AppKit follows the system's
+            // "show scroll bars" setting on its own and a legacy scroller takes
+            // 15 pt off the clip, which is the words' right edge cut mid-word.
+            promptScroll.scrollerStyle = .overlay
+            promptScroll.frame.size = NSSize(width: innerWidth, height: h)
+            let scrolls = full > h + 0.5
+            if scrolls != promptScrolls {
+                promptScrolls = scrolls
+                // After this pass has tiled the clip view; once per edge, so
+                // the pointer's own scrolling is left alone afterwards.
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.promptScrolls else { return }
+                    self.promptScroll.contentView.scroll(to: .zero)
+                    self.promptScroll.reflectScrolledClipView(self.promptScroll.contentView)
+                    self.promptScroll.flashScrollers()
+                }
+            }
+            promptScroll.isHidden = false
+            rows.append((promptScroll, h))
         } else {
-            promptLabel.isHidden = true
+            promptScroll.isHidden = true
+            promptScrolls = false
         }
 
         if let warning = promptWarning, sentPrompt != nil {
@@ -6275,6 +6327,12 @@ private let heardLabel = NSTextField(labelWithString: "")
                                   "paused": promptHoverPaused]
         out["deadline"] = promptDeadline.map { max(0, $0.timeIntervalSinceNow) } ?? NSNull()
         out["heard"] = promptHeard ?? NSNull()
+        // The words' full height against the row they got — `true` when the scroller is up.
+        out["scrolls"] = !promptScroll.isHidden && promptScrolls
+        out["scrollGeometry"] = ["words": promptLabel.frame.height, "row": promptScroll.frame.height,
+                                 "clipWidth": promptScroll.contentView.bounds.width, "wordsWidth": promptLabel.frame.width,
+                                 "visibleY": promptScroll.contentView.bounds.origin.y,
+                                 "scroller": promptScroll.scrollerStyle == .overlay ? "overlay" : "legacy"]
         return out
     }
 
@@ -6358,6 +6416,12 @@ final class RelayPanel: NSPanel {
 
 /// The round ✕ in the top-right, in the style of a macOS notification: hidden
 /// until the pointer is over the overlay, then a grey disc with a dark cross.
+/// A view whose y runs downward — the prompt panel's scroll document, so the
+/// top of the words is the anchor the clip view keeps (`RelayWindow.promptDoc`).
+final class FlippedBox: NSView {
+    override var isFlipped: Bool { true }
+}
+
 final class CloseButton: NSView {
     var onClick: (() -> Void)?
     private var hot = false
