@@ -9547,13 +9547,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// way the panel's `Engine:` row names it (`engineName`). The mod matches
     /// both spellings.
     ///
-    /// **`, heard through <mic>`** (2026-10-26): the device, as the panel's `Mic:`
-    /// row names it — the mod shows its emoji under the words (*"sursa reală de
-    /// microfon … doar emoji-ul"*), where a stock 🎙️ had stood whatever was open.
-    /// Unknown (empty) → the clause is as before, and the mod keeps the 🎙️.
+    /// **` · <glyph>`** (2026-10-26): the microphone's emoji alone, off the panel's
+    /// `Mic:` row — the mod shows it under the words (*"sursa reală de microfon …
+    /// doar emoji-ul"*), where a stock 🎙️ had stood whatever was open. The row's
+    /// name came along for a morning (`, heard through 🎙️ Elgato Wave XLR`), until
+    /// Victor at 09:22: *"Nu mai menționa heard through … ci doar iconița asociată
+    /// acelui device"* — the words are for him, the model reads them every turn.
+    /// Unknown (empty, or a row with no glyph) → the clause is as before, and the
+    /// mod keeps the 🎙️.
     private static func dictatedHint(_ m: Message) -> String {
-        let mic = m.mic.isEmpty || m.mic == "unknown" ? "" : ", heard through \(m.mic)"
-        return "[Transcribed in RO or EN by \(engineName(via: m.via, engineLabel: m.engine))\(mic)]"
+        let engine = engineName(via: m.via, engineLabel: m.engine)
+        guard let glyph = m.mic.first, !glyph.isLetter, !glyph.isNumber, !glyph.isWhitespace else {
+            return "[Transcribed in RO or EN by \(engine)]"
+        }
+        return "[Transcribed in RO or EN by \(engine) · \(glyph)]"
     }
 
     /// **What a Replace Wispr dictation actually pastes: the words, and only
