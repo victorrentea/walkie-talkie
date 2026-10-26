@@ -1602,13 +1602,37 @@ final class TerminalBinding {
             guard AXValueGetValue(unsafeBitCast(o, to: AXValue.self), .cgRect, &rect), rect.height > 0 else { return nil }
             return rect
         }
+        func text(_ location: Int, _ length: Int) -> String? {
+            guard location >= 0 else { return nil }
+            var r = CFRange(location: location, length: length)
+            guard let arg = AXValueCreate(.cfRange, &r) else { return nil }
+            var out: CFTypeRef?
+            guard AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString,
+                                                             arg, &out) == .success else { return nil }
+            return out as? String
+        }
         var caret: CGPoint?
         var rangeRef: CFTypeRef?
         var range = CFRange()
         if AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
            let rv = rangeRef, CFGetTypeID(rv) == AXValueGetTypeID(),
            AXValueGetValue(unsafeBitCast(rv, to: AXValue.self), .cfRange, &range) {
-            if let at = bounds(range.location, 1) {
+            // **The character before the caret, not the one under it** (2026-10-26,
+            // Victor: *"pinul de caret nu stă pe cursor în terminal … ci stă la
+            // stânga liniei"*). At the end of a terminal's text the character at
+            // the caret's location is the row break, whose bounds Terminal.app
+            // answers as the **start of the next row** — measured in the log:
+            // the caret read at x 1740 in a window starting at 1730, one row
+            // under the prompt, while the real caret sat 494 pt in. The character
+            // before the caret is the last one typed (or the `❯ ` of an empty
+            // prompt), and its right edge is where the next one goes. Only when
+            // that character is itself a line break — the caret at the head of a
+            // line — is the one under it the right answer.
+            let previous = range.location > 0 ? text(range.location - 1, 1) : nil
+            let afterBreak = previous.map { $0.isEmpty || $0.unicodeScalars.allSatisfy { CharacterSet.newlines.contains($0) } } ?? true
+            if !afterBreak, let before = bounds(range.location - 1, 1) {
+                caret = CGPoint(x: before.maxX, y: before.midY)
+            } else if let at = bounds(range.location, 1) {
                 caret = CGPoint(x: at.minX, y: at.midY)
             } else if let before = bounds(range.location - 1, 1) {
                 caret = CGPoint(x: before.maxX, y: before.midY)

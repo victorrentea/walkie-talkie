@@ -288,6 +288,15 @@ will receive the input … [if it is] a hidden terminal … don't display the ar
 - **Visible or nothing.** The window must be in the on-screen window list at the same frame (not
   minimised, not on another Space) and not wholly covered by layer-0 windows in front (9 × 9 sample
   grid); the caret must be on a screen and uncovered. Not visible → no outline and no heads.
+- **The caret is the right edge of the character before it, not the left edge of the one under it**
+  (2026-10-26, Victor: *"pinul de caret nu stă pe cursor în terminal … ci stă la stânga liniei"*).
+  `TerminalBinding.axCaretReading`: at the end of a terminal's text the character at the caret's
+  location is the row break, and Terminal.app answers its bounds as the **start of the next row** —
+  logged as a caret at x 1740 in a window starting at 1730, one row under the prompt, while the real
+  caret sat 494 pt in. `AXStringForRange` on the previous character decides: a line break → the
+  character under the caret (the head of a line); anything else → `bounds(location − 1, 1).maxX`.
+  VS Code's chat input and IntelliJ's chat are a different story — see the Monaco note of 2026-10-22
+  (the column is known to nobody outside the app; the pin stands at the start of its last line).
 - **The outline is 4 pt red — `Glyphs.mapPin`'s `systemRed`, the pin's own (2026-10-26, Victor: *"aceeași culoare cu pin-ul roșu, să se înțeleagă că e aceeași poveste"*; orange until then) — drawn inside the window's edge** (10 pt corners) — a maximised or tiled
   window has no outside. `.floating`, click-through, `sharingType = .none`.
 - **`CaretHalo.headsAt`** replaces the pointer as the heads' centre (`placeHeads`, `headsOrigin`);
