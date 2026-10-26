@@ -3256,6 +3256,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return out
         }
 
+        // **Ask for every grant at launch, not at the first press** (2026-10-26).
+        // On a fresh Mac the app came up silent: Accessibility missing (no tap),
+        // the microphone never requested (no dictation), Screen Recording never
+        // requested (black shots) — and nothing on screen said so until the
+        // first gesture failed. The three system dialogs are modal and queue up,
+        // so one pass here puts the app in all three lists while Victor is
+        // looking at it. Each is a no-op once granted; a refusal is only ever
+        // reported, never re-asked (macOS asks once). Skipped under the photo
+        // run, which is a second, unsigned process that must not be listed.
+        if !RelayWindow.shooting { requestGrantsAtLaunch() }
         let trusted = AXIsProcessTrusted()
         // **No tap while shooting the state pages** (2026-10-21). The photo run
         // is a second process beside the installed app — `SingleInstance` never
@@ -13559,5 +13569,32 @@ extension AppDelegate {
     /// For `GET /test/state.sentences` — oldest first.
     func describeSentences() -> [[String: Any]] {
         [parkedSentence, liveSentence].compactMap { $0 }.map { $0.describe() }
+    }
+}
+
+// MARK: - Grants at launch
+
+extension AppDelegate {
+    /// Accessibility, then Microphone, then Screen Recording — the order the
+    /// dialogs appear in. `AXIsProcessTrustedWithOptions(prompt)` both shows the
+    /// dialog and adds the app to the Accessibility list, so the row is there
+    /// to tick even if the dialog is dismissed. `CGRequestScreenCaptureAccess`
+    /// does the same for Screen Recording. Each result lands in the log with
+    /// the bundle id, which is the first thing to check when a grant "does not
+    /// stick" (see the `bundle=` note beside the trust check).
+    func requestGrantsAtLaunch() {
+        if !AXIsProcessTrusted() {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            let now = AXIsProcessTrustedWithOptions(options)
+            Log.info("grants: accessibility prompted → trusted=\(now)")
+        }
+        MicRecorder.requestAccess { [weak self] ok in
+            Log.info("grants: microphone granted=\(ok)")
+            if !ok { self?.overlay.flash("⚠️ grant Microphone to Walkie Talkie", duration: 15) }
+        }
+        if !CGPreflightScreenCaptureAccess() {
+            let now = CGRequestScreenCaptureAccess()
+            Log.info("grants: screen recording prompted → granted=\(now)")
+        }
     }
 }
