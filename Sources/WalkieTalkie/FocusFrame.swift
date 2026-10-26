@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import QuartzCore
 
-/// **An orange outline round the window a caret sentence will be typed into,
+/// **A red outline (orange until 2026-10-26) round the window a caret sentence will be typed into,
 /// and the caret in it for the heads** (2026-10-13).
 ///
 /// Victor: *"When I'm dictating at caret, be sure to highlight in an orange line
@@ -72,10 +72,13 @@ final class FocusFrame {
     private(set) var reading = Reading()
 
     private static let tick: TimeInterval = 0.2
-    /// Orange, not the heads' amber: it has to read as *a line round a window*
-    /// against every theme a window can have, and amber on a light page is the
-    /// one the heads already needed a shadow for.
-    private static let ink = NSColor(srgbRed: 1.0, green: 0.50, blue: 0.0, alpha: 1)
+    /// **The map pin's red** (2026-10-26, Victor: *"border-ul care apare în jurul
+    /// ferestrei … să fie aceeași culoare cu pin-ul roșu, să se înțeleagă că e
+    /// aceeași poveste"*): the outline and the pin standing on the caret inside
+    /// it are one sign, so they share `Glyphs.mapPin`'s fill. Orange from
+    /// 2026-10-13 until then — not the heads' amber, which on a light page
+    /// needed a shadow; red reads as a line round a window on every theme too.
+    private static let ink = NSColor.systemRed
     static let lineWidth: CGFloat = 4
     private static let corner: CGFloat = 10
     private static let fadeIn: TimeInterval = 0.15

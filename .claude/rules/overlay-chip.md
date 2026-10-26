@@ -70,24 +70,34 @@ yields to `--label`).
   dictation; what changes lives one row down. Liveness is the pulsing 🔴 — a frozen recording row is
   indistinguishable from a hung app. → journal: *Title states*
 - **The pulse takes the microphone's place** (2026-09-07): 🎙️ → `🔴 Listening...` in place and
-  `petclinic@main` slides to the second row; `⏳ Transcribing...` is the same slot at the next
+  `petclinic@main` slides down — to the second row until 2026-10-26, to the last since; `⏳ Transcribing...` is the same slot at the next
   moment. **Only the chip** — the held panel keeps its title first. → journal: *The recording rows*
 
 ## Rows: order, tally, geometry
 
-- **Row order, top to bottom: the dictation's state, the destination, the shots, the quoted
-  highlight, Chrome last.** *"citatul să apară mereu deasupra Chrome-ului … Chrome trebuie să fie
-  mereu ultima din listă"*. A highlight belongs to this message; the ⌘⇧ row outlives it, and a row
-  that shuffles as a highlight comes and goes is one he has to find again every time.
-  → journal: *The order of the rows, and Chrome is last (2026-09-09)*
+- **Row order, top to bottom: the dictation's state, the shots, the quoted highlight, Chrome, and
+  the destination last** (2026-10-26, Victor: *"mută simbolul de caret care apare în tooltip mereu să
+  vină ultimul, sub toate celelalte … cum are label"*): the row with the map pin or the terminal's
+  icon and its `folder@branch` (`titleRow`, and `heldRow` right under it) is the foot of the chip —
+  it holds still for the whole sentence; the rows that change stay together at the top. From
+  2026-09-07 to 2026-10-26 it was the second row, Chrome the last. *"citatul să apară mereu deasupra
+  Chrome-ului"* still holds: a highlight belongs to this message; the ⌘⇧ row outlives it.
+  → journal: *The order of the rows, and Chrome is last (2026-09-09)*; *The destination row is the chip's foot, on black bands (2026-10-26)*
+- **Black bands under the glyph column and under the words of every row while a sentence is in
+  flight** (2026-10-26, Victor: *"când merge dictarea bound la terminal care nu are focus … pune sub
+  textul din tooltip și sub emoji-urile niște benzi translucente negre, opacitate 30%"*).
+  `RelayWindow.placeBands` / `RowBand`: black 30 %, 4 pt corners, 3 pt of air round the ink, the row's
+  height less 2, two per row (the icon column and the words are two things), behind the pulses and
+  washes. Only on the anchored chip while `gathering`, with no prompt panel and no flash. Every
+  dictating state on the page shows them.
 - **The tally is the icon column read downwards**, each count two characters wide:
 
   ```
   🔴 Listening... [HQ] (2m)
-  [Terminal] petclinic@main
   📸 ×3
   “  ×2 + public Order placeOrder(Cart…  ← the last quote, always
   [chrome] ×3 ⤢
+  [Terminal] petclinic@main              ← the destination, last since 2026-10-26
   ```
 
   **The quoted row is the exception to `×N`** (2026-09-14): it used to collapse to `×2` four

@@ -2258,56 +2258,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             hint.row.isHidden = false
             rows.append((hint.row, h))
         }
-        // **No title row while nothing is bound.** The line names where the words
-        // go, and unbound there is nowhere — it used to read `🤖 /`, the launch
-        // directory of a login item, which is what got the whole chip taken off
-        // the pointer at rest. Now the chip stays, carrying the one row that says
-        // how to end that state.
-        //
-        // **The model loading is no longer one of these states.** It used to
-        // suppress this row and put a `⏳ preparing` in its place — the chip is a
-        // microphone standing by, and a microphone above a line that says
-        // `preparing` is the chip contradicting itself in two lines. The load now
-        // happens at launch, minutes before any of this is on screen, so there is
-        // no window left in which the two could disagree.
-        //
-        // **Nor under a flash.** Collapsed, this row is a lone 🎙️ with no words
-        // beside it — the chip *being* a microphone is the whole sentence, and it
-        // is a fine one at rest. Over a message it is not: `dictation cancelled`
-        // came out as a microphone with a caption, and Victor read the glyph as
-        // part of the message rather than as the state behind it — *"să nu se
-        // arate și microfonul acela mic, ci doar dictation cancelled"*. `🎙️ sent
-        // + 2 📸` was worse, two microphones stacked, one of them punctuation.
-        //
-        // A message beside the pointer is a message: it **replaces** the chip
-        // rather than being appended to it. Only in the collapsed case, though —
-        // with a folder name in the row the glyph is that line's icon, and the
-        // line is still the honest answer to *where do the words go*.
-        let names = boundLabel != nil || spawnLabel != nil || sentPrompt != nil || listening
-        let mutedByFlash = collapsed && flashMessage != nil
-        // **Not on the prompt panel** (2026-10-23): there the recipient is the
-        // last line of the footer, under `Engine:` — `recipientText`.
-        if names, !mutedByFlash, !spawnCollapsed, sentPrompt == nil {
-            layoutTitleRow(width: innerWidth)
-            titleRow.isHidden = false
-            rows.append((titleRow, titleRowHeight))
-        } else {
-            titleRow.isHidden = true
-        }
-
-        // **What is waiting for a bind, under where the words go** — see
-        // `heldRow`. Often the only row on the chip: nothing bound, nothing said.
-        if heldCount > 0 {
-            heldInfo.stringValue = Self.heldText(heldCount)
-            heldInfo.sizeToFit()
-            layoutGlyphRow(heldRow, glyph: heldGlyph, label: heldInfo, width: innerWidth)
-            heldRow.isHidden = false
-            rows.append((heldRow, recordRowHeight))
-        } else {
-            heldRow.isHidden = true
-        }
-
-
         // **Above the words, not inside them.** The selection used to be folded
         // into the prompt text as a `↪ …` first line, which made the passage he
         // is approving indistinguishable at a glance from the sentence he spoke
@@ -2420,6 +2370,65 @@ private let heardLabel = NSTextField(labelWithString: "")
         } else {
             pickRow.isHidden = true
         }
+
+        // **No title row while nothing is bound.** The line names where the words
+        // go, and unbound there is nowhere — it used to read `🤖 /`, the launch
+        // directory of a login item, which is what got the whole chip taken off
+        // the pointer at rest. Now the chip stays, carrying the one row that says
+        // how to end that state.
+        //
+        // **The model loading is no longer one of these states.** It used to
+        // suppress this row and put a `⏳ preparing` in its place — the chip is a
+        // microphone standing by, and a microphone above a line that says
+        // `preparing` is the chip contradicting itself in two lines. The load now
+        // happens at launch, minutes before any of this is on screen, so there is
+        // no window left in which the two could disagree.
+        //
+        // **Nor under a flash.** Collapsed, this row is a lone 🎙️ with no words
+        // beside it — the chip *being* a microphone is the whole sentence, and it
+        // is a fine one at rest. Over a message it is not: `dictation cancelled`
+        // came out as a microphone with a caption, and Victor read the glyph as
+        // part of the message rather than as the state behind it — *"să nu se
+        // arate și microfonul acela mic, ci doar dictation cancelled"*. `🎙️ sent
+        // + 2 📸` was worse, two microphones stacked, one of them punctuation.
+        //
+        // A message beside the pointer is a message: it **replaces** the chip
+        // rather than being appended to it. Only in the collapsed case, though —
+        // with a folder name in the row the glyph is that line's icon, and the
+        // line is still the honest answer to *where do the words go*.
+        //
+        // **Last on the chip since 2026-10-26** (Victor: *"mută simbolul de caret
+        // care apare în tooltip mereu să vină ultimul, sub toate celelalte … cum
+        // are label"*): the row with the map pin or the terminal's icon and its
+        // `folder@branch` sits under the tally, Chrome included — it holds still
+        // for the whole sentence, so it reads as the chip's signature line, and
+        // the rows that change stay together at the top. It was the second row,
+        // right under the dictation's state, from 2026-09-07 until then.
+        let names = boundLabel != nil || spawnLabel != nil || sentPrompt != nil || listening
+        let mutedByFlash = collapsed && flashMessage != nil
+        // **Not on the prompt panel** (2026-10-23): there the recipient is the
+        // last line of the footer, under `Engine:` — `recipientText`.
+        if names, !mutedByFlash, !spawnCollapsed, sentPrompt == nil {
+            layoutTitleRow(width: innerWidth)
+            titleRow.isHidden = false
+            rows.append((titleRow, titleRowHeight))
+        } else {
+            titleRow.isHidden = true
+        }
+
+        // **What is waiting for a bind, under where the words go** — see
+        // `heldRow`. Often the only row on the chip: nothing bound, nothing said.
+        if heldCount > 0 {
+            heldInfo.stringValue = Self.heldText(heldCount)
+            heldInfo.sizeToFit()
+            layoutGlyphRow(heldRow, glyph: heldGlyph, label: heldInfo, width: innerWidth)
+            heldRow.isHidden = false
+            rows.append((heldRow, recordRowHeight))
+        } else {
+            heldRow.isHidden = true
+        }
+
+
 
         // 📸0 right above the words — see `contextPicture`.
         let context = sentPrompt != nil ? contextPicture(width: innerWidth) : nil
@@ -2658,6 +2667,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             row.view.frame.origin = NSPoint(x: pad + inset, y: y)
             y -= gapBelow(row.view)
         }
+        placeBands(rows.map(\.view))
 
         // Bottom-right, where Victor asked for it — and where a destructive
         // button belongs, far from the drag area his cursor arrives through.
@@ -4756,6 +4766,63 @@ private let heardLabel = NSTextField(labelWithString: "")
         }
     }
 
+    /// **Black bands under the glyph column and under the words of every chip
+    /// row while a sentence is in flight** (2026-10-26, Victor: *"când merge
+    /// dictarea bound la terminal care nu are focus … pune sub textul din
+    /// tooltip și sub emoji-urile niște benzi translucente negre, opacitate
+    /// 30 %"*). The chip is bare — white ink with a halo — which is enough on
+    /// a terminal and on a white page, but a bound dictation rides the pointer
+    /// over whatever he is reading in the meantime, and over a busy window the
+    /// halo alone lost the words. Two bands per row, not one: the icon column
+    /// and the words are two things set apart by `recordDotGap`, and one bar
+    /// across both read as a window. Black at 30 % (`RowBand`), 4 pt corners,
+    /// 3 pt of air round the ink, the row's height less 2 like the yellow wash;
+    /// drawn behind everything in the row, so the pulses and washes stay on top.
+    /// Only on the anchored chip while `gathering` — never on the panel, never
+    /// at rest, never under a flash's lone row.
+    private var bands: [ObjectIdentifier: (glyph: RowBand, words: RowBand)] = [:]
+
+    private func placeBands(_ rows: [NSView]) {
+        let on = anchored && gathering && sentPrompt == nil && flashMessage == nil
+        for row in rows {
+            let pair = bands[ObjectIdentifier(row)] ?? {
+                let pair = (glyph: RowBand(), words: RowBand())
+                row.addSubview(pair.glyph, positioned: .below, relativeTo: nil)
+                row.addSubview(pair.words, positioned: .below, relativeTo: nil)
+                bands[ObjectIdentifier(row)] = pair
+                return pair
+            }()
+            guard on, row !== promptScroll, row !== contextShotView else {
+                pair.glyph.isHidden = true
+                pair.words.isHidden = true
+                continue
+            }
+            var glyphInk: NSRect?
+            var wordInk: NSRect?
+            for v in row.subviews where !v.isHidden && !(v is RowBand) && !(v is ChangePulse) {
+                var f = v.frame
+                if let label = v as? NSTextField {
+                    // A label is laid out across the whole row; the ink is what
+                    // it would ask for, clipped to what it was given.
+                    f.size.width = min(f.width, ceil(label.intrinsicContentSize.width))
+                }
+                guard f.width > 0, f.height > 0 else { continue }
+                if f.minX < glyphColumn { glyphInk = glyphInk.map { $0.union(f) } ?? f }
+                else { wordInk = wordInk.map { $0.union(f) } ?? f }
+            }
+            let h = max(0, row.frame.height - 2)
+            let y = ((row.frame.height - h) / 2).rounded()
+            for (band, ink) in [(pair.glyph, glyphInk), (pair.words, wordInk)] {
+                guard let ink else { band.isHidden = true; continue }
+                band.frame = NSRect(x: (ink.minX - Self.bandAir).rounded(), y: y,
+                                    width: (ink.width + Self.bandAir * 2).rounded(), height: h)
+                band.isHidden = false
+            }
+        }
+    }
+
+    private static let bandAir: CGFloat = 3
+
     /// The states page's reset: no flash pinned, none running.
     func unpinChangePulse() {
         changePulsePinned = false
@@ -6588,6 +6655,24 @@ final class OverrunWash: NSView {
 /// `draw(_:)`. Amber rather than pure yellow, for the reason the brick wash
 /// gives: yellow alone vanishes over a white page, and Victor asked for
 /// *"galben, nu galben … ceva ce să se vadă"* — the property, not the hue.
+/// Black at 30 % behind a chip row's glyph or words — see `placeBands`.
+final class RowBand: NSView {
+    override var isOpaque: Bool { false }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isHidden = true
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ dirty: NSRect) {
+        NSColor.black.withAlphaComponent(0.3).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 4, yRadius: 4).fill()
+    }
+}
+
 final class ChangePulse: NSView {
     var startedAt: CFTimeInterval?
 

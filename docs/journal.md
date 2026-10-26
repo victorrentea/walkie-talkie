@@ -17,6 +17,8 @@ The journal contradicts itself over time, because it was written as things chang
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
 
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
+- *The order of the rows, and Chrome is last (2026-09-09)*'s destination-second — superseded 2026-10-26: the destination row (pin or terminal icon + `folder@branch`) is the chip's last row (*The destination row is the chip's foot, on black bands*)
+- *The heads converge on the caret, and its window wears an orange outline (2026-10-13)* — the outline is the map pin's `systemRed` since 2026-10-26 (*"aceeași culoare cu pin-ul roșu"*)
 - *The 🤖 on the other screens* (`MenuBarMirror`, 2026-08) — superseded 2026-10-26: an `NSStatusItem` shows in every display's menu bar, so the mirror was a second robot at the centre of every inactive bar; deleted (Victor: *"iconița … de două ori, fix pe centru menu barului sus … doar pe ecranurile care nu sunt selectate"*)
 - *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
 - *Q7 — F8 on a caret sentence: stays ignored* (2026-09-26) — reversed 2026-10-04: *🔼 ↑ turns a caret sentence into a spawn*, folder menu included
@@ -15880,3 +15882,33 @@ restart had re-bound it — and, after an `/unbind`, was *held for the next bind
 again by the `/bind` that put the binding back (`no prompt on the panel` to the cancel: a held
 sentence has none). Panel states are photographed through `OverlayStates` from now on, never
 through a live test dictation (memory `unbind-before-test-dictation`).
+
+## The destination row is the chip's foot, on black bands (2026-10-26)
+
+Three asks in one breath, mid-workshop, while a bound dictation rode the pointer over a
+calendar in Chrome.
+
+**Bands.** *"când merge dictarea bound la terminal care nu are focus … pune sub textul din
+tooltip și sub emoji-urile niște benzi translucente negre, opacitate 30%"*. The chip is bare
+by rule (white ink, a halo, no window) and that was paid for on terminals and white pages;
+over a busy window the halo alone lost the words. `RowBand` — black 30 %, 4 pt corners, 3 pt
+of air round the ink, the row's height less 2 — one under the icon column and one under the
+words of every row (`placeBands`, from the end of `layoutContent`), behind the washes. Only
+on the anchored chip while `gathering`; the panel, the idle chip and a flash's lone row are
+untouched. Read as *every dictating state*, not only the bound-unfocused one: the problem is
+the backdrop, not the route.
+
+**The destination last.** *"mută simbolul de caret care apare în tooltip mereu să vină
+ultimul, sub toate celelalte. Cum are label, știi?"* — the row with the pin (a caret
+sentence) or the terminal's icon and `folder@branch` (bound), read as the chip's signature
+line. It was the second row since 2026-09-07 (*the pulse takes the microphone's place*);
+now `titleRow` and `heldRow` are appended after the ⌘⇧ row. Chrome is no longer the last row,
+but the 2026-09-09 reason — the quote above Chrome — is intact.
+
+**The outline is the pin's red.** *"border-ul care apare în jurul ferestrei … să fie aceeași
+culoare cu pin-ul roșu, să se înțeleagă că e aceeași poveste"*. `FocusFrame.ink` is
+`.systemRed`, the fill `Glyphs.mapPin` uses, instead of the orange of 2026-10-13.
+
+Also that morning: `MenuBarMirror` deleted (the status item is in every menu bar; the mirror
+was a second robot at the centre of every inactive one), and the envelope's microphone is the
+glyph alone (`· 🎙️`), not *heard through Elgato Wave XLR*.
