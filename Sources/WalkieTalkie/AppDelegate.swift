@@ -4995,12 +4995,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                   engine: b.engine, audio: b.audio)
         }
         // **A clean sentence on Wispr waits for the formatted words** (2026-10-10,
-        // `AutoLocal.wisprCleanFloor`).
+        // `AutoLocal.wisprCleanFloor`), and every Wispr budget is 10 % longer
+        // (2026-10-27, `AutoLocal.wisprPatience`).
         let sentence = owner ?? liveSentence
         let clean = sentence === liveSentence ? cleanSentence : (sentence?.env?.cleanSentence ?? cleanSentence)
-        let floored = AutoLocal.budgetSeconds(b.seconds, clean: clean, wispr: source === wisprSource)
+        let floored = AutoLocal.budgetSeconds(b.seconds, clean: clean, wispr: source === wisprSource,
+                                              forced: testBudget != nil)
         if floored > b.seconds {
-            Log.info(String(format: "⏱ a clean sentence on Wispr Flow — budget %.1f s raised to %.1f s, for Wispr's formatted words", b.seconds, floored))
+            Log.info(String(format: "⏱ Wispr Flow — budget %.1f s raised to %.1f s (%@× %.1f patience)", b.seconds, floored,
+                            clean && b.seconds < AutoLocal.wisprCleanFloor ? "clean floor, " : "", AutoLocal.wisprPatience))
             b = DecodeRate.Budget(seconds: floored, unclamped: b.unclamped, samples: b.samples, cap: b.cap,
                                   engine: b.engine, audio: b.audio)
         }

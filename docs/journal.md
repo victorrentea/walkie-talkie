@@ -15958,3 +15958,13 @@ trebuie să fie nu în colțul dreapta sus, ci în colțul dreapta jos al panelu
 `HeldPromptSkip.show` anchors on `frame.minY + inset` instead of `frame.maxY − side − inset`; size,
 inset and the 20 Hz follow are unchanged (the follow keeps it on the corner as the dialog resizes).
 `cases_night2.py` finds the dialog by the bottom-right corner now.
+
+## 2026-10-27 — More patience with Wispr Flow: every Wispr budget × 1.1
+
+Victor: *"Să faci automat fallback la model local dacă nu îl spune Wispr Flow repede. Îi mărește
+cu 10% marja de așteptare față de cât e acum. Fii mai răbdător cu Wispr Flow."* The automatic
+hand-over at the budget already existed (2026-10-06); what changes is the budget on Wispr Flow:
+`AutoLocal.wisprPatience = 1.1` multiplies the clamped p95 and the clean floor alike (a clean
+sentence now waits ≥ 5.5 s). ElevenLabs is unchanged; a budget forced through
+`POST /test/local-auto` is not stretched. `fallback-report.py --budgets` replays it: on this
+morning's 100 warm Wispr samples, 5 s → 2.8 s, 15 s → 3.7 s, 30 s → 4.6 s (were 2.5 / 3.3 / 4.2).

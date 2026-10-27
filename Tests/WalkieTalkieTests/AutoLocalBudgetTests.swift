@@ -92,10 +92,13 @@ final class AutoLocalBudgetTests: XCTestCase {
     }
 
     /// 2026-10-10: a clean sentence on Wispr waits ≥ 5 s for the formatted words; nothing else does.
+    /// 2026-10-27: and every Wispr budget is × 1.1 on top — except a forced one.
     func testACleanSentenceOnWisprWaitsForTheFormattedWords() {
-        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: true, wispr: true), AutoLocal.wisprCleanFloor)
-        XCTAssertEqual(AutoLocal.budgetSeconds(7, clean: true, wispr: true), 7)
-        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: false, wispr: true), 1.5)
+        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: true, wispr: true), 5.5, accuracy: 1e-9)
+        XCTAssertEqual(AutoLocal.budgetSeconds(7, clean: true, wispr: true), 7.7, accuracy: 1e-9)
+        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: false, wispr: true), 1.65, accuracy: 1e-9)
         XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: true, wispr: false), 1.5)
+        XCTAssertEqual(AutoLocal.budgetSeconds(3, clean: false, wispr: true, forced: true), 3)
+        XCTAssertEqual(AutoLocal.budgetSeconds(1.5, clean: true, wispr: true, forced: true), AutoLocal.wisprCleanFloor)
     }
 }

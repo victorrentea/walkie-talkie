@@ -150,7 +150,10 @@ def budget(samples, engine, audio, q=0.95):
         line = theil_sen(window)
         tail_x = clamp(quantile([w["decode"] / max(0.05, line[0] + line[1] * w["audio"]) for w in window], q), 1.0, 6.0)
         unclamped = (line[0] + line[1] * audio) * tail_x
-    return max(1.5, min(cap, unclamped)), unclamped, cap, len(window), line, tail_x
+    b = max(1.5, min(cap, unclamped))
+    if engine == "wispr-flow":
+        b *= 1.1  # AutoLocal.wisprPatience (2026-10-27)
+    return b, unclamped, cap, len(window), line, tail_x
 
 
 def local_typical(samples, audio):

@@ -88,10 +88,18 @@ enum AutoLocal {
     /// The local words are still decoded ahead and still go in past this.
     static let wisprCleanFloor: TimeInterval = 5
 
+    /// **More patience with Wispr Flow** (2026-10-27, Victor: *"îi mărește cu 10%
+    /// marja de așteptare față de cât e acum. Fii mai răbdător cu Wispr Flow"*):
+    /// every Wispr budget — the clamped p95 and the clean floor alike — times this.
+    /// Not a forced `POST /test/local-auto` budget: the desk asked for that number.
+    static let wisprPatience = 1.1
+
     /// The budget for this close: `seconds`, raised to `wisprCleanFloor` for a
-    /// clean sentence on Wispr Flow.
-    static func budgetSeconds(_ seconds: TimeInterval, clean: Bool, wispr: Bool) -> TimeInterval {
-        clean && wispr ? max(seconds, wisprCleanFloor) : seconds
+    /// clean sentence on Wispr Flow, then × `wisprPatience` on Wispr Flow.
+    static func budgetSeconds(_ seconds: TimeInterval, clean: Bool, wispr: Bool, forced: Bool = false) -> TimeInterval {
+        guard wispr else { return seconds }
+        let floored = clean ? max(seconds, wisprCleanFloor) : seconds
+        return forced ? floored : floored * wisprPatience
     }
 
     /// **The budget ran out: are the local words to go in now?** (2026-10-06,
