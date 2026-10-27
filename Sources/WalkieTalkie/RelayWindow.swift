@@ -5203,7 +5203,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     var localNowInlineText: String? { localNowFolded ? localNowInline : nil }
     /// Whether the » over the held sent-prompt dialog is up — `GET /test/state.heldSkip`.
     var heldSkipVisible: Bool { heldSkip.isVisible }
-    /// Both frames, Cocoa points — the » must sit in the dialog's top-right corner.
+    /// Both frames, Cocoa points — the » must sit in the dialog's bottom-right corner.
     var heldSkipFrames: [String: Any] {
         func r(_ f: NSRect) -> [String: Double] { ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height] }
         return ["panel": r(panel.frame), "skip": heldSkip.frame.map(r) ?? NSNull(), "held": spawnPanelHeld]

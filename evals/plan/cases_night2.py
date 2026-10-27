@@ -369,8 +369,8 @@ def held_and_click(t0, timeout=25):
         return f
     x, y, w, h, _ = skip[0]
     f["win"] = skip[0]
-    # The dialog: the window whose top-right corner holds the skip (inset 6).
-    f["dialog"] = [d for d in wins if abs(d[0] + d[2] - (x + w + 6)) <= 2 and abs(d[1] - (y - 6)) <= 2 and d[2] > 26]
+    # The dialog: the window whose bottom-right corner holds the skip (inset 6; top-right until 2026-10-27).
+    f["dialog"] = [d for d in wins if abs(d[0] + d[2] - (x + w + 6)) <= 2 and abs(d[1] + d[3] - (y + h + 6)) <= 2 and d[2] > 26]
     snap("C-held-" + str(int(t0)))
     time.sleep(float(os.environ.get("N_PRECLICK", "0.3")))
     f["wins_before_click"] = [d for d in app_windows(pid) if d[2] > 100 and d[3] < 600]

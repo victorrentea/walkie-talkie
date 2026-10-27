@@ -15950,3 +15950,11 @@ nearest anchors (the start, a heard marker with a clock, the end of the take); a
 disagreement still fails the sentence. `Said.at` is stamped at the splice from the take's own
 meter; `DictationResult.duration` is the ruler. A marker without a clock keeps its footer row.
 The log says which were heard and which were placed by the clock. Tests on the 16:28 sentence.
+
+## The sent prompt's `»` sits in the dialog's bottom-right corner (2026-10-27)
+
+Victor: *"Butonul de fast forward, de trimiterea dialogului de preview de prompturi mai devreme
+trebuie să fie nu în colțul dreapta sus, ci în colțul dreapta jos al panelului de preview."*
+`HeldPromptSkip.show` anchors on `frame.minY + inset` instead of `frame.maxY − side − inset`; size,
+inset and the 20 Hz follow are unchanged (the follow keeps it on the corner as the dialog resizes).
+`cases_night2.py` finds the dialog by the bottom-right corner now.

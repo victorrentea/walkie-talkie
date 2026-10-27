@@ -14,8 +14,9 @@ import AppKit
 ///
 /// The dialog ignores the mouse while held (*"inactiv … să nu pot să dau hover
 /// pe el sau click pe el"*), so the button is **its own small panel** over the
-/// dialog's top-right corner — `FilmBorder`'s `REC` badges are built the same
-/// way. A click fades the dialog and nothing else: the prompt has already gone
+/// dialog's bottom-right corner (top-right until 2026-10-27, Victor: *"nu în
+/// colțul dreapta sus, ci în colțul dreapta jos al panelului de preview"*) —
+/// `FilmBorder`'s `REC` badges are built the same way. A click fades the dialog and nothing else: the prompt has already gone
 /// and its delivery (the Returns, the session watch) carries on.
 final class HeldPromptSkip {
     private var panel: NSPanel?
@@ -24,12 +25,12 @@ final class HeldPromptSkip {
     static let side: CGFloat = 26
     static let inset: CGFloat = 6
 
-    /// Up over `frame`'s top-right corner, at `level`, captured like the dialog.
+    /// Up over `frame`'s bottom-right corner, at `level`, captured like the dialog.
     func show(over frame: NSRect, level: NSWindow.Level, sharing: NSWindow.SharingType) {
         let p = panel ?? make()
         p.level = NSWindow.Level(rawValue: level.rawValue + 1)
         p.sharingType = sharing
-        p.setFrame(NSRect(x: frame.maxX - Self.side - Self.inset, y: frame.maxY - Self.side - Self.inset,
+        p.setFrame(NSRect(x: frame.maxX - Self.side - Self.inset, y: frame.minY + Self.inset,
                           width: Self.side, height: Self.side), display: true)
         p.alphaValue = 1
         p.orderFrontRegardless()
