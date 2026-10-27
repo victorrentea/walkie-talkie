@@ -4978,17 +4978,13 @@ private let heardLabel = NSTextField(labelWithString: "")
         // (The `  🤔⏱️` note past 150 % of the estimate went on 2026-10-06 —
         // Victor: *"remove the thinking face"*; the ⌘⌃X row counts down to
         // the local fallback instead, `AutoLocal.rowText`.)
-        // **And that countdown rides this line since 2026-10-22** — `localNowInline`,
-        // after the word, in full ink: it is not part of the bar.
+        // **And ⌘⌃X rides this line since 2026-10-22** — `localNowInline`, `— ⌘⌃X`
+        // after the word, in grey (2026-10-27): a hint beside the bar, not part of it,
+        // and lighter than the bar's unlit `dim` so it never reads as letters to fill.
         if transcribing, let tail = localNowInline {
-            out.append(NSAttributedString(string: "  ", attributes: [.font: hintFont]))
-            for ch in tail {
-                if Glyphs.Engine(rawValue: ch) != nil || ch.unicodeScalars.first?.properties.isEmojiPresentation == true {
-                    out.append(Self.inline(Self.wordGlyph(ch, ink: lit), font: hintFont))
-                } else {
-                    out.append(NSAttributedString(string: String(ch), attributes: [.font: hintFont, .foregroundColor: lit]))
-                }
-            }
+            let grey = anchored ? NSColor(calibratedWhite: 0.62, alpha: 1)
+                                : lit.withAlphaComponent(0.55)
+            out.append(NSAttributedString(string: " " + tail, attributes: [.font: hintFont, .foregroundColor: grey]))
         }
         transcribeLit = steps
         return out
@@ -5171,7 +5167,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// **The same, folded onto the `Transcribing...` line** (2026-10-22, Victor:
     /// *"după acel text … un emoji de calculator și să spui in … countdown-ul fix
     /// acolo după transcribing și scurtătura tot acolo după. Nu un rând separat,
-    /// neintuitiv, confuz"*): `💻 in 3s ⌘⌃X`. While a sentence records the row
+    /// neintuitiv, confuz"*); only `— ⌘⌃X` in grey since 2026-10-27. While a sentence records the row
     /// stays a row — there is no Transcribing line to ride.
     private var localNowInline: String?
     /// The row is drawn on the Transcribing line rather than as its own.
@@ -5182,7 +5178,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     func setLocalNow(_ on: Bool, loading: Bool = false, countdown: TimeInterval? = nil) {
         let next: Bool? = on ? (loading && countdown == nil) : nil
         let text = on ? AutoLocal.rowText(countdown: countdown, loading: loading, keys: Self.localNowKeys) : nil
-        localNowInline = on ? AutoLocal.inlineText(countdown: countdown, loading: loading, keys: Self.localNowKeys) : nil
+        localNowInline = on ? AutoLocal.inlineText(keys: Self.localNowKeys) : nil
         // Once a second, as the whole seconds change — the one relayout this
         // row asks for while it counts (its width moves with the digit).
         guard next != localNow || text != localNowShown else { return }

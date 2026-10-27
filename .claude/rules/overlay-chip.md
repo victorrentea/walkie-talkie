@@ -385,9 +385,12 @@ yields to `--label`).
   up (`readyPulse`, in `placeChangePulses`' list) — **over the word `Ready` alone** since 2026-10-23
   (`readyLead`; *"cuvântul ready, nu și ready for more"*), and **stays at least 2 s once shown** (`readyMinimum`,
   Victor: *"să se vadă minim 2 s"* — two showings in three lasted ≤ 1 s).
-- **The local countdown is on the `Transcribing` line** while there is one: `Transcribing via <mark>...
-  💻 in 3s ⌘⌃X` (`localNowInline`, `AutoLocal.inlineText`, full ink — not part of the bar); the
+- **The local fallback's shortcut is on the `Transcribing` line** while there is one: `Transcribing via <mark>...
+  — ⌘⌃X` (`localNowInline`, `AutoLocal.inlineText`, grey — not part of the bar); the
   `localNowRow` only while the sentence records. At `now` AppDelegate sets the engine mark to 💻.
+  **No 💻 and no seconds on that line since 2026-10-27** (Victor: *"să nu mai spui emoji-ul de laptop,
+  … nici câte secunde, că e stresant, ci doar progress bar-ul … lasă scurtătura cu gri la final, după
+  un MDash"*) — `💻 in 3s ⌘⌃X` before; the bar is the countdown. Never put the digits back.
 - **`»` on the held sent-prompt dialog** (`HeldPromptSkip`, its own panel over the bottom-right corner (top-right until 2026-10-27),
   because the held dialog ignores the mouse): fades the dialog now, the delivery goes on.
 

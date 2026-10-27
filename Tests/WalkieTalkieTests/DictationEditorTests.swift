@@ -2,7 +2,7 @@ import XCTest
 @testable import WalkieTalkie
 
 /// The pure parts of 2026-10-22's evening: the editor's names and its guard
-/// (`DictationEditor`), the countdown on the Transcribing line
+/// (`DictationEditor`), the ⌘⌃X shortcut on the Transcribing line
 /// (`AutoLocal.inlineText`), and the 🎤's whole-take confidence
 /// (`LocalWhisperSource.weightedMean`, `LocalWhisper.isUnsure`).
 final class DictationEditorTests: XCTestCase {
@@ -138,10 +138,8 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(DictationEditor.message("x", nil, vocabulary: v), "<vocabulary>Devoxx, Rentea</vocabulary>\n<replacements>GVT → JWT</replacements>\n<dictation>x</dictation>")
     }
 
-    func testTheCountdownReadsOnTheTranscribingLine() {
-        XCTAssertEqual(AutoLocal.inlineText(countdown: 2.4, loading: false, keys: "⌘⌃X"), "💻 in 3s ⌘⌃X")
-        XCTAssertEqual(AutoLocal.inlineText(countdown: 0, loading: false, keys: "⌘⌃X"), "now ⌘⌃X")
-        XCTAssertEqual(AutoLocal.inlineText(loading: true, keys: "⌘⌃X"), "💻 local (loading) ⌘⌃X")
+    func testTheShortcutReadsOnTheTranscribingLine() {
+        XCTAssertEqual(AutoLocal.inlineText(keys: "⌘⌃X"), "— ⌘⌃X")
     }
 
     func testTheWholeTakeMeanWeighsEachPieceByItsLength() {

@@ -70,17 +70,13 @@ enum AutoLocal {
         return "Local now" + (loading ? " (loading)" : "") + "  " + keys
     }
 
-    /// **The countdown as it reads on the `Transcribing...` line** (2026-10-22,
-    /// `RelayWindow.localNowInline`): `💻 in 3s ⌘⌃X`, `now ⌘⌃X` (the mark is 💻 by then),
-    /// `💻 local ⌘⌃X` with no budget running (`(loading)` while the weights are down).
-    static func inlineText(countdown: TimeInterval? = nil, loading: Bool, keys: String) -> String {
-        if let c = countdown {
-            let s = Int(c.rounded(.up))
-            // At `now` the line's engine mark is already 💻 (`syncLocalNow`): no second laptop.
-            return (s > 0 ? "💻 in \(s)s" : "now") + " " + keys
-        }
-        return "💻 local" + (loading ? " (loading)" : "") + " " + keys
-    }
+    /// **The shortcut as it reads on the `Transcribing...` line** (2026-10-22,
+    /// `RelayWindow.localNowInline`): `— ⌘⌃X`, grey, after the bar. No laptop and no
+    /// seconds since 2026-10-27 (Victor: *"să nu mai spui emoji-ul de laptop … nici câte
+    /// secunde, că e stresant, ci doar progress bar-ul … lasă scurtătura cu gri la final,
+    /// după un MDash"*) — the bar already runs out where the local words go in, and at
+    /// `now` the line's engine mark is 💻 (`syncLocalNow`). Was `💻 in 3s ⌘⌃X`.
+    static func inlineText(keys: String) -> String { "— " + keys }
 
     /// **A plain sentence on Wispr waits for Wispr's own words** (2026-10-10,
     /// Victor: *"in dictare curata cu wispr ca motor, ia te rog varianta
