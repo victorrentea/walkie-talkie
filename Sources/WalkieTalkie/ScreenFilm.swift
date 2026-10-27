@@ -21,9 +21,10 @@ import UniformTypeIdentifiers
 /// - **the contact sheet** (`FilmSheet`), a sample of them laid out as a grid —
 ///   what the agent looks at to know *what moved and when*.
 ///
-/// No `.mp4` is written. It would be a file the recipient of this envelope has
-/// no way to open, and the frames at 5 fps are the film: `ffmpeg -pattern_type
-/// glob` turns them into one in a second if anybody ever wants it.
+/// ~~No `.mp4` is written.~~ **Since 2026-10-27 a real video rides beside them**
+/// (`FilmVideo`, `video.mov`, at the display's refresh rate): a blinking caret
+/// fell between two 5 fps frames. The frames stay the film the agent reads —
+/// the envelope tells it to open the video only when they cannot answer.
 ///
 /// ## Why not `screencapture`
 ///
@@ -62,6 +63,10 @@ final class ScreenFilm {
         /// panel's strip — the film's picture beside the screenshots' (2026-10-08).
         let poster: URL?
         let duration: TimeInterval
+        /// The full-refresh-rate recording of the same span (2026-10-27), nil
+        /// below macOS 15 or when ScreenCaptureKit refused.
+        var video: URL? = nil
+        var videoFPS: Int = 0
         /// Frames the encoder could not keep up with. Reported rather than
         /// hidden: it is the difference between *nothing happened in that second*
         /// and *we did not look*.
@@ -72,6 +77,7 @@ final class ScreenFilm {
     /// (`followPointer`). Touched only on the capture queue.
     private var displayID: CGDirectDisplayID
     private let dir: URL
+    private var video: FilmVideo?
     private let startedAt: CFTimeInterval
 
     /// **Capture and encode are two serial queues, never one.** A 5K JPEG is
@@ -140,6 +146,8 @@ final class ScreenFilm {
         }
         let film = ScreenFilm(displayID: CGDirectDisplayID(number.uint32Value), dir: dir)
         FilmBorder.show(on: screen)
+        film.video = FilmVideo.start(displayID: film.displayID, screen: screen,
+                                     to: dir.appendingPathComponent("video.mov"))
         film.begin()
         return film
     }
@@ -168,6 +176,7 @@ final class ScreenFilm {
         timer = nil
         FilmBorder.hide()
         let duration = CACurrentMediaTime() - startedAt
+        let videoOK = video?.stop() ?? false
         // Drain: two permits means at most two encodes in flight, so taking both
         // is *the encoder is finished*.
         slots.wait(); slots.wait()
@@ -194,7 +203,8 @@ final class ScreenFilm {
         Log.info(String(format: "🎬 recording stopped — %d frames over %.1fs%@",
                         taken.count, duration, missed > 0 ? ", \(missed) dropped" : ""))
         return Result(dir: dir, frames: sheetFrames, sheet: sheet, poster: poster,
-                      duration: duration, dropped: missed)
+                      duration: duration, video: videoOK ? video?.url : nil,
+                      videoFPS: videoOK ? video?.fps ?? 0 : 0, dropped: missed)
     }
 
     /// Throw it away — the gesture was a misfire, or the dictation it belonged to
@@ -205,6 +215,7 @@ final class ScreenFilm {
         // The border goes with the film (2026-10-16, Victor: *"when I canceled the
         // dictation while recording, the rec sign remained on screen"*).
         FilmBorder.hide()
+        video?.stop()
         slots.wait(); slots.wait()
         slots.signal(); slots.signal()
         try? FileManager.default.removeItem(at: dir)
@@ -224,6 +235,7 @@ final class ScreenFilm {
                 timer?.cancel()
                 timer = nil
                 FilmBorder.hide()
+                video?.stop(timeout: 0)
                 return
             }
             // Never wait on the encoder from the capture queue: a late frame is
@@ -267,6 +279,7 @@ final class ScreenFilm {
         else { return }
         Log.info("🎬 the pointer moved to display \(id) — filming it now (was \(displayID))")
         displayID = id
+        video?.follow(displayID: id)
         DispatchQueue.main.async {
             guard let screen = NSScreen.screens.first(where: {
                 ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == id

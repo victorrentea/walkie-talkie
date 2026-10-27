@@ -10260,6 +10260,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               + "The full-resolution frames are %@/frame-NNNN.jpg, numbered as on the "
                               + "sheet: open one when the sheet shows something worth reading.]",
                               label, film.duration, ScreenFilm.fps, film.frames.count, dir, name, dir)
+            if let video = film.video {
+                line += "\n" + videoNote(video, fps: film.videoFPS, dir: dir)
+            }
             if film.dropped > 0 {
                 line += "\n[\(film.dropped) frame(s) were missed while recording — a gap between "
                       + "two cells is not proof that nothing happened there.]"
@@ -10267,6 +10270,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lines.append(line)
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// **The full-rate video beside a film's frames, and when not to open it**
+    /// (2026-10-27). Victor: *"the agent should be instructed not to open the
+    /// video in the prompt, except absolutely necessary, and prefer to rely on
+    /// the screenshots or the series of photos"*. A video is the most expensive
+    /// thing in the envelope to look at and an agent cannot watch it — only cut
+    /// frames out of it — so the line names the one case it exists for.
+    static func videoNote(_ video: URL, fps: Int, dir: String) -> String {
+        "[The same span as a \(fps) fps video: \(dir)/\(video.lastPathComponent). Do NOT open it "
+            + "unless the sheet and the frames cannot answer — something shorter than their 0.2 s "
+            + "(a blink, a flicker, a one-frame glitch); then cut only the moment you need with ffmpeg.]"
     }
 
     /// **The footer: one row per artifact, keyed by the token that names it**
@@ -10523,6 +10538,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                ShotMarker.Token.key(film: i + 1),
                                name(sheet.path), film.duration, ScreenFilm.fps,
                                film.frames.count, frames))
+            if let video = film.video {
+                rows.append(videoNote(video, fps: film.videoFPS, dir: frames))
+            }
         }
         return rows
     }

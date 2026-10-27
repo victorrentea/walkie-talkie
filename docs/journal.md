@@ -15968,3 +15968,17 @@ hand-over at the budget already existed (2026-10-06); what changes is the budget
 sentence now waits ≥ 5.5 s). ElevenLabs is unchanged; a budget forced through
 `POST /test/local-auto` is not stretched. `fallback-report.py --budgets` replays it: on this
 morning's 100 warm Wispr samples, 5 s → 2.8 s, 15 s → 3.7 s, 30 s → 4.6 s (were 2.5 / 3.3 / 4.2).
+
+## 2026-10-27 — the film also writes a full-rate video, which the agent is told not to open
+
+Victor: *"besides the frames, five frames per second, I want also to have an actual video recorded at
+full frame per seconds, at the refresh rate of the monitor. … I just had right now a blinking line
+that didn't show up in the five frames per second … the agent should be instructed not to open the
+video in the prompt, except absolutely necessary, and prefer to rely on the screenshots or the
+series of photos."* Reverses `ScreenFilm`'s 2026-09-18 *no `.mp4` is written*: the reason given then
+(the agent cannot watch one) still holds, so the video is evidence for the gap between two frames,
+not a second way to read the film. `FilmVideo` = `SCStream` + `SCRecordingOutput` (macOS 15+), HEVC
+`.mov` at `maximumFramesPerSecond`, own app excluded by the filter. First desk run
+(`WT_SHOOT_FILM=3`, a 1920×1080 60 Hz display): 15 JPEG frames + `video.mov` 1.3 MB, 64 frames over
+2.85 s (SCK skips unchanged frames), finalised before `stop()` returned. The envelope's line:
+`AppDelegate.videoNote`. Rules: `screenshots-and-selection.md`, *The film's full-rate video*.

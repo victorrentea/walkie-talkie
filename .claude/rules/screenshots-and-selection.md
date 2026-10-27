@@ -247,3 +247,25 @@ VCR camera"*). One 50 pt red dot (42 → 50 on 2026-10-16, *"20% larger"*), a ha
 1 s dark (`slowBlink` 2 s), `REC` (48 pt monospaced heavy, red, 40 → 48 the same day) steady to its right, a dark 3 pt halo
 on both, under the menu bar. The border blinks on its own layer at its old pace. Review:
 `FILM_BORDER_PNG=<dir> swift test --filter FilmBorderTests`.
+
+## The film's full-rate video (2026-10-27, `FilmVideo.swift`)
+
+Victor: *"besides the frames, five frames per second, I want also to have an actual video recorded at
+full frame per seconds, at the refresh rate of the monitor … a blinking line that didn't show up in
+the five frames per second … the agent should be instructed not to open the video … except absolutely
+necessary, and prefer to rely on the screenshots or the series of photos"*.
+
+- **`film-<stamp>/video.mov`, HEVC, `minimumFrameInterval` = 1 / `NSScreen.maximumFramesPerSecond`**,
+  cursor shown, at the display's pixel size — ScreenCaptureKit's own `SCRecordingOutput` (macOS 15+;
+  below it, no video and nothing else changes). Started beside the 5 fps loop in `ScreenFilm.start`,
+  follows the pointer with `updateContentFilter` (output size stays the first display's), stopped in
+  `stop()` with a ≤ 2 s wait for the file to finalise, dropped with the folder on `discard`, pruned
+  with the film (`pruneFilms`).
+- **Variable frame rate:** SCK emits a frame only when the screen changes — a still desk at 60 Hz gave
+  64 frames in 2.85 s (avg 22 fps). The stream comes up ~0.35 s after frame 1.
+- **This app is excluded by the filter** (`excludingApplications: [own pid]`), not by `sharingType`,
+  which SCK does not reliably honour: checked on a frame of the first test video, no border, no badge.
+- **The envelope names it with a refusal attached** (`AppDelegate.videoNote`, in `filmClause` and the
+  footer row): *do NOT open it unless the sheet and the frames cannot answer — something shorter than
+  their 0.2 s; then cut only the moment you need with ffmpeg*. The frames stay the film.
+- Desk check: `WT_SHOOT_FILM=3 .build/debug/WalkieTalkie`, then `ffprobe` the `video.mov`.
