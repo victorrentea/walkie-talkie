@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// Talking to the editor instead of typing at it.
 ///
@@ -129,18 +129,53 @@ enum IDEBridge {
     /// focused one. Matching on the process tree was the other candidate and is
     /// worse: it identifies the *application*, which is exactly the granularity
     /// that was never the problem.
-    private static func focusedEndpoint(kind: String) -> Endpoint? {
+    ///
+    /// **The front window's title outvotes the `focused` flags (2026-10-27).**
+    /// Victor: *"Nu merge bind de copilot în terminal de VSC"* — ⌘⌃B over the
+    /// `petclinic — ⑂ freqentis26oct` window answered *no terminal open*. Three of
+    /// the four VS Code listeners said `focused: true` at once (spring,
+    /// petclinic-main, a notes window; `window.state.focused` goes stale), the
+    /// first in the folder listing was taken, and `spring` has no terminal. The
+    /// window server names the window actually in front; the listener whose folder
+    /// or open file is one of its ` — ` segments is that window.
+    private static func focusedEndpoint(kind: String, frontTitle: String?) -> Endpoint? {
         let candidates = endpoints(kind: kind)
-        for endpoint in candidates {
-            guard let obj = request("GET", "/ping", on: endpoint),
-                  (obj["focused"] as? Bool) == true else { continue }
-            return endpoint
+        let answers = candidates.map { request("GET", "/ping", on: $0) }
+        guard let index = pickWindow(answers: answers, frontTitle: frontTitle) else { return nil }
+        let focusedCount = answers.filter { ($0?["focused"] as? Bool) == true }.count
+        if focusedCount != 1 {
+            Log.info("🔌 \(kind): \(focusedCount) of \(candidates.count) windows say focused — took :\(candidates[index].port) by the front title «\(frontTitle ?? "?")»")
         }
+        return candidates[index]
+    }
+
+    /// Which `/ping` answer is the window in front — the pure half of
+    /// `focusedEndpoint`. A nil answer is a listener that did not reply.
+    static func pickWindow(answers: [[String: Any]?], frontTitle: String?) -> Int? {
+        let live = answers.indices.filter { answers[$0] != nil }
+        if let frontTitle, !frontTitle.isEmpty {
+            let segments = Set(frontTitle.components(separatedBy: " — ")
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "● ").union(.whitespaces)) })
+            let byTitle = live.filter { !windowNames(answers[$0]!).isDisjoint(with: segments) }
+            if byTitle.count == 1 { return byTitle[0] }
+        }
+        if let focused = live.first(where: { (answers[$0]!["focused"] as? Bool) == true }) { return focused }
         // A single editor window that reports itself unfocused a beat after
         // ⌘⌃B — the key is pressed while it *is* in front, and `activate` on
         // the relay's own side can land in between. With nothing to
         // disambiguate, the only candidate is the answer.
-        return candidates.count == 1 ? candidates[0] : nil
+        return answers.count == 1 ? 0 : nil
+    }
+
+    /// The names a window's title can carry: its folders and its open file.
+    private static func windowNames(_ ping: [String: Any]) -> Set<String> {
+        var names = Set<String>()
+        if let folder = ping["folder"] as? String { names.insert(folder) }
+        for folder in ping["folders"] as? [[String: Any]] ?? [] {
+            if let name = folder["name"] as? String { names.insert(name) }
+        }
+        if let file = ping["activeFile"] as? String { names.insert((file as NSString).lastPathComponent) }
+        return names
     }
 
     /// What asking an editor to bind its terminal came back with.
@@ -161,9 +196,11 @@ enum IDEBridge {
     }
 
     /// Point the editor at its active terminal and take a handle to it.
-    static func bind(bundleID: String) -> BindResult {
+    /// `frontTitle` is the editor's front window as the bind saw it; nil reads it
+    /// now, from the frontmost app when that is this editor.
+    static func bind(bundleID: String, frontTitle: String? = nil) -> BindResult {
         guard let kind = kind(bundleID: bundleID),
-              let endpoint = focusedEndpoint(kind: kind)
+              let endpoint = focusedEndpoint(kind: kind, frontTitle: frontTitle ?? frontWindowTitle(bundleID: bundleID))
         else { return .noExtension }
         guard let obj = request("POST", "/bind", on: endpoint) else { return .noTerminal }
         guard let id = obj["id"] as? Int else { return .noTerminal }
@@ -204,6 +241,11 @@ enum IDEBridge {
 
     /// The shell pid behind the focused window's active terminal, asked and let
     /// go: a bind released at once, so nothing stays pointed at it.
+    private static func frontWindowTitle(bundleID: String) -> String? {
+        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier == bundleID else { return nil }
+        return TerminalBinding.focusedWindow(pid: app.processIdentifier).title
+    }
+
     static func focusedTerminalShellPID(bundleID: String) -> pid_t? {
         guard case .bound(let handle) = bind(bundleID: bundleID) else { return nil }
         release(handle)

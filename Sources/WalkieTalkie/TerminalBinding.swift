@@ -299,7 +299,7 @@ final class TerminalBinding {
             // **Ask the editor.** Its extension knows which terminal is active,
             // can name it, and can hand back the shell's pid — three things
             // nothing outside the window has ever been able to answer.
-            switch IDEBridge.bind(bundleID: bundleID) {
+            switch IDEBridge.bind(bundleID: bundleID, frontTitle: window.title) {
             case .noTerminal:
                 // The extension answered and said there is no terminal in this
                 // window. Nothing to type into, so nothing is bound — a paste
