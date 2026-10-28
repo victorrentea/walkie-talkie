@@ -525,12 +525,26 @@ enum ReplyPanel {
         let f = p.frame
         var w = wheel ?? (f.size, scale, NSPoint(x: f.midX, y: f.midY), 0, f)
         if f.size != w.set.size {
-            w = (f.size, scale, NSPoint(x: f.midX, y: f.midY), 0, f)
+            // **The words changed under the zoom** (2026-10-28, Victor: *"dacă mi-a
+            // mai dat răspunsuri internetul sau adversarii … nu mai pot să-l zoomez
+            // la cum era original"*): a 🔎 / 🧐 streamed in, or `fit` shrank it. The
+            // first notch's scale stays the floor; its size there and `t` are read
+            // back from the scale it is at now — it was re-taken as the floor, and
+            // the wheel rolled down stopped at the zoomed size.
+            let back = w.scale / scale
+            w.size = NSSize(width: f.width * back, height: f.height * back)
+            let most = max(min(v.width / w.size.width, v.height / w.size.height), 1 / back)
+            w.t = most > 1.01 ? min(1, max(0, log(1 / back) / log(most))) : 0
+            if w.t < 1 {
+                w.centre = NSPoint(x: (f.midX - w.t * v.midX) / (1 - w.t), y: (f.midY - w.t * v.midY) / (1 - w.t))
+            }
+            w.set = f
         } else if f.origin != w.set.origin, w.t < 1 {
             w.centre = NSPoint(x: (f.midX - w.t * v.midX) / (1 - w.t), y: (f.midY - w.t * v.midY) / (1 - w.t))
         }
-        // As much as it can grow whole: until one side meets the screen's.
-        let most = min(v.width / w.size.width, v.height / w.size.height)
+        // As much as it can grow whole: until one side meets the screen's —
+        // never less than it is zoomed now, so rolling down still gets back.
+        let most = max(min(v.width / w.size.width, v.height / w.size.height), scale / w.scale)
         guard most > 1.01 else { return false }
         let t = min(1, max(0, w.t + (precise ? dy / wheelPoints : dy * wheelStep)))
         guard t != w.t else { return false }
