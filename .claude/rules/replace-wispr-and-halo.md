@@ -396,6 +396,16 @@ pin`, and it was **not** the asleep tree: with VS Code in front `kAXFocusedUIEle
 - **VS Code's editor pane gives the line, not the column**: with `editor.accessibilitySupport: off`
   Monaco's `inputarea` is 0×40 at the **line start** whatever the column (measured cols 1/20/40 →
   same x). The pin stands at the start of the caret's line. Nothing outside the app knows the column.
+- **…so `victor-vsc` moves that element onto the caret** (2026-10-28, Victor: *"the caret stays at
+  the beginning of the line in Visual Studio … IntelliJ moves correctly … fix this"*). Since 1.10x the
+  focused element is `.native-edit-context`, laid by Monaco's `ScreenReaderSupport.render` at
+  `_doRender(top, contentLeft, divWidth, lineHeight)` — the caret's row, the content's left edge,
+  the editor's width (read in VS Code's own bundle). `vscode-patch/workbench.js`
+  (`caretToEditContext`, every 120 ms while that div is focused and empty) sets its `left` to the
+  primary `.cursor`'s and its width to 0, so AX answers a 0×lineHeight `AXTextArea` on the caret and
+  the caret-sized branch above takes it — no Walkie change. Measured: 0×25 at the end of a 52-char
+  line, on the drawn cursor; the chat input gets the same. Missing after a VS Code update ⇒ the patch
+  was not reapplied (`POST /apply-patch` on the extension's listener, then `./reload-window.py`).
 - **Copilot's chat input (and any short field) puts the pin at its last line's start** (2026-10-22,
   Victor: *"când dictez în Visual Studio Code în chat … același simbol de Google Maps pin … în Visual
   Code în general"*). Every chat sentence logged `focused AXTextArea 378×35, no bounds for its caret`:
