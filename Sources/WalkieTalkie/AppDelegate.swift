@@ -4374,6 +4374,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let clean = cleanSentence && !cleanRedirected
         let prompt = caretPrompt && !cleanRedirected
         let submitClean = clean && submitAfterClean
+        // Headed for the Claude Code tab under it only because the app bound it
+        // (`cleanAutoBound`): still his plain sentence, so it keeps the formatted words.
+        let autoBoundPlain = cleanSentence && cleanRedirected && cleanAutoBound
         // A question redirected to a terminal or a spawn mid-sentence lost its
         // flag there (`retarget`, `convertDictationToSpawn`).
         let quick = quickAsk
@@ -4400,11 +4403,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **A prompt carries Wispr's recogniser, not its formatter** (2026-10-06,
         // `DictationResult.unformatted`): the rewrite reframes what he asked and
         // the agent is left to read his own words. A plain sentence keeps the
-        // formatted text; the corpus keeps `spokenText`. `WT_WISPR_RAW_PROMPTS=0` off.
-        if envelope, let raw = result.unformatted?.trimmingCharacters(in: .whitespacesAndNewlines),
+        // formatted text — **also one the app bound to a Claude Code tab** (2026-10-28,
+        // Victor: *"vreau să preiei varianta redactată de la Wispr Flow, cea curățată"*;
+        // 10-27 19:54 such a 🔽 sentence went in as `asrText`). The corpus keeps
+        // `spokenText`. `WT_WISPR_RAW_PROMPTS=0` off.
+        if envelope, !autoBoundPlain, let raw = result.unformatted?.trimmingCharacters(in: .whitespacesAndNewlines),
            !raw.isEmpty, ProcessInfo.processInfo.environment["WT_WISPR_RAW_PROMPTS"] != "0" {
             Log.info("🎙️ prompt carries Wispr's asrText (\(raw.count) chars) instead of its formatted \(result.text.count)")
             result.text = raw
+        } else if autoBoundPlain, result.unformatted != nil {
+            Log.info("🎙️ a plain sentence bound to Claude Code keeps Wispr's formatted words (\(result.text.count) chars)")
         }
         pendingAffect = nil
         if envelope {

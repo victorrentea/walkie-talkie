@@ -307,6 +307,10 @@ He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-
   envelope (bound terminal, spawn, 🔼 caret prompt), never for 🔽 / right ⌘⌥ clean words or a legacy
   caret sentence. Empty `asrText` → the formatted words. The corpus keeps the formatted text. Log
   `🎙️ prompt carries Wispr's asrText`. `WT_WISPR_RAW_PROMPTS=0` off.
+  **A 🔽 sentence the app bound to a Claude Code tab keeps the formatted words too** (2026-10-28,
+  Victor: *"vreau să preiei varianta redactată de la Wispr Flow, cea curățată"*): it is an envelope
+  to a terminal, but `cleanAutoBound` (`autoBoundPlain` in `deliver`) skips the swap — 10-27 19:54
+  one went in as `asrText`. Log `🎙️ a plain sentence bound to Claude Code keeps Wispr's formatted words`.
 - **The capture reads its own row after adoption** (W4, 2026-09-28): `pollHistory` takes
   `WisprHistory.entry(rowid: historyRow)`, never `newest()` — his own newer row hid the relay's.
 - **Q19 (Victor's Q7 = A): his own right ⌥⇧ sentence ending while the relay's row is in flight is
