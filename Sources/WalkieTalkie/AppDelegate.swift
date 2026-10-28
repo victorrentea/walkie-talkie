@@ -7510,9 +7510,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The frame of the display a shot at `point` photographs — the one
-    /// `ScreenCapture.grab` picks by the same test.
+    /// `ScreenCapture.grab` picks by the same test — or, under the macOS
+    /// magnifier, the part of it he can see (2026-10-28), which the magnifier
+    /// then draws at the edges of the glass.
     private static func screenFrame(at point: NSPoint) -> CGRect? {
-        NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) })?.frame
+        MagnifierViewport.visibleFrame(at: point)
     }
 
     /// Keep the overlay's `📸 ×N` honest. N is what this dictation would carry if it

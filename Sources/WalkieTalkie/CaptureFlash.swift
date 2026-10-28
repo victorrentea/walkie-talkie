@@ -37,7 +37,7 @@ enum CaptureFlash {
     /// it is a picture of; `target` is the chip's `📸` (`RelayWindow.shotLanding`).
     ///
     /// It arrives at the glyph's size with the picture's own aspect. **It flies
-    /// above everything** (2026-10-26, `maximumWindow`): one level below
+    /// above everything** (2026-10-26, `maximumWindow`; `flightLevel`, + 4, since 2026-10-28): one level below
     /// `.statusBar` put it under every open menu, popover and sheet, and the frame
     /// is the receipt that the shot *caught* the open dialog — Victor: *"să vină
     /// deasupra la absolut orice … orice dialog ar fi fost deschis, menu, orice"*.
@@ -56,6 +56,14 @@ enum CaptureFlash {
     /// just looked at that box while framing it; its pixels shrinking over his
     /// work say nothing he did not already see, and the white edge alone still
     /// says *that box went into the count*.
+    /// **Over Victor Addons' synthetic zoom too** (2026-10-28, Victor: *"draw the
+    /// frame on top of the entire content of the screen"*). That zoom is an opaque
+    /// window at `.maximumWindow + 3` filming the display, and this panel is
+    /// `sharingType = .none` — out of the film and under the glass, so a shot taken
+    /// while zoomed flew nothing anyone could see. `+ 4` is `CaretHalo`'s level for
+    /// the same glass: drawn unmagnified over the zoomed picture.
+    static let flightLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 4)
+
     static func flyIntoChip(_ picture: CGImage?, from source: CGRect, to target: CGRect) {
         guard source.width > 1, source.height > 1 else { return }
         let middle = NSPoint(x: source.midX, y: source.midY)
@@ -69,7 +77,7 @@ enum CaptureFlash {
         panel.backgroundColor = .clear
         panel.hasShadow = false
         panel.ignoresMouseEvents = true
-        panel.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        panel.level = flightLevel
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle, .transient]
         panel.sharingType = .none
 

@@ -51,7 +51,12 @@ enum ScreenCapture {
         let mouse = cursor ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
         let display = activeDisplayNumber(of: screen)
-        let spot = cursorFraction(mouse: mouse, screen: screen)
+        // Read at the shutter, with the file: the magnifier pans with the pointer.
+        let displayID = screen.flatMap(MagnifierViewport.displayID)
+        let viewport = displayID.flatMap(MagnifierViewport.visibleRect)
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let spot = viewport.map { cursorFraction(mouse: mouse, frame: MagnifierViewport.appKit($0, primaryHeight: primaryHeight)) }
+            ?? cursorFraction(mouse: mouse, screen: screen)
         let dir = folder ?? Outbox.shotsDir
         let file = dir
             .appendingPathComponent(uniqueBase(stem(offset, index), in: dir) + "-original.jpg")
@@ -83,10 +88,37 @@ enum ScreenCapture {
         //
         // It also drops a second JPEG pass over a frame `screencapture` already
         // encoded: ~100ms and a file that came back *larger* at quality 1.0.
+        if let viewport, let displayID {
+            cropToMagnifierView(file, display: CGDisplayBounds(displayID), viewport: viewport)
+        }
         let size = pixelSize(of: file)
         writeHandoverCopy(of: file)
         prune()
         return Frame(path: file.path, mouse: pixels(spot, in: size), area: nil, size: size)
+    }
+
+    /// **Under the macOS full-screen magnifier the shot is what he sees** (2026-10-28):
+    /// `screencapture` took the whole unmagnified display, so the file is cut down
+    /// to the magnifier's visible rectangle, in place, before any copy is made of it.
+    /// Its pixels are the display's own — the magnified look is only scanout.
+    /// One decode and re-encode, paid only while zoomed in.
+    private static func cropToMagnifierView(_ file: URL, display: CGRect, viewport: CGRect) {
+        guard let size = pixelSize(of: file), display.width > 0,
+              let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let full = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return }
+        let scale = size.width / display.width
+        let px = CGRect(x: ((viewport.minX - display.minX) * scale).rounded(),
+                        y: ((viewport.minY - display.minY) * scale).rounded(),
+                        width: (viewport.width * scale).rounded(),
+                        height: (viewport.height * scale).rounded())
+            .intersection(CGRect(origin: .zero, size: size))
+        guard !px.isNull, px.width >= 2, px.height >= 2, let cut = full.cropping(to: px),
+              let dest = CGImageDestinationCreateWithURL(file as CFURL, "public.jpeg" as CFString, 1, nil)
+        else { return }
+        CGImageDestinationAddImage(dest, cut, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        if CGImageDestinationFinalize(dest) {
+            Log.info("🔍 magnifier ×\(String(format: "%.1f", display.width / viewport.width)) — shot cut to the visible \(cut.width)x\(cut.height)px")
+        }
     }
 
     /// The pointer as whole pixels of a frame of this size — the reading that
@@ -539,7 +571,12 @@ enum ScreenCapture {
     /// the marker painted into the picture, so the two can never disagree about
     /// what he was pointing at.
     private static func cursorFraction(mouse: NSPoint, screen: NSScreen?) -> CGPoint? {
-        guard let frame = screen?.frame, frame.width > 0, frame.height > 0 else { return nil }
+        guard let frame = screen?.frame else { return nil }
+        return cursorFraction(mouse: mouse, frame: frame)
+    }
+
+    private static func cursorFraction(mouse: NSPoint, frame: CGRect) -> CGPoint? {
+        guard frame.width > 0, frame.height > 0 else { return nil }
         let clamp = { (v: CGFloat) in min(max(v, 0), 1) }
         // AppKit counts y up from the bottom, images count it down from the top.
         return CGPoint(x: clamp((mouse.x - frame.minX) / frame.width),
