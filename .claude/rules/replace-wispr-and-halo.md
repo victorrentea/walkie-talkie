@@ -599,6 +599,12 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `samples()`, which only a web host calls; use the fabricated voice (no `_AUDIO`). It **can** be
   checked with the display asleep: `screencapture -o -l<window id>` of the demo's panel (verified
   2026-10-11: centred, 26–44 % of the screen lit while voiced, 0 % from 6 s of silence).
+- **Under Victor Addons' ⌥⇧ zoom an anchored dress goes above the glass** (2026-10-28, Victor: the ❓
+  never showed while zoomed). The zoom is an opaque window at `.maximumWindow + 3` filming the display,
+  and the halo is `sharingType = .none` — not filmed and under the glass. `CaretHalo.restLevel`:
+  zoom on (`ReplyPanel.shareZoomOn`, its watcher's `shareZoomChanged` re-levels a ring already up) and
+  `drawn.isAnchored` → `.maximumWindow + 4`, unmagnified over the picture like Victor Effects. A dress
+  that rides the pointer stays under: the zoom draws its cursor away from the real pointer.
 - **The dust circles the caret when Accessibility can find one** (2026-10-10, Victor: *"shouldn't go
   and circle around the window, but should circle around the cursor if we can locate a cursor into
   the window … the diameter … should be a bit smaller … only for the dust"*). `aimRewind` asks
