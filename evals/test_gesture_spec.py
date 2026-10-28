@@ -489,8 +489,15 @@ def spec(src: dict):
                                        r"picker\.dictating = attachable", r"syncSelectionWatch\(attachable[ )]"))),
                 ("🔼 → / 🔼 ↑ turn it into a prompt: the tap is told", "AppDelegate `syncBorrowedGestures`",
                  lambda: before(function(src, ad, "syncBorrowedGestures"),
-                                r"hotkeys\.relayPromptOpen = listening && !\(cleanSentence && !cleanRedirected\)",
+                                r"hotkeys\.relayPromptOpen = listening && !plainToTheHand",
                                 r"let attachable")),
+                ("…but the auto-bind over a Claude Code tab keeps it plain to the hand (2026-10-28)",
+                 "AppDelegate `plainToTheHand` / `bindClaudeInFront`",
+                 lambda: has(src["AppDelegate.swift"],
+                             r"var plainToTheHand: Bool \{ cleanSentence && \(!cleanRedirected \|\| cleanAutoBound\) \}")
+                 and has(function(src, ad, "bindClaudeInFront"),
+                         r"self\.aimAtBoundTerminal\(\)\s*self\.cleanAutoBound = true\s*self\.syncBorrowedGestures\(\)")
+                 and has(function(src, ad, "retarget"), r"cleanAutoBound = false")),
                 ("…and a prompt is no longer clean to the tap", "HotkeyTap `cleanSentenceOpen`",
                  lambda: has(src["HotkeyTap.swift"], r"var cleanSentenceOpen: Bool \{.*?return !prompt && \(own \|\| plain \|\| backStopsWispr\)")),
                 ("once attached, 🔼 → back to the caret stays a prompt", "AppDelegate `aimAtCaret`",

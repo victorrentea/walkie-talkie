@@ -2950,6 +2950,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.cleanSentence = true
                     self.caretPrompt = false
                     self.cleanRedirected = false
+                    self.cleanAutoBound = false
                 }
                 if paste {
                     self.overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph)
@@ -3900,6 +3901,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 take: source.queuesSentences && source.isRecording ? source.take : nil)
         liveSentence?.target = "recording"
         cleanRedirected = false
+        cleanAutoBound = false
         // **Nothing latched survives into a new sentence** (F1, batch 4): TW4's
         // Q14 answer was delivered with the previous sentence's `latchedAtCaret`
         // (a cancelled clean caret sentence) because its own close never came.
@@ -4138,6 +4140,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 🔼 → took this clean sentence off the caret — see `aimAtBoundTerminal`.
     private var cleanRedirected = false
 
+    /// **…or the app did, binding the Claude Code tab under it**
+    /// (`bindClaudeInFront`), and then it stays plain to the hand (2026-10-28).
+    /// Victor: *"În timpul unei dictări normale, începută cu … butonul de back,
+    /// … n-ar trebui să pot să fac poze … Butonul de back ar trebui să opresc
+    /// dictarea."* The words still go to the bound tab (`cleanRedirected`), but
+    /// the tap reads it as plain — 🔽 its stop, no shutter, nothing attached —
+    /// until a gesture makes it a prompt (⌃P, 🔼 ↑) or 🔼 → turns it.
+    private var cleanAutoBound = false
+
+    /// A plain sentence, as the hand knows it: not redirected, or redirected
+    /// only by the auto-bind.
+    private var plainToTheHand: Bool { cleanSentence && (!cleanRedirected || cleanAutoBound) }
+
     /// **The terminal half of the same decision** — see `Message.target`. Set at
     /// the close, taken (and cleared) by `deliver`, which hands it to `send`; a
     /// sentence that never had a close on this side (`POST /test/dictation`, a
@@ -4371,6 +4386,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretPrompt = false
         submitAfterClean = false
         cleanRedirected = false
+        cleanAutoBound = false
         // **What the transcript lost** (2026-09-27, `VoiceAffect`): `[?]` where
         // he paused unusually long, and the verdict for the footer. Only on an
         // envelope for an agent — a bound terminal, a spawn, the forward
@@ -5869,8 +5885,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("📍 bound to Claude Code on \(short), but the plain sentence ended or turned meanwhile — it keeps its course")
                     return
                 }
-                Log.info("📍 a plain dictation over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there")
+                Log.info("📍 a plain dictation over Claude Code on \(short) — \(already == nil ? "bound to it (no flight)" : "already bound"), the words go there; still plain to the hand (🔽 stops it, no shutter)")
                 self.aimAtBoundTerminal()
+                self.cleanAutoBound = true
+                self.syncBorrowedGestures()
             }
         }
     }
@@ -5898,6 +5916,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 cleanRedirected = false
             }
+            cleanAutoBound = false
         } else {
             caretPrompt = true
         }
@@ -5972,6 +5991,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // stays — the back click is still this sentence's stop — and `deliver`
         // reads this instead.
         if cleanSentence { cleanRedirected = true; submitAfterClean = false }
+        cleanAutoBound = false
         overlay.setSpawnDestination(nil)
         syncBorrowedGestures()
         overlay.flash("↪️ to \(label)", duration: 1.5)
@@ -6450,6 +6470,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if pasteMode {
             pasteMode = false
             if cleanSentence { cleanRedirected = true; submitAfterClean = false }
+            cleanAutoBound = false
             dropQuestion(for: "a new session")
             Log.info("✨ 🔼 ↑ on a caret sentence — off the caret, into a new session")
         }
@@ -7906,11 +7927,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // turned into a prompt (🔼 →, 🔼 ↑ — `cleanRedirected`), so the same
         // read, `cleanSentenceOpen`, refuses before the switch and lets through
         // after it. Below `ownDictation`, which `cleanSentenceOpen` reads.
-        hotkeys.relayPromptOpen = listening && !(cleanSentence && !cleanRedirected)
+        hotkeys.relayPromptOpen = listening && !plainToTheHand
         // …and that one is still plain, in the app's own words: the tap's Wispr arm
         // expires 12 s in when Wispr never opens its microphone, and the shutter
         // then took two pictures into a plain sentence (14:30:34/39, 2026-10-08).
-        hotkeys.relayPlainOpen = listening && cleanSentence && !cleanRedirected
+        hotkeys.relayPlainOpen = listening && plainToTheHand
         // 🔽 → over a ⚡ question Googles it (2026-10-25, `onQuickGoogle`).
         hotkeys.relayQuickOpen = listening && quickAsk
         let attachable = live && !hotkeys.cleanSentenceOpen
@@ -8097,7 +8118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // corner hints** (2026-10-25, the hint audit): the halo keeps the clean
             // dress, but the tap already reads it as a prompt (`relayPromptOpen`) —
             // 🔽 is its shutter, 🔼 its stop — and the bar said `⏹️ + ⏎`.
-            let plainWords = destination == .wispr && !(cleanSentence && cleanRedirected)
+            let plainWords = destination == .wispr && !(cleanSentence && cleanRedirected && !cleanAutoBound)
             overlay.prompting = !plainWords && destination != .quick
             overlay.asking = quickAsk
         }
@@ -11503,8 +11524,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// going to the caret, so it stays there, now with 🔼's whole envelope — and
     /// it is one-way, since the shot is an attachment. Main thread.
     private func promotePlainToPrompt(cursor: NSPoint) {
-        guard listening, cleanSentence, !cleanRedirected, !quickAsk else {
+        guard listening, plainToTheHand, !quickAsk else {
             Log.info("💬 ⌃P — the plain sentence ended first; nothing to promote")
+            return
+        }
+        // Auto-bound to a Claude Code tab: it stays headed there, as the prompt
+        // 🔼 → would have made of it (2026-10-28).
+        if cleanAutoBound {
+            cleanAutoBound = false
+            hotkeys.ownCleanSentence = false
+            syncBorrowedGestures()
+            let label = terminal.target?.label ?? "the terminal"
+            Log.info("💬 an auto-bound plain dictation became the prompt to \(label) (⌃P) — the shutter follows")
+            overlay.flash("💬 Now a prompt — to \(label)", duration: 1.5)
+            DispatchQueue.global().async { [weak self] in self?.plusOneShot(cursor: cursor) }
             return
         }
         pasteMode = true
