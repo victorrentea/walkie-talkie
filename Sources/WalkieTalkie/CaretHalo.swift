@@ -1889,6 +1889,8 @@ final class CaretHalo {
             // `alphaValue` is the web view's fade — see `hide`.
             panel.alphaValue = 1
         }
+        watchShareZoom()
+        panel.level = restLevel
         panel.orderFrontRegardless()
         if drawn == .questionMark { flashQuestion(panel) }
 
@@ -2404,6 +2406,33 @@ final class CaretHalo {
                             "preset": HaloStyle.current(for: $0).preset?.name ?? ""])
          }),
          "delivering": delivering, "atCaret": atCaret]
+    }
+
+    /// **Over Victor Addons' ⌥⇧ zoom while it is on, for a dress placed on the
+    /// screen rather than on the pointer** (2026-10-28, Victor: *"dacă fac zoom
+    /// sintetic și apăs … de ce nu văd semn întrebări?"*). That zoom is an opaque
+    /// window at `.maximumWindow + 3` that films the display magnified, and this
+    /// panel is `sharingType = .none` — left out of the film and under the glass,
+    /// so the ❓ (and Sparks, Mosaic) were nowhere. Above the glass it is drawn
+    /// unmagnified over the zoomed picture, the way it looks unzoomed — Victor
+    /// Effects' rule for the same glass. A dress that rides the pointer stays
+    /// under it: the zoom draws the cursor elsewhere than the real pointer, and
+    /// a ring round the real one would circle nothing.
+    private var restLevel: NSWindow.Level {
+        ReplyPanel.shareZoomOn && drawn.isAnchored
+            ? NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 4)
+            : NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
+    }
+    private var shareZoomWatched = false
+
+    /// The zoom going on or off with the ring up moves the panel at once.
+    private func watchShareZoom() {
+        guard !shareZoomWatched else { return }
+        shareZoomWatched = true
+        ReplyPanel.shareZoomChanged.append { [weak self] _ in
+            guard let self, self.dock == nil, let panel = self.panel else { return }
+            panel.level = self.restLevel
+        }
     }
 
     /// Centred on the pointer, every time the pointer reports. Off the events
@@ -3459,7 +3488,7 @@ final class CaretHalo {
         // **One level under the chip and the heads** (both `.statusBar`): the
         // effects are drawn under the tooltip, never over it (Victor, 2026-09-20
         // late — a screen-sized web view ordered front had covered the chip).
-        p.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
+        p.level = restLevel
         p.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         // **Never in a screenshot or a recording**, previews included — the
         // standing rule; `WT_HALO_DEMO` is the only exception, and it never

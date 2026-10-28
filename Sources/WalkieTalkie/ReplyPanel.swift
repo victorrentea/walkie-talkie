@@ -399,13 +399,16 @@ enum ReplyPanel {
     private static var shareZoomObserver: NSObjectProtocol?
     private static var shareZoomSeenAt: CFAbsoluteTime = 0
     private static var shareZoomStale: Timer?
-    private static var shareZoomOn = false {
+    private(set) static var shareZoomOn = false {
         didSet {
             guard shareZoomOn != oldValue else { return }
             Log.info("🔎 ⌥⇧ zoom \(shareZoomOn ? "on — the reply pop-up goes under it" : "off — the reply pop-up back on top")")
             panel?.level = level
+            shareZoomChanged.forEach { $0(shareZoomOn) }
         }
     }
+    /// Others drawn on the screen that must move round the zoom's glass too (`CaretHalo`).
+    static var shareZoomChanged: [(Bool) -> Void] = []
 
     static func watchShareZoom() {
         guard shareZoomObserver == nil else { return }
