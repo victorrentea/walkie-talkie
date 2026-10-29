@@ -7495,14 +7495,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the `publishShotCount` that preceded it, so the row it lands on is already
     /// laid out with the new count. No chip on screen, no flight: the ripple at
     /// the pointer is the receipt that never depends on the chip.
-    /// → `CaptureFlash.flyIntoChip`
-    /// `outlineOnly` — the full-screen shutter (2026-10-23; the dragged area
-    /// from 2026-09-24 until then): the white edge flies without the pixels
-    /// inside it, and nothing is decoded.
-    private func flyShotIntoChip(_ path: String, from source: CGRect?, outlineOnly: Bool = false) {
-        guard let source = source else { return }
-        let picture = outlineOnly ? nil : CaptureFlash.loadPicture(path)
-        guard outlineOnly || picture != nil else { return }
+    /// → `CaptureFlash.flyIntoChip`. The full-screen shutter does not fly since
+    /// 2026-10-29 — its picture is shown back in place (`CaptureFlash.echo`).
+    private func flyShotIntoChip(_ path: String, from source: CGRect?) {
+        guard let source = source, let picture = CaptureFlash.loadPicture(path) else { return }
         DispatchQueue.main.async { [weak self] in
             guard let target = self?.overlay.shotLanding else { return }
             CaptureFlash.flyIntoChip(picture, from: source, to: target)
@@ -11644,6 +11640,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let count = self.pendingShots.count
             self.stateLock.unlock()
 
+            // **The shot shown back, 10 pt right and down, over everything**
+            // (2026-10-29) — what moves is what it caught (`CaptureFlash.echo`).
+            // The original, not the 800 px copy: it lies on the screen pixel for
+            // pixel. Replaces the outline that flew into the chip (2026-10-23).
+            if let source = Self.screenFrame(at: cursor), let picture = CaptureFlash.loadPicture(path) {
+                DispatchQueue.main.async { CaptureFlash.echo(picture, over: source) }
+            }
+
             if attaching {
                 self.armOrphanFlush()
                 Log.info("📸 attached to in-flight dictation (\(count) so far)")
@@ -11653,10 +11657,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // row goes up under his cursor instead — the receipt is the number,
                 // and the picture flies into it.
                 self.publishShotCount()
-                // **Outline only** (2026-10-23, Victor: *"Nu și când fac poză la
-                // tot ecranul, ci doar când fac poza unui crop"*) — the crop alone
-                // carries its pixels into the chip.
-                self.flyShotIntoChip(path, from: Self.screenFrame(at: cursor), outlineOnly: true)
                 return
             }
             self.send(kind: "screenshot", paths: [path])

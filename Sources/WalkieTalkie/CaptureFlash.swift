@@ -160,6 +160,80 @@ enum CaptureFlash {
         }
     }
 
+    /// **The shot, shown back over what it photographed, 10 pt right and down**
+    /// (2026-10-29, Victor: *"deasupra orice dialoge, meniuri deschise … să văd
+    /// exact ecranul pe care l-am capturat mergând la dreapta și în jos 10
+    /// pixeli, la opacitate 100%, după care să dispară … dacă o să văd că ceea
+    /// ce voiam să vezi se mișcă la dreapta … asta va însemna că ai văzut ceea ce
+    /// văd și eu"*). The full-screen shutter's receipt, in place of its outline
+    /// flying into the chip: the picture starts exactly on top of the screen it
+    /// is a picture of — invisible — and slides `echoShift` down-right, so what
+    /// moves is what was caught, an open menu or dialog included; what stays
+    /// put was not in it. Opaque, at `flightLevel` (over every menu and over
+    /// Addons' zoom glass), `sharingType = .none`, click-through.
+    static let echoShift: CGFloat = 10
+    private static let echoSlide = 0.12
+    private static let echoHold = 0.45
+    private static let echoFade = 0.25
+
+    static func echo(_ picture: CGImage, over source: CGRect) {
+        guard source.width > 1, source.height > 1 else { return }
+        let middle = NSPoint(x: source.midX, y: source.midY)
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(middle, $0.frame, false) })
+                ?? NSScreen.main else { return }
+
+        let panel = RelayPanel(contentRect: screen.frame,
+                               styleMask: [.borderless, .nonactivatingPanel],
+                               backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = false
+        panel.ignoresMouseEvents = true
+        panel.level = flightLevel
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle, .transient]
+        panel.sharingType = .none
+
+        let view = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        view.wantsLayer = true
+        let from = source.offsetBy(dx: -screen.frame.minX, dy: -screen.frame.minY)
+        let shot = CALayer()
+        shot.contents = picture
+        shot.contentsGravity = .resize
+        shot.frame = from
+        view.layer?.addSublayer(shot)
+
+        panel.contentView = view
+        panel.setFrame(screen.frame, display: true)
+        panel.orderFrontRegardless()
+        activePanels.append(panel)
+
+        // Right and *down*: Cocoa's y grows upwards.
+        let to = CGPoint(x: from.midX + echoShift, y: from.midY - echoShift)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        shot.position = to
+        shot.opacity = 0
+        CATransaction.commit()
+
+        let slide = CABasicAnimation(keyPath: "position")
+        slide.fromValue = NSValue(point: CGPoint(x: from.midX, y: from.midY))
+        slide.toValue = NSValue(point: to)
+        slide.duration = echoSlide
+        slide.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        shot.add(slide, forKey: "slide")
+        let total = echoSlide + echoHold + echoFade
+        let life = CAKeyframeAnimation(keyPath: "opacity")
+        life.values = [1, 1, 0]
+        life.keyTimes = [0, NSNumber(value: (echoSlide + echoHold) / total), 1]
+        life.duration = total
+        shot.add(life, forKey: "life")
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + total) {
+            panel.orderOut(nil)
+            activePanels.removeAll { $0 === panel }
+        }
+    }
+
     /// A frame on disk as a `CGImage`, for `flyIntoChip`. Off the main thread —
     /// it decodes a JPEG.
     static func loadPicture(_ path: String) -> CGImage? {
