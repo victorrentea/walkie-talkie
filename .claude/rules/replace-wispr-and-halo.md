@@ -674,6 +674,22 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   AppleScript; `SpawnTerminal.predictedFrame` is deleted — and the ring **is docked** on the real
   panel when it comes up; the send flight carries the panel on to the window. Log `⏪ the stars fly to
   the prompt panel's corner — (x, y)`.
+- **At the close the spawn's stars and a bound sentence's effect freeze and fade; the bound one
+  comes back still on the terminal's middle** (2026-10-29, Victor: *"să înghețe în modul în care era
+  la momentul închiderii dictării și să facă fade-out pe durata de juma de secundă sau și mai puțin …
+  să nu se ducă spre locul în care apare preview-ul … fără să mai facă slide … pe centrul … ariei
+  terminalului, fără să se rotească ca acum"*). Supersedes, for `.spawn`, the flight into the prompt
+  panel's corner and the dock on it (2026-10-14 above); for `.bound` with a dress that rides
+  (`flies` — his Reverse tunnel, which has a trail), the flight to the caret and the orbit round it.
+  `CaretHalo.freezeAndFade`: the engine's loop stops (`stop` keeps its last frame), the panel fades
+  over `stillFade` 0.4 s; `frozeThisRing` blocks the dock. A spawn stays out until `hide`; a bound
+  one (`stillLanding`) waits for the fade **and** `rewindAim` (the window's middle — not the caret),
+  then `landStill` places it there, restarts the engine fed the take backwards, and fades in over
+  `stillReturn` 0.2 s — no flight, no orbit, no `flightScale` shrink; the tunnel keeps its own
+  approach. The words' landing takes it out in `rewindFade` as before. A bound take too short to
+  rewind freezes and does not come back. `WT_HALO_STILL=0` brings the flights back. Log `⏪ the … freeze
+  at the close and fade`, `⏪ the effect is back on the terminal's middle (x, y)`,
+  `◯ halo not docked on the prompt panel — it froze and faded at the close`.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets

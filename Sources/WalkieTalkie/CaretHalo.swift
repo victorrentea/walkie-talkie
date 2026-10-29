@@ -1145,6 +1145,7 @@ final class CaretHalo {
         arrow.armed = ((on && atCaret) || delivering) && pinAt != nil
         guard live != on else { return }
         live = on
+        if on { frozeThisRing = false; stillLanding = false }
         // Both edges, for the reason the selection watcher logs both: "why did
         // the ring not come up" has to be answerable from the file, and the
         // conditions behind it are not all visible on screen.
@@ -1308,7 +1309,7 @@ final class CaretHalo {
             fadeAim = aim
             // **The dust goes on circling while it fades** (2026-10-09) — see
             // `orbitFading`; its path needs `rewindStart` until the fade is over.
-            orbitFading = flies && rewindStyle.hasTrail && rewindStart != nil && web != nil
+            orbitFading = flies && rewindStyle.hasTrail && rewindStart != nil && web != nil && !stillLanding
             rewinding = false
             rewindEndedAt = CFAbsoluteTimeGetCurrent()
             // The take is kept until the next rewind replaces it: a ring docked
@@ -1325,10 +1326,22 @@ final class CaretHalo {
             }
             return false
         }
-        guard !Self.rewindOff, rewindStyle.isAvailable, !delivering else { return false }
+        // **A spawn's stars freeze and go** (2026-10-29) — see `freezeAndFade`.
+        // A bound sentence's effect freezes too, then lands on the terminal below.
+        let freezes = !Self.stillOff && web != nil && live
+            && (destination == .spawn || (destination == .bound && flies))
+        if freezes && destination == .spawn {
+            freezeAndFade(lands: false)
+            return false
+        }
+        guard !Self.rewindOff, rewindStyle.isAvailable, !delivering else {
+            if freezes { freezeAndFade(lands: false) }
+            return false
+        }
         let samples = take()
         guard samples.count >= Self.rewindMinSamples else {
             Log.info("⏪ no rewind — only \(samples.count) samples in the take; the heads keep the job")
+            if freezes { freezeAndFade(lands: false) }
             return false
         }
         rewindTake = samples.map { Float($0) / 32768 }
@@ -1343,18 +1356,95 @@ final class CaretHalo {
         rewindEstimate = predicted
         rewindStart = NSEvent.mouseLocation
         anchorStart = anchoredFlight ? anchor : nil
+        stillLanding = freezes
         fitApproach(to: rewindAim ?? NSEvent.mouseLocation)
         rewinding = true
         Log.info(String(format: "⏪ the rewind: %.1f s of his voice, backwards at %.1f×, fitted to %.2f s on %@ (chip's ceiling %.1f s, visible from %.2f s), on %@%@",
                         seconds, rewindSpeed, predicted, DecodeRate.activeEngine, estimate,
                         flies || anchoredFlight ? 0 : Self.rewindVisibleFrom, rewindStyle.rawValue,
-                        flies ? " — flying from the pointer to the window"
+                        stillLanding ? " — frozen and faded on the pointer, then on the terminal's middle"
+                            : flies ? " — flying from the pointer to the window"
                             : anchoredFlight ? (destination == .spawn ? " — shrinking onto the new terminal" : " — shrinking onto the caret") : ""))
-        use(rewindStyle)
+        if stillLanding { freezeAndFade(lands: true) } else { use(rewindStyle) }
         return true
     }
 
     private(set) var rewinding = false
+
+    /// **At the close the picture freezes where it was and fades out; a bound
+    /// one then comes back still, on the terminal's middle** (2026-10-29,
+    /// Victor: *"din efectul de stars actual să înghețe în modul în care era la
+    /// momentul închiderii dictării și să facă fade-out pe durata de juma de
+    /// secundă sau și mai puțin … și să nu se ducă spre locul în care apare
+    /// preview-ul … La fel … când dictez bound la un terminal … ulterior să
+    /// apară pe terminalul … fără să mai facă slide … pe centrul … ariei
+    /// terminalului, fără să se rotească ca acum"*). Supersedes, for a spawn,
+    /// the flight into the prompt panel's corner and the dock on it (2026-10-14);
+    /// for a bound sentence whose dress rides the pointer, the flight to the
+    /// caret and the orbit round it (2026-10-08…14). The engine's loop stops
+    /// (`stop` leaves its last frame on the layer), the panel fades over
+    /// `stillFade`; a spawn's stays out until `hide`, a bound one is placed on
+    /// `rewindAim` — the window's middle, not the caret — once both the fade is
+    /// over and the window has answered, and fades back in over `stillReturn`,
+    /// fed the take backwards as before. `WT_HALO_STILL=0` brings the flights back.
+    private func freezeAndFade(lands: Bool) {
+        guard !frozeThisRing, let panel else { return }
+        frozeThisRing = true
+        frozenAt = CFAbsoluteTimeGetCurrent()
+        stillFaded = false
+        renderTimer?.invalidate(); renderTimer = nil
+        web?.stop(); under?.stop()
+        pageRunning = false
+        stillGeneration &+= 1
+        let generation = stillGeneration
+        Log.info(lands ? "⏪ the effect freezes at the close and fades — it comes back on the terminal's middle"
+                       : "⏪ the \(drawn.rawValue) freeze at the close and fade — nothing flies to the prompt panel")
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.stillFade
+            panel.animator().alphaValue = 0
+        } completionHandler: { [weak self] in
+            guard let self, self.stillGeneration == generation else { return }
+            self.stillFaded = true
+            if lands { self.landStill() }
+        }
+    }
+
+    /// Puts a frozen bound effect back on the terminal's middle — the fade is
+    /// over and `rewindAim` is known; whichever comes second calls it.
+    private func landStill() {
+        guard stillLanding, rewinding, stillFaded, frozenAt != nil, rewindAim != nil,
+              let panel, let web else { return }
+        frozenAt = nil
+        // On the window's screen, the stamp on its middle, before the first frame.
+        follow()
+        // `follow` rebuilt the page for a screen of another size: the new one
+        // comes up through `show`, warm-up and all.
+        guard self.panel === panel, self.web === web else { return }
+        web.start(); under?.start()
+        pageRunning = true
+        startRenderTimer(web)
+        stillReturnUntil = CFAbsoluteTimeGetCurrent() + Self.stillReturn
+        panel.alphaValue = 0
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.stillReturn
+            panel.animator().alphaValue = 1
+        }
+        if let p = rewindAim { Log.info(String(format: "⏪ the effect is back on the terminal's middle (%.0f, %.0f)", p.x, p.y)) }
+    }
+    /// This rewind ends still on the window's middle (`freezeAndFade(lands: true)`).
+    private var stillLanding = false
+    /// The ring froze at its close — no second freeze, and no dock on the
+    /// prompt panel; a new ring clears it (`setActive`).
+    private var frozeThisRing = false
+    /// The picture is frozen (fading, or faded and waiting for the window).
+    private var frozenAt: CFAbsoluteTime?
+    private var stillFaded = false
+    private var stillGeneration = 0
+    /// Until then `refresh` leaves the panel's alpha to the landing's fade-in.
+    private var stillReturnUntil: CFAbsoluteTime = 0
+    private static let stillFade: TimeInterval = 0.4
+    private static let stillReturn: TimeInterval = 0.2
+    private static let stillOff = ProcessInfo.processInfo.environment["WT_HALO_STILL"] == "0"
 
     /// **The rewind converges on the middle of the window the words go to, not
     /// on the pointer** (2026-09-30). Victor: *"the reverse tunnel … shouldn't be
@@ -1372,6 +1462,7 @@ final class CaretHalo {
             if let aim = rewindAim { fitApproach(to: aim) }
             guard live || closing else { return }
             follow()
+            landStill()
         }
     }
     /// **The dust's ring round the receiving window** (2026-10-08): ¼ of its
@@ -1421,6 +1512,8 @@ final class CaretHalo {
     /// like a loading icon (`orbit`) until the words land. Until the window
     /// answers it waits on the pointer.
     private var rewindPoint: NSPoint? {
+        // Frozen on the pointer at the close, then still on the window's middle (2026-10-29).
+        if stillLanding { return frozenAt != nil ? rewindStart : (rewindAim ?? rewindStart) }
         if flies, let from = rewindStart, let to = rewindAim {
             let t = CFAbsoluteTimeGetCurrent() - rewindFrom
             // Only the dust (a trail or fluid effect) circles once it is there;
@@ -1787,7 +1880,7 @@ final class CaretHalo {
             if (self.rewinding && self.rewindApproaches) || Self.approachDemo > 0 { web?.approach(scale: self.approachScale.scale, alpha: self.approachScale.alpha) }
             else if self.rewinding && !self.flies { web?.approach(scale: self.landsInWindow ? 1 : self.sparksShrink, alpha: 1) }
             // Tendrils and the other straight flyers shrink to a fifth on the way (2026-10-08).
-            else if self.rewinding && !self.rewindStyle.hasTrail {
+            else if self.rewinding && !self.rewindStyle.hasTrail && !self.stillLanding {
                 web?.approach(scale: CGFloat(RewindTimeline.flightScale(elapsed: CFAbsoluteTimeGetCurrent() - self.rewindFrom,
                                                                         predicted: self.rewindEstimate)), alpha: 1)
             }
@@ -1816,6 +1909,8 @@ final class CaretHalo {
         settleDock()
         settleLanding()
         orbitFading = false
+        frozenAt = nil
+        stillGeneration &+= 1
         let panel = self.panel ?? makePanel()
         // **A collapse still in the air is taken back whole**, before anything
         // else: he stopped and started again inside half a second, and what has
@@ -2158,6 +2253,12 @@ final class CaretHalo {
         // A ring still hearing a sentence stays on the pointer; one coasting
         // through the transcription is about to go down anyway.
         guard !live || coasting else { return }
+        // **A ring frozen at its close is gone, not docked** (2026-10-29) —
+        // the prompt panel just comes up when it is ready.
+        if frozeThisRing {
+            Log.info("◯ halo not docked on the prompt panel — it froze and faded at the close")
+            return
+        }
         // **The Reverse tunnel stays on the window that got the words**
         // (2026-10-07, Victor: *"I want the reverse tunnel to focus on the
         // target terminal or application that received the dictation and not
@@ -2589,7 +2690,8 @@ final class CaretHalo {
         if web != nil {
             // The page's own alpha is 1 (see `show`); the coast is the one
             // thing allowed over it, because it is not about the voice.
-            panel.alphaValue = coastFactor
+            // The freeze's fade and the landing's fade-in own it meanwhile (2026-10-29).
+            if frozenAt == nil, CFAbsoluteTimeGetCurrent() >= stillReturnUntil { panel.alphaValue = coastFactor }
             if let o = headsOrigin { arrow.refresh(quiet: quietSeconds?() ?? 0, at: o) }
             return
         }
