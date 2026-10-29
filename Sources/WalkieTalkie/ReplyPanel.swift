@@ -702,25 +702,15 @@ enum ReplyPanel {
                 onRaise?(tty)
             }
         }
-        // **Not selectable; a press on the words drags the panel** (2026-10-08,
-        // Victor: *"I should be able to drag the little window … by clicking
-        // on the text and the text shouldn't be selectable"*) — the label
-        // passes the click through to `ReplyRoot`.
-        // **With links, a text view** — it knows where each word is laid out,
-        // for the hover and the click (`LinkedBody`); otherwise the label.
+        // **The words are selectable; the rest of the panel drags it** (2026-10-29,
+        // Victor: *"vreau să fac select la text … drag e să meargă de restul"* —
+        // until then a press on the words dragged, 2026-10-08). Always a text
+        // view: it knows where each word is laid out, for the selection, the
+        // hover and the link's click (`LinkedBody`).
         var (words, links) = parseLinks(text)
         let body: NSView
         let bodySize: NSSize
-        if links.isEmpty && !words.contains(dots) && !words.contains(signed) {
-            let label = InertLabel(wrappingLabelWithString: text)
-            label.isSelectable = false
-            label.font = font
-            label.textColor = .white
-            label.preferredMaxLayoutWidth = inner - gutter
-            body = label
-            bodySize = text.isEmpty ? .zero
-                : label.sizeThatFits(NSSize(width: inner - gutter, height: .greatestFiniteMagnitude))
-        } else {
+        do {
             // The dots: three, one lit — and the links after them moved by two.
             var lit: [NSRange] = []
             while let r = words.range(of: dots) {
@@ -770,7 +760,7 @@ enum ReplyPanel {
             let view = LinkedBody(styled, width: inner - gutter)
             view.links = links
             body = view
-            bodySize = NSSize(width: inner - gutter, height: view.naturalHeight)
+            bodySize = text.isEmpty ? .zero : NSSize(width: inner - gutter, height: view.naturalHeight)
         }
         // **The pictures under the words**, as many as fit (2026-10-09).
         let pictures = images.compactMap { url -> (URL, NSImage)? in
@@ -819,8 +809,8 @@ enum ReplyPanel {
             let box = NSRect(x: pad, y: pad + stripH, width: inner - gutter, height: bodyH)
             if natural > bodyH + 1 {
                 // **Scrolls when there is more than the room** — the wheel works on
-                // a panel that is never key; a press still drags (it reaches
-                // `ReplyRoot` through the clip view).
+                // a panel that is never key; a press on the words selects, as
+                // unscrolled.
                 body.frame = NSRect(x: 0, y: 0, width: inner - gutter, height: natural)
                 let scroll = NSScrollView(frame: box)
                 scroll.frame.size.width += 14
@@ -904,6 +894,10 @@ enum ReplyPanel {
         }
         root.hot = hot
         if let linked = body as? LinkedBody {
+            linked.onCopy = { [weak root, weak linked] rect in
+                guard let root, let linked else { return }
+                root.showCopied(under: root.convert(rect, from: linked))
+            }
             root.bodyLink = { [weak root, weak linked] p in
                 guard let root, let linked, let hit = linked.link(at: linked.convert(p, from: root)) else { return nil }
                 // Not over the part of the words scrolled out of sight.
@@ -1098,7 +1092,9 @@ private final class ReplyRoot: NSView {
             return
         }
         hideTip()
-        if !hot.contains(where: { $0.contains(p) }) { NSCursor.arrow.set() }
+        if hot.contains(where: { $0.contains(p) }) { return }
+        // The words take the press now (2026-10-29): the I-beam over them.
+        if hitTest(convert(p, to: superview)) is LinkedBody { NSCursor.iBeam.set() } else { NSCursor.arrow.set() }
     }
 
     override func updateTrackingAreas() {
@@ -1154,6 +1150,31 @@ private final class ReplyRoot: NSView {
         tipFor = nil
     }
 
+    /// **`Copied` under a finished selection** for a second — the panel is
+    /// never key, so ⌘C cannot reach it: letting go of the selection copies it.
+    private var copied: NSTextField?
+    func showCopied(under rect: NSRect) {
+        copied?.removeFromSuperview()
+        let t = InertLabel(labelWithString: " Copied ")
+        t.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        t.textColor = .white
+        t.drawsBackground = true
+        t.backgroundColor = NSColor(calibratedRed: 0.2, green: 0.45, blue: 0.9, alpha: 1)
+        t.sizeToFit()
+        // After the selection on its last line; over that line's end when it is full.
+        let y = rect.midY - t.frame.height / 2
+        t.setFrameOrigin(NSPoint(x: min(rect.maxX + 4, bounds.width - 8 - t.frame.width), y: y))
+        t.wantsLayer = true
+        t.layer?.cornerRadius = 4
+        t.layer?.masksToBounds = true
+        addSubview(t)
+        copied = t
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self, weak t] in
+            t?.removeFromSuperview()
+            if self?.copied === t { self?.copied = nil }
+        }
+    }
+
     override func mouseExited(with event: NSEvent) { hideTip() }
     override func cursorUpdate(with event: NSEvent) { arrow(event) }
     override func mouseEntered(with event: NSEvent) { arrow(event) }
@@ -1204,10 +1225,13 @@ private struct PressOrDrag {
     mutating func up() -> Bool { defer { dragging = false }; return !dragging }
 }
 
-/// **Words with links** (2026-10-10): a text view, never hit like the label, so
-/// a press is still `ReplyRoot`'s — which asks it which link is under it.
+/// **Words with links** (2026-10-10), **selectable** (2026-10-29): a press on
+/// the words selects them; one on a link is still `ReplyRoot`'s — which asks
+/// this view which link is under it — so a link clicks and drags as before.
 private final class LinkedBody: NSTextView {
     var links: [(range: NSRange, url: URL)] = []
+    /// A selection let go of: copied, its last line's rect (this view's points).
+    var onCopy: ((NSRect) -> Void)?
 
     convenience init(_ text: NSAttributedString, width: CGFloat) {
         let storage = NSTextStorage(attributedString: text)
@@ -1218,7 +1242,10 @@ private final class LinkedBody: NSTextView {
         layout.addTextContainer(container)
         self.init(frame: NSRect(x: 0, y: 0, width: width, height: 10), textContainer: container)
         isEditable = false
-        isSelectable = false
+        isSelectable = true
+        // The panel is never key: the selection is drawn in the inactive
+        // colour, which `darkAqua` keeps visible on the dark panel.
+        appearance = NSAppearance(named: .darkAqua)
         drawsBackground = false
         textContainerInset = .zero
         isVerticallyResizable = false
@@ -1230,7 +1257,33 @@ private final class LinkedBody: NSTextView {
         return ceil(lm.usedRect(for: tc).height)
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// Hit off the links only: a link's press is `ReplyRoot`'s click-or-drag.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        return link(at: convert(point, from: superview)) == nil ? hit : nil
+    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    /// The cursor is `ReplyRoot`'s to set (a background app's own cursor rects never show).
+    override func resetCursorRects() {}
+
+    /// AppKit's selection loop runs inside `super`; past it, what is selected is copied.
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        let r = selectedRange()
+        guard r.length > 0, let lm = layoutManager, let tc = textContainer else { return }
+        // A picture in the words (the 😠 attachment) is not text.
+        let text = (string as NSString).substring(with: r).replacingOccurrences(of: "\u{FFFC}", with: "")
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        Log.info("💬 \(text.count) chars selected in the reply pop-up — copied")
+        var last = NSRect.zero
+        lm.enumerateEnclosingRects(forGlyphRange: lm.glyphRange(forCharacterRange: r, actualCharacterRange: nil),
+                                   withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: tc) { rect, _ in
+            last = rect
+        }
+        onCopy?(last.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y))
+    }
 
     /// Each link's first laid-out rect, in order.
     func rects() -> [NSRect] {
@@ -1265,8 +1318,7 @@ private final class LinkedBody: NSTextView {
     }
 }
 
-/// The answer's words: never the target of a click, so a press on them is
-/// `ReplyRoot`'s drag and no selection starts.
+/// A label never the target of a click: the tip, the 🪦's hint, `Copied`.
 private final class InertLabel: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

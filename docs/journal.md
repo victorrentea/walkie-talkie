@@ -16,6 +16,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 The journal contradicts itself over time, because it was written as things changed. The
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
 
+- The reply pop-up's *"the text shouldn't be selectable"* (2026-10-08, *The panel is a surface*) — superseded 2026-10-29 for the words: they select and copy on release; the rest still drags (*The reply pop-up's words are selectable*)
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
 - *The order of the rows, and Chrome is last (2026-09-09)*'s destination-second — superseded 2026-10-26: the destination row (pin or terminal icon + `folder@branch`) is the chip's last row (*The destination row is the chip's foot, on black bands*)
 - *The heads converge on the caret, and its window wears an orange outline (2026-10-13)* — the outline is the map pin's `systemRed` since 2026-10-26 (*"aceeași culoare cu pin-ul roșu"*)
@@ -15982,3 +15983,17 @@ not a second way to read the film. `FilmVideo` = `SCStream` + `SCRecordingOutput
 (`WT_SHOOT_FILM=3`, a 1920×1080 60 Hz display): 15 JPEG frames + `video.mov` 1.3 MB, 64 frames over
 2.85 s (SCK skips unchanged frames), finalised before `stop()` returned. The envelope's line:
 `AppDelegate.videoNote`. Rules: `screenshots-and-selection.md`, *The film's full-rate video*.
+
+## The reply pop-up's words are selectable (2026-10-29)
+
+Victor, over the pop-up: *"vreau să fac select la text. M-am terminat. Drag e să mă rog să meargă de
+restul, dar dacă vreau să selectez o bucată de text mereu mă chinui."* 2026-10-08 had made the words
+an inert label so a press anywhere dragged the panel; now a press on the words selects and only the
+rest (margin, header, between pictures) drags. Links keep their click-or-drag through `ReplyRoot`
+(`LinkedBody.hitTest` returns nil over a link). The panel never becomes key — making it key would take
+the keyboard from the app he types in, and a Wispr ⌘V would land in a read-only view — so ⌘C has no
+route in: the selection is copied on release, with a `Copied` badge after it for a second. This
+overwrites the finished sentence on the clipboard (Q17), which is the point of selecting. Desk check:
+synthetic drag on the first line → `Selection test: drag across these w` on the clipboard, frame
+unchanged; a drag on the bottom margin moved it 100 pt.
+

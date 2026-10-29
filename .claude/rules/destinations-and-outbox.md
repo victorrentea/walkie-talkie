@@ -312,6 +312,17 @@ me to dismiss it explicitly"*.
   don't click it but drag it"*): a press that moves past 3 pt drags the panel and clicks nothing
   (`PressOrDrag`). **The name's label is never hit** — `ReplyRoot.link` takes its press (click or
   drag); the `NSTextField` with mouse overrides did not move the panel (*"even if I drag on the title"*).
+- **The words are selectable; the rest drags** (2026-10-29, Victor: *"vreau să fac select la text. M-am
+  terminat … drag e să meargă de restul"*) — reverses 2026-10-08's *"the text shouldn't be
+  selectable"* for the words only. The body is always a `LinkedBody` (`NSTextView`, selectable,
+  `darkAqua` so the inactive selection shows on the dark panel); it is hit except over a link, whose
+  press stays `ReplyRoot`'s click-or-drag. The panel is never key, so **⌘C cannot reach it: letting
+  go of a selection copies it** and shows `Copied` after it for 1 s (`ReplyRoot.showCopied`; log
+  `💬 N chars selected in the reply pop-up — copied`). I-beam over the words, arrow elsewhere. The
+  margin, header and pictures' gaps still `performDrag`. A selection is lost when the pop-up is
+  rebuilt (a ⚡ answer still streaming, a wheel notch). Desk-checked with synthetic drags: 35 chars
+  copied, frame unmoved; a drag on the bottom margin moved it 100 pt. **The transparent rounded
+  corner does not take a press** — a drag there misses the panel.
 
 ## ⚡ Quick question (2026-10-09, `QuickAsk`)
 
