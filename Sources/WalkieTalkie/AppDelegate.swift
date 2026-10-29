@@ -11233,7 +11233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // rămână acea tastare ce am tastat cu afișare în rând"*) — a copy's
         // treatment (`📋 …`): the 1.5 s flash took the chip over and then left
         // nothing behind to say the note was attached.
-        overlay.setSelection("⌨️ " + text, count: total)
+        overlay.setSelection(RelayWindow.typedLead + text, count: total)
     }
 
     // MARK: - Copied while a prompt records (2026-10-15, `AutoAttach.clipboard`)
@@ -11373,7 +11373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let total = (pendingSelection != nil ? 1 : 0) + pendingExtraSelections.count
         stateLock.unlock()
         DispatchQueue.main.async { [weak self] in
-            self?.overlay.setSelection("📋 " + shown, count: total)
+            self?.overlay.setSelection(RelayWindow.copiedLead + shown, count: total)
         }
     }
 

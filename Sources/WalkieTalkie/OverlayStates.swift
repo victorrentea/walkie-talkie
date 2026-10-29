@@ -316,6 +316,16 @@ enum OverlayStates {
                 o.pinChangePulse()
             },
 
+            Shot(slug: "listening-typed", group: "Dictating", title: "A typed line: the keyboard, not a quote",
+                 when: "After 🔽 ↓ while a prompt records, once the typing box sends its line.",
+                 note: "2026-10-29, Victor: *\"when I type something, there shouldn't be a quote at the beginning of that line, but the keyboard emoji … Keep the quote only when I select text\"*. A copy wears the Copy icon in the same column (`listening-change-pulse`).",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.setShotCount(1)
+                o.setSelection(RelayWindow.typedLead + "use BigDecimal, not double", count: 1)
+            },
+
             Shot(slug: "listening-selection-multi", group: "Dictating", title: "A highlight, four seconds later",
                  when: "Every highlight ends here — the words have had their seconds and the row is the running count alone. Three of them, here.",
                  note: "`×3` and nothing else. A highlight is read once, at the moment it is caught; from then on the only open question is whether any of them fell out, and a line of somebody else's code beside the cursor for the rest of a two-minute sentence is the widest row on the chip restating something already checked. `×1` is written out too — the number is all that is left, so an empty row would read as a highlight that got lost.",

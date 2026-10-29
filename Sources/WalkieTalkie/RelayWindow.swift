@@ -29,8 +29,18 @@ final class RelayWindow: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     /// clipboard … left most. Iar dacă iei selecție … lasă citat ca până acum"*).
     /// `AppDelegate` hands a copy over as `📋 <text>`; the lead moves into the
     /// icon column and the `“` steps aside.
+    /// **⌨️ the same way for the typing box** (2026-10-29, Victor: *"when I type
+    /// something, there shouldn't be a quote at the beginning of that line, but
+    /// the keyboard emoji … Keep the quote only when I select text"*).
     private let selectionCopyGlyph = NSImageView()
     static let copiedLead = "📋 "
+    static let typedLead = "⌨️ "
+    /// **A copy wears the Copy icon, not 📋** (2026-10-29, Victor: *"use the copy
+    /// icon, something similar to what PowerPoint has"*) — the two sheets the Edit
+    /// menu draws beside Copy. A template, so it takes the row's ink like the words.
+    private static let copySymbol: NSImage? = NSImage(systemSymbolName: "doc.on.doc", accessibilityDescription: "Copied")?
+        .withSymbolConfiguration(.init(pointSize: 15, weight: .regular))
+    private static let selectionLeads = [copiedLead, typedLead]
     private let selectionLabel = NSTextField(labelWithString: "")
 /// The frozen selection, quoted, at the very top of the prompt panel.
 private let quoteLabel = NSTextField(labelWithString: "")
@@ -713,6 +723,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         selectionLabel.attributedStringValue = NSAttributedString(
             string: selectionHead + selectionBody,
             attributes: [.font: hintFont, .foregroundColor: ink])
+        selectionCopyGlyph.contentTintColor = ink
+        selectionCopyGlyph.shadow = selectionLabel.shadow
     }
 
     /// The `Mic:` / `Engine:` pair, one row each.
@@ -1585,7 +1597,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         selectionGlyph.alignment = .center
         selectionRow.addSubview(selectionPulse)
         selectionRow.addSubview(selectionGlyph)
-        selectionCopyGlyph.image = Glyphs.emoji("📋", ink: iconInk)
         selectionCopyGlyph.imageScaling = .scaleProportionallyUpOrDown
         selectionCopyGlyph.isHidden = true
         selectionRow.addSubview(selectionCopyGlyph)
@@ -2120,11 +2131,14 @@ private let heardLabel = NSTextField(labelWithString: "")
             // `applySelectionText` concatenates the two and an empty head must
             // not indent the quote.
             selectionHead = selectionCount > 1 ? "×\(selectionCount - 1) + " : ""
-            let copied = selection.hasPrefix(Self.copiedLead)
-            selectionCopyGlyph.isHidden = !copied
-            selectionGlyph.isHidden = copied
-            selectionBody = Self.fitHead(singleLine(copied ? String(selection.dropFirst(Self.copiedLead.count))
-                                                           : selection), 34)
+            let lead = Self.selectionLeads.first { selection.hasPrefix($0) }
+            if let lead = lead {
+                selectionCopyGlyph.image = lead == Self.copiedLead ? Self.copySymbol
+                    : Glyphs.emoji(lead.trimmingCharacters(in: .whitespaces), ink: iconInk)
+            }
+            selectionCopyGlyph.isHidden = lead == nil
+            selectionGlyph.isHidden = lead != nil
+            selectionBody = Self.fitHead(singleLine(String(selection.dropFirst(lead?.count ?? 0))), 34)
             applySelectionText()
             // Off the label rather than the font: the mark is in the icon column
             // now, so the text is plain `hintFont` — but it is set as an

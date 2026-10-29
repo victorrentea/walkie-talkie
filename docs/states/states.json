@@ -309,6 +309,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
     "height" : 117,
+    "image" : "listening-typed.png",
+    "note" : "2026-10-29, Victor: *\"when I type something, there shouldn't be a quote at the beginning of that line, but the keyboard emoji … Keep the quote only when I select text\"*. A copy wears the Copy icon in the same column (`listening-change-pulse`).",
+    "shape" : "chip",
+    "slug" : "listening-typed",
+    "title" : "A typed line: the keyboard, not a quote",
+    "when" : "After 🔽 ↓ while a prompt records, once the typing box sends its line.",
+    "width" : 308
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 117,
     "image" : "listening-selection-multi.png",
     "note" : "`×3` and nothing else. A highlight is read once, at the moment it is caught; from then on the only open question is whether any of them fell out, and a line of somebody else's code beside the cursor for the rest of a two-minute sentence is the widest row on the chip restating something already checked. `×1` is written out too — the number is all that is left, so an empty row would read as a highlight that got lost.",
     "shape" : "chip",
