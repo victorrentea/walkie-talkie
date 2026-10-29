@@ -176,8 +176,10 @@ enum CaptureFlash {
     /// blând pe parcursul a trei sute de milisecunde … liniar, neaccelerat … un pic
     /// slide out și apoi dispare"*): 0.12 s eased out was a jump, not a movement.
     /// The slide is 0.3 s at constant speed, no hold, then a short fade.
+    /// **0.6 s** (2026-10-29 evening, Victor: *"apare foarte rapid mișcarea. Pune-ți
+    /// tu pe 600 de milisecunde sau 500 măcar"*): 0.3 s still read as a twitch.
     static let echoShift: CGFloat = 10
-    private static let echoSlide = 0.3
+    private static let echoSlide = 0.6
     private static let echoHold = 0.0
     private static let echoFade = 0.15
 

@@ -95,7 +95,7 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
   mergând la dreapta și în jos 10 pixeli, la opacitate 100%, după care să dispară … dacă o să văd că
   ceea ce voiam să vezi se mișcă … asta va însemna că ai văzut ceea ce văd și eu"*). Supersedes its
   outline flying into the chip (above). `CaptureFlash.echo`: the **original** frame, opaque, laid on
-  the screen it photographed (`screenFrame(at:)`), slides `echoShift` (10 pt) down-right in **0.3 s, linear**,
+  the screen it photographed (`screenFrame(at:)`), slides `echoShift` (10 pt) down-right in **0.6 s, linear** (0.3 s until the 2026-10-29 evening: *"foarte rapid … pune pe 600 de milisecunde"*),
   no hold, fades 0.15 s (same day: *"blând pe parcursul a trei sute de milisecunde … liniar,
   neaccelerat"* — 0.12 s eased out read as a jump) — at `flightLevel`, so over every menu, dialog and Addons' zoom glass;
   `sharingType = .none`, click-through. What moves was caught; what stays put was not. Attached or
