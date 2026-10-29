@@ -699,6 +699,11 @@ enum ReplyPanel {
         header.cell?.truncatesLastVisibleLine = true
         header.font = NSFont.systemFont(ofSize: font.pointSize, weight: .semibold)
         header.textColor = NSColor.white.withAlphaComponent(0.6)
+        // **Laid out as the hover lays it out, from the start** (2026-10-29, Victor:
+        // *"când dau hover prima dată … brusc încap mai multe litere"*): the plain
+        // value truncated a few letters earlier than the attributed one the first
+        // hover set, so the title grew under the pointer and stayed so.
+        header.underline(false)
         // **The click is the answer read: the pop-up goes** (Victor, 2026-10-08:
         // *"I clicked on the title … and it did not close the window. Should
         // have."*), and that terminal comes in front at the pointer, as the
@@ -1474,8 +1479,7 @@ private final class ReplyIcon: NSImageView {
 private final class LinkLabel: NSTextField {
     var onClick: (() -> Void)? { didSet { window?.invalidateCursorRects(for: self) } }
 
-    private func underline(_ on: Bool) {
-        guard onClick != nil else { return }
+    func underline(_ on: Bool) {
         // The paragraph style carries the … : an attributed value without one
         // wraps instead, and the hovered title would lose its ellipsis.
         let para = NSMutableParagraphStyle()
