@@ -59,6 +59,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// had put one there.
     var elevenReady: (() -> Bool)?
 
+    /// **The engine that wrote the last sentence delivered** — the route its
+    /// words came by (`AppDelegate.engineName(via:engineLabel:)`), nil before
+    /// the first one this run. Asked when the menu opens, like the rows above.
+    var lastEngineUsed: (() -> String?)?
+
 
 
     /// Whether the relay's own microphone is open right now. Asked when the menu
@@ -414,6 +419,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the same preference key — what it has not got any more is a place in this
     /// menu to be ticked, which is Victor's call of 2026-09-14.
     private let engineItem = NSMenuItem(title: "Engine", action: nil, keyEquivalent: "")
+
+    /// **`Last used: ☁️ ElevenLabs Scribe (scribe_v2)`, directly under `Engine`**
+    /// (2026-10-29, Victor: *"vreau să văd în meniu Last used ce engine a fost
+    /// folosit la ultima dictare sau promptare"*). The row above says what is
+    /// picked; this one what actually wrote the last sentence — they differ
+    /// exactly when the local model stood in (fallback, ⌘⌃X, the countdown).
+    /// A readout, never clickable.
+    private let lastUsedItem = NSMenuItem(title: "Last used: —", action: nil, keyEquivalent: "")
 
     /// **The two rows under the arrow**, rebuilt by `applyEngineRow` rather than
     /// by a delegate of its own: the names change only with the model's
@@ -1167,6 +1180,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         ElevenLabsQuota.shared.start()
         applyEngineRow()
         menu.addItem(engineItem)
+
+        lastUsedItem.image = Self.symbolIcon("clock.arrow.circlepath")
+        lastUsedItem.isEnabled = false
+        applyLastUsedRow()
+        menu.addItem(lastUsedItem)
 
         logiGestures.image = Self.symbolIcon("computermouse")
         logiGestures.submenu = gesturesSubmenu
@@ -2068,6 +2086,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         return name + String(format: " %.1f GB", Double(bytes) / 1_073_741_824)
     }
 
+    private func applyLastUsedRow() {
+        lastUsedItem.title = "Last used: " + (lastEngineUsed?() ?? "—")
+    }
+
     @objc private func enginePicked(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String, id != engineId else { return }
         onPickEngine?(id)
@@ -2375,6 +2397,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // 🎤 the DJI's battery, asked of Victor Addons; the row repaints in the open menu.
         DjiBattery.refresh { [weak self] _ in self?.applyMicTitle() }
         applyEngineRow()
+        applyLastUsedRow()
         // Devices come and go while the app runs, and the only moment this list
         // has to be right is the moment he is looking at it.
         applyMicRow()

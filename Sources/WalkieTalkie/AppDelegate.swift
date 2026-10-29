@@ -1742,6 +1742,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `rebindFromMenu`.
         status.onRebind = { [weak self] tty in self?.rebindFromMenu(tty: tty) }
         status.whisperFootprint = { [weak self] in self?.whisperSource.footprintBytes }
+        status.lastEngineUsed = { [weak self] in self?.lastEngineUsed }
         // The id the overlay used to carry beside the pulse. Same shape as the
         // footprint: asked when the menu opens, because that is the one moment
         // its answer has to be right.
@@ -4468,7 +4469,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pasteMode = false
             latchedAtCaret = false
             endSettling(reason: "asking the quick model")
-            recordDelivery(via: result.via, kind: result.delivery, to: "quick")
+            recordDelivery(via: result.via, engine: result.engineLabel, kind: result.delivery, to: "quick")
             // **The envelope, as the caret prompt's** (2026-10-15) — minus the
             // `walkie-reply` hint, which is an agent's — and its pictures: each
             // frame's 800 px copy, a crop's cut-out instead. Read before
@@ -4501,7 +4502,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Somebody else already put the words on screen — Wispr Flow with the
         // wrap off, and nothing else today. Filed above, delivered by nobody.
         if case .alreadyInserted = result.delivery {
-            recordDelivery(via: result.via, kind: result.delivery,
+            recordDelivery(via: result.via, engine: result.engineLabel, kind: result.delivery,
                            to: destinationLabel(atCaret: latchedAtCaret))
             endSettling(reason: "\(source.name) inserted it")
             clearSpawn()
@@ -4520,7 +4521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the sentence goes on to where he pointed it.
         if case .insertedElsewhere = result.delivery {
             if latchedAtCaret {
-                recordDelivery(via: result.via, kind: result.delivery, to: "caret")
+                recordDelivery(via: result.via, engine: result.engineLabel, kind: result.delivery, to: "caret")
                 endSettling(reason: "\(source.name) inserted it at the caret, with no ⌘V")
                 clearSpawn()
                 abandonDictation("the source delivered it itself")
@@ -4569,7 +4570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // **No outbox line here and there never was one** — a caret sentence
             // is wanted in the field he is looking at and is not addressed to a
             // watcher. The record is the only trace it leaves.
-            recordDelivery(via: result.via, kind: result.delivery, to: "caret")
+            recordDelivery(via: result.via, engine: result.engineLabel, kind: result.delivery, to: "caret")
             pendingVia = nil
             pendingHeard = nil
             pendingDeliveryKind = nil
@@ -8760,6 +8761,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["lastSettled"] = RingDown.lastSettled ?? NSNull()
         deliveryLock.lock()
         out["lastDelivery"] = lastDeliveryRecord ?? NSNull()
+        out["lastEngineUsed"] = lastEngineUsed ?? NSNull()
         deliveryLock.unlock()
         // **The restart gate** (2026-09-23) — what `relay-restart.sh` polls.
         let why = restartBlockers
@@ -8906,7 +8908,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         // The window is there (bound, or at least opened with the
                         // prompt in its `argv`): now it is a delivery.
                         let delivery = m.kind == "dictation"
-                            ? self.recordDelivery(via: m.via, kind: m.deliveryKind,
+                            ? self.recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind,
                                                   to: self.destinationLabel(atCaret: false, spawn: true,
                                                                             directory: m.directory))
                             : nil
@@ -9400,7 +9402,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switch outcome {
                 case .delivered:
                     let delivery = m.kind == "dictation"
-                        ? self.recordDelivery(via: m.via, kind: m.deliveryKind, to: to) : nil
+                        ? self.recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: to) : nil
                     self.writeOutbox(m, line: line, delivery: delivery)
                     if let serial {
                         self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: to, serial: serial) { [weak self] in
@@ -9416,7 +9418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // `caret`. Measured before: TR20, the tab closed while he
                     // spoke → `targetGone` and a `delivered` row for a dead tty.
                     if m.kind == "dictation" {
-                        self.recordDelivery(via: m.via, kind: m.deliveryKind, to: "caret")
+                        self.recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: "caret")
                         // The sentence's settle ended at `deliver`; one standing now is the next's (Q12).
                         self.pasteText(line, settles: false)
                     }
@@ -12748,13 +12750,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Written on the main thread, read on the listener queue, hence the lock.
     private let deliveryLock = NSLock()
     private var lastDeliveryRecord: [String: Any]?
+    /// The engine that wrote the last delivered sentence, for `StatusItem.lastEngineUsed`.
+    private var lastEngineUsed: String?
 
     @discardableResult
-    private func recordDelivery(via: String, kind: DictationDelivery, to: String) -> [String: Any] {
+    private func recordDelivery(via: String, engine: String = "", kind: DictationDelivery, to: String) -> [String: Any] {
         let obj: [String: Any] = ["via": via, "kind": Self.deliveryName(kind),
                                   "to": to, "at": Outbox.iso(Date())]
         deliveryLock.lock()
         lastDeliveryRecord = obj
+        // **The menu's `Last used:` row** (2026-10-29, Victor: *"vreau să văd în
+        // meniu Last used ce engine a fost folosit la ultima dictare sau
+        // promptare"*) — the route the words came by, the panel's `Engine:` row,
+        // so a fallback or ⌘⌃X says so where the Engine setting would not.
+        lastEngineUsed = Self.engineName(via: via, engineLabel: engine)
         deliveryLock.unlock()
         Log.info("📦 delivery: \(via) → \(to) (\(Self.deliveryName(kind)))")
         // **The local model stood in — said once the words have landed**
@@ -12880,7 +12889,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the record. A held sentence lives in memory and nowhere else
             // (*When the outbox is written*), so `held` is the one destination
             // the file could never name.
-            recordDelivery(via: m.via, kind: m.deliveryKind, to: "held")
+            recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: "held")
             if spawnPickInFlight != nil { pickHeld = true }
             // Whatever it was addressed to, it now waits for the bind — the
             // pick's, or the next one.
@@ -12907,7 +12916,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             spawnClaude(m, line: line)
         } else {
             let delivery = m.kind == "dictation"
-                ? recordDelivery(via: m.via, kind: m.deliveryKind,
+                ? recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind,
                                  to: destinationLabel(atCaret: false, spawn: m.spawn,
                                                       directory: m.directory))
                 : nil
