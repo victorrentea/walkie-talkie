@@ -496,6 +496,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// a ✂️ area, the 800 px frame otherwise). A frame whose token is in the words
     /// is drawn there and leaves the strip; the rest stay in the strip.
     private var promptInlineShots: [Int: String] = [:]
+    /// **A copied GIF in the words plays** (2026-10-30, `AnimatedCopy`): its
+    /// picture is a new frame at every draw, and this repaints the words while
+    /// one is in them — `richPrompt` sets `promptAnimates`, `syncGIFTicker` follows.
+    private var promptAnimates = false
+    private var gifTicker: Timer?
     /// **The whole frame behind each ✂️ cut-out** (2026-10-15): shot number →
     /// the 800 px copy and the original's size in pixels (what the token's
     /// corners are measured in). `richPrompt` draws it after the cut-out,
@@ -2480,7 +2485,10 @@ private let heardLabel = NSTextField(labelWithString: "")
             // the field editor gets his words back bare (`beginPromptEdit`).
             if !editingPrompt {
                 promptLabel.attributedStringValue = richPrompt(prompt, width: innerWidth)
+            } else {
+                promptAnimates = false
             }
+            syncGIFTicker()
             let shown = promptLabel.stringValue
             promptLabel.preferredMaxLayoutWidth = innerWidth
             // **Ask the label, not a parallel calculation.** The height used to
@@ -3337,6 +3345,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// The other tokens are kept verbatim — the panel is where he checks *where*
     /// the relay put each thing; a picture says it by standing there.
     private func richPrompt(_ text: String, width: CGFloat) -> NSAttributedString {
+        promptAnimates = false
         let out = NSMutableAttributedString()
         let body: [NSAttributedString.Key: Any] = [.font: promptFont, .foregroundColor: NSColor.labelColor]
         let tokenFont = NSFont.monospacedSystemFont(ofSize: promptFont.pointSize * 0.7, weight: .medium)
@@ -3403,6 +3412,12 @@ private let heardLabel = NSTextField(labelWithString: "")
                     let zoom = min(context.image.size.height / image.size.height, room / image.size.width)
                     size = NSSize(width: (image.size.width * zoom).rounded(), height: (image.size.height * zoom).rounded())
                     drawn = AreaContext.callout(cut: image, cutSize: size, screen: context.image, box: context.box)
+                } else if let gif = AnimatedCopy.gif(beside: path),
+                          let film = AnimatedCopy.picture(gif: gif, size: size) {
+                    // A copied GIF: the same frame and corners, the picture moving.
+                    drawn = AreaContext.framed(film, size: size)
+                    drawn.cacheMode = .never
+                    promptAnimates = true
                 } else {
                     drawn = AreaContext.framed(drawn, size: size)
                 }
@@ -3528,6 +3543,22 @@ private let heardLabel = NSTextField(labelWithString: "")
         }
     }
 
+    /// Repaints the words at `AnimatedCopy.tick` while a GIF is in them; a
+    /// repaint, never a relayout.
+    private func syncGIFTicker() {
+        guard promptAnimates != (gifTicker != nil) else { return }
+        guard promptAnimates else {
+            gifTicker?.invalidate()
+            gifTicker = nil
+            return
+        }
+        let timer = Timer(timeInterval: AnimatedCopy.tick, repeats: true) { [weak self] _ in
+            self?.promptLabel.needsDisplay = true
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        gifTicker = timer
+    }
+
     private func layoutShots(width: CGFloat) -> CGFloat {
         shotViews.forEach { $0.removeFromSuperview() }
         shotViews = []
@@ -3542,6 +3573,11 @@ private let heardLabel = NSTextField(labelWithString: "")
             view.image = image
             if let n = shot.number, let at = promptPointers[n] {
                 view.image = Self.pointerDot(on: image, at: at, size: NSSize(width: w, height: height))
+            } else if shot.film == nil, let gif = AnimatedCopy.gif(beside: shot.path),
+                      let film = NSImage(contentsOfFile: gif) {
+                // A copied GIF plays in the strip too (`AnimatedCopy`).
+                view.image = film
+                view.animates = true
             }
             view.imageScaling = .scaleProportionallyUpOrDown
             view.wantsLayer = true
@@ -6028,6 +6064,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         promptSpawnFolder = nil
         promptShots = []
         promptInlineShots = [:]
+        promptAnimates = false
+        syncGIFTicker()
         promptInlineFrames = [:]
         promptPointers = [:]
         promptFilms = []

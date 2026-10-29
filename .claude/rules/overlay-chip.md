@@ -515,6 +515,16 @@ yields to `--label`).
   2026-10-07 — by path the cut-out never equalled the frame, so every inlined picture came back in the strip); the
   automatic 📸0 is not in the preview's words, so it stays there. Editing swaps back to the plain
   words. Shot `prompt-inline`.
+- **A copied GIF plays in the panel** (2026-10-30, Victor: *"Dacă îți copiezi un clip din GIF animat,
+  îl rendez animat și în panoul de preview de prompturi"*). `AnimatedCopy`: Chrome's *Copy Image*
+  puts only the first frame on the board (PNG/TIFF) plus `<img src>` as HTML, so a `src` that says
+  `gif` (or `data:image/gif`) is fetched again (≤ 5 s, ≤ 20 MB, off main); Safari's
+  `com.compuserve.gif` is taken as is; one frame is not kept. Saved as `screenshot-N.gif` beside the
+  JPEG — the agent still gets the JPEG. In the words the attachment is an `NSImage` drawn from the
+  clock (`cacheMode = .never`, frames decoded once at 2× the shown size, ≤ 200) and `gifTicker`
+  repaints the label 25×/s while one is there — a repaint, never a relayout; in the strip an
+  `NSImageView` with `animates`. Log `📋 copied image N is an animated GIF`. `AnimatedCopyTests`
+  checks a label repaint shows the next frame; no `Shot` (a still cannot show it).
 - **The pointer is a yellow dot on the picture, never pixels in its caption** (2026-10-17, Victor:
   *"pună o bulină galbenă pe captura ecranului acolo unde era mouse, în loc să îmi arate mouse cu
   pixel … e inutil pentru mine"*). `RelayWindow.withoutPointer` cuts `🖱️@x:y` out of every token the

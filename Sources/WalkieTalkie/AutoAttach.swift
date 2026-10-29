@@ -68,7 +68,8 @@ enum AutoAttach {
 /// **One thing copied, read off the general pasteboard** — for the clipboard
 /// half of `AutoAttach`.
 enum CopiedItem {
-    case image(CGImage)
+    /// `gif`: the animated GIF behind it, when there is one (`AnimatedCopy`).
+    case image(CGImage, gif: Data?)
     case files([String])
     case text(String)
 
@@ -82,7 +83,10 @@ enum CopiedItem {
     /// TIFF — the file is what he meant), an image before text (Chrome's Copy
     /// Image carries the URL as text too).
     static func read(expecting count: Int) -> CopiedItem? {
-        Clipboard.with { board -> CopiedItem? in
+        // The GIF's bytes or the page's `<img src>`, read under the lock and
+        // fetched after it — a download must not hold the pasteboard.
+        var gif: Data?, html: String?
+        let item = Clipboard.with { board -> CopiedItem? in
             guard board.changeCount == count, let types = board.types else { return nil }
             var item: CopiedItem?
             if types.contains(.fileURL),
@@ -94,7 +98,9 @@ enum CopiedItem {
                       let data = board.data(forType: types.contains(.png) ? .png : .tiff),
                       let source = CGImageSourceCreateWithData(data as CFData, nil),
                       let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-                item = .image(image)
+                item = .image(image, gif: nil)
+                gif = board.data(forType: AnimatedCopy.gifType)
+                html = board.string(forType: .html)
             } else if types.contains(.string),
                       let text = board.string(forType: .string)?
                         .trimmingCharacters(in: .whitespacesAndNewlines),
@@ -103,5 +109,12 @@ enum CopiedItem {
             }
             return board.changeCount == count ? item : nil
         }
+        guard case .image(let image, _) = item else { return item }
+        if let data = gif, AnimatedCopy.isAnimated(data) { return .image(image, gif: data) }
+        if let src = html.flatMap(AnimatedCopy.imageSource(inHTML:)), AnimatedCopy.mayBeGIF(src),
+           let data = AnimatedCopy.fetch(src) {
+            return .image(image, gif: data)
+        }
+        return item
     }
 }

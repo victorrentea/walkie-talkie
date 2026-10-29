@@ -11323,8 +11323,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// which is what he copies them for. Counted on the chip like a prompt's.
     private func fileCopied(_ item: CopiedItem, at moment: Date, opened: Date, window: String?) {
         switch item {
-        case .image(let image):
-            fileCopiedImage(image, at: moment, opened: opened, window: window)
+        case .image(let image, let gif):
+            fileCopiedImage(image, gif: gif, at: moment, opened: opened, window: window)
         case .files(let paths):
             fileCopiedText(paths.joined(separator: "\n"), at: moment, opened: opened, window: window,
                            receipt: paths.count == 1 ? (paths[0] as NSString).lastPathComponent
@@ -11380,7 +11380,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The tail of `fileArea`, for an image off the pasteboard: a numbered
     /// picture in the same list (`screenshot-N`, `📸N 📋 copied`), counted on
     /// the chip, flying into it from the pointer.
-    private func fileCopiedImage(_ image: CGImage, at moment: Date, opened: Date, window: String?) {
+    private func fileCopiedImage(_ image: CGImage, gif: Data?, at moment: Date, opened: Date, window: String?) {
         guard let number = reservePicture(at: moment) else { return }
         let offset = moment.timeIntervalSince(opened)
         guard let frame = ScreenCapture.fileImage(image, offset: offset, index: number,
@@ -11391,6 +11391,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let path = frame.path
+        // Kept beside the JPEG, so the panel plays it (`AnimatedCopy`).
+        if let gif, AnimatedCopy.keep(gif, beside: path) {
+            Log.info("📋 copied image \(number) is an animated GIF (\(gif.count / 1024) KB) — the panel plays it")
+        }
         stateLock.lock()
         let attaching = dictationInFlight && dictationStartedAt == opened
         shotSizes[path] = frame.size
