@@ -609,6 +609,11 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `samples()`, which only a web host calls; use the fabricated voice (no `_AUDIO`). It **can** be
   checked with the display asleep: `screencapture -o -l<window id>` of the demo's panel (verified
   2026-10-11: centred, 26–44 % of the screen lit while voiced, 0 % from 6 s of silence).
+- **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece
+  de sub mouse către centrul ecranului când apare. Zoomeze in"*). `flashQuestion` animates `stage`
+  (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the
+  Retina) to the whole screen over `questionFly` 0.4 s at `questionLoud`; the 0.3 s fade starts when
+  it lands (`questionFlashUntil` covers both). `show`, `hide` and `dock` remove the animation.
 - **Under Victor Addons' ⌥⇧ zoom an anchored dress goes above the glass** (2026-10-28, Victor: the ❓
   never showed while zoomed). The zoom is an opaque window at `.maximumWindow + 3` filming the display,
   and the halo is `sharingType = .none` — not filmed and under the glass. `CaretHalo.restLevel`:

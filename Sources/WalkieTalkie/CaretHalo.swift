@@ -1827,6 +1827,7 @@ final class CaretHalo {
         stage?.removeAnimation(forKey: "collapse")
         stage?.removeAnimation(forKey: "collapse-ink")
         stage?.removeAnimation(forKey: "bloom")
+        stage?.removeAnimation(forKey: "question-fly")
         // After `makePanel`, never before: building the layer is what measures
         // the picture and so what sets `artworkGain`.
         panel.alphaValue = drawn == .questionMark ? 0 : Self.opacity(Self.rest)
@@ -1957,6 +1958,7 @@ final class CaretHalo {
         growOnShow = false
         small = false
         stage?.removeAnimation(forKey: "bloom")
+        stage?.removeAnimation(forKey: "question-fly")
         // **A web view goes out in a fade**, over `collapse`: it is not on the
         // stage the collapse scales, and a fade is the one thing a window can
         // do to a view it does not draw. The engine's loop stops at the end.
@@ -2190,6 +2192,7 @@ final class CaretHalo {
         stage?.removeAnimation(forKey: "collapse")
         stage?.removeAnimation(forKey: "collapse-ink")
         stage?.removeAnimation(forKey: "bloom")
+        stage?.removeAnimation(forKey: "question-fly")
         dock = Dock(target: target, from: from, focus: focus, visible: visible,
                     startedAt: now, level: panel.level, landedOn: nil)
         if let web, !pageRunning {
@@ -3068,18 +3071,44 @@ final class CaretHalo {
     /// film is invisible in silence, so until he spoke nothing said the ❓ was
     /// listening. Up at `questionLoud` at once, faded out over `questionFlash`
     /// (ease-out); the voice has the alpha back after it.
+    ///
+    /// **It leaves from under the pointer** (2026-10-29, Victor: *"semnul
+    /// întrebării … să plece de sub mouse către centrul ecranului când apare.
+    /// Zoomeze in"*): over `questionFly` the stage goes from `questionFrom` of
+    /// its size, centred on the pointer (clamped to the Retina), to the whole
+    /// screen, at full ink; the 0.3 s fade starts when it has landed.
     private func flashQuestion(_ panel: NSPanel) {
-        questionFlashUntil = CFAbsoluteTimeGetCurrent() + Self.questionFlash
-        panel.alphaValue = Self.questionLoud
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = Self.questionFlash
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 0
+        let now = CFAbsoluteTimeGetCurrent()
+        questionFlashUntil = now + Self.questionFly + Self.questionFlash
+        let until = questionFlashUntil
+        if let stage = stage {
+            let f = panel.frame, mouse = NSEvent.mouseLocation
+            let x = min(max(mouse.x, f.minX), f.maxX), y = min(max(mouse.y, f.minY), f.maxY)
+            let from = CATransform3DConcat(CATransform3DMakeScale(Self.questionFrom, Self.questionFrom, 1),
+                                           CATransform3DMakeTranslation(x - f.midX, y - f.midY, 0))
+            let fly = CABasicAnimation(keyPath: "transform")
+            fly.fromValue = NSValue(caTransform3D: from)
+            fly.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+            fly.duration = Self.questionFly
+            fly.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.7, 0.3, 1)
+            stage.add(fly, forKey: "question-fly")
         }
-        Log.info("◯ caret halo: the ❓ flashes up and fades over \(Int(Self.questionFlash * 1000)) ms — question mode open")
+        panel.alphaValue = Self.questionLoud
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.questionFly) { [weak self, weak panel] in
+            guard let self = self, let panel = panel, self.live, self.questionFlashUntil == until else { return }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = Self.questionFlash
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                panel.animator().alphaValue = 0
+            }
+        }
+        Log.info("◯ caret halo: the ❓ flies from the pointer to the middle in \(Int(Self.questionFly * 1000)) ms, zooming in, then fades over \(Int(Self.questionFlash * 1000)) ms — question mode open")
     }
     private var questionFlashUntil: CFAbsoluteTime = 0
     static let questionFlash: TimeInterval = 0.3
+    static let questionFly: TimeInterval = 0.4
+    /// The ❓'s size under the pointer, as a share of the screen it lands on.
+    static let questionFrom: CGFloat = 0.08
 
     private(set) static var questionPlayer: AVQueuePlayer?
     private static var questionLooper: AVPlayerLooper?
