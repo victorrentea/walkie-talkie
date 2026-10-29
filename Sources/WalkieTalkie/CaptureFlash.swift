@@ -171,10 +171,15 @@ enum CaptureFlash {
     /// moves is what was caught, an open menu or dialog included; what stays
     /// put was not in it. Opaque, at `flightLevel` (over every menu and over
     /// Addons' zoom glass), `sharingType = .none`, click-through.
+    ///
+    /// **Slow and linear, then gone** (same day, Victor: *"trebuie să se întâmple
+    /// blând pe parcursul a trei sute de milisecunde … liniar, neaccelerat … un pic
+    /// slide out și apoi dispare"*): 0.12 s eased out was a jump, not a movement.
+    /// The slide is 0.3 s at constant speed, no hold, then a short fade.
     static let echoShift: CGFloat = 10
-    private static let echoSlide = 0.12
-    private static let echoHold = 0.45
-    private static let echoFade = 0.25
+    private static let echoSlide = 0.3
+    private static let echoHold = 0.0
+    private static let echoFade = 0.15
 
     static func echo(_ picture: CGImage, over source: CGRect) {
         guard source.width > 1, source.height > 1 else { return }
@@ -219,7 +224,7 @@ enum CaptureFlash {
         slide.fromValue = NSValue(point: CGPoint(x: from.midX, y: from.midY))
         slide.toValue = NSValue(point: to)
         slide.duration = echoSlide
-        slide.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        slide.timingFunction = CAMediaTimingFunction(name: .linear)
         shot.add(slide, forKey: "slide")
         let total = echoSlide + echoHold + echoFade
         let life = CAKeyframeAnimation(keyPath: "opacity")
