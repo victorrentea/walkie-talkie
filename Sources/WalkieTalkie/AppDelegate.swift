@@ -1532,17 +1532,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ReplyPanel.isBound = { [weak self] tty in
             self?.terminal.target?.address == (tty as NSString).lastPathComponent
         }
-        ReplyPanel.onRaise = { [weak self] tty in
+        ReplyPanel.onPresent = { [weak self] tty in
             DispatchQueue.global(qos: .userInitiated).async {
+                if TerminalBinding.presentAtPointer(tty: tty) { return }
+                // Not a Terminal.app tab (an IDE's terminal, a tmux pane): its
+                // window cannot be moved from here — brought forward where it is.
                 guard let target = self?.terminal.resolve(tty: tty) else {
                     Log.error("🪟 no terminal on \(tty) — nothing brought forward")
                     return
                 }
                 TerminalBinding.bringToFront(target)
             }
-        }
-        ReplyPanel.onPresent = { tty in
-            DispatchQueue.global(qos: .userInitiated).async { TerminalBinding.presentOnRetina(tty: tty) }
         }
         ReplyPanel.agentRunning = { TerminalBinding.agentRunning(onTTY: $0) }
         ReplyPanel.onKamikaze = { [weak self] tty in

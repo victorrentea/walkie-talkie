@@ -1382,23 +1382,28 @@ final class TerminalBinding {
     }
 
     /// **The Terminal window showing this tty, in front and centred on the
-    /// Retina — at once, no flight** (2026-10-08, Victor, of the walkie icon on
-    /// the answer panel: *"that terminal should pop in front … on the retina in
-    /// the center of the screen … with no animation, just immediately"*). For
-    /// reading more of an answer, so the window comes to where he is looking
-    /// rather than him going to find it; nothing is bound. Its size is kept,
-    /// shrunk only to fit the Retina's visible frame. No built-in display (lid
-    /// closed) → the screen under the pointer.
+    /// pointer — at once, no flight** (2026-10-29, Victor, of the reply
+    /// pop-up's walkie and name: *"mi-aduce terminalul fix unde e mouse-ul,
+    /// brusc … topmost și exact unde este mouse-ul meu"*). Centred on the
+    /// Retina until then (2026-10-08, the walkie only; the name raised it where
+    /// it was). For reading more of an answer, so the window comes to where he
+    /// is looking rather than him going to find it; nothing is bound. Its size
+    /// is kept, shrunk only to fit the pointer's screen, and slid back inside
+    /// that screen's visible frame when the pointer is near an edge.
     ///
     /// Off the main thread — `osascript`. Returns whether the window was found.
     @discardableResult
-    static func presentOnRetina(tty: String) -> Bool {
-        let screen = DispatchQueue.main.sync { CaretHalo.retina ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main }
-        guard let screen, let primary = DispatchQueue.main.sync(execute: { NSScreen.screens.first }) else { return false }
+    static func presentAtPointer(tty: String) -> Bool {
+        let (mouse, screen, primary) = DispatchQueue.main.sync { () -> (NSPoint, NSScreen?, NSScreen?) in
+            let m = NSEvent.mouseLocation
+            return (m, NSScreen.screens.first { NSMouseInRect(m, $0.frame, false) } ?? NSScreen.main, NSScreen.screens.first)
+        }
+        guard let screen, let primary else { return false }
         // AppleScript's bounds: origin top-left of the primary, y downwards.
         let v = screen.visibleFrame
         let left = Int(v.minX), top = Int(primary.frame.maxY - v.maxY)
         let right = Int(v.maxX), bottom = Int(primary.frame.maxY - v.minY)
+        let px = Int(mouse.x), py = Int(primary.frame.maxY - mouse.y)
         let script = """
         tell application "Terminal"
             repeat with w in windows
@@ -1413,8 +1418,12 @@ final class TerminalBinding {
                             set hh to (item 4 of b) - (item 2 of b)
                             if ww > \(right - left) then set ww to \(right - left)
                             if hh > \(bottom - top) then set hh to \(bottom - top)
-                            set x to \(left) + ((\(right - left) - ww) div 2)
-                            set y to \(top) + ((\(bottom - top) - hh) div 2)
+                            set x to \(px) - (ww div 2)
+                            set y to \(py) - (hh div 2)
+                            if x + ww > \(right) then set x to \(right) - ww
+                            if y + hh > \(bottom) then set y to \(bottom) - hh
+                            if x < \(left) then set x to \(left)
+                            if y < \(top) then set y to \(top)
                             set bounds of w to {x, y, x + ww, y + hh}
                             set selected of t to true
                             set index of w to 1
@@ -1434,7 +1443,7 @@ final class TerminalBinding {
                 .first?.processIdentifier,
               let raised = raise(pid: pid, windowAt: topLeft(answer)) else { return false }
         let (activated, axFront) = raised
-        Log.info("🪟 \(tty) centred on \(screen.localizedName) and brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
+        Log.info("🪟 \(tty) centred on the pointer (\(px), \(py)) on \(screen.localizedName) and brought forward (activate=\(activated), AXFrontmost=\(axFront.rawValue))")
         return true
     }
 

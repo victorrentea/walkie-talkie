@@ -184,6 +184,13 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   `bringToFront`), binds nothing. **📍** (`Glyphs.mapPin`, drawn) sits left of ☠️, only when Walkie is
   not bound to that tty (`ReplyPanel.isBound`); it binds with the border flight (`onBind` →
   `rebindFromMenu(fly:)`). The bullets below that say the name binds are superseded.
+- **Name and walkie both bring the terminal to the pointer** (2026-10-29, Victor: *"mi-aduce
+  terminalul fix unde e mouse-ul … topmost și exact unde este mouse-ul meu"*). Supersedes the name's
+  *where it is* above and the walkie's *centred on the Retina* below: both clicks →
+  `ReplyPanel.onPresent` → `TerminalBinding.presentAtPointer` — the Terminal.app window centred on
+  the pointer, size kept (shrunk to the pointer's screen), slid back inside its visible frame, raised
+  at once, nothing bound. Not a Terminal.app tab (IDE, tmux) → `bringToFront` where it is.
+  `ReplyPanel.onRaise` is gone. Log `🪟 ttysNNN centred on the pointer (x, y) on <screen> …`.
 - **🔼 → over the pop-up answers its sender** (2026-10-09, Victor: *"If I do the gesture for … bound
   prompting while my mouse is over the tooltip with the reply … close the bubble … first rebind me to
   the sender terminal, just like if I would press the pin button … an easy way to chat back with the

@@ -126,16 +126,12 @@ enum ReplyPanel {
     static var onBind: ((String) -> Void)?
     /// Is Walkie bound to this tty right now — decides whether the 📍 is drawn.
     static var isBound: ((String) -> Bool)?
-    /// **A click on the terminal's name brings it in front, where it is**
-    /// (2026-10-08, Victor: *"if I click the name of it, it's not rebind … it
-    /// brings in front the wrong terminal"*) — nothing is bound; the 📍 binds.
-    static var onRaise: ((String) -> Void)?
-
-    /// **A click on the walkie puts that terminal in front, centred on the
-    /// Retina, at once** (2026-10-08, Victor: *"if I click on the Walkie Talkie
-    /// icon … that terminal should pop in front … on the retina in the center of
-    /// the screen … with no animation"*) — to read more, or ask more, there.
-    /// Nothing is bound; the name is the link that binds.
+    /// **A click on the walkie or on the terminal's name puts that terminal in
+    /// front, centred on the pointer, at once** (2026-10-29, Victor: *"mi-aduce
+    /// terminalul fix unde e mouse-ul … topmost și exact unde este mouse-ul
+    /// meu"*) — to read more, or ask more, there. Until then the walkie centred
+    /// it on the Retina and the name raised it where it was (2026-10-08).
+    /// Nothing is bound; the 📍 binds.
     static var onPresent: ((String) -> Void)?
 
     /// **The ☠️ left of the ✕ sends that session `kamikaze`** (2026-10-08,
@@ -694,12 +690,13 @@ enum ReplyPanel {
         header.textColor = NSColor.white.withAlphaComponent(0.6)
         // **The click is the answer read: the pop-up goes** (Victor, 2026-10-08:
         // *"I clicked on the title … and it did not close the window. Should
-        // have."*), and that terminal comes in front — bound by the 📍 only.
+        // have."*), and that terminal comes in front at the pointer, as the
+        // walkie's click brings it (2026-10-29) — bound by the 📍 only.
         if let tty = tty {
             header.onClick = {
-                Log.info("💬 the reply pop-up's name clicked — \(tty) to the front, pop-up closed")
+                Log.info("💬 the reply pop-up's name clicked — \(tty) to the front at the pointer, pop-up closed")
                 close()
-                onRaise?(tty)
+                onPresent?(tty)
             }
         }
         // **The words are selectable; the rest of the panel drags it** (2026-10-29,
@@ -792,7 +789,7 @@ enum ReplyPanel {
         icon.imageScaling = .scaleProportionallyUpOrDown
         if let tty = tty {
             icon.onClick = {
-                Log.info("💬 the reply pop-up's walkie clicked — \(tty) to the front, centred on the Retina, pop-up closed")
+                Log.info("💬 the reply pop-up's walkie clicked — \(tty) to the front at the pointer, pop-up closed")
                 close()
                 onPresent?(tty)
             }
