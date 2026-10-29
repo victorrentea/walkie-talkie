@@ -472,6 +472,16 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   replaced round's late `web` / `review` paint nothing (`mine == round`). Desk: `POST /test/quick
   {"peek": true}` answers the words on screen.
 
+- **The zoom magnifies the words, never re-wraps them; 30 % more line spacing; `🪏 more`** (2026-10-29,
+  Victor: *"să nu mișboare cuvintele de pe un paragraf pe altul la zoom … mărește cu 30% spațiul între
+  rânduri … în loc de dig more, lasă doar more"*). A font `scale` × larger is not exactly `scale` ×
+  wider, so some notches moved a word to the next line. The body is now laid out once at 1×
+  (`bodyFont` 15 pt, `footerFont` 14 pt, a `baseWidth − 42` column) and its view's bounds are set to
+  frame ÷ `scale` — selection, links and hover go through `convert` and need nothing else. The
+  header, icons and margins still scale by their own lengths. `lineSpacing` = 0.3 × the line's
+  height (18 → 5.4 pt; TextKit 1 adds none under the last line, measured). The link reads `🪏 more`.
+  Checked on the desk: the same answer at 1× and after `{"wheel": 3}` broke on the same words.
+
 - **🔽 → over a question Googles it instead** (2026-10-25, Victor: *"dacă în timpul întrebării fac …
   butonul back și swipe la dreapta, se deschidă în loc de dialogul mic inline … Google Search cu …
   un query extras din ce am spus"*). `HotkeyTap.onQuickGoogle` → `quickGoogle` (an `Envelope` field)

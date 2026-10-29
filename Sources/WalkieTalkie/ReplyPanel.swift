@@ -67,6 +67,15 @@ enum ReplyPanel {
     /// has zoomed it (`grow`, 2026-10-23); 1 for every new pop-up.
     private static var scale: CGFloat = 1
     private static var font: NSFont { .systemFont(ofSize: 15 * scale) }
+    /// **The words are laid out once, at 1×, and only magnified** (2026-10-29, Victor:
+    /// *"să nu mișboare cuvintele de pe un paragraf pe altul la zoom"*): a font
+    /// `scale` times larger wrapped a word onto the next line at some notches — its
+    /// advances are not exactly proportional. The body is `bodyFont` in a
+    /// `baseWidth − 42` column at every zoom; `build` scales its bounds by `scale`.
+    private static let bodyFont = NSFont.systemFont(ofSize: 15)
+    /// **30 % more room between the lines** (2026-10-29, Victor: *"mărește cu 30% de
+    /// spațiu între rânduri să fie mai ușor de citit"*) — of the line's own height.
+    private static let lineSpacing: CGFloat = 0.3 * NSLayoutManager().defaultLineHeight(for: bodyFont)
     /// 26, up from 20, to carry the 26 pt walkie (2026-10-08, *"make the icon
     /// slightly larger … so I can click it easier"*); the name and the ✕ are
     /// centred in it.
@@ -348,7 +357,8 @@ enum ReplyPanel {
     /// **It reads `🪏 dig more`** (2026-10-23, Victor: *"să se cheamă linkul dig more"*,
     /// then *"un emoji de lopată în fața lu D, d mic să fie"*).
     static let moreURL = URL(string: "walkie-quick:more")!
-    static var more: String { link("🪏 dig more", moreURL) }
+    /// **Just `🪏 more`** since 2026-10-29 (Victor: *"în loc de dig more, lasă doar more"*).
+    static var more: String { link("🪏 more", moreURL) }
     static var onMore: (() -> Void)?
     /// The finished ⚡ pop-up is being written again (🌐 More): later `live`
     /// calls rewrite it in place instead of opening a new one. False when it
@@ -601,7 +611,8 @@ enum ReplyPanel {
     /// are `footerFont`; `adversary` is `robot-adversarial.png`, the 🧐's place.
     static let signed = "\u{5}"
     static let adversary = "\u{6}"
-    private static var footerFont: NSFont { .systemFont(ofSize: 14 * scale) }
+    /// 1×, like `bodyFont` — the body is magnified whole.
+    private static let footerFont = NSFont.systemFont(ofSize: 14)
     private static let adversaryImage: NSImage? = RelayWindow.walkieURL("robot-adversarial").flatMap(NSImage.init(contentsOf:))
 
     /// **Three dots, one lit at a time, for a step still running** (2026-10-10,
@@ -716,7 +727,10 @@ enum ReplyPanel {
                 links = links.map { $0.range.location > at ? (NSRange(location: $0.range.location + 2, length: $0.range.length), $0.url) : $0 }
                 lit.append(NSRange(location: at, length: 3))
             }
-            let styled = NSMutableAttributedString(string: words, attributes: [.font: font, .foregroundColor: NSColor.white])
+            let spaced = NSMutableParagraphStyle()
+            spaced.lineSpacing = lineSpacing
+            let styled = NSMutableAttributedString(string: words, attributes: [.font: bodyFont, .foregroundColor: NSColor.white,
+                                                                                .paragraphStyle: spaced])
             for r in lit {
                 styled.addAttribute(.foregroundColor, value: NSColor.white.withAlphaComponent(0.3), range: r)
                 styled.addAttribute(.foregroundColor, value: NSColor.white, range: NSRange(location: r.location + dotPhase % 3, length: 1))
@@ -754,10 +768,10 @@ enum ReplyPanel {
                 }
                 at = (styled.string as NSString).range(of: adversary)
             }
-            let view = LinkedBody(styled, width: inner - gutter)
+            let view = LinkedBody(styled, width: baseWidth - 42)
             view.links = links
             body = view
-            bodySize = text.isEmpty ? .zero : NSSize(width: inner - gutter, height: view.naturalHeight)
+            bodySize = text.isEmpty ? .zero : NSSize(width: inner - gutter, height: view.naturalHeight * s)
         }
         // **The pictures under the words**, as many as fit (2026-10-09).
         let pictures = images.compactMap { url -> (URL, NSImage)? in
@@ -809,6 +823,7 @@ enum ReplyPanel {
                 // a panel that is never key; a press on the words selects, as
                 // unscrolled.
                 body.frame = NSRect(x: 0, y: 0, width: inner - gutter, height: natural)
+                body.setBoundsSize(NSSize(width: body.frame.width / s, height: body.frame.height / s))
                 let scroll = NSScrollView(frame: box)
                 scroll.frame.size.width += 14
                 scroll.drawsBackground = false
@@ -823,6 +838,7 @@ enum ReplyPanel {
                 root.addSubview(scroll)
             } else {
                 body.frame = NSRect(x: pad, y: pad + stripH + bodyH - natural, width: inner - gutter, height: natural)
+                body.setBoundsSize(NSSize(width: body.frame.width / s, height: body.frame.height / s))
                 root.addSubview(body)
             }
         }
