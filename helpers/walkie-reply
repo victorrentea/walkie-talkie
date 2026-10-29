@@ -44,8 +44,23 @@ except Exception:
     top = ""
 def session_tty():
     """The terminal of the agent asking: walk up from this process to the first
-    ancestor with a tty (the Bash tool's shell has none; `claude` does)."""
-    pid = os.getppid()
+    ancestor with a tty (the Bash tool's shell has none; `claude` does).
+
+    An agent that runs `walkie-reply … &` as its last command loses that chain:
+    the tool's shell exits at once and this process is reparented to launchd
+    before it can look (2026-10-29: the answer came without a tty, so neither the
+    click on the bar nor the bind icons worked). Claude Code exports its own pid
+    as CLAUDE_PID, which survives the reparenting."""
+    return tty_above(os.getppid()) or tty_above(os.environ.get("CLAUDE_PID"))
+
+
+def tty_above(pid):
+    try:
+        pid = int(pid)
+    except (TypeError, ValueError):
+        return None
+    if pid <= 1:
+        return None
     for _ in range(12):
         try:
             out = subprocess.run(["ps", "-o", "tty=,ppid=", "-p", str(pid)],
