@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  INSTALLED (2026-09-27). Every night at 02:00: `tools/wt-night.sh start`, which runs only when the
-  external disk "Vic" is mounted, the last automatic run is ≥ 6 d 12 h old, no `wt-night` tmux is
+  PARKED in ~/Library/LaunchAgents.disabled since 2026-09-29 (on demand only). Was: every night at 02:00,
+  `tools/wt-night.sh start`, which ran only when the last automatic run is ≥ 6 d 12 h old, no `wt-night` tmux is
   live and the hour is 01–05; then an interactive Claude Code session in tmux `wt-night` runs the
   suite in the Tart guest (brief: evals/plan/vm/night/PROMPT.md). See docs/vm-lab.md, *Nightly*.
 

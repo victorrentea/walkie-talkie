@@ -1,17 +1,12 @@
 # The lab — a headless macOS guest for the live tests
 
-> **Since 2026-10-26 `wt-lab` lives on the new Mac's internal disk again: `TART_HOME=~/tart`**
-> (set in `~/.zshenv`; the migration to the new MacBook Pro left 1.4 TB free). Copied from Vic with
-> the VM stopped (`rsync -a --partial --exclude control.sock`, same image, so Wispr's sign-in inside
-> it survives). **The copy on `/Volumes/Vic/tart/vms/wt-lab` is the backup** — `wt-base` and
-> `fx-lab` stay on Vic and were not copied. `tools/vm-lab.sh` still defaults to `/Volumes/Vic/tart`
-> when `TART_HOME` is unset, so run it from a login shell (or export it).
-
-> **Since 2026-10-21 `wt-lab` lives on Vic again: `TART_HOME=/Volumes/Vic/tart`** (Victor: the internal
-> disk was full — 6 GB free — and the VM held 39 GB of it). Moved with the VM stopped
-> (`rsync -aS --exclude control.sock`, the same image, so Wispr's sign-in inside it survives), booted
-> once from Vic, then `~/tart` deleted. Boots and guest builds are slower again (USB HDD) — the price
-> of the space. The paragraph below is the history.
+> **Since 2026-10-30 the external disk "Vic" is out of the picture altogether** (Victor: *"renunțăm la
+> discul extern cu totul. E prea lent"*). Everything lives in **`TART_HOME=~/tart`** on the internal
+> disk (set in `~/.zshenv`, and the default of `tools/vm-lab.sh` / `tools/wt-night.sh` since that day;
+> the new MacBook Pro has 1.2 TB free). `wt-lab` came back from Vic on 2026-10-26 (`rsync -a --partial
+> --exclude control.sock` with the VM stopped, same image, so Wispr's sign-in inside it survives).
+> **`wt-base` and `fx-lab` stayed on Vic and are not used any more** — a `reset` + `up` pulls the base
+> image again (~25 GB) into `~/tart`. Every `/Volumes/Vic/…` path below is history.
 
 A Tart VM (`wt-lab`) on Apple's Virtualization.framework, so that synthetic mouse and keys, the
 witness Terminal tabs and the test audio stay inside a guest instead of on Victor's screen, his
@@ -99,11 +94,11 @@ tools/vm-lab.sh down      # guest shutdown, then reap
 tools/vm-lab.sh look      # Screen Sharing on Victor's screen — only when he asks for it
 ```
 
-By hand: `export TART_HOME=/Volumes/Vic/tart` first (back on Vic since 2026-10-21), **always** (without it Tart silently uses
-`~/.tart`; `/Volumes/Vic/tart` is the old home since 2026-09-29). Then
+By hand: `export TART_HOME=~/tart` first (already in `~/.zshenv`), **always** — without it Tart silently uses
+`~/.tart`. Then
 `nohup tart run wt-lab --no-graphics --no-audio --no-clipboard > $TART_HOME/wt-lab.log 2>&1 &`.
 
-## How the USB disk shows up — it is a spinning disk
+## How the USB disk showed up — it is a spinning disk (history: not used since 2026-10-30)
 
 "Vic" is a **WD Elements 25A1** (a 2.5" USB hard drive, 3 TB, APFS, `Owners: Disabled`), behind
 a 5 Gb/s bridge. It sustained 16–28 MB/s at 240–300 IOPS whenever the VM was busy. Everything the
@@ -226,7 +221,7 @@ stay) — untested, and a resume would still read 8 GiB of RAM image off the dis
   dictation, and there is none there.)
 - Docker Desktop's VM (`com.apple.Virtualization.VirtualMachine`, 14 GB RSS) runs beside it on the
   host; `pgrep -f Virtualization` finds both. The lab's is the one with
-  `/Volumes/Vic/tart/vms/wt-lab/disk.img` open.
+  `~/tart/vms/wt-lab/disk.img` open.
 
 ## Still needs a hand: the privacy grants
 
@@ -388,8 +383,7 @@ exploratorie sa se joace cu app. totul in VM."*
 symlinked into `~/Library/LaunchAgents/`, bootstrapped) runs `tools/wt-night.sh start` every day at
 **02:00**. `start` runs `gate`, which lets it through only when:
 
-- `/Volumes/Vic/tart` exists (the disk is plugged in);
-- the stamp **`/Volumes/Vic/tart/night/last-run`** is absent or older than **6 d 12 h** — so at most one
+- the stamp **`~/tart/night/last-run`** (`$TART_HOME/night/last-run`) is absent or older than **6 d 12 h** — so at most one
   automatic run a week, and a 02:00 job still fires on the 7th night despite drift;
 - no tmux session `wt-night` younger than 20 h exists (a live run). An older one is last week's,
   left open to read: `start` renames it `wt-night-<YYYYMMDD-HHMM>` and keeps it;
@@ -438,7 +432,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ro.victorrentea.wt-night
 
 **Where things go.** Reports: `evals/plan/vm/night/<YYYY-MM-DD>/` (`report.md`, `merged.md` from
 `merge.py`, per-phase reports and logs, `notes.json`, `exploratory.md`), committed and pushed by the
-session; screenshots on the disk, `/Volumes/Vic/tart/night/<date>/`. On the internal disk only logs:
+session; screenshots beside the VM, `~/tart/night/<date>/` (on the external disk until 2026-10-30). On the internal disk only logs:
 `~/.walkie-talkie/night/launcher.log` (every gate decision), `launchagent.log` (launchd's stdout),
 `history.log` (one line per night: date, counts, commit, report path).
 

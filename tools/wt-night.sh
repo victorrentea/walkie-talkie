@@ -23,11 +23,11 @@
 #      WT_NIGHT_RC=0     start claude without `--remote-control` (if RC blocks or wants a login)
 #
 # Logs in ~/.walkie-talkie/night/. The stamp is beside the VM in $TART_HOME/night (internal disk since
-# 2026-09-29 — the weekly gate no longer depends on the external disk Vic being mounted).
+# 2026-09-29; the external disk Vic is not used at all since 2026-10-30).
 set -euo pipefail
 
 REPO=/Users/victorrentea/workspace/walkie-talkie
-export TART_HOME="${TART_HOME:-/Volumes/Vic/tart}"   # back on Vic since 2026-10-21
+export TART_HOME="${TART_HOME:-$HOME/tart}"   # internal disk only; the external disk is dropped (2026-10-30)
 STAMP="$TART_HOME/night/last-run"
 SESSION=wt-night
 LOGDIR="$HOME/.walkie-talkie/night"

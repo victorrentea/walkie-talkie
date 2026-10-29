@@ -13,8 +13,8 @@ in the guest, leave a morning report, shut the VM down.
   `.claude/rules/desk-testing.md`, `docs/journal.md` (its *Contents* and *Superseded* lists, plus the
   last two dated `## ` sections at the end), and the previous night's report — the newest
   `evals/plan/vm/night/<YYYY-MM-DD>/report.md`, or `evals/plan/vm/night/report-vm-night.md` if none.
-- `DATE=$(date +%F)` once, now; `OUT=evals/plan/vm/night/$DATE`; `SHOTS=/Volumes/Vic/tart/night/$DATE`
-  (screenshots stay on the external disk, never in git). `export TART_HOME=/Volumes/Vic/tart` in every shell.
+- `DATE=$(date +%F)` once, now; `OUT=evals/plan/vm/night/$DATE`; `SHOTS=~/tart/night/$DATE`
+  (screenshots stay beside the VM, never in git). `export TART_HOME=~/tart` in every shell.
 - **Nothing synthetic on the host.** No `osascript`/System Events, no `cliclick`, no audio, no windows
   on Victor's screen. Everything goes through `tools/vm-lab.sh {up,deploy,api,sh,shot,down}`, `tart exec`
   and SSH into the guest as `docs/vm-lab.md` documents. Never `vm-lab.sh look`, never Codex/Screen Sharing.
@@ -144,7 +144,7 @@ Runs when the guest is free: after the suite, while you triage and edit on the h
 re-run waits until it has handed back. Spawn **one** subagent (model Opus, description suffixed
 ` / Opus`) with this brief, filled in:
 
-> Play with Walkie Talkie inside the Tart guest `wt-lab` (TART_HOME=/Volumes/Vic/tart), for at most
+> Play with Walkie Talkie inside the Tart guest `wt-lab` (TART_HOME=~/tart), for at most
 > 40 minutes, looking for anything odd. Real guest-side input only, through `tools/vm-lab.sh api|sh|shot`
 > and `tart exec wt-lab …`: `/test/gesture`, `/test/dictation`, `/test/cancel`, `/test/recover`,
 > `/bind`/`/unbind`, `/test/rebind-panel`, `/engine`, `/test/autosend`, `/test/whisper {"kill":true}`,

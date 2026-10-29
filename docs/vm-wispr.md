@@ -237,7 +237,7 @@ is the stable primary key (Wispr's `transcriptEntityId` or the relay's stem).
   overwrites a label already written"*). The host has sqlite 3.43, and `UPDATE … FROM` needs 3.33:
 
 ```sql
-ATTACH '/Volumes/Vic/tart/wt-wispr-out/corpus-guest.db' AS g;
+ATTACH '/Users/victorrentea/tart/wt-wispr-out/corpus-guest.db' AS g;
 UPDATE samples SET teacher_text = x.teacher_text, teacher_at = x.teacher_at,
                    teacher_mic  = x.teacher_mic
 FROM (SELECT id, teacher_text, teacher_at, teacher_mic FROM g.samples
@@ -432,17 +432,17 @@ take and keeps it for Recover.
 
 ## The step list, for the day the VM is up
 
-`TART_HOME=/Volumes/Vic/tart` throughout, as `vm-lab.sh` set it then (since 2026-09-29 the lab is at `~/tart`; the `wt-wispr-out` folder stays on Vic).
+`TART_HOME=~/tart` throughout — the internal disk; the external disk Vic is not used since 2026-10-30.
 
 1. **Make the Wispr VM.** `tart clone wt-base wt-wispr` (or clone from the image if `wt-base` is
    not there yet), then `tart set wt-wispr --cpu 4 --memory 8192`, then
-   `mkdir -p /Volumes/Vic/tart/wt-wispr-out`.
+   `mkdir -p ~/tart/wt-wispr-out`.
 2. **Boot it headless, with no audio and two shares.** This needs a flags knob in `vm-lab.sh`, or
    run by hand:
    ```sh
    tart run wt-wispr --no-graphics --no-audio \
      --dir corpus:$HOME/.walkie-talkie/voice-corpus:ro \
-     --dir out:/Volumes/Vic/tart/wt-wispr-out &
+     --dir out:$HOME/tart/wt-wispr-out &
    caffeinate -i -w $! &
    ```
    In the guest they appear as `/Volumes/My Shared Files/{corpus,out}`.
@@ -487,7 +487,7 @@ take and keeps it for Recover.
     - `mkdir -p ~/.walkie-talkie/voice-corpus`, then symlink every date directory and `mic` from
       `/Volumes/My Shared Files/corpus/`.
     - On the **host**, snapshot the database into the share:
-      `/usr/bin/sqlite3 ~/.walkie-talkie/voice-corpus/corpus.db ".backup /Volumes/Vic/tart/wt-wispr-out/corpus-in.db"`.
+      `/usr/bin/sqlite3 ~/.walkie-talkie/voice-corpus/corpus.db ".backup $HOME/tart/wt-wispr-out/corpus-in.db"`.
     - In the guest, copy that file to `~/.walkie-talkie/voice-corpus/corpus.db`.
 11. **The go/no-go, supervised over Screen Sharing.** Open a blank TextEdit document, then:
     ```sh
@@ -542,3 +542,14 @@ merges into the host `corpus.db` every 30 min (only empty rows, backup first) an
 **2026-10-23:** both scripts had `TART_HOME=~/tart` hardcoded from before the VM moved back to Vic
 (2026-10-21) — fixed to `/Volumes/Vic/tart`. The first Wispr launch right after a cold boot from Vic
 failed (`Launch failed`, RBS code 5); the second worked. That night: 542 labels (1.53 h), 413 new clips left.
+
+**2026-10-30: every night on its own, and off the external disk.** The LaunchAgent
+`ro.victorrentea.wispr-night` (in `~/Library/LaunchAgents/`, outside this repo too) runs
+`~/tart/wispr-batch/night-trigger.sh` every 2 min: once a night, 22:00–05:00, after 10 min with no keyboard
+or mouse on the host, `start-night.sh "<next day> 10:00"`; once the guard exits, `tart stop wt-lab`.
+Skip a night: `touch ~/tart/wispr-batch/no-night`; log `night.log`. A file `ignore-host` makes the guard
+not pause on host dictation for one run (Victor, 01:16 that night: *"pornește de acum etichetarea, chiar
+dacă mai folosesc încă Wispr"*); the trigger deletes it when the run ends. The scripts use
+`TART_HOME=~/tart` (Vic dropped — *"e prea lent"*), `g` asks `tart ip` (the guest moved .4 → .2 with the
+VM), and `mute-ids.py` runs on `/opt/homebrew/bin/python3` (the `voice-distill` venvs broke in the Mac
+migration).

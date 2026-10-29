@@ -1,15 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  DRAFT, NOT INSTALLED (2026-09-26). Starts the Tart lab `wt-lab` headless at login and whenever
-  a volume mounts, so it comes up once the external disk "Vic" appears. See docs/vm-lab.md.
+  DRAFT, NOT INSTALLED (2026-09-26). Starts the Tart lab `wt-lab` headless at login. See docs/vm-lab.md.
 
   Still a draft on 2026-09-27: the weekly night run (tools/wt-night.sh, LaunchAgent
   ro.victorrentea.wt-night) is what brings the VM up now — its Claude session runs `vm-lab.sh up`
   at 02:00 and `down` at the end. Installing this one too would keep the VM running all day.
 
-  - `vm-lab.sh up` exits 1 when /Volumes/Vic is absent (every other mount is a harmless no-op),
-    and is a no-op when wt-lab is already running.
+  - `vm-lab.sh up` is a no-op when wt-lab is already running.
   - `up` backgrounds `tart run` with nohup; AbandonProcessGroup keeps launchd from killing the VM
     when the script exits. No KeepAlive: `vm-lab.sh down` must stay down.
   - Install: ln -s "$PWD/tools/ro.victorrentea.wt-lab.plist" ~/Library/LaunchAgents/ &&
@@ -27,10 +25,9 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>TART_HOME</key><string>/Volumes/Vic/tart</string>
+    <key>TART_HOME</key><string>/Users/victorrentea/tart</string>
   </dict>
   <key>RunAtLoad</key><true/>
-  <key>StartOnMount</key><true/>
   <key>AbandonProcessGroup</key><true/>
   <key>ProcessType</key><string>Background</string>
   <key>StandardOutPath</key><string>/tmp/wt-lab-launchagent.log</string>

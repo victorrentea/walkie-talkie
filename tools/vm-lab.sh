@@ -29,24 +29,15 @@
 # once they are there (see `bake`).
 set -euo pipefail
 
-# **Everything Tart stores lives on the external disk "Vic"** (2026-09-26, Victor: *"e important să
-# nu se stocheze pe discul meu mult … totul să fie cât de mult se poate pe acel hard extern"*): the
-# internal disk had 88 GiB free against a 25 GB base image plus clones. `TART_HOME` is the one knob
-# Tart offers (OCI cache, IPSW cache, VMs, tmp all live under it); the volume is APFS, which the
-# sparse disk images need. Refuse to run without it rather than silently fill the internal disk.
-#
-# **`wt-lab` moved to the internal disk on 2026-09-29** (Victor, 28 Sep 22:30: *"move the VM back on
-# my Mac disk to increase speed"*): the USB HDD made a boot take minutes and every guest build read
-# through it. `~/tart` holds only `vms/wt-lab` (+ the night stamp); the base image and the OCI cache
-# stay on Vic (`/Volumes/Vic/tart`) and are not needed to run the lab. `TART_HOME=/Volumes/Vic/tart`
-# still points at the old copy, renamed `wt-lab.moved-2026-09-29`.
-#
-# **Back on Vic since 2026-10-21** (Victor: *"stop it and move it back to the external disk to free
-# the space"* — the internal disk was 100 % full, 6 GB left; the VM took 39 GB of it). Copied with
-# `rsync -aS --exclude control.sock` with the VM stopped (same disk image, not a clone, so the Wispr
-# Flow session signed in inside it survives), booted from Vic, then `~/tart` deleted.
-export TART_HOME="${TART_HOME:-/Volumes/Vic/tart}"
-[ -d "$TART_HOME" ] || { echo "❌ $TART_HOME is not there — is the disk Vic mounted? (the lab lives on Vic since 2026-10-21)" >&2; exit 1; }
+# **Everything Tart stores lives on the internal disk, in `~/tart`** (since 2026-10-26; Victor,
+# 2026-10-30: *"renunțăm la discul extern cu totul. E prea lent"*). The lab went back and forth to the
+# external USB disk "Vic" (2026-09-26 for space, 2026-09-29 back for speed, 2026-10-21 out again when the
+# old Mac's disk was full); the new Mac has 1.2 TB free and a boot from the USB HDD took minutes, so the
+# external disk is gone from every script. `TART_HOME` is the one knob Tart offers (OCI cache, IPSW cache,
+# VMs, tmp all live under it). The base image `wt-base` stayed on Vic, so `up` after a `reset` pulls it
+# again (~25 GB) into `~/tart`.
+export TART_HOME="${TART_HOME:-$HOME/tart}"
+mkdir -p "$TART_HOME"
 
 VM="${WT_LAB_VM:-wt-lab}"
 BASE="${WT_LAB_BASE:-wt-base}"

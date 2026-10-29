@@ -15997,3 +15997,14 @@ overwrites the finished sentence on the clipboard (Q17), which is the point of s
 synthetic drag on the first line → `Selection test: drag across these w` on the clipboard, frame
 unchanged; a drag on the bottom margin moved it 100 pt.
 
+
+## 2026-10-30 — the external disk Vic is dropped; the Wispr batch runs every night on its own
+
+Victor: *"renunțăm la discul extern cu totul. E prea lent"*. `wt-lab` had been back on the internal disk
+(`~/tart`) since 2026-10-26, but `tools/vm-lab.sh`, `tools/wt-night.sh` and the draft
+`ro.victorrentea.wt-lab.plist` still defaulted to `/Volumes/Vic/tart`, and so did the host kit in
+`~/tart/wispr-batch/` — with Vic unplugged, a LaunchAgent (no `~/.zshenv`) would have failed. Every default
+is `~/tart` now; `vm-lab.sh` no longer refuses to run without the disk. `wt-base` and `fx-lab` stayed on
+Vic: a `reset` re-pulls the base image. Same night, *"când mă culc … rulează o rundă de transcriere cu
+Wispr Flow … în fiecare noapte, după 10 min de inactivitate"* → LaunchAgent `ro.victorrentea.wispr-night`
+(details in `docs/vm-wispr.md`, *How the batch is actually run*).

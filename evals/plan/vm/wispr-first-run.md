@@ -75,7 +75,7 @@ screenshots were `ssh … screencapture -x` and the deploy was the manual tar.
 
 ## The runs
 
-Driver: `wfirst.py` (a copy is at `/Volumes/Vic/tart/night/wispr/wfirst.py`, the guest's at
+Driver: `wfirst.py` (a copy is at `~/tart/night/wispr/wfirst.py`, the guest's at
 `~/wt-lab/wfirst.py`), run as `/usr/bin/python3` over SSH. The clip is the harness's `CLIP_EN`
 (3.5 s, *"If I dictate now, how good is this dictation, I wonder?"*), resampled to 48 kHz stereo,
 peak 0.5, with 0.5 s of silence either side, played into **BlackHole 2ch** with `sounddevice`.
@@ -182,7 +182,7 @@ microphone` line appeared once, at the moment the playback started (standalone r
 Guest running. Wispr Flow running with `61+60 = ptt` (Q23, same map as the host); Walkie Talkie running, Engine back on
 `eleven-live` (what it was), unbound, firewall alive. Witness tabs killed and closed; three
 TextEdit documents (*Untitled*, *Untitled 2*, *Untitled 3*) left open with the standalone text.
-Screenshots and raw JSON per run: `/Volumes/Vic/tart/night/wispr/` (`00-before.png`,
+Screenshots and raw JSON per run: `~/tart/night/wispr/` (`00-before.png`,
 `01-relay1-after.png`, `02-standalone1-after.png`, `03-standalone2-after.png`,
 `04-relay-witness-tab.png`, `05-standalone-q23-after.png`, `relay{1,2,3}.json.txt`,
 `standalone{1,2}.json.txt`, `standalone{3,4,5}-q23.json.txt`, `wfirst.py`).
