@@ -4994,11 +4994,15 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// boundary.)
     private var transcribeString: NSAttributedString {
         let lit = transcribeLabel.textColor ?? (anchored ? .white : .secondaryLabelColor)
-        // The unlit end, `applyEngineText`'s colours exactly: opaque grey on the
-        // chip, because alpha over an unknown backdrop is the halo problem one
-        // step further in.
-        let dim = anchored ? NSColor(calibratedWhite: 0.45, alpha: 1)
-                           : lit.withAlphaComponent(0.30)
+        // The unlit end: opaque grey on the chip, because alpha over an unknown
+        // backdrop is the halo problem one step further in. **Lighter than
+        // `applyEngineText`'s 0.45 since 2026-10-30** — at the close every letter
+        // is unlit, and 0.45 on the 30 % black band read as no row at all until
+        // the bar had lit a few letters (Victor: *"o latență de câteva secunde
+        // între momentul când închid dictarea și momentul în care văd
+        // transcribing"*; the row was up in the same pass as the stop).
+        let dim = anchored ? NSColor(calibratedWhite: 0.70, alpha: 1)
+                           : lit.withAlphaComponent(0.55)
         let out = NSMutableAttributedString()
         // **The ✨ goes in as a picture** — the failure `applyEngineText` is
         // written under, and this row was still walking into it: a raw emoji in
@@ -5030,10 +5034,11 @@ private let heardLabel = NSTextField(labelWithString: "")
         // the local fallback instead, `AutoLocal.rowText`.)
         // **And ⌘⌃X rides this line since 2026-10-22** — `localNowInline`, `— ⌘⌃X`
         // after the word, in grey (2026-10-27): a hint beside the bar, not part of it,
-        // and lighter than the bar's unlit `dim` so it never reads as letters to fill.
+        // and a grey apart from the bar's unlit `dim` so it never reads as letters to
+        // fill — darker than it since the unlit letters went to 0.70 (2026-10-30).
         if transcribing, let tail = localNowInline {
-            let grey = anchored ? NSColor(calibratedWhite: 0.62, alpha: 1)
-                                : lit.withAlphaComponent(0.55)
+            let grey = anchored ? NSColor(calibratedWhite: 0.55, alpha: 1)
+                                : lit.withAlphaComponent(0.40)
             out.append(NSAttributedString(string: " " + tail, attributes: [.font: hintFont, .foregroundColor: grey]))
         }
         transcribeLit = steps

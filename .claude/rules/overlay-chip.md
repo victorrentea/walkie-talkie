@@ -347,6 +347,12 @@ yields to `--label`).
   culoarea textului"*). Three full stops, for `Listening...`'s reason. Fifteen ticks a second and
   **nothing relayouts at all** — the row is a fixed string whose ink changes; taking the number
   off *removed* a relayout. → journal: *The wait fills too (2026-09-08)*
+- **The bar's unlit letters are grey 0.70 on the chip, not 0.45** (2026-10-30, Victor: *"o latență
+  de câteva secunde între momentul când închid dictarea și momentul în care văd transcribing"*).
+  The row was up in the same main-thread pass as the stop; at that instant every letter is unlit,
+  and 0.45 on the 30 % black band read as *no row* until the bar had lit a few letters, 1–3 s in.
+  The `— ⌘⌃X` tail went to 0.55 so it stays a grey apart from the letters. `Listening...` keeps
+  `applyEngineText`'s 0.45 — it starts at the stop of nothing, so nobody is waiting to read it.
 - **The meter constants come from the corpus replay and are transferable only because
   `MicRecorder.meter` runs on the converted 16 kHz mono buffer** (`evals/voiced-seconds.py`). Per
   1024 frames (64 ms): RMS against an adaptive noise floor, 9 dB over it to count as speech,
