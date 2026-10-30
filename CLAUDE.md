@@ -127,3 +127,8 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
 - A rule with a measured number keeps the number. A feature that cannot be screenshot keeps a
   `WT_SHOOT_*` route, or it cannot be reviewed.
 - New detail goes into the matching `.claude/rules/` file (or the journal), not here.
+
+## Memoria lui Claude
+
+Memoria generală (cine e Victor, cum vrea să lucrezi) e în repo-ul privat `victorrentea/assistant`.
+Într-o sesiune din cloud, atașează-l la sesiune și urmează-i `CLAUDE.md`-ul. Pe Mac se încarcă singură.
