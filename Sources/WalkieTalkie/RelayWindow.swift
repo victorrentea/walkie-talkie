@@ -1417,11 +1417,27 @@ private let heardLabel = NSTextField(labelWithString: "")
         // layout change is `CGWindowListCopyWindowInfo` — the window's bounds tell
         // you which rows are up (16 title / 17 recording / 15 selection, 6 apart,
         // 12 padding all round) and whether it is riding the cursor.
-        panel.sharingType = ProcessInfo.processInfo.environment["RELAY_CAPTURABLE"] == "1"
-            ? .readOnly : .none
+        applySharing()
+        ReplyPanel.shareZoomChanged.append { [weak self] _ in self?.applySharing() }
+        ReplyPanel.inShotChanged.append { [weak self] in self?.applySharing() }
         panel.delegate = self
         panel.contentView = root
         root.owner = self
+    }
+
+    /// **Filmed while Victor Addons' ⌥⇧ zoom is on** (2026-10-30, Victor: *"să pot
+    /// să fac zoom sintetic și pe dialogul de prompturi … el dispare cumva, că faci
+    /// zoom pe ce e sub"*). That zoom is an opaque glass at `.maximumWindow + 3` that
+    /// films the display with ScreenCaptureKit and shows it magnified; this panel, at
+    /// `.statusBar` and `.none`, was under the glass and out of its film — the zoom
+    /// showed what lay beneath it. `.readOnly` for the zoom's length puts it in the
+    /// film, magnified with the rest, the way the reply pop-up has been since
+    /// 2026-10-15 — and so also in a Teams/Zoom share for that long. The shutter's
+    /// own frames still never hold it (`ReplyPanel.outOfShot`).
+    private func applySharing() {
+        let wanted = ProcessInfo.processInfo.environment["RELAY_CAPTURABLE"] == "1" || ReplyPanel.shareZoomOn
+        panel.sharingType = wanted && !ReplyPanel.inShot ? .readOnly : .none
+        if heldSkip.isVisible { heldSkip.show(over: panel.frame, level: panel.level, sharing: panel.sharingType) }
     }
 
     private func configureViews() {

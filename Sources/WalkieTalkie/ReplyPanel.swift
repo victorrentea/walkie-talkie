@@ -90,15 +90,28 @@ enum ReplyPanel {
 
     /// **Out of the frame while `body` takes a screenshot** — the shutter's
     /// `screencapture` runs off the main thread, the window is touched on it.
+    /// `inShotChanged` takes the other capturable windows out with it (the prompt
+    /// panel under the ⌥⇧ zoom, `RelayWindow.applySharing`).
     static func outOfShot<T>(_ body: () throws -> T) rethrows -> T {
-        func share(_ type: NSWindow.SharingType) {
-            if Thread.isMainThread { panel?.sharingType = type }
-            else { DispatchQueue.main.sync { panel?.sharingType = type } }
+        func share(_ type: NSWindow.SharingType, inShot: Bool) {
+            let apply = {
+                panel?.sharingType = type
+                self.inShot = inShot
+                inShotChanged.forEach { $0() }
+            }
+            if Thread.isMainThread { apply() } else { DispatchQueue.main.sync(execute: apply) }
         }
-        share(.none)
-        defer { share(capturable ? .readOnly : .none) }
+        share(.none, inShot: true)
+        defer { share(capturable ? .readOnly : .none, inShot: false) }
+        // Under the ⌥⇧ zoom the shot is of its glass, which shows the film of a
+        // frame ago — still with these windows in it. Two of its frames (30 fps)
+        // and the glass has caught up.
+        if shareZoomOn { usleep(80_000) }
         return try body()
     }
+    /// The shutter is taking its picture — every capturable window is out of it.
+    private(set) static var inShot = false
+    static var inShotChanged: [() -> Void] = []
     /// The open pop-up's frame, global Cocoa points.
     static var frame: NSRect? { panel?.frame }
 

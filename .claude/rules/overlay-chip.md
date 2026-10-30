@@ -664,3 +664,12 @@ yields to `--label`).
 - **Never put a raw emoji into an attributed string on a label that carries a halo** — go through
   `inline(Glyphs.emoji(…))`. → journal: *Two implementation traps, both paid for*
 - **The reward mark is the blue `HQ` tag, never ⭐ or ✨.** → journal: *A tag pops out when it fills (2026-09-08; it said `HQ` from 2026-09-09)*
+- **Under Victor Addons' ⌥⇧ zoom the overlay is filmed, so it is magnified with the rest** (2026-10-30,
+  Victor: *"să pot să fac zoom sintetic și pe dialogul de prompturi … el dispare cumva, că faci zoom pe
+  ce e sub"*). The zoom is an opaque glass at `.maximumWindow + 3` filming the display with
+  ScreenCaptureKit; the overlay at `.statusBar` + `sharingType = .none` was under the glass and out of
+  the film, so the prompt dialog vanished. `RelayWindow.applySharing`: `.readOnly` while
+  `ReplyPanel.shareZoomOn` (also in a Teams/Zoom share for that long), `.none` otherwise and during the
+  shutter (`ReplyPanel.outOfShot` → `inShotChanged`, which waits two zoom frames, 80 ms, under the
+  zoom). Measured: SCK display capture `including:` the chip — 0 lit px at `.none`, 178 at `.readOnly`;
+  the 2026-07-31 "`.readOnly` captures transparent" note is about `screencapture`, not SCK.

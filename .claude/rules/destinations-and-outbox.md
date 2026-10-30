@@ -429,7 +429,7 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   distributed note (the feed victor-effects' `VisibleCursor` reads; empty = ended, 1.5 s silent =
   ended) and moves the open pop-up to `.screenSaver − 1` while the zoom is on, back to the top after.
   The ✕ and links still work: the glass ignores the mouse and its cursor is the same transform.
-  Log `🔎 ⌥⇧ zoom on — the reply pop-up goes under it`. Not done for Walkie's other top-level panels
+  Log `🔎 ⌥⇧ zoom on — the reply pop-up goes under it`. The overlay itself is filmed instead (2026-10-30, `overlay-chip.md`). Not done for Walkie's other top-level panels
   (`TypeInBox`, the spawn menu, the capture effects).
 
 - **🤖 signs the ⚡ footer, an angry 🤖 reviews, `Internet` searches; 428 pt; a follow-up goes in ❓**
