@@ -2074,6 +2074,8 @@ final class HotkeyTap {
     /// `areaDrag` at every middle press and release.
     private var haloDialed = false
     private var lastHaloDialAt: CFTimeInterval = 0
+    /// This tap saw the wheel go down and not yet come up. Tap thread only.
+    private var wheelPressSeen = false
     /// One step per notch — a wheel spun fast reports several lines per
     /// event and several events a frame, and a dial that skipped three halos
     /// on one flick is one he cannot aim.
@@ -2099,8 +2101,15 @@ final class HotkeyTap {
     /// The button is asked of the window server rather than of this tap's
     /// bookkeeping: in Logi mode the press goes straight past and leaves no
     /// mark here, and `rightIsHeld` already reaches for the same instrument.
+    ///
+    /// ⚠️ **And this tap must have seen the press itself** (`wheelPressSeen`).
+    /// The window server's word alone is not enough: a release eaten by any
+    /// other app's tap (Victor Addons' wheel crop, ScreenBrush, an agent's
+    /// unpaired click) leaves it believing the wheel is down for hours —
+    /// `area-crop.md` measured seven — and every dictation then ate every
+    /// scroll on the Mac (2026-10-31, from a scan of every app's scroll hooks).
     private func haloDial(_ event: CGEvent) -> Bool {
-        guard haloUp, !areaCropping else { return false }
+        guard haloUp, !areaCropping, wheelPressSeen else { return false }
         guard CGEventSource.buttonState(.combinedSessionState, button: .center)
            || CGEventSource.buttonState(.hidSystemState, button: .center) else { return false }
         // Ours from here: the wheel is down and the ring is up, so nothing
@@ -2157,6 +2166,8 @@ final class HotkeyTap {
     private var padScrollFired = false
     /// The scroll began under the chord: its tail (momentum included) is ours
     /// too, even once the keys are up — a page must not coast on a swipe.
+    /// Only a gesture's tail, though: an event with neither a scroll phase nor
+    /// a momentum phase belongs to no gesture (`padScrolled`).
     private var padScrollOwned = false
     /// The first scroll of each hold is logged with its fields — the one way
     /// to see what a trackpad (or a posted scroll) hands this tap.
@@ -2315,15 +2326,18 @@ final class HotkeyTap {
             Log.info("🖐️ a scroll under left ⌃⌥⌘ — continuous=\(event.getIntegerValueField(.scrollWheelEventIsContinuous)) phase=\(event.getIntegerValueField(.scrollWheelEventScrollPhase)) momentum=\(event.getIntegerValueField(.scrollWheelEventMomentumPhase)) dy=\(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)) dx=\(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2))")
         }
         guard event.getIntegerValueField(.scrollWheelEventIsContinuous) != 0 else { return false }
+        let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+        let momentum = event.getIntegerValueField(.scrollWheelEventMomentumPhase)
         // kCGScrollPhaseBegan
-        if event.getIntegerValueField(.scrollWheelEventScrollPhase) == 1 {
-            padScrollOwned = padChordDown
+        if phase == 1 {
             padScroll = .zero
             padScrollFired = false
         }
-        guard padChordDown || padScrollOwned else { return false }
-        guard padChordDown, !padScrollFired,
-              event.getIntegerValueField(.scrollWheelEventMomentumPhase) == 0 else { return true }
+        let tail = Self.padScrollTail(owned: padScrollOwned, chordDown: padChordDown,
+                                      phase: phase, momentum: momentum)
+        padScrollOwned = tail.owned
+        guard tail.ours else { return false }
+        guard padChordDown, !padScrollFired, momentum == 0 else { return true }
         let dy = CGFloat(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1))
         let dx = CGFloat(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2))
         // The fingers' own direction, whatever *Natural scrolling* says: with it
@@ -2335,6 +2349,26 @@ final class HotkeyTap {
         padScrollFired = true
         padFire(fingers: 2, d)
         return true
+    }
+
+    /// Whether a continuous scroll is the chord's, and whether the gesture it
+    /// belongs to stays owned. A swipe begun under the chord keeps its tail —
+    /// momentum included — once the keys are up: a page must not coast on it.
+    ///
+    /// ⚠️ **A tail, nothing more.** Released ⌃⌥⌘ before the fingers left the
+    /// pad, the gesture used to stay owned until the next one *began* — and a
+    /// smooth-scrolling mouse wheel (Logi Options+) sends continuous events
+    /// with no phase at all, so it never began one: the wheel was dead in every
+    /// app until the trackpad was touched again (2026-10-31, from a scan of
+    /// every app's scroll hooks). An event with neither a scroll nor a momentum
+    /// phase belongs to no gesture, and momentum's end ends the tail.
+    static func padScrollTail(owned: Bool, chordDown: Bool,
+                              phase: Int64, momentum: Int64) -> (owned: Bool, ours: Bool) {
+        var owned = owned
+        if phase == 1 { owned = chordDown }         // kCGScrollPhaseBegan
+        if momentum == 3 { owned = false }          // kCGMomentumScrollPhaseEnd
+        let inAGesture = phase != 0 || momentum != 0
+        return (owned, chordDown || (owned && inAGesture))
     }
 
     /// The swipe, as the chord the side button would have sent.
@@ -2922,6 +2956,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         // Anything past the canary is someone's input — the restart gate's clock.
         HotkeyTap.noteInput()
+        // The wheel's own press, as this tap saw it — in both modes and while
+        // failing open, so a release is never missed here (`haloDial`).
+        if type == .otherMouseDown || type == .otherMouseUp,
+           event.getIntegerValueField(.mouseEventButtonNumber) == MOUSE_BUTTON_MIDDLE {
+            wheelPressSeen = type == .otherMouseDown
+        }
         if frozen {
             // The chord's edges are still followed, so a release while main is
             // frozen gives the pointer back (`holdCursor`).

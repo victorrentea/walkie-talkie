@@ -243,3 +243,40 @@ final class GestureHintBarTests: XCTestCase {
         XCTAssertEqual(far?.opacity, GestureHintBar.aloneOpacity)
     }
 }
+
+/// 🛟 A two-finger swipe's tail under left ⌃⌥⌘ — and nothing past it (2026-10-31).
+final class PadScrollTailTests: XCTestCase {
+    private func step(_ owned: Bool, chord: Bool, phase: Int64, momentum: Int64 = 0) -> (owned: Bool, ours: Bool) {
+        HotkeyTap.padScrollTail(owned: owned, chordDown: chord, phase: phase, momentum: momentum)
+    }
+
+    /// The trap: keys up before the fingers, then the mouse's smooth wheel —
+    /// continuous, no phase — must reach the app.
+    func testAPhaselessWheelAfterAnOwnedSwipeIsNotSwallowed() {
+        var s = step(false, chord: true, phase: 1)          // began under the chord
+        XCTAssertTrue(s.ours); XCTAssertTrue(s.owned)
+        s = step(s.owned, chord: false, phase: 2)           // keys up, fingers still moving
+        XCTAssertTrue(s.ours, "the rest of the swipe is still ours")
+        s = step(s.owned, chord: false, phase: 0)           // a Logi smooth-wheel event
+        XCTAssertFalse(s.ours, "a scroll in no gesture must never be eaten")
+    }
+
+    func testMomentumAfterAnOwnedSwipeIsSwallowedUntilItEnds() {
+        var s = step(false, chord: true, phase: 1)
+        s = step(s.owned, chord: false, phase: 4)           // fingers lifted
+        XCTAssertTrue(s.ours)
+        s = step(s.owned, chord: false, phase: 0, momentum: 1)
+        XCTAssertTrue(s.ours, "a page must not coast on a swipe")
+        s = step(s.owned, chord: false, phase: 0, momentum: 2)
+        XCTAssertTrue(s.ours)
+        s = step(s.owned, chord: false, phase: 0, momentum: 3)
+        XCTAssertFalse(s.owned, "momentum's end ends the tail")
+        s = step(s.owned, chord: false, phase: 0, momentum: 1)
+        XCTAssertFalse(s.ours)
+    }
+
+    func testAGestureBegunWithoutTheChordIsNeverOwned() {
+        let s = step(true, chord: false, phase: 1)          // stale ownership, new gesture
+        XCTAssertFalse(s.owned); XCTAssertFalse(s.ours)
+    }
+}
