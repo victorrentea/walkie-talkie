@@ -439,3 +439,12 @@ session; screenshots beside the VM, `~/tart/night/<date>/` (on the external disk
 `tools/ro.victorrentea.wt-lab.plist` (VM up at login and on every mount) stays a **draft, not
 installed**: the night session brings the VM up and down itself, and that agent would keep it running
 all day.
+
+## `wt-lab` also exports slides (2026-11-04)
+
+`wt-lab` is Victor's only VM: *"nu-mi trebuie două niciodată"*. Besides the lab it holds PowerPoint and
+his fonts, signed into his Microsoft account, for `slides_seen.py` in
+`victor-skills-private/skills/training-summarizer/`. That script boots it headless with `--no-audio`,
+exports and shuts it down; when the VM is already running it leaves it alone and uses LibreOffice, so a
+lab run is never disturbed. **`vm-lab.sh reset` would lose PowerPoint and the Microsoft sign-in.**
+Details: `victor-macos-addons/docs/activity-monitors.md`.
