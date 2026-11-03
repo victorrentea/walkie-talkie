@@ -102,6 +102,32 @@ final class TranscriptGuardTests: XCTestCase {
         XCTAssertEqual(r.sentence.via, TranscriptGuard.via)
     }
 
+    func testTheLocalModelsInventionsAreSeen() {
+        XCTAssertNotNil(TranscriptGuard.judgeLocal("Thank you.", duration: 6))
+        XCTAssertNotNil(TranscriptGuard.judgeLocal("Thank you. Thank you.", duration: 33))
+        XCTAssertNotNil(TranscriptGuard.judgeLocal("Bine.", duration: 20))
+        XCTAssertNotNil(TranscriptGuard.judgeLocal("Вот я требую ye vs vs", duration: 7))
+        XCTAssertNil(TranscriptGuard.judgeLocal("Move this from here to here. Thank you.", duration: 5))
+        XCTAssertNil(TranscriptGuard.judgeLocal("Bine.", duration: 2))
+        XCTAssertNil(TranscriptGuard.judgeLocal("Screenshot 1.", duration: 8))
+    }
+
+    func testScribesAnswerIsMarkedAsItsOwn() {
+        var scribe = local("Dacă dictezi acuma, nu dai Enter?")
+        scribe = DictationResult(text: scribe.text, language: "ron", audio: nil, duration: 7, engine: "elevenlabs",
+                                 warning: nil, delivery: .route, via: TranscriptGuard.scribeVia, markersInAudio: true, engineLabel: "")
+        let r = TranscriptGuard.resolve(held("Dak diktée dakuma, ngou daay Enter?", duration: 7), retry: scribe)
+        XCTAssertEqual(r.sentence.via, TranscriptGuard.scribeVia)
+    }
+
+    func testTheLocalModelsOwnWordsAreReplacedWholeOrKept() {
+        var mine = held("Thank you.", duration: 6)
+        mine = DictationResult(text: mine.text, language: "en", audio: nil, duration: 6, engine: "whisper-local",
+                               warning: nil, delivery: .route, via: "local-whisper", markersInAudio: true, engineLabel: "")
+        XCTAssertEqual(TranscriptGuard.resolve(mine, retry: nil).outcome, "kept")
+        XCTAssertEqual(TranscriptGuard.resolve(mine, retry: nil).sentence.warning, TranscriptGuard.unfixed)
+    }
+
     func testNoUsableRetryStillDeliversTheSentence() {
         for retry in [nil, local("Я покупал"), local("Thank you.")] {
             let r = TranscriptGuard.resolve(held("Я покупал в этом магазине только молочные продукты", duration: 7), retry: retry)

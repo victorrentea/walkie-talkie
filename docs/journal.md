@@ -16044,10 +16044,22 @@ same failure there**: on three 32–40 s takes it answered `Thank you.` and noth
 had a sentence glued on with no space (`pornit.Sci.`). So a retry passes the same judge plus 0.3 words a
 second, and with nothing usable the run is cut or the sentence goes out as it came, with a warning.
 
-Run over the 55: 35 whole takes replaced, 11 spliced, 3 cut, 6 no longer flagged (the false alarms of
+Run over the 55, local model only: 35 whole takes replaced, 11 spliced, 3 cut, 6 no longer flagged (the false alarms of
 the first threshold, 0.5). Rules: `dictation-source.md`, *Words in a language nobody spoke*.
 
 Proven end to end by TF1–TF2 (`evals/plan/cases_guard.py`) on the installed app: a garbled text on a real WAV
 through the engine's two callbacks, the hold, the real local model, the delivery into the witness tab. **No
 real microphone in those cases**: this Mac has no `WT Inject` Loopback and `From Walkie` takes no outside
 output, so the first real sentence to cross it will be Wispr's own; `transcript-guard.jsonl` is where to look.
+
+**The same night the local model failed the first real sentence.** 01:02, Wispr: `Чего Patrick не мерзнуешь
+тебе?`, local: `Deci cum poate că poți să mergi uiește-le?`. It passed every check, being Romanian. Victor:
+*"textul din modelul local e bine încurcat … modelul local halucinează mai des"*. The corpus agrees on the
+second half and not by language: since 1 October the local model has 0 of 1,419 sentences in a wrong language
+and Wispr 34 of 2,089, but `Thank you.` alone 10 of 1,419 against Wispr's 1. Scribe on the 51 flagged clips,
+`language_code: ro` and unpinned (891 s of audio): pinned it reads better than the local model nearly
+everywhere, *de ce nu mai pot să fac scroll cu mouse-ul* against *SCROW cu mouse*, *subtitrare* against
+*substrare*, and keeps English; unpinned it wrote Russian, Italian, Portuguese and Indonesian on short takes.
+It answered nothing on 4 clips, and those are the takes the local model called `Thank you.`: their WAVs hold no
+speech. So the second listen is Scribe pinned to `ro`, the local model behind it for offline and a late answer,
+and the local model's own words pass the same check. TF1–TF4 prove the four roads, with the harness's fake Scribe.

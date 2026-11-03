@@ -2,11 +2,13 @@
 uneori să vină prompt-ul în altă limbă"*.
 
 No microphone: `POST /test/transcript-guard {"replay"}` calls the engine's `didTranscribe` and
-`didEnd(.delivered)`, in that order, with a garbled text on a real voice WAV. The hold, the real local
-model and the delivery into the witness tab all run. Needs Engine ≠ local, hence `engine="wispr"`.
+`didEnd(.delivered)`, in that order, with a garbled text on a real voice WAV. The hold, the fake Scribe,
+the real local model and the delivery into the witness tab all run. `engine="wispr"`: Engine ≠ local.
 
-    TF1  a foreign answer → the local words land in the tab, via local-guard, nothing Cyrillic
+    TF1  a foreign answer → Scribe's words land in the tab, via scribe-guard, nothing Cyrillic
     TF2  the guard off → the garble lands as it came (TF1's garble really was in the way)
+    TF3  Scribe fails → the local model's words land, via local-guard
+    TF4  the local model's own foreign words → Scribe overrules them, via scribe-guard
 """
 import contextlib
 import os
@@ -37,11 +39,12 @@ def _rows():
     return sum(1 for _ in open(LOG)) if os.path.exists(LOG) else 0
 
 
-def _replay():
+def _replay(**extra):
+    fake_script(CLIP_SPEECH, None)
     t0 = now_iso()
     with wave.open(CLIP_SPEECH) as w:
         seconds = w.getnframes() / w.getframerate()
-    code, r = post("/test/transcript-guard", {"text": GARBLE, "replay": CLIP_SPEECH, "duration": seconds})
+    code, r = post("/test/transcript-guard", dict(text=GARBLE, replay=CLIP_SPEECH, duration=seconds, **extra))
     if not r.get("replayed"):
         return None, r
     d = wait_for(lambda: last_delivery(t0), 30, 0.2)
@@ -53,16 +56,20 @@ def _replay():
 
 
 @case("TF1", ("delivery",), covers=_COV, engine="wispr",
-      expect="a Cyrillic answer never reaches the tab: via local-guard, the local Latin words delivered, one row in transcript-guard.jsonl")
+      expect="a Cyrillic answer never reaches the tab: via scribe-guard, Latin words delivered, one row in transcript-guard.jsonl")
 def tf1():
+    return _mended("scribe-guard")
+
+
+def _mended(via, **extra):
     with witness():
         post("/test/transcript-guard", {"on": True})
         m, rows0 = log_mark(), _rows()
-        d, r = _replay()
+        d, r = _replay(**extra)
         text = wait_for(lambda: witness_text().strip() or None, 15, 0.3) or ""
         held = log_has(m, r"🌐 .*words look wrong")
         note = f"via {(d or {}).get('via')}; held {held}; rows {rows0}→{_rows()}; answer {r}; witness {text[:90]!r}"
-        ok = ((d or {}).get("via") == "local-guard" and held and _rows() == rows0 + 1
+        ok = ((d or {}).get("via") == via and held and _rows() == rows0 + 1
               and len(text) > 20 and not CYRILLIC.search(text))
         return ("PASS" if ok else "FAIL"), note
 
@@ -82,3 +89,19 @@ def tf2():
             return ("PASS" if ok else "FAIL"), note
         finally:
             post("/test/transcript-guard", {"on": True})
+
+
+@case("TF3", ("delivery",), covers=_COV, engine="wispr",
+      expect="Scribe answers 500 twice: the real local model hears it, via local-guard")
+def tf3():
+    post("/test/eleven", {"fail": "500x2"})
+    try:
+        return _mended("local-guard")
+    finally:
+        post("/test/eleven", {"clear": True})
+
+
+@case("TF4", ("delivery",), covers=_COV, engine="wispr",
+      expect="the local model's own Cyrillic is overruled by Scribe, via scribe-guard")
+def tf4():
+    return _mended("scribe-guard", local=True)

@@ -456,6 +456,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "local-forced": engine = local + " — ⌘⌃X"
         case "local-auto": engine = local + " — auto fallback"
         case TranscriptGuard.via: engine = local + " — foreign words"
+        case TranscriptGuard.scribeVia: engine = "\(StatusItem.cloud) ElevenLabs " + (engineLabel.isEmpty ? "Scribe" : engineLabel) + " — foreign words"
         case _ where wispr: engine = "\(StatusItem.cloud) \(WisprFlowSource.engineLabel)"
         default: engine = engineLabel.isEmpty ? via : engineLabel
         }
@@ -2425,7 +2426,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // hold, the real local model and the delivery; only the microphone and
             // the engine are not there.
             if let wav = body["replay"] as? String {
-                guard let self, !self.listening, !self.settling, !self.source.isRecording, self.source !== self.whisperSource else {
+                let asLocal = body["local"] as? Bool ?? false
+                guard let self, !self.listening, !self.settling, !self.source.isRecording,
+                      asLocal || self.source !== self.whisperSource else {
                     out["error"] = "a sentence is in flight, or the engine is the local model"
                     return out
                 }
@@ -2438,7 +2441,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.deliverGuarded(DictationResult(
                     text: text, language: nil, audio: copy,
                     duration: (body["duration"] as? NSNumber)?.doubleValue ?? 0,
-                    engine: "wispr-flow", warning: nil, delivery: .route, via: "wispr-history",
+                    engine: asLocal ? "whisper-local" : "wispr-flow", warning: nil, delivery: .route,
+                    via: asLocal ? "local-whisper" : "wispr-history",
                     markersInAudio: false, engineLabel: WisprFlowSource.engineLabel))
                 self.dictationEnded(.delivered)
                 out["replayed"] = true
@@ -4689,7 +4693,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         send(kind: "dictation", text: result.text, app: app, latched: latched)
     }
 
-    /// **Words in a language nobody spoke wait for the local model** (2026-11-04,
+    /// **Words in a language nobody spoke wait for a second listen** (2026-11-04,
     /// `TranscriptGuard`). The source calls `didTranscribe` and `didEnd(.delivered)`
     /// back to back, and a delivery cannot wait inside the first: the second would
     /// end the sentence under it. So the words are held across that one gap, and
@@ -4697,18 +4701,70 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// — same settle, same destination, same flags, same cancel.
     ///
     /// Only words the relay still has to deliver (text already on screen cannot be
-    /// taken back), with their WAV, and with the model already up: a sentence is
+    /// taken back), with their WAV, and with someone ready to listen: a sentence is
     /// never made to wait 10 s of weights for this.
     private func deliverGuarded(_ result: DictationResult) {
         guard TranscriptGuard.isOn, case .route = result.delivery, !transcriptDisowned,
-              result.engine != "whisper-local", !fallingBack, guardHeld == nil,
+              !fallingBack, guardHeld == nil,
               let wav = result.audio, FileManager.default.fileExists(atPath: wav.path),
-              whisperSource.isReady, let verdict = TranscriptGuard.judge(result) else {
+              let verdict = TranscriptGuard.judge(result), canHearAgain(result) else {
             return deliver(result)
         }
-        Log.error("🌐 \(result.engine)'s words look wrong — \(verdict.why): the local model hears the take again")
+        Log.error("🌐 \(result.engine)'s words look wrong — \(verdict.why): they get a second listen")
         noteEngineAnswered()
         guardHeld = result
+    }
+
+    /// The key, while the network is there.
+    private var scribeKey: String? {
+        guard Connectivity.shared.isOnline else { return nil }
+        // Filled at an engine pick or a menu open; Wispr may be all he has picked.
+        _ = elevenSource.reloadKey()
+        return elevenSource.apiKey
+    }
+
+    /// Scribe can hear anything; the local model cannot overrule itself.
+    private func canHearAgain(_ r: DictationResult) -> Bool {
+        scribeKey != nil || (r.engine != "whisper-local" && whisperSource.isReady)
+    }
+
+    /// **The second listen: Scribe pinned to `ro`, then the local model**
+    /// (`TranscriptGuard`). Scribe has `scribeBudget`, and an answer `accepts`
+    /// refuses counts as none. Nil means nobody did better — for the local model's
+    /// own words, Scribe is the only one who can say so.
+    private func listenAgain(to held: DictationResult, wav: URL, duration: TimeInterval, said: [ShotMarker.Said],
+                             _ done: @escaping (DictationResult?) -> Void) {
+        var answered = false
+        func standIn(_ why: String) {
+            guard !answered else { return }
+            answered = true
+            guard held.engine != "whisper-local" else {
+                Log.info("🌐 \(why) — the local words stand")
+                return done(nil)
+            }
+            Log.info("🌐 \(why) — the local model listens")
+            transcribeLocally(wav: wav, duration: duration, standingInFor: held.engine, forced: true, said: said, done)
+        }
+        guard let key = scribeKey else { return standIn("no key or no network for Scribe") }
+        DispatchQueue.main.asyncAfter(deadline: .now() + TranscriptGuard.scribeBudget(duration: duration)) {
+            standIn("Scribe is late")
+        }
+        ElevenLabsSource.transcribe(wav: wav, key: key, languageCode: TranscriptGuard.scribeLanguage) { [weak self] outcome in
+            DispatchQueue.main.async {
+                guard let self, !answered else { return }
+                switch outcome {
+                case .success(let r) where TranscriptGuard.accepts(retry: r.text, duration: duration):
+                    answered = true
+                    Log.info("🌐 Scribe heard it as \(r.text.count) chars of \(r.language ?? "?")")
+                    done(DictationResult(
+                        text: r.text, language: r.language, audio: wav, duration: duration,
+                        engine: "elevenlabs", warning: nil, delivery: .route, via: TranscriptGuard.scribeVia,
+                        markersInAudio: true, engineLabel: self.elevenSource.displayModelName, words: r.words, said: said))
+                case .success(let r): standIn("Scribe's \(r.text.count) chars are no better")
+                case .failure(let why): standIn("Scribe failed: \(why)")
+                }
+            }
+        }
     }
 
     /// The session is over, whichever way it ended.
@@ -4768,7 +4824,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func fallBackToLocal(why: String, wav: URL, duration: TimeInterval,
                                  held: DictationResult? = nil) -> Bool {
         // Wispr since Q14 (2026-09-28): the WAV is the relay's own meter recording.
-        guard source.recordsOwnAudio || source === wisprSource, source !== whisperSource, !fallingBack,
+        guard held != nil || source.recordsOwnAudio || source === wisprSource,
+              held?.engine == "whisper-local" || source !== whisperSource, !fallingBack,
               FileManager.default.fileExists(atPath: wav.path) else { return false }
         // **⌘⌃X is not a failure** (2026-09-28): asked for, so no warning rides
         // the words and `lastFailure` keeps the last real one.
@@ -4787,7 +4844,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let token = fallbackToken
         fallbackAudio = (wav, duration)
         if held != nil {
-            Log.info("🌐 transcribing the \(String(format: "%.1f", duration))s recording on this Mac too")
+            Log.info("🌐 a second listen to the \(String(format: "%.1f", duration))s recording")
         } else if forced {
             Log.info("💻 ⌘⌃X — transcribing the \(String(format: "%.1f", duration))s recording on this Mac, as asked\(whisperSource.isReady ? "" : " (the weights are loading — the WAV waits for them)")")
         } else {
@@ -4797,7 +4854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DecodeRate.activeEngine = DecodeRate.whisperLocal
         // A parked sentence's fallback (Q12) leaves the live one's chip alone.
         if !answeringInBackground {
-            overlay.setEngineMark(Self.mark(engine: "whisper"))
+            overlay.setEngineMark(Self.mark(engine: held != nil && scribeKey != nil ? "elevenlabs" : "whisper"))
             overlay.setTranscribing(false)
             overlay.setTranscribing(true, audio: duration)
         }
@@ -4807,8 +4864,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // them on the result the local words keep `Screenshot one` and the frames
         // go to the footer. `resolveStrict` reads them off the local text.
         let said = source === wisprSource ? wisprSource.saidSpliced(into: wav) : []
-        transcribeLocally(wav: wav, duration: duration, standingInFor: failed, forced: forced,
-                          said: said) { [weak self] result in
+        let hear: (@escaping (DictationResult?) -> Void) -> Void = { [weak self] answer in
+            guard let self else { return }
+            if let held {
+                self.listenAgain(to: held, wav: wav, duration: duration, said: said, answer)
+            } else {
+                self.transcribeLocally(wav: wav, duration: duration, standingInFor: failed, forced: forced,
+                                       said: said, answer)
+            }
+        }
+        hear { [weak self] result in
             guard let self else { return }
             if let owner, owner.finished {
                 Log.info("🗑️ the local model answered for sentence #\(owner.id), which is over — dropped")
@@ -4832,6 +4897,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let result else {
                     self.dictationEndedForGood(.failed(why: "\(why); the local model could not transcribe it either",
                                                        audio: wav, duration: duration))
+                    return
+                }
+                // **The local model's words pass the same door** (2026-11-04, whichever
+                // road brought them here: a failed engine, ⌘⌃X, the clock).
+                if TranscriptGuard.isOn, let v = TranscriptGuard.judge(result), self.canHearAgain(result),
+                   self.fallBackToLocal(why: "the local model's words: \(v.why)", wav: wav, duration: duration, held: result) {
                     return
                 }
                 self.deliver(result)
@@ -12938,7 +13009,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch via {
         case "local-fallback", "local-auto": return "💻 Fell back to local"
         case "local-forced": return "💻 Used local"
-        case TranscriptGuard.via: return TranscriptGuard.notice
+        case TranscriptGuard.via, TranscriptGuard.scribeVia: return TranscriptGuard.notice
         default: return nil
         }
     }

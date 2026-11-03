@@ -490,25 +490,40 @@ in Wispr (`config.json` `prefs.user.selectedLanguages`), so **that setting is no
   markers are stripped first. At 0.5 it took *JDBC connection pool starvation* (0.39).
 - **The hold is across one gap.** `didTranscribe` → `deliverGuarded` keeps the sentence in `guardHeld`;
   `didEnd(.delivered)` → `dictationEnded` turns it into `fallBackToLocal(held:)`, the path a failed
-  engine takes: same settle, destination, flags, cancel, and the decode ahead is reused. A delivery
-  cannot wait inside `didTranscribe`: `didEnd` follows it at once and would end the sentence under it.
+  engine takes: same settle, destination, flags, cancel. A delivery cannot wait inside `didTranscribe`:
+  `didEnd` follows it at once and would end the sentence under it.
+- **The second listen is Scribe pinned to `ro`, then the local model** (`listenAgain`, same night; the
+  first version was local only, and at 01:02 its first real sentence went out as `Deci cum poate că poți
+  să mergi uiește-le?`). On 51 flagged clips Scribe + `language_code: ro` beat the local model and kept
+  English as English; **unpinned it went Russian, Italian, Indonesian on short takes, so the pin lives
+  here only** (`languageCode:`), the ordinary batch stays unpinned. Budget `3 s + 0.1 × take`, then the
+  local model (the decode ahead is reused). Offline or no key: the local model. Billed by `ElevenLabsCost`
+  (`scribe_v1`, under a cent a clip).
 - **Only when it can help:** `.route` words (text already on screen cannot be taken back), with a WAV,
-  `whisperSource.isReady` (never 10 s of weights for this), not the local engine.
-- **`TranscriptGuard.resolve` decides:** *whole take* → the local words (`via: local-guard`, filed as
-  `whisper-local`); *a run inside good words* → `spliced`, the engine's words around it and the local
-  ones inside it (13 of 14 runs sit in the last 17 %, 11 of 14 takes last 30–43 s), on `text` and
-  `unformatted` separately; local words unusable → `cut` the run; whole and unusable → `kept`, sent as
-  it came with `TranscriptGuard.unfixed` on the panel. **The sentence always goes out.**
-- **A retry is judged too** (`accepts`): the same check, and ≥ 0.3 words per second of take. On three
-  32–40 s takes the local model answered `Thank you.` and nothing else; replacing the text with that
-  would have deleted 30 s of good words.
+  and `canHearAgain` (never 10 s of weights for this).
+- **The local model's own words pass the same door, by every road** (`judgeLocal`): its own engine
+  through `deliverGuarded`, a fallback / ⌘⌃X / the clock in `fallBackToLocal`'s completion. It adds what
+  the local model really invents: `Thank you.` alone (10 of 1,419 since 1 Oct, Wispr 1 of 2,089) and
+  under 0.3 words a second on ≥ 8 s. Wrong language from it: **0 of 1,419** since the pin. Only Scribe
+  can overrule it, whole or not at all.
+- **`TranscriptGuard.resolve` decides:** *whole take* → the second opinion (`via: scribe-guard` or
+  `local-guard`, filed under that engine); *a run inside good words* → `spliced`, the engine's words
+  around it and the second opinion inside it (13 of 14 runs sit in the last 17 %, 11 of 14 takes last
+  30–43 s), on `text` and `unformatted` separately; nothing usable → `cut` the run; whole and unusable
+  → `kept`, sent as it came with `TranscriptGuard.unfixed` on the panel. **The sentence always goes out.**
+- **A second opinion is judged too** (`accepts`): the same check, and ≥ 0.3 words per second of take.
+  On three 32–40 s takes the local model said `Thank you.` and Scribe nothing at all: those WAVs hold no
+  speech (Wispr heard another path). Replacing the text would have deleted 30 s of good words.
 - **Timed words are never spliced** (ElevenLabs): `ShotMarker.place` rebuilds the text from them, so a
   mended run would come back. Whole replacement or nothing.
 - **`~/.walkie-talkie/transcript-guard.jsonl`** keeps both sides of every intervention, forever: the
-  corpus holds one text per clip. Chip: `TranscriptGuard.notice`, 3 s (Shot `flash-foreign-words`).
+  corpus holds one text per clip. Chip: `TranscriptGuard.notice`, 3 s, no engine's name (Shot
+  `flash-foreign-words`).
 - **Off:** `defaults write ro.victorrentea.wispr-relay transcriptGuard -bool false`, or
   `POST /test/transcript-guard {"on": false}`.
-- **Not caught:** gibberish that reads as Romanian (`Arbătăbați mai săva confortivă` scores 1.00).
+- **Not caught:** gibberish that reads as Romanian (`Arbătăbați mai săva confortivă` scores 1.00), and
+  the local model's tail after a window join (`pornit.Sci.`): 24 % of its sentences since October carry
+  a sentence glued on with no space, the join itself being a separate bug in `whisper_helper.py`.
   Comparing the engine with the local model on every take finds those (agreement under 0.3 on 4 of 10
   suspects, 0.8+ on the 2 sound ones), parked until the log says this much was worth it.
 

@@ -861,6 +861,7 @@ final class ElevenLabsSource: DictationSource {
     }
 
     static func transcribe(wav: URL, key: String, attempt: Int = 0, purpose: String = "final",
+                           languageCode: String? = nil,
                            upload: Upload? = nil, _ done: @escaping (Outcome) -> Void) {
         // A cancelled upload asks nothing more of the network — not even the retry.
         if upload?.isCancelled == true { return }
@@ -872,7 +873,7 @@ final class ElevenLabsSource: DictationSource {
             body.append("\(value)\r\n".data(using: .utf8)!)
         }
         field("model_id", model)
-        if let lang = language, !lang.isEmpty { field("language_code", lang) }
+        if let lang = languageCode ?? language, !lang.isEmpty { field("language_code", lang) }
         // **Both off.** Diarization is a second speaker's problem and there is
         // one microphone here; the audio-event tags would put `(laughs)` in the
         // middle of a prompt bound for an agent.
@@ -917,7 +918,7 @@ final class ElevenLabsSource: DictationSource {
             if retriable, attempt == 0 {
                 Log.error("ElevenLabs attempt 1 failed (\(error?.localizedDescription ?? "HTTP \(code)")) — retrying")
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.8) {
-                    transcribe(wav: wav, key: key, attempt: 1, purpose: purpose, upload: upload, done)
+                    transcribe(wav: wav, key: key, attempt: 1, purpose: purpose, languageCode: languageCode, upload: upload, done)
                 }
                 return
             }

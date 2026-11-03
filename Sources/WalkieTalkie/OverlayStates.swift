@@ -516,7 +516,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "flash-foreign-words", group: "Flashes", title: "Flash — foreign words mended",
-                 when: "Three seconds, once a sentence has landed that the engine heard in a language nobody spoke and the local model heard again (2026-11-04, `TranscriptGuard`).",
+                 when: "Three seconds, once a sentence has landed that the engine heard in a language nobody spoke and a second listen mended (2026-11-04, `TranscriptGuard`).",
                  note: "Victor: *\"se mai întâmplă uneori să vină prompt-ul în altă limbă\"*. Said on the chip because the words that landed are not the ones the engine sent, and `transcript-guard.jsonl` holds both.",
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)

@@ -17,10 +17,20 @@ import NaturalLanguage
 ///   window guessing its own language. The first half minute is fine and better
 ///   than the local model's, so only the run is replaced (`repair`).
 ///
-/// Nothing here spends a token: `foreignLetters` is a walk over the scalars and
-/// `NLLanguageRecognizer` answers on this Mac in 0.9 ms a sentence. The retry is
-/// checked as hard as the original, because the local model has its own failure:
-/// on three 32–40 s takes it answered `Thank you.` and nothing else (`accepts`).
+/// Nothing here spends a token: the alphabet is a walk over the scalars and
+/// `NLLanguageRecognizer` answers on this Mac in 0.9 ms a sentence.
+///
+/// **Who hears it again: Scribe pinned to `ro`, then the local model** (same night,
+/// Victor: *"textul din modelul local e bine încurcat … modelul local halucinează
+/// mai des"*). On the 51 flagged clips Scribe with `language_code: ro` was the better
+/// reader — `de ce nu mai pot să fac scroll cu mouse-ul` against `SCROW cu mouse`,
+/// `subtitrare` against `substrare` — and it keeps English as English; left to detect
+/// the language it went Russian, Italian, Indonesian on the short ones, which is why
+/// it is pinned here and only here. The local model stands in offline, or when Scribe
+/// is late. Its own words are checked too, `judgeLocal`, and only Scribe can overrule
+/// them. A second opinion passes the same judge: on three 32–40 s takes the local
+/// model answered `Thank you.` and Scribe nothing at all — those WAVs hold no speech
+/// (`accepts`).
 /// → journal: *Words in a language nobody spoke*
 enum TranscriptGuard {
 
@@ -69,6 +79,26 @@ enum TranscriptGuard {
 
     static func withoutMarkers(_ text: String) -> String {
         marker.stringByReplacingMatches(in: text, range: NSRange(text.startIndex..., in: text), withTemplate: " ")
+    }
+
+    /// **What the local model invents, in English** — on a take with no speech in
+    /// it, 10 of 1,419 sentences since October, against 1 of 2,089 from Wispr.
+    private static let invented = ["thank you", "thanks for watching", "thank you for watching"]
+
+    /// `judge`, and the local model's own failures: an invented sentence, or a
+    /// transcript of far less than the take. *No* wrong-language sentence from it
+    /// since the `ro`/`en` pin took hold (0 of 1,419 since 1 October).
+    static func judgeLocal(_ text: String, duration: TimeInterval) -> Verdict? {
+        if let v = judge(text) { return v }
+        let bare = tokens(withoutMarkers(text))
+        let said = bare.joined(separator: " ")
+        if !bare.isEmpty, invented.contains(where: { said.replacingOccurrences(of: $0, with: "").allSatisfy { $0 == " " } }) {
+            return .wholeTake("the local model's \"\(text.prefix(30))\"")
+        }
+        if duration >= 8, !bare.isEmpty, Double(bare.count) < duration * minRetryWordsPerSecond {
+            return .wholeTake(String(format: "%d words in %.0f s", bare.count, duration))
+        }
+        return nil
     }
 
     /// **`nil` is a transcript in Romanian and/or English.**
@@ -248,17 +278,27 @@ enum TranscriptGuard {
         set { UserDefaults.standard.set(newValue, forKey: "transcriptGuard") }
     }
 
-    /// The chip, once a sentence has been fixed.
-    static let notice = "💻 Foreign words fixed locally"
-    /// `DictationResult.via` of a sentence the local model rewrote whole.
+    /// The chip, once a sentence has been fixed. No engine's name (2026-10-06).
+    static let notice = "🌐 Foreign words fixed"
+    /// `DictationResult.via` of a sentence rewritten whole, by whoever wrote it.
     static let via = "local-guard"
+    static let scribeVia = "scribe-guard"
     /// Under the words, when nothing better could be found: they go out as they
     /// came, because a wrong sentence he can see beats one that never arrives.
-    static let unfixed = "⚠️ These words may be in the wrong language — the local model could not do better"
+    static let unfixed = "⚠️ These words may be wrong — a second listen could not do better"
+    /// **Scribe's language here, and nowhere else** — see the type's comment; the
+    /// ordinary batch stays unpinned for his English terms.
+    static let scribeLanguage = "ro"
+
+    /// **How long Scribe has before the local model answers instead**: a few
+    /// seconds, *his patience* (2026-09-28), plus what a long upload needs. The 51
+    /// clips averaged 17 s of audio.
+    static func scribeBudget(duration: TimeInterval) -> TimeInterval { 3 + duration * 0.1 }
 
     /// The sentence's verdict: its worst across what a plain sentence sends
     /// (`text`) and what a prompt sends (`unformatted`).
     static func judge(_ r: DictationResult) -> Verdict? {
+        if r.engine == "whisper-local" { return judgeLocal(r.text, duration: r.duration) }
         let all = [judge(r.text), r.unformatted.flatMap { judge($0) }].compactMap { $0 }
         return all.first { if case .wholeTake = $0 { return true } else { return false } } ?? all.first
     }
@@ -268,14 +308,15 @@ enum TranscriptGuard {
     ///
     /// Timed words (`ElevenLabs`) cannot be spliced — `ShotMarker.place` rebuilds
     /// the text from them, so a run mended in `text` would come straight back:
-    /// such a sentence takes the local words whole, or stays as it was.
+    /// such a sentence takes the second opinion whole, or stays as it was. So does
+    /// the local model's own: there is nothing of it worth keeping around a run.
     static func resolve(_ held: DictationResult, retry: DictationResult?) -> (sentence: DictationResult, outcome: String) {
         func replaced() -> (DictationResult, String)? {
             guard var r = retry, accepts(retry: r.text, duration: held.duration) else { return nil }
-            r.via = via
+            r.via = r.engine == "elevenlabs" ? scribeVia : via
             return (r, "replaced")
         }
-        var whole = held.words != nil
+        var whole = held.words != nil || held.engine == "whisper-local"
         var fields = [String: Verdict]()
         for (name, text) in [("text", Optional(held.text)), ("unformatted", held.unformatted)] {
             guard let text, let v = judge(text) else { continue }
