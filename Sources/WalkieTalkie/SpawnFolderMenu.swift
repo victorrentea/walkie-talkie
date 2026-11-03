@@ -1077,6 +1077,14 @@ enum SpawnFolderMenu {
 /// which is what suspends and releases the fade (`SpawnFolderMenu.setHovered`).
 /// The rows' own tracking areas are about highlighting one folder; this one is
 /// about the menu as a target being aimed at.
+///
+/// **It also owns the pointer's shape: the arrow, over the whole panel**
+/// (2026-11-03, Victor: *"mouseul tre să fie săgeată când dă hover la proiecte
+/// (nu cursor de text)"*). This app is never active, so the frontmost app keeps
+/// resetting the cursor from its own cursor rects as the pointer moves — over a
+/// terminal or an editor underneath, that is the I-beam. One `.cursorUpdate` on
+/// entry is not enough; the arrow is set again on every move. The pointing hand
+/// the rows used to set (2026-09-09) is gone with it.
 private final class HoverRoot: NSView {
     var onHover: ((Bool) -> Void)?
 
@@ -1084,11 +1092,14 @@ private final class HoverRoot: NSView {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate,
+                                                 .activeAlways, .inVisibleRect],
                                        owner: self))
     }
 
-    override func mouseEntered(with event: NSEvent) { onHover?(true) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.arrow.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.arrow.set(); onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 
@@ -1193,24 +1204,8 @@ final class FolderRow: NSView {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(rect: bounds,
-                                       options: [.mouseEnteredAndExited, .cursorUpdate,
-                                                 .activeAlways, .inVisibleRect],
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
                                        owner: self))
-    }
-
-    /// **A pointing hand over a row**, the same convention `inspect.js` follows
-    /// in Chrome with `grab`: this is something to take, not text to select. The
-    /// arrow says nothing, and over a row drawn with text in it the pointer can
-    /// read as an I-beam — which is the one thing this panel never offers, since
-    /// it never becomes key and there is nothing to type into.
-    ///
-    /// **Through the tracking area, not `resetCursorRects`.** Cursor rects are
-    /// reset by the *key* window, and this panel is deliberately never one, so
-    /// they would simply never fire. `.activeAlways` on a `.cursorUpdate` area is
-    /// what makes a background app's cursor stick. The area covers the star as
-    /// well, which is right — it is the other thing on the row that is clicked.
-    override func cursorUpdate(with event: NSEvent) {
-        (enabled ? NSCursor.pointingHand : NSCursor.arrow).set()
     }
 
     // The star sits inside the row, so the pointer resting on it is still on the

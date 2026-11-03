@@ -105,11 +105,12 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   permanently disabled and eat the first click. `acceptsFirstMouse` is what makes the first click
   count — the app never activates itself, so *every* click arrives at a background app.
   → journal: *The folder menu (2026-09-04)*
-- **Hand cursor via a `.cursorUpdate` tracking area with `.activeAlways`, not `resetCursorRects`**
-  (2026-09-09). Cursor rects are reset by the *key* window, so on a panel deliberately never key
-  they never fire; `.activeAlways` is what makes a background app's cursor stick. Over text rows the
-  arrow reads as an I-beam, the one thing this panel never offers. The area covers the star too.
-  → journal: *The folder menu (2026-09-04)*
+- **The arrow, set by the panel's root on enter, `cursorUpdate` and every `mouseMoved`**
+  (2026-11-03, Victor: *"mouseul tre să fie săgeată când dă hover la proiecte (nu cursor de
+  text)"* — supersedes the pointing hand of 2026-09-09). This app is never active, so the frontmost
+  app's cursor rects keep putting its I-beam back as the pointer moves; one `cursorUpdate` on entry
+  lost to them. `HoverRoot` owns it (`.activeAlways`, never `resetCursorRects` — those fire only on
+  the key window); the rows set no cursor of their own.
 - **The choice rides the `Message`; a late pick is refused.** `send` moves `spawnFolder` onto
   `Message.directory` and clears it — the panel holds a prompt for seconds and the next dictation
   may have started. Moving a folder under words already in flight silently is worse than ignoring
