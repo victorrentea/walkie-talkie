@@ -773,6 +773,31 @@ microphone; he cancelled at 2.8 s.
 - **A take Wispr never heard falls back at 0.3 s voiced, not 1.5 s** (`endWithRecording`: floor =
   `micSeen ? fallbackVoicedFloor : 0.3`). The 1.5 s floor guards a sentence Wispr heard and mangled.
 
+## A wedged Wispr is restarted, as a login item (2026-11-03, `WisprWedge`)
+
+Victor: *"nu a mers de loc toata ziua wisprflow ca motor … mereu face fallback pe model local"*, then
+*"autodetect + restart wispr flow … fara fereastra de startup"*. Wispr (up since 31 Oct) stopped opening
+its input at 11-02 17:20 (a config change on Wireless Mic Rx at that same sentence): every chord still
+made a `History` row, the row stayed NULL forever (not even `dismissed` after ⌃Escape), and all 64
+sentences of 11-03 went to the local model. A kill + relaunch fixed it at once.
+
+- **`row made, microphone never opened` twice in a row** (`armMicOpenWatch`, `hadRow != nil` →
+  `WisprWedge.noteMissedMic`; any `noteMicSeen` resets) → once the relay is quiet
+  (`AppDelegate.wisprQuietForRestart`: no engine recording, phase idle, no fallback, no unfinished
+  sentence, Wispr's input shut; waits ≤ 5 min) SIGKILL on the main pid + `WisprWedge.launchHidden`.
+  At most once per 10 min — a Wispr broken another way is restarted once, then left to the local
+  model. A chord with **no row** neither counts nor resets. `WT_WISPR_AUTORESTART=0` turns it off.
+  Log `🩺 …`; `GET /test/state.wisprWedge`; `POST /test/wispr-wedge {"miss"|"opened"|"clearCooldown"}`
+  (the second `miss` restarts his **real** Wispr).
+- **`launchHidden` = no hub window**: Wispr hides its 1350×850 hub only when
+  `getLoginItemSettings().wasOpenedAtLogin` (`shouldShowHubWindowAtLaunch` in `app.asar`), which
+  Chromium reads from the launching Apple event — so `OpenConfiguration.appleEvent` is a
+  `kAEOpenApplication` with `keyAEPropData = keyAELaunchedAsLogInItem`. Measured 2026-11-03: no Wispr
+  window on screen; a plain `open` shows the hub. Used by `launchWisprInBackground` and
+  `/test/wispr-proc relaunch` too.
+- **A freshly restarted Wispr may not take a chord for ~30–50 s** (20:04: no row at 33 s old,
+  microphone open in 403 ms at 55 s). That sentence goes to the local model by `micOpenGrace`, as before.
+
 ## Diagnostics for a Wispr that will not start (2026-09-29)
 
 Three log lines, no behaviour behind them (journal: *Wispr as the engine, 29 Sep*):

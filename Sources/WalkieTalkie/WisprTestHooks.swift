@@ -64,10 +64,9 @@ enum WisprProc {
                     for _ in 0..<60 where WisprFlowSource.wisprMainPid != 0 { usleep(50_000) }
                 }
                 DispatchQueue.main.async {
-                    NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: appPath),
-                                                       configuration: NSWorkspace.OpenConfiguration()) { app, error in
-                        Log.info("🧪 /test/wispr-proc: relaunched — "
-                                 + (error.map { "failed: \($0.localizedDescription)" } ?? "pid \(app?.processIdentifier ?? 0)"))
+                    WisprWedge.launchHidden { pid, error in
+                        Log.info("🧪 /test/wispr-proc: relaunched as a login item — "
+                                 + (error.map { "failed: \($0)" } ?? "pid \(pid)"))
                     }
                 }
             }

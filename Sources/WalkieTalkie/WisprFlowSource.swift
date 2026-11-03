@@ -2361,6 +2361,7 @@ final class WisprFlowSource: DictationSource {
             if let row = hadRow {
                 Log.error("💻 dismissing Wispr's row \(row) (⌃Escape) — it never opened its microphone, so it is free for the next sentence")
                 HotkeyTap.postWisprCancel()
+                WisprWedge.noteMissedMic(row: row)
             }
             self.armGhostWatch()
         }
@@ -3634,6 +3635,7 @@ final class WisprFlowSource: DictationSource {
     private func noteMicSeen() {
         guard !micSeen, machineRecording || speculative else { return }
         micSeen = true
+        WisprWedge.noteMicOpened()
         micOpened?()
     }
 

@@ -1464,6 +1464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotkeyTap.markPrompting(false)
         Self.startAtLogin()
         FromWalkieDevice.set(true, reason: "launch")
+        WisprWedge.isQuiet = { [weak self] in self?.wisprQuietForRestart ?? false }
         Outbox.prepare()
         // The recording device's gain is put back when it falls to nothing (2026-10-15).
         GainGuard.start { [weak self] text in self?.overlay.flash(text, duration: 6) }
@@ -2232,6 +2233,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHook = { [weak self] path, body in
             guard let self else { return (503, ["ok": false, "error": "gone"]) }
             switch path {
+            case "/test/wispr-wedge":
+                // `{"miss": true}` counts one *row made, mic never opened* (the
+                // threshold'th one restarts his REAL Wispr once the relay is quiet);
+                // `{"opened": true}` resets; `{"clearCooldown": true}` forgets the
+                // last restart. Answers `GET /test/state.wisprWedge`.
+                var out: [String: Any] = [:]
+                DispatchQueue.main.sync {
+                    if body["clearCooldown"] as? Bool == true { WisprWedge.clearCooldownForTest() }
+                    if body["opened"] as? Bool == true { WisprWedge.noteMicOpened() }
+                    if body["miss"] as? Bool == true { WisprWedge.noteMissedMic(row: 0) }
+                    out = WisprWedge.describe()
+                }
+                out["ok"] = true
+                return (200, out)
             case "/test/wispr-proc":
                 // Batch 4: the quit without a signal — his real Wispr is never touched.
                 if body["fakeExit"] as? Bool == true {
@@ -5281,15 +5296,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("🚀 Wispr Flow is already running — not launched again")
             return
         }
-        let cfg = NSWorkspace.OpenConfiguration()
-        cfg.activates = false
-        cfg.addsToRecentItems = false
-        cfg.hides = true
-        Log.info("🚀 launching Wispr Flow in the background for the next sentence")
-        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/Applications/Wispr Flow.app"),
-                                           configuration: cfg) { _, error in
-            if let error { Log.error("🚀 Wispr Flow did not launch — \(error.localizedDescription)") }
+        Log.info("🚀 launching Wispr Flow in the background for the next sentence (as a login item — no hub window)")
+        WisprWedge.launchHidden { _, error in
+            if let error { Log.error("🚀 Wispr Flow did not launch — \(error)") }
         }
+    }
+
+    /// **Nothing of the relay's is on Wispr Flow** — what `WisprWedge` waits for
+    /// before it kills a wedged Wispr: no engine recording, no sentence being
+    /// transcribed, queued or falling back, and Wispr's own microphone shut.
+    private var wisprQuietForRestart: Bool {
+        let engines: [DictationSource] = [elevenSource, elevenLiveSource, whisperSource, wisprSource]
+        if engines.contains(where: { $0.isRecording }) { return false }
+        if source.phase.name != "idle" || fallingBack { return false }
+        if [parkedSentence, liveSentence].contains(where: { $0.map { !$0.finished } == true }) { return false }
+        return !wisprSource.wisprMicOpenNow
     }
 
     /// `GET /test/state.localAuto`.
@@ -8756,6 +8777,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["phase"] = source.phase.name
         out["phaseStatus"] = source.phase.status
         out["wispr"] = wisprSource.state.snapshot()
+        out["wisprWedge"] = WisprWedge.describe()
         out["historyRoute"] = wisprSource.historyIsTheRoute
         out["lastRingDown"] = RingDown.last ?? NSNull()
         out["lastSettled"] = RingDown.lastSettled ?? NSNull()
