@@ -16,7 +16,7 @@ final class ActiveTerminalsTests: XCTestCase {
 
     func testEmptyStateIsDrawnNotHidden() {
         // The row keeps its place and says why it opens nothing.
-        XCTAssertEqual(ActiveTerminals.label, "Active Terminals")
+        XCTAssertEqual(ActiveTerminals.label, "Other terminals")
         XCTAssertTrue(ActiveTerminals.emptyLabel.hasPrefix(ActiveTerminals.label))
         XCTAssertTrue(ActiveTerminals.emptyLabel.hasSuffix("none"))
     }

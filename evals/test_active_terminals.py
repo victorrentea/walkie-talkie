@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""**`Active Terminals` is the spawn menu's first row, and it is never hidden.**
+"""**`Other terminals` (ex-*Active Terminals*) is the spawn menu's last row, and it is never hidden.**
+
+Since 2026-11-03 it sits at the bottom, under the line, where *Workspace* was
+(Victor: *"mută Active Terminals ca Other terminals, în locul Workspace"*);
+until then it was the first row.
 
 Victor, 2026-09-23: *"In the project pop-up … when I open a new terminal, I
 want the first option to be a menu that says 'Recent', or 'Active Terminals',
@@ -7,11 +11,11 @@ and then when I hover over it, a submenu opens that lets me bind this prompt to
 that terminal."*
 
 `SpawnFolderMenu.build` lays the menu out **bottom-up** (Cocoa's y grows
-upwards), so *first on screen* means *last row added*. This test parses the
+upwards), so *last on screen* means *first row added*. This test parses the
 Swift source and holds it to that, plus the three things the feature's promises
 rest on:
 
-* `build` adds `addActiveRow` after every other row, the header and the line —
+* `build` adds `addActiveRow` before every other row, the header and the line —
   and unconditionally, at the function's own indentation, so an empty list
   cannot take the row away (the empty state is `ActiveTerminals.emptyLabel`,
   drawn dimmed: a row that comes and goes moves every folder under it);
@@ -62,9 +66,9 @@ def check(menu: str, delegate: str) -> list[str]:
         return ["`SpawnFolderMenu.build(size:)` is gone"]
     adds = [(i, l) for i, l in enumerate(build)
             if re.search(r"\b(add|addHeader|addSeparator|addActiveRow)\(", l)]
-    if not adds or "addActiveRow(" not in adds[-1][1]:
-        problems.append("`addActiveRow` is not the last row `build` adds — bottom-up, "
-                        "that means *Active Terminals* is not the first row on screen")
+    if not adds or "addActiveRow(" not in adds[0][1]:
+        problems.append("`addActiveRow` is not the first row `build` adds — bottom-up, "
+                        "that means *Other terminals* is not the last row on screen")
     active = [l for l in build if "addActiveRow(" in l]
     if len(active) != 1:
         problems.append(f"`build` adds *Active Terminals* {len(active)} times, expected once")
@@ -103,13 +107,14 @@ def main() -> int:
     menu = (SOURCES / "SpawnFolderMenu.swift").read_text()
     delegate = (SOURCES / "AppDelegate.swift").read_text()
     if "--self-test" in sys.argv:
-        broken = menu.replace("        _ = addActiveRow(at: y, size: size, to: root)\n", "", 1)
-        broken = broken.replace("        var y = pad\n",
-                                "        var y = pad\n        y = addActiveRow(at: y, size: size, to: root)\n", 1)
-        hidden = menu.replace("        _ = addActiveRow(at: y, size: size, to: root)\n",
-                              "        if active?.isEmpty == false { _ = addActiveRow(at: y, size: size, to: root) }\n", 1)
+        broken = menu.replace("        y = addActiveRow(at: y, size: size, to: root)\n", "", 1)
+        broken = broken.replace("        _ = addHeader(header, at: y, size: size, to: root)\n",
+                                "        y = addHeader(header, at: y, size: size, to: root)\n"
+                                "        _ = addActiveRow(at: y, size: size, to: root)\n", 1)
+        hidden = menu.replace("        y = addActiveRow(at: y, size: size, to: root)\n",
+                              "        if active?.isEmpty == false { y = addActiveRow(at: y, size: size, to: root) }\n", 1)
         leaky = delegate.replace("!isBound || spawnPickInFlight != nil", "!isBound", 1)
-        cases = {"row moved to the bottom": (broken, delegate),
+        cases = {"row moved to the top": (broken, delegate),
                  "row hidden when empty": (hidden, delegate),
                  "no hold during the pick": (menu, leaky)}
         ok = True
@@ -124,7 +129,7 @@ def main() -> int:
     for p in problems:
         print(f"FAIL: {p}")
     if not problems:
-        print("ok: Active Terminals is the first row, drawn even when empty, and its pick binds")
+        print("ok: Other terminals is the last row, drawn even when empty, and its pick binds")
     return 1 if problems else 0
 
 

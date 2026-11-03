@@ -240,8 +240,11 @@ enum SpawnFolderMenu {
     private static let gap: CGFloat = 10
 
     /// The last row, which opens `WorkspaceFolders`' sections.
-    static let workspaceLabel = "Workspace"
-    static let workspaceEmptyLabel = "Workspace — none"
+    /// **✨ like the folders above it** (2026-11-03): since that day it is the
+    /// last of them, and a click opens a session in `~/workspace` itself; the
+    /// hover still opens the list of every other folder.
+    static let workspaceLabel = sparkle + "Workspace"
+    static let workspaceEmptyLabel = sparkle + "Workspace — none"
 
     /// It says what the rows are for. Every one of them is a bare folder name,
     /// which is unmistakable once you know what the menu is and says nothing at
@@ -608,11 +611,10 @@ enum SpawnFolderMenu {
         // the longest name *and* the glyph; the header has no star and is
         // measured on its own.
         let width = max(max(widest, activeWidth) + starGap + starSize, headerWidth) + 2 * (pad + rowInset)
-        // *Active Terminals* and the line under it; *Workspace* and the line
-        // over it.
-        let top = rowHeight + separatorHeight
-        let bottom = separatorHeight + rowHeight
-        let height = 2 * pad + top + headerHeight + CGFloat(all.count) * rowHeight + bottom
+        // *Workspace* under the pinned folders, then the line and *Other
+        // terminals* (2026-11-03).
+        let bottom = rowHeight + separatorHeight + rowHeight
+        let height = 2 * pad + headerHeight + CGFloat(all.count) * rowHeight + bottom
             + CGFloat(sessions.count) * sessionHeight
         return NSSize(width: ceil(width), height: ceil(height))
     }
@@ -622,20 +624,22 @@ enum SpawnFolderMenu {
         root.onHover = { SpawnFolderMenu.setHovered($0) }
         addSurface(to: root)
 
-        // Cocoa's y grows upwards, so the groups are laid out bottom-up —
-        // *Workspace* first, then the line, then the pinned folders, the
-        // header, and *Active Terminals* ends up on top.
+        // Cocoa's y grows upwards, so the groups are laid out bottom-up.
+        // **Since 2026-11-03** (Victor: *"mută Active Terminals ca Other
+        // terminals, în locul Workspace. Workspace capătă steluțe în față și
+        // vine ca ultima opțiune deasupra liniei, după proiectele marcate
+        // favorite"*): *Other terminals* at the bottom, the line, *✨ Workspace*,
+        // the pinned folders, and the header on top.
         folderRows = [:]
         var y = pad
-        y = addWorkspaceRow(at: y, size: size, to: root)
-        y = addSeparator(at: y, size: size, to: root)
-        for choice in rendered.reversed() { y = add(choice, at: y, size: size, to: root) }
-        y = addHeader(header, at: y, size: size, to: root)
-        y = addSeparator(at: y, size: size, to: root)
-        // **First, always** — with nothing behind it, dimmed rather than hidden
+        // **Last, always** — with nothing behind it, dimmed rather than hidden
         // (see `ActiveTerminals.emptyLabel`). `evals/test_active_terminals.py`
-        // holds this line to being the last row added, i.e. the top one.
-        _ = addActiveRow(at: y, size: size, to: root)
+        // holds this line to being the first row added, i.e. the bottom one.
+        y = addActiveRow(at: y, size: size, to: root)
+        y = addSeparator(at: y, size: size, to: root)
+        y = addWorkspaceRow(at: y, size: size, to: root)
+        for choice in rendered.reversed() { y = add(choice, at: y, size: size, to: root) }
+        _ = addHeader(header, at: y, size: size, to: root)
 
         return root
     }
@@ -664,13 +668,16 @@ enum SpawnFolderMenu {
         return y + rowHeight
     }
 
-    /// The last row: *Workspace ›*, drawn like *Active Terminals* — dimmed
-    /// `Workspace — none` when the scan found nothing unpinned this month.
+    /// The last folder row: *✨ Workspace ›*, drawn like *Other terminals* —
+    /// dimmed `✨ Workspace — none` when the scan found nothing unpinned this
+    /// month. A click opens a session in `~/workspace` (the ✨'s promise).
     private static func addWorkspaceRow(at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
         let row = ActiveRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: rowHeight),
                             font: rowFont, label: workspaceLabel, emptyLabel: workspaceEmptyLabel)
         row.update(items: workspace.map { $0.flatMap(\.rows) })
         row.onEnter = { [weak row] in if let row { SpawnFolderMenu.openSubmenu(for: row) } }
+        let path = WorkspaceFolders.root.path
+        row.onClick = { take(Choice(name: (path as NSString).lastPathComponent, path: path)) }
         root.addSubview(row)
         workspaceRow = row
         return y + rowHeight
@@ -1246,6 +1253,8 @@ final class ActiveRow: NSView {
     /// nil while the sessions are still being looked for.
     private var items: [SpawnFolderMenu.Choice]?
     var onEnter: (() -> Void)?
+    /// *✨ Workspace* only: a click opens a session there instead of the submenu.
+    var onClick: (() -> Void)?
     /// Its submenu is up — keeps the highlight after the hand has moved into it.
     var open = false { didSet { if open != oldValue { needsDisplay = true } } }
 
@@ -1303,9 +1312,10 @@ final class ActiveRow: NSView {
     override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true; onEnter?() }
     override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    // A click opens it too, for a hand that clicked before it hovered.
+    // A click opens it too, for a hand that clicked before it hovered —
+    // except on *✨ Workspace*, where it opens a session.
     override func mouseDown(with event: NSEvent) {}
-    override func mouseUp(with event: NSEvent) { onEnter?() }
+    override func mouseUp(with event: NSEvent) { if let onClick { onClick() } else { onEnter?() } }
 }
 
 // MARK: - The star

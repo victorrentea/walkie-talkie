@@ -23,13 +23,14 @@ import Foundation
 /// its word (`Tests/WalkieTalkieTests/ActiveTerminalsTests.swift`).
 enum ActiveTerminals {
 
-    /// The row that opens the submenu — always drawn, first in the menu.
-    static let label = "Active Terminals"
+    /// The row that opens the submenu — always drawn, last in the menu, under
+    /// the line (2026-11-03: *Active Terminals* at the top until then).
+    static let label = "Other terminals"
     /// **The same row with nothing behind it: drawn, dimmed, not hidden.** A row
     /// that comes and goes moves every folder under it by a row's height between
     /// two openings, and the menu's whole promise is that the row he reached for
     /// last time is where he left it.
-    static let emptyLabel = "Active Terminals — none"
+    static let emptyLabel = "Other terminals — none"
     /// The submenu's one row while the answer is still coming (an `osascript`
     /// plus one `ps`, ~100 ms) — reached only by a hand faster than that.
     static let loadingLabel = "Looking…"
