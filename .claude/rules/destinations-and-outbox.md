@@ -191,6 +191,7 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   the pointer, size kept (shrunk to the pointer's screen), slid back inside its visible frame, raised
   at once, nothing bound. Not a Terminal.app tab (IDE, tmux) → `bringToFront` where it is.
   `ReplyPanel.onRaise` is gone. Log `🪟 ttysNNN centred on the pointer (x, y) on <screen> …`.
+- **The name and the 📍 say what they do, on hover** (2026-11-03, Victor: *"la hover pe numele titlului sesiunii să-mi apară un tooltip mic: Bring forward"*, *"pe iconița roșie să zică tooltip Bind"*). `Bring forward` under the name, `Bind` under the pin (`ReplyPanel.nameHint`, `pinHint`, `hoverHint`) — small drawn labels like the 🪦's, because an `NSView.toolTip` never shows on a panel of an inactive app. Only the walkie has none. Desk: `POST /test/quick {"hint": {"on": "name" | "pin", "shot": path}}` runs the control's own `mouseEntered`/`mouseExited` and keeps a PNG of the pop-up between them; the real mouse is not moved.
 - **🔼 → over the pop-up answers its sender** (2026-10-09, Victor: *"If I do the gesture for … bound
   prompting while my mouse is over the tooltip with the reply … close the bubble … first rebind me to
   the sender terminal, just like if I would press the pin button … an easy way to chat back with the

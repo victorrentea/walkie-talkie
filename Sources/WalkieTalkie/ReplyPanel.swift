@@ -389,6 +389,11 @@ enum ReplyPanel {
     /// The header of every ⚡ quick answer starts with it (`AppDelegate.askQuick`).
     static let quickMark = "⚡ "
     static let deadHint = "The terminal died already"
+    /// **What the name and the 📍 do, on hover** (2026-11-03, Victor: *"la hover pe
+    /// numele titlului sesiunii să-mi apară un tooltip mic: Bring forward"*, *"pe
+    /// iconița roșie să zică tooltip Bind"*).
+    static let nameHint = "Bring forward"
+    static let pinHint = "Bind"
 
     /// The ⚡ pop-up is still being written.
     private(set) static var liveOpen = false
@@ -694,6 +699,50 @@ enum ReplyPanel {
         return out
     }
 
+    /// **Desk** (`POST /test/quick {"hint": {"on": "name" | "pin", "shot"?: path}}`):
+    /// the title's or the 📍's own `mouseEntered` and `mouseExited`, with a PNG of
+    /// the pop-up between them. The real mouse is not moved.
+    static func testHint(_ which: String, shot: String?) -> [String: Any] {
+        guard let p = panel, let root = p.contentView else { return ["ok": false, "error": "no pop-up"] }
+        let label = which == "pin" ? pinHintLabel : nameHintLabel
+        let control: NSView? = which == "pin"
+            ? root.subviews.compactMap { $0 as? ReplyCloseButton }.first { $0.image != nil }
+            : root.subviews.compactMap { $0 as? LinkLabel }.first
+        guard let label, let control,
+              let e = NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
+                                         windowNumber: p.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)
+        else { return ["ok": false, "error": "no \(which) hint on this pop-up"] }
+        let hiddenBefore = label.isHidden
+        control.mouseEntered(with: e)
+        let shownOnEnter = !label.isHidden
+        let f = label.frame
+        if let shot, let image = snapshot(p)?.cg {
+            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                .write(to: URL(fileURLWithPath: shot))
+        }
+        control.mouseExited(with: e)
+        return ["ok": true, "text": label.stringValue, "hiddenBefore": hiddenBefore, "shownOnEnter": shownOnEnter,
+                "hiddenOnExit": label.isHidden, "insidePopUp": root.bounds.contains(f),
+                "rect": ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height]]
+    }
+
+    /// A word or two drawn over the pop-up while the pointer is on a control —
+    /// hidden until then. Added last, so the words do not cover it.
+    private static func hoverHint(_ text: String) -> InertLabel {
+        let hint = InertLabel(labelWithString: text)
+        hint.font = .systemFont(ofSize: 12)
+        hint.textColor = .white
+        hint.alignment = .center
+        hint.wantsLayer = true
+        hint.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
+        hint.layer?.cornerRadius = 5
+        hint.frame.size = NSSize(width: ceil(hint.intrinsicContentSize.width) + 14, height: 20)
+        hint.isHidden = true
+        return hint
+    }
+    private static weak var nameHintLabel: InertLabel?
+    private static weak var pinHintLabel: InertLabel?
+
     /// The pop-up's content for these words — the header, the body, the buttons —
     /// fitted to them, `baseWidth` wide. Every length is `scale` times its own.
     private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
@@ -884,16 +933,8 @@ enum ReplyPanel {
             skull.dead = shownDead
             // **The 🪦's words, on hover** — drawn under it: a tooltip never
             // shows on a panel of an app that is not active.
-            let hint = InertLabel(labelWithString: deadHint)
-            hint.font = .systemFont(ofSize: 12)
-            hint.textColor = .white
-            hint.alignment = .center
-            hint.wantsLayer = true
-            hint.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
-            hint.layer?.cornerRadius = 5
-            let hintW = ceil(hint.intrinsicContentSize.width) + 14
-            hint.frame = NSRect(x: x.frame.maxX - hintW, y: skull.frame.minY - 24, width: hintW, height: 20)
-            hint.isHidden = true
+            let hint = hoverHint(deadHint)
+            hint.frame.origin = NSPoint(x: x.frame.maxX - hint.frame.width, y: skull.frame.minY - 24)
             skull.onHover = { [weak hint, weak skull] inside in hint?.isHidden = !(inside && skull?.dead == true) }
             let blast = CGPoint(x: skull.frame.midX, y: skull.frame.midY)
             skull.onClick = {
@@ -917,11 +958,22 @@ enum ReplyPanel {
                 }
                 root.addSubview(pin)
                 hot.append(pin.frame)
+                let pinTip = hoverHint(pinHint)
+                pinTip.frame.origin = NSPoint(x: min(pin.frame.midX - pinTip.frame.width / 2, width - pinTip.frame.width - 4),
+                                              y: pin.frame.minY - 24)
+                pin.onHover = { [weak pinTip] inside in pinTip?.isHidden = !inside }
+                root.addSubview(pinTip)
+                pinHintLabel = pinTip
             }
             let fit = min(header.frame.width, header.intrinsicContentSize.width)
             let link = NSRect(x: header.frame.minX, y: header.frame.minY, width: fit, height: header.frame.height)
             hot.append(link)
             root.link = (link, { header.onClick?() })
+            let nameTip = hoverHint(nameHint)
+            nameTip.frame.origin = NSPoint(x: link.minX, y: icon.frame.minY - 24)
+            header.onHover = { [weak nameTip] inside in nameTip?.isHidden = !inside }
+            root.addSubview(nameTip)
+            nameHintLabel = nameTip
         }
         root.hot = hot
         if let linked = body as? LinkedBody {
@@ -1491,6 +1543,8 @@ private final class ReplyIcon: NSImageView {
 /// cursor and an underline while the pointer is on it, a click binds it.
 private final class LinkLabel: NSTextField {
     var onClick: (() -> Void)? { didSet { window?.invalidateCursorRects(for: self) } }
+    /// The pointer came onto the words (true) or left them (false).
+    var onHover: ((Bool) -> Void)?
 
     func underline(_ on: Bool) {
         // The paragraph style carries the … : an attributed value without one
@@ -1519,8 +1573,8 @@ private final class LinkLabel: NSTextField {
     /// Never hit: a press on it is `ReplyRoot`'s — a drag, or the name's click.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
-    override func mouseEntered(with event: NSEvent) { underline(true); NSCursor.pointingHand.set() }
+    override func mouseEntered(with event: NSEvent) { underline(true); NSCursor.pointingHand.set(); onHover?(true) }
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
-    override func mouseExited(with event: NSEvent) { underline(false); NSCursor.arrow.set() }
+    override func mouseExited(with event: NSEvent) { underline(false); NSCursor.arrow.set(); onHover?(false) }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
