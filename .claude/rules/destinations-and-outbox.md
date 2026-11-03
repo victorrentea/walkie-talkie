@@ -191,7 +191,7 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   the pointer, size kept (shrunk to the pointer's screen), slid back inside its visible frame, raised
   at once, nothing bound. Not a Terminal.app tab (IDE, tmux) → `bringToFront` where it is.
   `ReplyPanel.onRaise` is gone. Log `🪟 ttysNNN centred on the pointer (x, y) on <screen> …`.
-- **The name and the 📍 say what they do, on hover** (2026-11-03, Victor: *"la hover pe numele titlului sesiunii să-mi apară un tooltip mic: Bring forward"*, *"pe iconița roșie să zică tooltip Bind"*). `Bring forward` under the name, `Bind` under the pin (`ReplyPanel.nameHint`, `pinHint`, `hoverHint`) — small drawn labels like the 🪦's, because an `NSView.toolTip` never shows on a panel of an inactive app. Only the walkie has none. Desk: `POST /test/quick {"hint": {"on": "name" | "pin", "shot": path}}` runs the control's own `mouseEntered`/`mouseExited` and keeps a PNG of the pop-up between them; the real mouse is not moved.
+- **The name, the 📍 and the ☠️ say what they do, above them, on hover** (2026-11-03, Victor: *"la hover pe numele titlului sesiunii să-mi apară un tooltip mic: Bring forward"*, *"pe iconița roșie să zică tooltip Bind"*, *"tooltipurile să apară deasupra buton/titlu, ca altfel vin sub mouse"*, *"tooltip pe rip: kill session"*). `Bring forward`, `Bind`, `Kill session` (`The terminal died already` on a 🪦, drawn under it until this day). Drawn, because an `NSView.toolTip` never shows on a panel of an inactive app; in a child window of the pop-up (`ReplyPanel.hintWindow`, never hit), because the header sits at the top edge and a label inside the pop-up could only go under it, where the pointer's arrow covers it. Under the control only when the screen ends above it. The walkie and the ✕ have none. Desk: `POST /test/quick {"hint": {"on": "name" | "pin" | "skull", "hold": true}}` runs the control's own `mouseEntered` (and `mouseExited` without `hold`); the real mouse is not moved.
 - **🔼 → over the pop-up answers its sender** (2026-10-09, Victor: *"If I do the gesture for … bound
   prompting while my mouse is over the tooltip with the reply … close the bubble … first rebind me to
   the sender terminal, just like if I would press the pin button … an easy way to chat back with the
@@ -310,7 +310,7 @@ me to dismiss it explicitly"*.
   It's a one shot question"*) — it had a red one for a few hours that morning.
   **Dead shows a 🪦, not a red ☠️** (2026-10-13 late, Victor: *"replace that emoji with a tombstone
   … saying to me: the terminal died already"*): same grey disc as the live ☠️; hovering it shows
-  `The terminal died already` in a small label drawn under it (`ReplyPanel.deadHint`) — not an
+  `The terminal died already` in a small drawn label (`ReplyPanel.deadHint`) — not an
   `NSView.toolTip`, which never shows on a panel of an inactive app. Log `… shows a 🪦`.
 - **The panel is a surface, not a document** (2026-10-08, *"drag the little window … by clicking on the
   text and the text shouldn't be selectable"*): the words are an `InertLabel` (not selectable, no hit),

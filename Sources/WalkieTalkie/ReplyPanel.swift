@@ -96,6 +96,7 @@ enum ReplyPanel {
         func share(_ type: NSWindow.SharingType, inShot: Bool) {
             let apply = {
                 panel?.sharingType = type
+                panel?.childWindows?.forEach { $0.sharingType = type }
                 self.inShot = inShot
                 inShotChanged.forEach { $0() }
             }
@@ -394,6 +395,8 @@ enum ReplyPanel {
     /// iconița roșie să zică tooltip Bind"*).
     static let nameHint = "Bring forward"
     static let pinHint = "Bind"
+    /// The ☠️ of a session still alive (2026-11-03, *"tooltip pe rip: kill session"*).
+    static let killHint = "Kill session"
 
     /// The ⚡ pop-up is still being written.
     private(set) static var liveOpen = false
@@ -699,53 +702,94 @@ enum ReplyPanel {
         return out
     }
 
-    /// **Desk** (`POST /test/quick {"hint": {"on": "name" | "pin", "shot"?: path}}`):
-    /// the title's or the 📍's own `mouseEntered` and `mouseExited`, with a PNG of
-    /// the pop-up between them. The real mouse is not moved.
-    static func testHint(_ which: String, shot: String?) -> [String: Any] {
+    /// **Desk** (`POST /test/quick {"hint": {"on": "name" | "pin" | "skull", "hold"?: true}}`):
+    /// that control's own `mouseEntered`, then its `mouseExited` unless `hold`
+    /// leaves the hint up for a screenshot. The real mouse is not moved.
+    static func testHint(_ which: String, hold: Bool) -> [String: Any] {
         guard let p = panel, let root = p.contentView else { return ["ok": false, "error": "no pop-up"] }
-        let label = which == "pin" ? pinHintLabel : nameHintLabel
-        let control: NSView? = which == "pin"
-            ? root.subviews.compactMap { $0 as? ReplyCloseButton }.first { $0.image != nil }
-            : root.subviews.compactMap { $0 as? LinkLabel }.first
-        guard let label, let control,
+        let buttons = root.subviews.compactMap { $0 as? ReplyCloseButton }
+        let control: NSView? = switch which {
+        case "pin": buttons.first { $0.image != nil }
+        case "skull": buttons.first { $0.glyph != nil }
+        default: root.subviews.compactMap { $0 as? LinkLabel }.first
+        }
+        guard let control,
               let e = NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
                                          windowNumber: p.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)
-        else { return ["ok": false, "error": "no \(which) hint on this pop-up"] }
-        let hiddenBefore = label.isHidden
+        else { return ["ok": false, "error": "no \(which) on this pop-up"] }
+        let visibleBefore = hintWindow.isVisible
         control.mouseEntered(with: e)
-        let shownOnEnter = !label.isHidden
-        let f = label.frame
-        if let shot, let image = snapshot(p)?.cg {
-            try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
-                .write(to: URL(fileURLWithPath: shot))
+        let visible = hintWindow.isVisible, f = hintWindow.frame
+        let at = p.convertToScreen(control.convert(control.bounds, to: nil))
+        var out: [String: Any] = [
+            "ok": true, "text": hintLabel.stringValue, "visibleBefore": visibleBefore, "visibleOnEnter": visible,
+            "above": f.minY >= at.maxY, "followsThePopUp": hintWindow.parent === p,
+            "rect": ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height],
+            "control": ["x": at.minX, "y": at.minY, "w": at.width, "h": at.height]]
+        if !hold {
+            control.mouseExited(with: e)
+            out["visibleOnExit"] = hintWindow.isVisible
         }
-        control.mouseExited(with: e)
-        return ["ok": true, "text": label.stringValue, "hiddenBefore": hiddenBefore, "shownOnEnter": shownOnEnter,
-                "hiddenOnExit": label.isHidden, "insidePopUp": root.bounds.contains(f),
-                "rect": ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height]]
+        return out
     }
 
-    /// A word or two drawn over the pop-up while the pointer is on a control —
-    /// hidden until then. Added last, so the words do not cover it.
-    private static func hoverHint(_ text: String) -> InertLabel {
-        let hint = InertLabel(labelWithString: text)
-        hint.font = .systemFont(ofSize: 12)
-        hint.textColor = .white
-        hint.alignment = .center
-        hint.wantsLayer = true
-        hint.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
-        hint.layer?.cornerRadius = 5
-        hint.frame.size = NSSize(width: ceil(hint.intrinsicContentSize.width) + 14, height: 20)
-        hint.isHidden = true
-        return hint
+    /// **A hint stands above its control, in a little window of its own**
+    /// (2026-11-03, Victor: *"tooltipurile să apară deasupra buton/titlu, ca altfel
+    /// vin sub mouse"*). The header is at the pop-up's top edge, so above it is
+    /// outside the pop-up. A child window, so a drag takes it along; never hit, so
+    /// it cannot take the hover from what it explains. Under the control only
+    /// when the screen ends above it.
+    private static let hintLabel: InertLabel = {
+        let label = InertLabel(labelWithString: "")
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .white
+        label.alignment = .center
+        label.wantsLayer = true
+        label.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
+        label.layer?.cornerRadius = 5
+        return label
+    }()
+    private static let hintWindow: NSPanel = {
+        let w = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.ignoresMouseEvents = true
+        w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        w.hidesOnDeactivate = false
+        w.contentView = hintLabel
+        return w
+    }()
+
+    /// `rect` in `view`; `leading` lines the hint up with its left edge, as under
+    /// a title as long as the pop-up, instead of centring it.
+    private static func showHint(_ text: String, over rect: NSRect, of view: NSView, leading: Bool = false) {
+        guard let p = view.window else { return }
+        let at = p.convertToScreen(view.convert(rect, to: nil))
+        hintLabel.stringValue = text
+        let size = NSSize(width: ceil(hintLabel.intrinsicContentSize.width) + 14, height: 20)
+        let room = p.screen?.visibleFrame ?? at.insetBy(dx: 0, dy: -100)
+        let x = min(max(room.minX, leading ? at.minX : at.midX - size.width / 2), room.maxX - size.width)
+        let y = at.maxY + 4 + size.height <= room.maxY ? at.maxY + 4 : at.minY - 4 - size.height
+        hintWindow.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
+        hintWindow.level = p.level
+        hintWindow.sharingType = p.sharingType
+        if hintWindow.parent !== p {
+            hintWindow.parent?.removeChildWindow(hintWindow)
+            p.addChildWindow(hintWindow, ordered: .above)
+        }
+        hintWindow.orderFront(nil)
     }
-    private static weak var nameHintLabel: InertLabel?
-    private static weak var pinHintLabel: InertLabel?
+
+    private static func hideHint() {
+        hintWindow.parent?.removeChildWindow(hintWindow)
+        hintWindow.orderOut(nil)
+    }
 
     /// The pop-up's content for these words — the header, the body, the buttons —
     /// fitted to them, `baseWidth` wide. Every length is `scale` times its own.
     private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
+        // The control under it is about to be replaced, and sends no `mouseExited`.
+        hideHint()
         let s = scale
         let pad: CGFloat = 12 * s
         let width = (baseWidth * s).rounded()
@@ -931,11 +975,12 @@ enum ReplyPanel {
             let skull = ReplyCloseButton(frame: x.frame.offsetBy(dx: -(iconSide + gap), dy: 0))
             skull.glyph = "☠️"
             skull.dead = shownDead
-            // **The 🪦's words, on hover** — drawn under it: a tooltip never
-            // shows on a panel of an app that is not active.
-            let hint = hoverHint(deadHint)
-            hint.frame.origin = NSPoint(x: x.frame.maxX - hint.frame.width, y: skull.frame.minY - 24)
-            skull.onHover = { [weak hint, weak skull] inside in hint?.isHidden = !(inside && skull?.dead == true) }
+            // **Its words, on hover** — drawn: a tooltip never shows on a panel of
+            // an app that is not active.
+            skull.onHover = { [weak root, weak skull] inside in
+                guard inside, let root, let skull else { return hideHint() }
+                showHint(skull.dead ? deadHint : killHint, over: skull.frame, of: root)
+            }
             let blast = CGPoint(x: skull.frame.midX, y: skull.frame.midY)
             skull.onClick = {
                 Log.info("💬 the reply pop-up's ☠️ clicked — kamikaze to \(tty), pop-up blown up")
@@ -943,7 +988,6 @@ enum ReplyPanel {
                 onKamikaze?(tty)
             }
             root.addSubview(skull)
-            root.addSubview(hint)
             skullButton = skull
             hot.append(skull.frame)
             // **📍 left of the ☠️, only while another terminal is bound** — the
@@ -958,22 +1002,19 @@ enum ReplyPanel {
                 }
                 root.addSubview(pin)
                 hot.append(pin.frame)
-                let pinTip = hoverHint(pinHint)
-                pinTip.frame.origin = NSPoint(x: min(pin.frame.midX - pinTip.frame.width / 2, width - pinTip.frame.width - 4),
-                                              y: pin.frame.minY - 24)
-                pin.onHover = { [weak pinTip] inside in pinTip?.isHidden = !inside }
-                root.addSubview(pinTip)
-                pinHintLabel = pinTip
+                pin.onHover = { [weak root, weak pin] inside in
+                    guard inside, let root, let pin else { return hideHint() }
+                    showHint(pinHint, over: pin.frame, of: root)
+                }
             }
             let fit = min(header.frame.width, header.intrinsicContentSize.width)
             let link = NSRect(x: header.frame.minX, y: header.frame.minY, width: fit, height: header.frame.height)
             hot.append(link)
             root.link = (link, { header.onClick?() })
-            let nameTip = hoverHint(nameHint)
-            nameTip.frame.origin = NSPoint(x: link.minX, y: icon.frame.minY - 24)
-            header.onHover = { [weak nameTip] inside in nameTip?.isHidden = !inside }
-            root.addSubview(nameTip)
-            nameHintLabel = nameTip
+            header.onHover = { [weak root] inside in
+                guard inside, let root else { return hideHint() }
+                showHint(nameHint, over: link, of: root, leading: true)
+            }
         }
         root.hot = hot
         if let linked = body as? LinkedBody {
@@ -1029,6 +1070,7 @@ enum ReplyPanel {
     }
 
     static func close() {
+        hideHint()
         panel?.orderOut(nil)
         panel = nil
         if liveOpen {
@@ -1415,7 +1457,7 @@ private final class ReplyCloseButton: NSView {
     var image: NSImage?
     /// **A session already gone** — the ☠️ turns 🪦, no hand, a click does
     /// nothing (a press still drags the pop-up).
-    var dead = false { didSet { needsDisplay = true; window?.invalidateCursorRects(for: self); onHover?(hot) } }
+    var dead = false { didSet { needsDisplay = true; window?.invalidateCursorRects(for: self); if hot { onHover?(true) } } }
     /// The pointer came in (true) or left (false).
     var onHover: ((Bool) -> Void)?
     private var hot = false

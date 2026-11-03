@@ -2176,10 +2176,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ReplyPanel.testLink(i, click: l["click"] as? Bool == true, open: l["open"] as? Bool ?? true)
                 }
             }
-            // `hint: {on: "name" | "pin", shot?}` — the pointer on the open pop-up's
-            // title or 📍, through their own handlers; `shot` keeps a PNG of it.
+            // `hint: {on: "name" | "pin" | "skull", hold?}` — the pointer on that
+            // control of the open pop-up, through its own handlers; `hold` leaves
+            // the hint up for a screenshot, until the pop-up closes.
             if let h = body["hint"] as? [String: Any], let on = h["on"] as? String {
-                linkOut = DispatchQueue.main.sync { ReplyPanel.testHint(on, shot: h["shot"] as? String) }
+                linkOut = DispatchQueue.main.sync { ReplyPanel.testHint(on, hold: h["hold"] as? Bool == true) }
             }
             let frame: Any = DispatchQueue.main.sync {
                 ReplyPanel.frame.map { ["x": $0.minX, "y": $0.minY, "w": $0.width, "h": $0.height] } ?? NSNull()
