@@ -83,6 +83,14 @@ enum IDEBridge {
         /// Captured at bind and refreshed from `/state`, because Victor `cd`s
         /// between repos inside one session.
         let cwd: String?
+        /// **The editor's chat, not a terminal** (2026-11-03, Victor: *"să pot
+        /// lega chatul copilot din vsc cum leg orice terminal … să pot prompta în
+        /// acele chaturi din IDE-uri cu bound, fără să aibă focus"*). The extension
+        /// binds the chat when ⌘⌃B finds the keyboard in it and answers
+        /// `kind: "chat"`; every later line goes through the same `/send`, which
+        /// there submits it to the chat. There is no shell behind it to guard, and
+        /// none is needed: a chat cannot run the sentence as a command.
+        var isChat = false
 
         static func == (a: Handle, b: Handle) -> Bool {
             a.endpoint.port == b.endpoint.port && a.id == b.id
@@ -207,8 +215,11 @@ enum IDEBridge {
         let name = (obj["name"] as? String) ?? "terminal"
         let shell = (obj["shellPID"] as? Int).map { pid_t($0) }
         let cwd = obj["cwd"] as? String
-        Log.info("🔌 \(kind) bridge on :\(endpoint.port) → terminal #\(id) “\(name)” shell pid \(shell.map(String.init) ?? "?") cwd \(cwd ?? "?")")
-        return .bound(Handle(endpoint: endpoint, id: id, name: name, shellPID: shell, cwd: cwd))
+        let isChat = (obj["kind"] as? String) == "chat"
+        Log.info(isChat
+            ? "🔌 \(kind) bridge on :\(endpoint.port) → chat #\(id) “\(name)” cwd \(cwd ?? "?") — no shell to guard"
+            : "🔌 \(kind) bridge on :\(endpoint.port) → terminal #\(id) “\(name)” shell pid \(shell.map(String.init) ?? "?") cwd \(cwd ?? "?")")
+        return .bound(Handle(endpoint: endpoint, id: id, name: name, shellPID: shell, cwd: cwd, isChat: isChat))
     }
 
     /// Where that terminal is **now** — the editor asked again rather than the

@@ -197,7 +197,7 @@ final class TerminalBinding {
             // Guarded exactly when the extension could tell us which process
             // owns the panel. It normally can; if it could not, saying so is
             // better than implying a check that will not happen.
-            case .ide(let h): return h.shellPID != nil
+            case .ide(let h): return h.isChat || h.shellPID != nil
             case .terminalApp, .tmux: return true
             }
         }
