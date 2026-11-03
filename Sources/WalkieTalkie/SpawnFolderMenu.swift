@@ -628,7 +628,7 @@ enum SpawnFolderMenu {
         // **Since 2026-11-03** (Victor: *"mută Active Terminals ca Other
         // terminals, în locul Workspace. Workspace capătă steluțe în față și
         // vine ca ultima opțiune deasupra liniei, după proiectele marcate
-        // favorite"*): *Other terminals* at the bottom, the line, *✨ Workspace*,
+        // favorite"*): *Active terminals* at the bottom, the line, *✨ Workspace*,
         // the pinned folders, and the header on top.
         folderRows = [:]
         var y = pad
@@ -668,7 +668,7 @@ enum SpawnFolderMenu {
         return y + rowHeight
     }
 
-    /// The last folder row: *✨ Workspace ›*, drawn like *Other terminals* —
+    /// The last folder row: *✨ Workspace ›*, drawn like *Active terminals* —
     /// dimmed `✨ Workspace — none` when the scan found nothing unpinned this
     /// month. A click opens a session in `~/workspace` (the ✨'s promise).
     private static func addWorkspaceRow(at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {

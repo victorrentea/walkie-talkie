@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""**`Other terminals` (ex-*Active Terminals*) is the spawn menu's last row, and it is never hidden.**
+"""**`Active terminals` is the spawn menu's last row, and it is never hidden.**
 
 Since 2026-11-03 it sits at the bottom, under the line, where *Workspace* was
 (Victor: *"mută Active Terminals ca Other terminals, în locul Workspace"*);
@@ -68,7 +68,7 @@ def check(menu: str, delegate: str) -> list[str]:
             if re.search(r"\b(add|addHeader|addSeparator|addActiveRow)\(", l)]
     if not adds or "addActiveRow(" not in adds[0][1]:
         problems.append("`addActiveRow` is not the first row `build` adds — bottom-up, "
-                        "that means *Other terminals* is not the last row on screen")
+                        "that means *Active terminals* is not the last row on screen")
     active = [l for l in build if "addActiveRow(" in l]
     if len(active) != 1:
         problems.append(f"`build` adds *Active Terminals* {len(active)} times, expected once")
@@ -129,7 +129,7 @@ def main() -> int:
     for p in problems:
         print(f"FAIL: {p}")
     if not problems:
-        print("ok: Other terminals is the last row, drawn even when empty, and its pick binds")
+        print("ok: Active terminals is the last row, drawn even when empty, and its pick binds")
     return 1 if problems else 0
 
 

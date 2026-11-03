@@ -129,12 +129,12 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `$HOME` on a failed `cd`, the one destination nobody meant.
   → journal: *The folder menu (2026-09-04)*
 
-## Other terminals — the last row (ex-*Active Terminals*, the first row) (2026-09-23 → 2026-11-03)
+## Active terminals — the last row (the first until 2026-11-03) (2026-09-23 → 2026-11-03)
 
 **Since 2026-11-03** (Victor: *"mută Active Terminals ca Other terminals, în locul Workspace.
 Workspace capătă steluțe în față și vine ca ultima opțiune deasupra liniei, după proiectele marcate
 favorite"*) the menu reads, top to bottom: `Start Claude in…`, the pinned folders (with their
-session lines), **`✨ Workspace ›`**, a line, **`Other terminals ›`**. The label is
+session lines), **`✨ Workspace ›`**, a line, **`Active terminals ›`** (named *Active terminals* for an hour, then back: *"Active terminals -> Active terminals"*). The label is
 `ActiveTerminals.label`; the code still calls the row `ActiveRow` / `addActiveRow`. A click on
 `✨ Workspace` opens a session in `~/workspace` itself (the ✨'s promise, `ActiveRow.onClick`); a
 hover opens its folder list as before. Where the rules below say *first*, read *last*.
@@ -220,7 +220,7 @@ week, and the last month. And then inside each section … ascending by name …
 star to get them onto the main list"*.
 
 - ~~**The menu is *Active Terminals*, the pinned folders (`PinnedProjects`), a line, then
-  `Workspace ›`**~~ (→ 2026-11-03: the pinned folders, `✨ Workspace ›`, a line, *Other terminals*) — an `ActiveRow` with its own labels (`Workspace — none`, dimmed,
+  `Workspace ›`**~~ (→ 2026-11-03: the pinned folders, `✨ Workspace ›`, a line, *Active terminals*) — an `ActiveRow` with its own labels (`Workspace — none`, dimmed,
   when nothing unpinned changed this month). **The five transcript-ranked recents
   (`RecentProjects`, `helpers/recent_projects.py`, 2026-09-08) are gone** — never used.
 - **`PinnedProjects` is seeded from the six that were hardcoded**, persisted in
@@ -411,7 +411,7 @@ star to get them onto the main list"*.
 - Do not reintroduce `activate` in `SpawnTerminal`, `reversed:` in a spawn flight, or a picture on
   the send flight to an existing terminal.
 - Do not scan `~/workspace` at the gesture or on the main thread, and do not put the recent half back.
-- Do not hide *Other terminals* when nothing is running, move it off the last row, or let a
+- Do not hide *Active terminals* when nothing is running, move it off the last row, or let a
   pick's words out before its bind lands.
 - Do not make a folder row's click do anything but start a new session, and do not put the folder submenus back.
 - Do not offer a session that was sent `kamikaze`.
