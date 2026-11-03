@@ -1557,22 +1557,27 @@ final class TerminalBinding {
     /// `caret`, and when there is none, **why** — for the `🟧 … no caret found`
     /// line, so the next app that hides its caret says how (2026-10-16).
     static func caretReading(pid: pid_t, in window: CGRect) -> (point: NSPoint?, miss: String?) {
-        let ax = axCaretReading(pid: pid, in: window)
-        guard ax.point == nil,
-              let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
-              IDEBridge.kind(bundleID: bundle) == "intellij" else { return ax }
-        // **IntelliJ's terminal has no caret to Accessibility** (2026-10-19 —
-        // `focused no role, no bounds for its caret` on every sentence there):
-        // the plugin reads JediTerm's cursor cell. Its line's middle, like a
-        // range's `midY` above.
+        guard let bundle = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+              IDEBridge.kind(bundleID: bundle) == "intellij" else { return axCaretReading(pid: pid, in: window) }
+        // **In a JetBrains app the plugin is asked first** (2026-10-28, Victor:
+        // *"și în IntelliJ, când scriu un fișier text … pad-ul roșu stă exact
+        // unde este cursorul"*). Its editor answer is `visualPositionToXY` of the
+        // caret — exact by construction, where Accessibility's is the Java
+        // bridge's reading of a character's bounds. Since 2026-10-19 it was asked
+        // only when Accessibility found nothing: IntelliJ's terminal has no caret
+        // there (`focused no role, no bounds for its caret`), and the plugin
+        // reads JediTerm's cursor cell. Accessibility stays the fallback — an
+        // old plugin, a focus owner it does not know (404).
         let ide = IDEBridge.caret(pid: pid)
-        guard let r = ide.rect, let primary = NSScreen.screens.first else {
-            return (nil, [ax.miss, ide.miss].compactMap { $0 }.joined(separator: "; "))
+        if let r = ide.rect, let primary = NSScreen.screens.first {
+            // Its line's middle, like a range's `midY` below.
+            let point = NSPoint(x: r.minX, y: primary.frame.maxY - r.midY)
+            if window.insetBy(dx: -4, dy: -4).contains(point) { return (point, nil) }
+            let ax = axCaretReading(pid: pid, in: window)
+            return ax.point != nil ? ax : (nil, String(format: "its caret (%.0f, %.0f) from live-coding is outside the window", point.x, point.y))
         }
-        let point = NSPoint(x: r.minX, y: primary.frame.maxY - r.midY)
-        return window.insetBy(dx: -4, dy: -4).contains(point)
-            ? (point, nil)
-            : (nil, String(format: "its caret (%.0f, %.0f) from live-coding is outside the window", point.x, point.y))
+        let ax = axCaretReading(pid: pid, in: window)
+        return ax.point != nil ? ax : (nil, [ax.miss, ide.miss].compactMap { $0 }.joined(separator: "; "))
     }
 
     private static func axCaretReading(pid: pid_t, in window: CGRect) -> (point: NSPoint?, miss: String?) {
