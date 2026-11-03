@@ -16008,3 +16008,16 @@ is `~/tart` now; `vm-lab.sh` no longer refuses to run without the disk. `wt-base
 Vic: a `reset` re-pulls the base image. Same night, *"când mă culc … rulează o rundă de transcriere cu
 Wispr Flow … în fiecare noapte, după 10 min de inactivitate"* → LaunchAgent `ro.victorrentea.wispr-night`
 (details in `docs/vm-wispr.md`, *How the batch is actually run*).
+
+## 2026-11-03 — the relay's own ⌃Escape killed the box he was moving
+
+Victor: *"s-a pierdut … poza în timp ce o mutam. A trebuit să reîncep mutarea imaginii, să reselectez poza
+originală"*. `armMicOpenWatch` dismisses Wispr's row with ⌃Escape 3 s into a sentence whose microphone never
+opened; the crop's Esc tap took it for his, ended the crop and ate the key, so Wispr's row stayed open as well.
+Every crop a dismiss crossed died: **8 of 8, none survived** (10-14, 10-23, six on 11-03). The six came from a
+Wispr wedged all day (61 dismisses on 11-03, at most 4 a day before) until the watchdog of a824ac8 restarted
+it at 20:04; since then 31 crops, no cancel. The moving box only made it look like a move bug: the ghost is
+what he sees vanish, and locks at about 2–3 s are what put the crop under the dismiss.
+Fix: `CropSelectionOverlay.ownEventStamp` (kit) = `HotkeyTap.backButtonStamp`; the stamped Esc passes the tap,
+and `tick` polls `keyState` only when the tap is missing. Proven by `CropEscapeTests` on a real overlay through
+the tap's handler; not yet watched on a real miss, since that needs a wedged Wispr. Rule: `area-crop.md`.

@@ -2665,6 +2665,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // was actually drawn in, and the longest it went without one. It took a
         // bug report to ask that question the first time.
         CropSelectionOverlay.log = { Log.info($0) }
+        // The ⌃Escape posted to Wispr Flow is not his Esc: it must neither end
+        // the box he is framing nor be eaten on its way to Wispr (2026-11-03).
+        CropSelectionOverlay.ownEventStamp = HotkeyTap.backButtonStamp
         // Main, because it touches the overlay's own state; and `async`, because
         // this arrives on the tap thread mid-gesture.
         hotkeys.onAreaEnd = { DispatchQueue.main.async { CropSelectionOverlay.endDrag() } }
