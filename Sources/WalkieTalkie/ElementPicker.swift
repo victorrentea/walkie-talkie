@@ -519,6 +519,9 @@ final class ElementPicker {
     /// forced budget / local ETA (2026-09-29) and the Wispr fakes (2026-09-28);
     /// answers `state.localAuto`. Run on the main queue.
     var onTestLocalAuto: (([String: Any]) -> [String: Any])?
+    /// `POST /test/transcript-guard` — `{"on"}` the switch, `{"text", "retry"?,
+    /// "duration"?}` the pure verdict, `{"text", "replay": wav, "duration"}` a whole sentence.
+    var onTestTranscriptGuard: (([String: Any]) -> [String: Any])?
 
     /// `POST /test/resume-session` `{"session": "<uuid>", "directory": "…"}` —
     /// what ⏎ does on a panel row whose terminal is closed.
@@ -965,6 +968,12 @@ final class ElementPicker {
                 let answer = self?.onTestLocalFallback?(wav, (body?["words"] as? Bool) ?? false) ?? ["ok": false]
                 self?.respond(conn, 200, answer)
             }
+
+        case ("POST", "/test/transcript-guard"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            var answer: [String: Any] = [:]
+            DispatchQueue.main.sync { answer = onTestTranscriptGuard?(body) ?? [:] }
+            respond(conn, 200, ["ok": true].merging(answer) { _, new in new })
 
         case ("POST", "/test/live-caption"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]

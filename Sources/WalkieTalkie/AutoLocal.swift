@@ -259,6 +259,7 @@ enum AutoLocal {
             case "local-forced": return "local-forced"
             case "local-auto": return "local-auto"
             case "local-fallback": return "local-fallback"
+            case "local-guard": return "local-guard"
             default: return "engine"
             }
         }

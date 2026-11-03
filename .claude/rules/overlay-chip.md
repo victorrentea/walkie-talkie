@@ -192,6 +192,11 @@ yields to `--label`).
   `🎙️ sent`; not for `held` (its own flash; the notice comes at the bind's delivery). No engine's
   name. Shot `flash-local-fallback`.
 
+- **`💻 Foreign words fixed locally` — 3 s, once a sentence the engine heard in another language has
+  landed mended** (2026-11-04, `TranscriptGuard.notice`; `dictation-source.md`). Through `localNotice`
+  for `via: local-guard`, from `finishGuard` for a splice or a cut, which keep the engine's `via`. Shot
+  `flash-foreign-words`.
+
 ## `Listening...` and `Transcribing...`
 
 - **The live caption is not on the chip since 2026-09-26** — it is `LiveCaptionBand`, a click-through

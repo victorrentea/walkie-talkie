@@ -16021,3 +16021,33 @@ what he sees vanish, and locks at about 2–3 s are what put the crop under the 
 Fix: `CropSelectionOverlay.ownEventStamp` (kit) = `HotkeyTap.backButtonStamp`; the stamped Esc passes the tap,
 and `tick` polls `keyState` only when the tap is missing. Proven by `CropEscapeTests` on a real overlay through
 the tap's handler; not yet watched on a real miss, since that needs a wedged Wispr. Rule: `area-crop.md`.
+
+## Words in a language nobody spoke (2026-11-04)
+
+Victor: *"se mai întâmplă uneori să vină prompt-ul în altă limbă, de caracter chinezesc sau arabă … un check
+super rapid … cu sau fără consum de tokeni"*. The corpus, 1 Oct – 3 Nov: 3,570 sentences, 34 wrong, nearly
+all Wispr's, 1 a week until mid-October and 18 in the week of 26 Oct, with `ro` and `en` already the only
+languages ticked in Wispr. Twelve had another alphabet; the other 22 were Portuguese, Italian, Polish or
+Croatian in Latin letters, so the character filter he asked for sees only a third. macOS's
+`NLLanguageRecognizer` sees the rest, on the Mac, in 0.9 ms.
+
+The audio was Romanian. 55 suspect clips through the local model (pinned `ro`/`en`, separate process): about
+4 in 5 came back right or clearly better, median decode 0.3 s — `مغربية.` → *Mă grăbesc.*, `Чыфатчымат
+поккок` → *Ce face Matt Pokok?*, `Dak diktée dakuma, ngou daay Enter?` → *Dacă dictezi acuma, nu dai Enter?*,
+a 58 s `시청해 주셔서 감사합니다` → the sentence he said. That judgement is by reading: there is no reference
+text. So the cure was already in the app: `fallBackToLocal`.
+
+Two findings shaped it. **The foreign run sits at the end** in 13 of 14 mixed takes, and 11 of 14 last
+30–43 s — it looks like a short second 30 s window guessing its own language, not proven. The half minute
+before it is good and better than the local model's, so only the run is replaced. **The local model has the
+same failure there**: on three 32–40 s takes it answered `Thank you.` and nothing else, and 9 of 55 results
+had a sentence glued on with no space (`pornit.Sci.`). So a retry passes the same judge plus 0.3 words a
+second, and with nothing usable the run is cut or the sentence goes out as it came, with a warning.
+
+Run over the 55: 35 whole takes replaced, 11 spliced, 3 cut, 6 no longer flagged (the false alarms of
+the first threshold, 0.5). Rules: `dictation-source.md`, *Words in a language nobody spoke*.
+
+Proven end to end by TF1–TF2 (`evals/plan/cases_guard.py`) on the installed app: a garbled text on a real WAV
+through the engine's two callbacks, the hold, the real local model, the delivery into the witness tab. **No
+real microphone in those cases**: this Mac has no `WT Inject` Loopback and `From Walkie` takes no outside
+output, so the first real sentence to cross it will be Wispr's own; `transcript-guard.jsonl` is where to look.

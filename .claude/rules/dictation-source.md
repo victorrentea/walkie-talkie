@@ -478,6 +478,40 @@ Wispr's own let-through ⌘V leaves ⌘ down, so the tap posts the clearing even
 `clearStaleModifiersAtLaunch()` (after `SingleInstance.enforce`) heals one left before launch,
 per modifier, against `keyState` on both keycodes. `evals/test_stale_modifier.py` guards the source.
 
+## Words in a language nobody spoke (2026-11-04)
+
+`TranscriptGuard`, between the engine's answer and `deliver`. Victor: *"se mai întâmplă uneori să vină
+prompt-ul în altă limbă"*. Measured over `corpus.jsonl`, 1 Oct – 3 Nov: 34 of 3,570 flagged, and all 34
+read as real on inspection; 18 in the week of 26 Oct; `ro` + `en` were already the only languages ticked
+in Wispr (`config.json` `prefs.user.selectedLanguages`), so **that setting is not the cure**.
+
+- **Two checks, no tokens:** a run of ≥ 2 non-Latin letters (one `π` or `λ` passes), or ≥ 4 words (≥ 3
+  distinct) with `NLLanguageRecognizer`'s Romanian + English under **0.2** (0.9 ms a sentence). Spoken
+  markers are stripped first. At 0.5 it took *JDBC connection pool starvation* (0.39).
+- **The hold is across one gap.** `didTranscribe` → `deliverGuarded` keeps the sentence in `guardHeld`;
+  `didEnd(.delivered)` → `dictationEnded` turns it into `fallBackToLocal(held:)`, the path a failed
+  engine takes: same settle, destination, flags, cancel, and the decode ahead is reused. A delivery
+  cannot wait inside `didTranscribe`: `didEnd` follows it at once and would end the sentence under it.
+- **Only when it can help:** `.route` words (text already on screen cannot be taken back), with a WAV,
+  `whisperSource.isReady` (never 10 s of weights for this), not the local engine.
+- **`TranscriptGuard.resolve` decides:** *whole take* → the local words (`via: local-guard`, filed as
+  `whisper-local`); *a run inside good words* → `spliced`, the engine's words around it and the local
+  ones inside it (13 of 14 runs sit in the last 17 %, 11 of 14 takes last 30–43 s), on `text` and
+  `unformatted` separately; local words unusable → `cut` the run; whole and unusable → `kept`, sent as
+  it came with `TranscriptGuard.unfixed` on the panel. **The sentence always goes out.**
+- **A retry is judged too** (`accepts`): the same check, and ≥ 0.3 words per second of take. On three
+  32–40 s takes the local model answered `Thank you.` and nothing else; replacing the text with that
+  would have deleted 30 s of good words.
+- **Timed words are never spliced** (ElevenLabs): `ShotMarker.place` rebuilds the text from them, so a
+  mended run would come back. Whole replacement or nothing.
+- **`~/.walkie-talkie/transcript-guard.jsonl`** keeps both sides of every intervention, forever: the
+  corpus holds one text per clip. Chip: `TranscriptGuard.notice`, 3 s (Shot `flash-foreign-words`).
+- **Off:** `defaults write ro.victorrentea.wispr-relay transcriptGuard -bool false`, or
+  `POST /test/transcript-guard {"on": false}`.
+- **Not caught:** gibberish that reads as Romanian (`Arbătăbați mai săva confortivă` scores 1.00).
+  Comparing the engine with the local model on every take finds those (agreement under 0.3 on 4 of 10
+  suspects, 0.8+ on the 2 sound ones), parked until the log says this much was worth it.
+
 ## ElevenLabs Scribe (2026-09-18)
 
 - **`LocalWhisperSource`'s shape with an HTTPS `POST`** to `api.elevenlabs.io/v1/speech-to-text`

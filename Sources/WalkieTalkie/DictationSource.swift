@@ -282,7 +282,7 @@ struct DictationResult {
     /// floor, a loop ceiling. Generic because *the recogniser is unsure* is not
     /// a Whisper-specific idea, even though Whisper is the only one measuring
     /// it today.
-    let warning: String?
+    var warning: String?
     /// Whether the relay still has to put these words somewhere.
     let delivery: DictationDelivery
     /// **Which of the recogniser's delivery routes produced this text** —
@@ -301,7 +301,7 @@ struct DictationResult {
     /// place the answer lived, and a log line is not something a test can assert
     /// against — on 2026-09-13 two failures turned on precisely which route
     /// delivered, and by then the log was the only witness.
-    let via: String
+    var via: String
     /// **Which process these words were meant for**, when the recogniser's own
     /// machinery may have taken the focus since (2026-09-14). Nil — the ordinary
     /// case — means *whatever has the caret*, which is what every delivery in
