@@ -1463,6 +1463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
+        _ = BackgroundCursor.allow
         // **Whatever the session was left holding while no tap was running.**
         // After `SingleInstance.enforce`, so the relaunch path — the instance
         // that has just been stood down being the likeliest poster of the last
@@ -4208,13 +4209,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The wall clock of the sentence, not the recorder's file: it is what
         // `DecodeRate` has always been fitted against, and it is known here
         // whatever the source is.
-        stateLock.lock()
-        let spokenFor = dictationStartedAt.map { Date().timeIntervalSince($0) } ?? 0
-        stateLock.unlock()
-        overlay.setTranscribing(true, audio: max(0, spokenFor))
+        let spokenFor = spokenSoFar
+        overlay.setTranscribing(true, audio: spokenFor)
+        if let at = chipStoppedAt {
+            chipStoppedAt = nil
+            let ahead = CFAbsoluteTimeGetCurrent() - at
+            if ahead > 0.02 { Log.info(String(format: "⏳ the chip said Transcribing %.0f ms before the microphone closed", ahead * 1000)) }
+        }
         // The auto fallback's budget for this length, on this engine (2026-09-28).
-        armAutoLocal(audio: max(0, spokenFor))
+        armAutoLocal(audio: spokenFor)
     }
+
+    /// The wall clock of the sentence so far.
+    private var spokenSoFar: TimeInterval {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return max(0, dictationStartedAt.map { Date().timeIntervalSince($0) } ?? 0)
+    }
+
+    /// When his stop put `Transcribing` on the chip ahead of the close.
+    private var chipStoppedAt: CFAbsoluteTime?
 
     /// Where this sentence is going, decided at the close and read when the words
     /// arrive seconds later.
@@ -5736,6 +5750,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if listening {
             listening = false
             overlay.setListening(false)
+            // A sentence that ended before its close: `endDictation` may have
+            // put the row up, and no settle was opened to take it down.
+            overlay.setTranscribing(false)
+            chipStoppedAt = nil
         }
         syncBorrowedGestures()
     }
@@ -6451,6 +6469,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // relay's `listening` with no microphone under it used to swallow the
         // gesture without a line until the ten-minute ceiling.
         if listening, !recorderBehindListening { clearStuckListening(by: "a stop gesture") }
+        // **The chip answers the press, not the close** (2026-11-04, Victor: *"un
+        // lag între apăsarea pe butonul … și momentul când se vede … că trece în
+        // transcribing"*). On Wispr the close waits for the bridge to drain —
+        // 171 ms at the median, 925 ms at p90, 6.5 s at worst — and the chip kept
+        // saying `Listening` through it, though his voice was cut at the press
+        // (`WisprFlowSource.stopMachine`). Only the chip moves: the recipient, the
+        // ring and the budget still belong to the close.
+        if listening, recorderBehindListening {
+            if chipStoppedAt == nil { chipStoppedAt = CFAbsoluteTimeGetCurrent() }
+            overlay.setListening(false)
+            overlay.setTranscribing(true, audio: spokenSoFar)
+        }
     }
 
     // MARK: - Flags that refuse a gesture, named (2026-09-26, TR18)

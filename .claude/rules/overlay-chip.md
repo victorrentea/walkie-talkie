@@ -358,6 +358,16 @@ yields to `--label`).
   and 0.45 on the 30 % black band read as *no row* until the bar had lit a few letters, 1–3 s in.
   The `— ⌘⌃X` tail went to 0.55 so it stays a grey apart from the letters. `Listening...` keeps
   `applyEngineText`'s 0.45 — it starts at the stop of nothing, so nobody is waiting to read it.
+- **`Transcribing` goes up at the stop press, not at the close** (2026-11-04, Victor: *"un lag între
+  apăsarea pe butonul … și momentul când se vede … că trece în transcribing în tooltip"*). The
+  2026-10-30 note above measured from the close; on Wispr the close waits for the bridge to drain
+  (`WisprFlowSource.stopMachine`: 171 ms at the median of the last 300 stops, 925 ms p90, 2.4 s p99,
+  6.5 s max), and his voice is cut at the press. `AppDelegate.endDictation` is the one door every
+  stop goes through; it moves **only the chip** (`setListening(false)` + `setTranscribing(true)`) —
+  the recipient, the ring and the budget still belong to `dictationStoppedListening`, whose two chip
+  calls are then no-ops. A sentence that ends with no close takes the row down at
+  `dictationEndedForGood`'s tail, since no settle exists for `endSettling` to do it. Log: `⏳ the chip
+  said Transcribing N ms before the microphone closed`.
 - **The meter constants come from the corpus replay and are transferable only because
   `MicRecorder.meter` runs on the converted 16 kHz mono buffer** (`evals/voiced-seconds.py`). Per
   1024 frames (64 ms): RMS against an adaptive noise floor, 9 dB over it to count as speech,

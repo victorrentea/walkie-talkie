@@ -347,6 +347,8 @@ enum SpawnFolderMenu {
     /// under the pointer gets no `mouseEntered`, and a submenu ordered out under
     /// the hand sends no `mouseExited`. The pointer's position cannot be missed.
     private static var watch: Timer?
+    private static var handHold: Timer?
+    private static var handShown = false
     /// Bumped on every state change, so a fade's completion can tell it has
     /// been superseded by an un-fade and must not hide the panel.
     private static var generation = 0
@@ -413,6 +415,7 @@ enum SpawnFolderMenu {
         hoveredSub = false
         generation += 1
         startClock()
+        startHand()
         fillActive(for: p)
         // **A fresh scan on the way past, if the last is stale** — never waited
         // on: the submenu shows the last one, and is redrawn if it is open when
@@ -544,12 +547,38 @@ enum SpawnFolderMenu {
         }
     }
 
+    /// **The hand, kept on the pointer for as long as it is on the menu**
+    /// (2026-11-04). The frontmost app's key window takes every `mouseMoved`
+    /// wherever the pointer is, so a terminal under the menu sets its I-beam on
+    /// each move and `HoverRoot` setting the hand on the same move only races it:
+    /// 29 of 534 reads of the system cursor were the I-beam. Position, not
+    /// tracking areas, because a rebuild swaps the root under a still pointer and
+    /// no `mouseEntered` follows.
+    private static func startHand() {
+        handHold?.invalidate()
+        let t = Timer(timeInterval: 1.0 / 120, repeats: true) { _ in
+            let on = pointerOnMenu()
+            if on { NSCursor.pointingHand.set() } else if handShown { NSCursor.arrow.set() }
+            handShown = on
+        }
+        RunLoop.main.add(t, forMode: .common)
+        handHold = t
+    }
+
+    private static func stopHand() {
+        handHold?.invalidate()
+        handHold = nil
+        if handShown { NSCursor.arrow.set() }
+        handShown = false
+    }
+
     /// Take it down now — a pick, a cancelled dictation, a second menu.
     static func hide() {
         timer?.invalidate()
         timer = nil
         watch?.invalidate()
         watch = nil
+        stopHand()
         fading = false
         chosen = nil
         closeSubmenu()
@@ -1085,13 +1114,12 @@ enum SpawnFolderMenu {
 /// The rows' own tracking areas are about highlighting one folder; this one is
 /// about the menu as a target being aimed at.
 ///
-/// **It also owns the pointer's shape: the arrow, over the whole panel**
-/// (2026-11-03, Victor: *"mouseul tre să fie săgeată când dă hover la proiecte
-/// (nu cursor de text)"*). This app is never active, so the frontmost app keeps
-/// resetting the cursor from its own cursor rects as the pointer moves — over a
-/// terminal or an editor underneath, that is the I-beam. One `.cursorUpdate` on
-/// entry is not enough; the arrow is set again on every move. The pointing hand
-/// the rows used to set (2026-09-09) is gone with it.
+/// **It also owns the pointer's shape: the hand, over the whole panel**
+/// (2026-11-04, Victor: *"pe tot panoul ăsta activ e doar mânuța"* — supersedes
+/// the arrow of 2026-11-03). This app is never active, so the frontmost app keeps
+/// resetting the cursor as the pointer moves — over a terminal or an editor
+/// underneath, that is the I-beam. Set here on every move, and between moves by
+/// `SpawnFolderMenu.startHand`.
 private final class HoverRoot: NSView {
     var onHover: ((Bool) -> Void)?
 
@@ -1104,9 +1132,9 @@ private final class HoverRoot: NSView {
                                        owner: self))
     }
 
-    override func cursorUpdate(with event: NSEvent) { NSCursor.arrow.set() }
-    override func mouseMoved(with event: NSEvent) { NSCursor.arrow.set() }
-    override func mouseEntered(with event: NSEvent) { NSCursor.arrow.set(); onHover?(true) }
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseEntered(with event: NSEvent) { NSCursor.pointingHand.set(); onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
 }
 

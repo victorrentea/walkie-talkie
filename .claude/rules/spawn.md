@@ -105,12 +105,17 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   permanently disabled and eat the first click. `acceptsFirstMouse` is what makes the first click
   count — the app never activates itself, so *every* click arrives at a background app.
   → journal: *The folder menu (2026-09-04)*
-- **The arrow, set by the panel's root on enter, `cursorUpdate` and every `mouseMoved`**
-  (2026-11-03, Victor: *"mouseul tre să fie săgeată când dă hover la proiecte (nu cursor de
-  text)"* — supersedes the pointing hand of 2026-09-09). This app is never active, so the frontmost
-  app's cursor rects keep putting its I-beam back as the pointer moves; one `cursorUpdate` on entry
-  lost to them. `HoverRoot` owns it (`.activeAlways`, never `resetCursorRects` — those fire only on
-  the key window); the rows set no cursor of their own.
+- **The hand over the whole panel, held there 120×/s** (2026-11-04, Victor: *"în continuare îmi
+  apare și mouse face-ul de edit text … pe tot panoul ăsta activ e doar mânuța"* — supersedes the arrow
+  of 2026-11-03 and the row-by-row hand of 2026-09-09). This app is never active: the frontmost app's
+  key window takes every `mouseMoved` wherever the pointer is, so a terminal underneath sets its
+  I-beam on each move, and `HoverRoot` setting ours on the same move only races it — measured
+  2026-11-04 with `NSCursor.currentSystem` over Terminal: the I-beam on 29 of 534 reads. So
+  `SpawnFolderMenu.startHand` re-sets it from a 120 Hz `.common` timer from `show` to `hide`, by
+  position (`pointerOnMenu`, the submenu included), because a rebuild swaps the root under a still
+  pointer and no `mouseEntered` follows. Never `resetCursorRects` (those fire only on the key
+  window). `BackgroundCursor.allow` runs at launch: it used to run at the first reply pop-up, and
+  before one every `NSCursor.set()` here was ignored.
 - **The choice rides the `Message`; a late pick is refused.** `send` moves `spawnFolder` onto
   `Message.directory` and clears it — the panel holds a prompt for seconds and the next dictation
   may have started. Moving a folder under words already in flight silently is worse than ignoring

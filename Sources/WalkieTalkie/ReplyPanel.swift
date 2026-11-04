@@ -461,7 +461,6 @@ enum ReplyPanel {
     }
 
     private static func present(_ text: String, from label: String?, tty: String?, images: [URL] = []) {
-        allowCursorInBackground
         shown = plain(text)
         shownRaw = text
         shownTTY = tty
@@ -1036,14 +1035,6 @@ enum ReplyPanel {
         return root
     }
 
-    /// **A background app's `NSCursor.set()` is ignored unless the process asks
-    /// for it** — the window server keeps the frontmost app's cursor. Once per
-    /// launch; the same private property every pointer utility sets.
-    private static let allowCursorInBackground: Void = {
-        let cid = _CGSDefaultConnection()
-        _ = CGSSetConnectionProperty(cid, cid, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
-    }()
-
     /// **Closed by 🔼 → over it: the pop-up bursts to the right** (2026-10-09) —
     /// `ReplyBurst`, his focus sent on to the terminal. The queue moves on as on
     /// any close. **☠️ blows it up** instead (`.explode(from:)`, 2026-10-14).
@@ -1173,11 +1164,6 @@ private final class ReplyWindow: NSPanel {
         super.sendEvent(event)
     }
 }
-
-@_silgen_name("_CGSDefaultConnection")
-private func _CGSDefaultConnection() -> Int32
-@_silgen_name("CGSSetConnectionProperty")
-private func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFString, _ value: CFTypeRef) -> Int32
 
 /// **The panel's own surface: an arrow, and a press drags it** (2026-10-08).
 /// The arrow because the window server keeps the frontmost app's cursor —
