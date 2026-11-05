@@ -23,7 +23,7 @@ import QuartzCore
 /// `POST /test/stop-wave` exist. Main thread only.
 enum StopWave {
     /// The ring's thickness.
-    static let band: CGFloat = 240
+    static let band: CGFloat = 480
     /// Its white at the crest: *"abia alb … abia vizibil"*.
     static let peak: CGFloat = 0.14
     /// Mean speed. The duration comes from the distance, so a press in a corner

@@ -542,8 +542,8 @@ alone read a 🔽 → sentence as bound).
 - **No microphone disc beside it** — added 2026-10-07 (*"display the microphone currently connected
   in a orange circle in the menu bar icon"*) and taken off the same evening (*"remove from the menu
   bar icon the emoji of the mic from the right of the walkie main icon"*). The walkie alone.
-- **The menu bar icon is always the device in its orange-yellow disc** (2026-09-28, Victor:
-  *"change the menu icon so the icon is always the walkie-talkie with a yellow circle around
-  it"*) — `StatusItem.boundIcon` at every state; the bare `walkie-idle` no longer means unbound
+- **The menu bar icon is always the same device, a monochrome template since 2026-11-05**
+  (`Glyphs.walkie`, drawn; the orange-yellow disc from 2026-09-28 stays the app's and the extension's
+  icon) — `StatusItem.boundIcon` at every state; the bare `walkie-idle` no longer means unbound
   there (the chip's `📍 Unbound` row and the Bind row do). `⏳` beside it still means the engine is
   loading.

@@ -372,8 +372,8 @@ yields to `--label`).
 - **The stop press sends a wave across the screen** (2026-11-05, Victor: *"un fel de inel gros care să
   se ducă din locul în care e mouse-ul în jur radial, semitransparent alb, abia vizibil … până iese din
   ecran"*). `StopWave.fire` from `endDictation`, beside the chip's `Transcribing`, once a sentence
-  (`chipStoppedAt`): a second press during the bridge's drain sends none. A cancel sends none. 240 pt
-  thick, white 14 % at the crest, ~1600 pt/s from the pointer until the inner edge has passed the
+  (`chipStoppedAt`): a second press during the bridge's drain sends none. A cancel sends none. 480 pt
+  thick (240 until the same evening: *"de două ori mai gros"*), white 14 % at the crest, ~1600 pt/s from the pointer until the inner edge has passed the
   farthest corner of the pointer's screen. A radial `CAGradientLayer` whose `locations` move, so the
   thickness holds and main stays free. White on a white page cannot be seen. Not on the states page, it is a
   transition. `sharingType = .none`: review with `WT_SHOOT_WAVE=<png>`, or `POST /test/stop-wave

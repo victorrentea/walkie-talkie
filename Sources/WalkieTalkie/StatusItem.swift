@@ -2158,10 +2158,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // have a recogniser to reach. ⏸️ used to share this slot; there is no
         // pause any more.
         let badge = engineLoading ? "⏳" : ""
-        // **Always the device in its ring** (2026-09-28, Victor: *"change the menu
-        // icon so the icon is always the walkie-talkie with a yellow circle around
-        // it"*). The bare device meant *unbound* from 2026-08-28 to today; the
-        // chip's `📍 Unbound` row and the menu's Bind row say that now.
+        // **Always the same device** (2026-09-28). The bare device meant *unbound*
+        // from 2026-08-28; the chip's `📍 Unbound` row and the menu's Bind row say
+        // that now.
         let icon = Self.boundIcon
         item.button?.image = icon
         item.button?.title = badge
@@ -2298,24 +2297,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         return image
     }()
 
-    /// The device in its orange-yellow disc, at every state (2026-09-28).
-    /// `walkie-idle.png` (the bare device) stays in the bundle for the overlay's
-    /// chip glyphs; the menu bar no longer uses it.
-    private static let boundIcon = loadIcon("walkie-bound")
-
-    private static func loadIcon(_ name: String) -> NSImage? {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
-              let image = NSImage(contentsOf: url) else { return nil }
-        let height: CGFloat = 18
-        let size = NSSize(width: (image.size.width / image.size.height * height).rounded(),
-                          height: height)
-        let scaled = NSImage(size: size)
-        scaled.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(in: NSRect(origin: .zero, size: size))
-        scaled.unlockFocus()
-        return scaled
-    }
+    /// The device, monochrome, at every state (2026-11-05; its orange disc from
+    /// 2026-09-28). `walkie-bound.png` stays the app's and the extension's icon.
+    private static let boundIcon = Glyphs.walkie(height: 18)
 
     /// Where the words are going: the bound session's `folder@branch`, behind the
     /// destination app's own icon.

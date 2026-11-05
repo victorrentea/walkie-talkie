@@ -49,6 +49,33 @@ enum Glyphs {
         }
     }
 
+    /// **The menu bar's walkie-talkie** (2026-11-05, Victor: monochrome, not orange).
+    /// A template, so the bar colours it for its own background and highlight; the
+    /// holes are cleared, as in `mapPin`. Coordinates on an 18-unit-tall grid, y up.
+    static func walkie(height: CGFloat) -> NSImage {
+        let unit = height / 18
+        let image = NSImage(size: NSSize(width: 12 * unit, height: height), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            func round(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat) {
+                ctx.addPath(CGPath(roundedRect: CGRect(x: x, y: y, width: w, height: h),
+                                   cornerWidth: r, cornerHeight: r, transform: nil))
+                ctx.fillPath()
+            }
+            ctx.scaleBy(x: unit, y: unit)
+            ctx.setFillColor(NSColor.black.cgColor)
+            round(0.5, 0, 11, 13, 2.2)      // the body
+            round(7.4, 12, 2.4, 6, 0.9)     // the antenna
+            round(2.2, 12, 3, 2.3, 0.6)     // the talk button
+            ctx.setBlendMode(.clear)
+            round(2.2, 8.2, 7.6, 3.2, 0.7)  // the screen
+            for y: CGFloat in [5.4, 3.3, 1.2] { round(2.8, y, 6.4, 1.1, 0.5) }  // the speaker
+            ctx.setBlendMode(.normal)
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     /// **The pin's outline and its hole, as geometry** — shared by `mapPin` and
     /// the pin `DropArrow` stands on the caret (2026-10-14), so the big one is
     /// the chip's own shape and not a second drawing of it. Bottom-left origin,
