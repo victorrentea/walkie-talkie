@@ -1399,10 +1399,10 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     // MARK: - Setup
 
-    /// How opaque the prompt panel's surface is, with no hand on it.
-    private static let panelSurfaceAlpha: CGFloat = 0.30
-    /// The surface coming up under the pointer, and going back.
-    private static let panelSurfaceFade: TimeInterval = 0.12
+    /// How opaque the whole prompt panel is, with no hand on it.
+    private static let panelRestAlpha: CGFloat = 0.30
+    /// The panel coming up under the pointer, and going back.
+    private static let panelHandFade: TimeInterval = 0.12
 
     private func configurePanel() {
         panel.isOpaque = false
@@ -1889,9 +1889,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // and the outline in the air is aimed at that exact rectangle — a dialog
         // that walked off after the pointer would leave the flight starting from
         // empty screen. See `spawnPanelHeld`.
+        syncPanelOpacity()
         if spawnPanelHeld || spawnPanelFading { return }
-
-        syncPanelSurface(animated: true)
 
         // The first real movement of the pointer brings the chip back after
         // typing sent it away.
@@ -3763,7 +3762,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         // whose only value is the default is a question nobody is being asked.
         let bare = anchored
         root.blur?.isHidden = bare
-        syncPanelSurface(animated: false)
         root.layer?.cornerRadius = bare ? 0 : 14
         if panel.hasShadow != !bare {
             panel.hasShadow = !bare
@@ -4639,7 +4637,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // The paste row is the same kind of thing: said *to* him, for three
         // seconds, right after a caret sentence he may already be typing past.
         let target: CGFloat = (anchored && typing && !listening && flashMessage == nil && !pasteHint) ? 0.0
-                            : (anchored ? 0.80 : 1.00)
+                            : (anchored ? 0.80 : panelOpacity)
+        panelOpacityShown = anchored ? nil : target
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.18
             panel.animator().alphaValue = target
@@ -5879,30 +5878,31 @@ private let heardLabel = NSTextField(labelWithString: "")
         return panel.isVisible && panel.frame.contains(pointer) && promptPointerMoved
     }
 
-    /// **The surface is sketched at 30 % and solid under the hand** (2026-11-05,
-    /// Victor: *"Când dau mouse-ul pe acel panou … să devină opac. Că dacă vreau
-    /// să arăt detalii pe el"*). The surface and not the window: the panel exists
-    /// to be read before it sends, and `panel.alphaValue` would take the words
-    /// and the pictures down with it. The last target is kept because
-    /// `layoutContent` calls this too, and a write would cut a running fade short.
-    private var panelSurfaceTarget: CGFloat?
-    private var panelSurfacePinned = false
-
-    private func syncPanelSurface(animated: Bool) {
-        let target = panelSurfacePinned || pointerReachedPanel() ? 1 : Self.panelSurfaceAlpha
-        guard target != panelSurfaceTarget else { return }
-        panelSurfaceTarget = target
-        guard animated else { root.blur?.alphaValue = target; return }
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = Self.panelSurfaceFade
-            root.blur?.animator().alphaValue = target
-        }
+    /// **The whole panel is sketched at 30 %, solid under the hand** (2026-11-05,
+    /// Victor: *"panelul … să fie semi-transparent, dar și pozele dinăuntru să fie
+    /// semi-transparente și textul. Întregul panel"*, then *"dacă mut mouse-ul pe el
+    /// … opaque complet"*). The window's alpha, so the words and the pictures go
+    /// with the surface. While the transcript is edited the hand is on the
+    /// keyboard, and the words being corrected stay solid. The held spawn dialog
+    /// answers its own question: it is inactive, and its pointer rule is its own.
+    private var panelOpacity: CGFloat {
+        let handOn = editingPrompt || (spawnPanelHeld ? pointerReadsSpawnPanel : pointerReachedPanel())
+        return handOn ? 1 : Self.panelRestAlpha
     }
 
-    /// `OverlayStates` shoots with no pointer near the panel, like `pinHoverPause`.
-    func pinPanelSurfaceSolid(_ solid: Bool) {
-        panelSurfacePinned = solid
-        syncPanelSurface(animated: false)
+    /// The last target, because this runs on every pointer move and a write would
+    /// cut a running fade short. Nil on the chip.
+    private var panelOpacityShown: CGFloat?
+
+    private func syncPanelOpacity() {
+        guard !spawnPanelFading, spawnPanelHeld || !anchored else { return }
+        let target = panelOpacity
+        guard target != panelOpacityShown else { return }
+        panelOpacityShown = target
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.panelHandFade
+            panel.animator().alphaValue = target
+        }
     }
 
     private func syncHoverPause() {
@@ -5987,6 +5987,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     func beginPromptEdit() {
         guard !editingPrompt, sentPrompt != nil, let words = promptWords else { return }
         editingPrompt = true
+        syncPanelOpacity()
 
         promptTimer?.invalidate(); promptTimer = nil
         countdownTimer?.invalidate(); countdownTimer = nil
@@ -6057,6 +6058,7 @@ private let heardLabel = NSTextField(labelWithString: "")
 
         sentPrompt = [promptWords, promptExtras.nilIfEmpty].compactMap { $0 }.joined()
         layoutContent()
+        syncPanelOpacity()
     }
 
     /// **What the green button promises.** A spawn does not send a message to a
@@ -6093,7 +6095,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         countdownTimer?.invalidate()
         let tick = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             self?.updateCancelTitle()
-            self?.syncPanelSurface(animated: true)
+            self?.syncPanelOpacity()
             self?.syncHoverPause()
         }
         RunLoop.main.add(tick, forMode: .common)
@@ -6244,7 +6246,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             closeButton.needsDisplay = true
         }
         refreshOpacity()
-        syncPanelSurface(animated: true)
+        syncPanelOpacity()
         syncHoverPause()
     }
 
@@ -6527,7 +6529,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         var out: [String: Any] = ["held": true, "verb": sendVerb, "text": promptWords ?? prompt,
                                   "buttons": promptButtons, "editing": editingPrompt,
                                   "paused": promptHoverPaused,
-                                  "surface": panelSurfaceTarget ?? Self.panelSurfaceAlpha]
+                                  "opacity": panelOpacityShown ?? Self.panelRestAlpha]
         out["deadline"] = promptDeadline.map { max(0, $0.timeIntervalSinceNow) } ?? NSNull()
         out["heard"] = promptHeard ?? NSNull()
         // The words' full height against the row they got — `true` when the scroller is up.

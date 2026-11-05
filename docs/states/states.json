@@ -630,11 +630,11 @@
     "width" : 262
   },
   {
-    "alpha" : 1,
+    "alpha" : 0.29999999999999999,
     "group" : "The held prompt",
     "height" : 132,
     "image" : "prompt.png",
-    "note" : "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so.",
+    "note" : "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so. The whole panel, words and pictures too, rests at 30 % until the hand reaches it (2026-11-05); this is the one picture here at that alpha, the others are solid so they can be read.",
     "shape" : "panel",
     "slug" : "prompt",
     "title" : "The held prompt",
@@ -692,14 +692,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 642,
+    "height" : 626,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -728,14 +728,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 485,
+    "height" : 469,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -819,19 +819,19 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 1002,
+    "height" : 1036,
     "image" : "prompt-scrolling.png",
     "note" : "The words sit in a scroll view (2026-10-26, Victor: *\"dacă prompt preview panel devine prea înalt, să-i apară scrollbar\"*): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.",
     "shape" : "panel",
     "slug" : "prompt-scrolling",
     "title" : "A transcript taller than the screen",
     "when" : "A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -850,7 +850,7 @@
     "group" : "The held prompt",
     "height" : 331,
     "image" : "prompt-hover.png",
-    "note" : "The surface goes from 30 % to solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
+    "note" : "The whole panel goes from 30 % to solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
     "shape" : "panel",
     "slug" : "prompt-hover",
     "title" : "The prompt, cursor over it",

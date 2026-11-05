@@ -573,8 +573,8 @@ enum OverlayStates {
             // ---- the panel: the held prompt --------------------------------
             Shot(slug: "prompt", group: "The held prompt", title: "The held prompt",
                  when: "The seconds between the model answering and the words reaching the agent.",
-                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so.",
-                 shape: "panel", alpha: 1.0) { o in
+                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so. The whole panel, words and pictures too, rests at 30 % until the hand reaches it (2026-11-05); this is the one picture here at that alpha, the others are solid so they can be read.",
+                 shape: "panel", alpha: 0.30) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)
             },
@@ -766,13 +766,12 @@ enum OverlayStates {
 
             Shot(slug: "prompt-hover", group: "The held prompt", title: "The prompt, cursor over it",
                  when: "While the pointer is on the panel.",
-                 note: "The surface goes from 30 % to solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
+                 note: "The whole panel goes from 30 % to solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
                                  stamps: ["", "0:38"], words: transcript, heard: heard)
                 o.setHovering(true)
-                o.pinPanelSurfaceSolid(true)
             },
 
             Shot(slug: "prompt-editing", group: "The held prompt", title: "Correcting the transcript",
@@ -842,7 +841,6 @@ enum OverlayStates {
         o.cancelHeldPrompt()
         o.clearFlash(animated: false)
         o.setHovering(false)
-        o.pinPanelSurfaceSolid(false)
         o.setListening(false)
         o.setTranscribing(false)
                 o.pinTranscribeWarmth(nil)
