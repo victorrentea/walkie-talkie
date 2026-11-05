@@ -120,6 +120,16 @@ final class RebindHistory {
         }
     }
 
+    /// **Did this app open the window at that address?** The chip names such a
+    /// session by its folder alone (`RelayWindow.identity`). Asked of the disk's
+    /// record, so a relaunch does not bring the generated title back. A closed
+    /// row does not answer: a tty number is handed out again.
+    func isSpawned(address: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return entries.contains { $0.address == address && $0.isCurrent && $0.spawned }
+    }
+
     /// **The binding let go of `target`.** The title is refreshed on the way out
     /// because this is the last instant anything knows it.
     func released(_ target: TerminalBinding.Target) {

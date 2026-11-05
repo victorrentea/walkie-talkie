@@ -296,9 +296,15 @@ enum SpawnTerminal {
                            - max(screen.frame.minX, primary.frame.minX)
                 return shared > screen.frame.width / 2
             }
-            let lateral = screens.filter { $0.backingScaleFactor < 2 && !stacked($0) }
-            let under = pointer.flatMap { p in lateral.first { $0.frame.contains(p) } }
-            found = lateral
+            // **"Never the Retina one" outranks "not the one above"** (2026-11-05,
+            // *"întotdeauna să pornești terminalele noi … pe un ecran diferit de
+            // retina"*): a stacked monitor that is the only other screen takes the
+            // window rather than leaving it on the Retina display.
+            let outside = screens.filter { !isRetina($0) }
+            let lateral = outside.filter { !stacked($0) }
+            let allowed = lateral.isEmpty ? outside : lateral
+            let under = pointer.flatMap { p in allowed.first { $0.frame.contains(p) } }
+            found = allowed
                 // The pointer's screen is the minimum and everything else keeps
                 // its left-to-right order behind it — one comparator rather than
                 // a partition, so a nil pointer costs nothing and reads as the
@@ -320,6 +326,33 @@ enum SpawnTerminal {
         // of that contract.
         if Thread.isMainThread { read() } else { DispatchQueue.main.sync(execute: read) }
         return found
+    }
+
+    /// **The laptop's own panel, whatever scale it is running at** (2026-11-05).
+    /// `backingScaleFactor >= 2` alone stopped being true of it the moment it was
+    /// mirrored to a room's projector: measured on the Cisco codec, the built-in
+    /// display drops to 1920×1080 at scale 1.0, read as an ordinary external
+    /// screen, and being leftmost it took every spawn — onto the projected image.
+    /// The scale test stays for a HiDPI monitor; the identity test is the new half.
+    private static func isRetina(_ screen: NSScreen) -> Bool {
+        screen.backingScaleFactor >= 2 || isBuiltIn(screen)
+    }
+
+    /// A mirror set is one `NSScreen` carrying its master's id, so the built-in
+    /// display is asked about through the set as well: it may be a follower.
+    private static func isBuiltIn(_ screen: NSScreen) -> Bool {
+        let key = NSDeviceDescriptionKey("NSScreenNumber")
+        guard let id = (screen.deviceDescription[key] as? NSNumber)?.uint32Value else { return false }
+        var online = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(16, &online, &count) == .success else {
+            return CGDisplayIsBuiltin(id) != 0
+        }
+        return online.prefix(Int(count)).contains { display in
+            CGDisplayIsBuiltin(display) != 0
+                && (display == id || CGDisplayMirrorsDisplay(display) == id
+                    || CGDisplayMirrorsDisplay(id) == display)
+        }
     }
 
     /// **Where this window goes so that it covers as little as possible of what

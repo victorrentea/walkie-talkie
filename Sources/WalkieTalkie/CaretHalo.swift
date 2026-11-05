@@ -690,7 +690,8 @@ final class CaretHalo {
         if let preset = drawn.preset {
             // The engine's "cover": a square of side max(w, h) of the screen ×
             // the preset's scale, its `centerAt` point on the pointer, following it.
-            let s = (max(screen.frame.width, screen.frame.height) * preset.scale).rounded()
+            let s = parallaxes ? (Self.retina ?? screen).frame.height.rounded()
+                               : (max(screen.frame.width, screen.frame.height) * preset.scale).rounded()
             return NSRect(x: (mouse.x - s * preset.centerAt.x + preset.offset.x).rounded(),
                           y: (mouse.y - s * (1 - preset.centerAt.y) + preset.offset.y).rounded(), width: s, height: s)
         }
@@ -1354,7 +1355,7 @@ final class CaretHalo {
         rewindSpeed = min(max(seconds / max(predicted, 0.5), 1), Self.rewindMaxSpeed)
         rewindFrom = CFAbsoluteTimeGetCurrent()
         rewindEstimate = predicted
-        rewindStart = NSEvent.mouseLocation
+        rewindStart = pointerAim
         anchorStart = anchoredFlight ? anchor : nil
         stillLanding = freezes
         fitApproach(to: rewindAim ?? NSEvent.mouseLocation)
@@ -1482,7 +1483,32 @@ final class CaretHalo {
     private var fadeAim: NSPoint?
     /// Where the effect is centred: the pointer, or the rewind's path.
     private var aim: NSPoint {
-        (rewinding || orbitFading ? rewindPoint : fadeAim) ?? NSEvent.mouseLocation
+        (rewinding || orbitFading ? rewindPoint : fadeAim) ?? pointerAim
+    }
+    /// The point the effect rides while he talks: the pointer, or half way to it.
+    private var pointerAim: NSPoint {
+        let mouse = NSEvent.mouseLocation
+        guard parallaxes, let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+        else { return mouse }
+        return Self.parallax(of: mouse, on: screen.frame)
+    }
+    /// **A bound sentence's effect is the height of the Retina and rides at half
+    /// the pointer's travel** (2026-11-05, Victor: *"să fie practic cât înălțimea
+    /// ecranului retina și să se miște … 50%, în stil paralax. Să nu urmeze direct
+    /// mouse-ul de fiecare dată, ci să rămână pe centru"*). He drew where its
+    /// centre may go: 396,274 → 1553,909 on a 1920×1080 frame, and half the
+    /// pointer's offset from the middle is 480,270 → 1440,810, inside it. The
+    /// bound row's own dress only, so a Reverse tunnel worn for a bound sentence
+    /// keeps its size, and only a square that rides: a screen-sized page already
+    /// moves nothing but the point it is handed.
+    private var parallaxes: Bool {
+        guard destination == .bound, drawn == HaloStyle.current(for: .bound) else { return false }
+        return drawn.preset != nil && !drawn.coversScreen && Self.rides(drawn)
+    }
+    static let parallaxShare: CGFloat = 0.5
+    static func parallax(of pointer: NSPoint, on screen: NSRect) -> NSPoint {
+        NSPoint(x: screen.midX + (pointer.x - screen.midX) * parallaxShare,
+                y: screen.midY + (pointer.y - screen.midY) * parallaxShare)
     }
     /// **The tunnel starts where the pointer was and travels to the window as
     /// it shrinks** (2026-10-02, Victor: *"întâi pe mouse și să apară mare ca
@@ -2577,6 +2603,13 @@ final class CaretHalo {
         // An `anchored` preset's square stays where `show` put it; only the arrow rides the pointer.
         if drawn.isAnchored, anchor != nil {
             placeHeads()
+            return
+        }
+        // The Retina's height can change under a sentence — a projector mirrored
+        // on — and only this square's size depends on anything but its style.
+        if parallaxes, panelFrame().size != panel.frame.size {
+            Log.info("◯ caret halo: the bound square is \(Int(panelFrame().width)) pt now — rebuilding it")
+            rebuild()
             return
         }
         let wanted = drawn.preset != nil ? panelFrame().origin : Self.origin()
@@ -3772,6 +3805,10 @@ extension CaretHalo {
     static func demo(seconds: Double) {
         capturable = true
         let halo = CaretHalo()
+        // `WT_HALO_DEMO_DEST=bound` wears that destination's dress and its ride.
+        if let dest = ProcessInfo.processInfo.environment["WT_HALO_DEMO_DEST"].flatMap(HaloDestination.init(rawValue:)) {
+            halo.setDestination(dest)
+        }
         let started = Date()
         /// Where in the 12s loop we are.
         let phase = { Date().timeIntervalSince(started).truncatingRemainder(dividingBy: 12) }

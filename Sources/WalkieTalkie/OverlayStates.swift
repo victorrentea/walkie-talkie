@@ -92,6 +92,15 @@ enum OverlayStates {
                 o.setFilming(true)
             },
 
+            Shot(slug: "listening-spawned-session", group: "Dictating", title: "Into a session this app opened",
+                 when: "Bound to a window the app spawned itself, from the bind that adopts it until the binding moves.",
+                 note: "**The terminal's icon and the folder, nothing else.** Everywhere else this row is the tab's title, which names the session; a spawned session's title is Claude Code's summary of the very sentence that started it, so it only said back what he had just said. No branch either (2026-11-05). The panel's `To:` line keeps the task.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ Fix the tax rounding", spawned: true, icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(1)
+            },
+
             Shot(slug: "listening-kamikaze", group: "Dictating", title: "Kamikaze — the agent closes when done",
                  when: "🔼 ↓ while a sentence is open or still on its way. Again takes it back.",
                  note: "**A row under the others**, like everything the sentence carries. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",

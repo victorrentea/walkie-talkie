@@ -542,6 +542,8 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// The terminal dictations are being typed into — `folder@branch` of the
     /// bound session, or nil while the relay is only writing the outbox.
     private var boundLabel: String?
+    /// This app opened the bound window (`RebindHistory.isSpawned`).
+    private var boundSpawned = false
     /// The bound terminal's working directory, `petclinic@main` — **the one thing
     /// the chip says** once it is bound. nil for targets with no tty to read one
     /// from, where the app's own name takes the line rather than inventing a
@@ -1396,6 +1398,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     }
 
     // MARK: - Setup
+
+    /// How opaque the prompt panel's surface is.
+    private static let panelSurfaceAlpha: CGFloat = 0.40
 
     private func configurePanel() {
         panel.isOpaque = false
@@ -3754,6 +3759,11 @@ private let heardLabel = NSTextField(labelWithString: "")
         // whose only value is the default is a question nobody is being asked.
         let bare = anchored
         root.blur?.isHidden = bare
+        // **The prompt panel is see-through: its surface at 40 %** (2026-11-05,
+        // Victor: *"să fie transparent, adică să fie opac doar 40%"*). The surface
+        // and not the window: the panel exists to be read before it sends, and
+        // `panel.alphaValue` would take the words and the pictures down with it.
+        root.blur?.alphaValue = Self.panelSurfaceAlpha
         root.layer?.cornerRadius = bare ? 0 : 14
         if panel.hasShadow != !bare {
             panel.hasShadow = !bare
@@ -3861,12 +3871,20 @@ private let heardLabel = NSTextField(labelWithString: "")
                 hint.label.textColor = .white
             }
         } else {
+            // **The halo stays on the panel since its surface went to 40 %**
+            // (2026-11-05): white over a white page is what the chip's halo was
+            // for, and that page now shows through. Measured: the surface comes
+            // out at alpha 102/255, so over white the ground is about 204 grey.
             for hint in hintRows {
-                hint.label.shadow = nil
+                hint.label.shadow = Self.halo()
                 hint.label.textColor = .secondaryLabelColor
             }
-            hintLabel.shadow = nil
-            titleLabel.shadow = nil
+            hintLabel.shadow = Self.halo()
+            titleLabel.shadow = Self.halo()
+            promptLabel.wantsLayer = true
+            promptLabel.shadow = Self.halo()
+            heardLabel.wantsLayer = true
+            heardLabel.shadow = Self.halo()
             recordInfo.shadow = nil
             recordInfo.textColor = .secondaryLabelColor
             kamikazeInfo.shadow = nil
@@ -3890,7 +3908,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             elapsedLabel.textColor = .secondaryLabelColor
             pickInfo.shadow = nil
             pickInfo.textColor = .secondaryLabelColor
-            selectionLabel.shadow = nil
+            selectionLabel.shadow = Self.halo()
             selectionLabel.textColor = .secondaryLabelColor
             selectionGlyph.shadow = nil
             applySelectionText()
@@ -4500,6 +4518,15 @@ private let heardLabel = NSTextField(labelWithString: "")
         // beside it (`titleGlyph`) says which app, so this line never spells
         // out an app name it can show instead; only a target with no directory
         // to read falls back to one.
+        //
+        // **A session this app opened is its folder, strictly** (2026-11-05,
+        // Victor: *"strict folderul în care ești, nu un titlu generat din ce
+        // ți-am promptat"*): its title is Claude Code's summary of the sentence
+        // that started it, so it only says back what he has just said. No branch
+        // either. The panel's `To:` line keeps the task (`panelRecipient`).
+        if boundSpawned, let folder = boundFolder ?? boundLabel, !folder.isEmpty {
+            return folder.components(separatedBy: "@").first ?? folder
+        }
         if let title = boundTitle, !title.isEmpty { return Self.fitHead(title, 44) }
         return boundFolder ?? boundLabel ?? ""
     }
@@ -4927,12 +4954,15 @@ private let heardLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
-    func setBound(label: String?, folder: String? = nil, title: String? = nil, icon: NSImage? = nil) {
-        guard boundLabel != label || boundFolder != folder || boundTitle != title || boundIcon !== icon
+    func setBound(label: String?, folder: String? = nil, title: String? = nil, spawned: Bool = false,
+                  icon: NSImage? = nil) {
+        guard boundLabel != label || boundFolder != folder || boundTitle != title
+                || boundSpawned != spawned || boundIcon !== icon
         else { return }
         boundLabel = label
         boundFolder = label == nil ? nil : folder
         boundTitle = label == nil ? nil : title
+        boundSpawned = label != nil && spawned
         boundIcon = label == nil ? nil : icon
         refreshTitle()
         layoutContent()

@@ -569,6 +569,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   take backwards at `rewindSpeed` (one pass over the prediction, then looping). Not docked on the
   prompt panel — it ends on the terminal like the tunnel. Anything else bound keeps the Reverse
   tunnel; `WT_HALO_FLIGHT=0` brings it back. Log `⏪ the rewind: … — flying from the pointer to the terminal`.
+- **The bound dress is the Retina's height and rides at half the pointer's travel** (2026-11-05,
+  Victor: *"cât înălțimea ecranului retina … 50%, în stil paralax. Să nu urmeze direct mouse-ul"*).
+  `CaretHalo.parallaxes`: destination `.bound`, its own dress, a riding square (not `coversScreen`, not a
+  Reverse tunnel worn for it). `pointerAim` = the middle of the pointer's screen + `parallaxShare`
+  0.5 of his offset from it, and it is what `aim` and `rewindStart` read, so the flight leaves from
+  the effect, not from the pointer. He drew the allowed box as 396,274 → 1553,909 on a 1920×1080
+  frame; half travel is 480,270 → 1440,810. Crossing to another screen jumps with the pointer's
+  middle. `WT_HALO_DEMO_DEST=bound` wears it in a demo, on a binary that has the engine.
+  `HaloParallaxTests`.
 - **A prompt at the caret flies too; only the dust waves and circles** (2026-10-08, Victor: *"Unify
   the experience … if I prompt at caret … I don't want to see the reverse tunnel"*, then *"Only the
   dust effect should go circle … the tendrils … go straight to the target. The dust should be more

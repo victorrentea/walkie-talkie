@@ -8802,6 +8802,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let line = target.folder ?? target.appName
         overlay.setBound(label: target.label, folder: line, title: target.title,
+                         spawned: RebindHistory.shared.isSpawned(address: target.address),
                          icon: Self.appIcon(target.bundleID, height: 18))
         status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 20))
         // Published here for the reason everything else about a binding is

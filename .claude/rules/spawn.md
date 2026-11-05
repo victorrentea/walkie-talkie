@@ -325,9 +325,14 @@ star to get them onto the main list"*.
 ## Where the window opens (`SpawnTerminal.board()` / `slot(for:on:avoiding:)`)
 
 - **Tile across every non-Retina screen *lateral* to the primary, left to right; with nothing but
-  the Retina display, open behind.** "Retina" is `backingScaleFactor >= 2` — deliberately not a
-  size or a name.
+  the Retina display, open behind.** "Retina" is `backingScaleFactor >= 2` **or the built-in display,
+  also through a mirror set** (`isRetina`, 2026-11-05, Victor: *"întotdeauna … pe un ecran diferit
+  de retina"*). Measured with the Cisco codec in the room: the built-in mirrored to the projector
+  runs 1920×1080 at scale 1.0, at `x = -1920`, so it read as an external screen and, leftmost, took
+  every spawn onto the projected image. The ASUS beside it was the primary.
   → journal: *Where a spawned window opens (2026-09-04)*
+- **With no lateral screen, a stacked one still beats the Retina** (2026-11-05): the stacked filter
+  below only chooses among screens that are not the Retina.
 - **"Lateral" is measured: a screen is *stacked* when it shares more than half of its own width
   with the primary's horizontal span, and stacked screens are dropped** (2026-09-09, *"start the
   terminals on the lateral screens, not on the screen above"*). At home a Dell at `(-89, 1117)`

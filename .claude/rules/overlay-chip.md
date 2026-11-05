@@ -472,6 +472,12 @@ yields to `--label`).
   message).** Anchored = bare text, no blur, no rounded rect, no shadow, alpha 0.80, trailing the
   cursor. Panel = top-left of the current screen, blur, ✕ on hover, full opacity, entered by a
   prompt and **by nothing else since 2026-09-02**. → journal: *Two shapes: the chip and the panel*
+- **The panel's surface is 40 % opaque; its words are not** (2026-11-05, Victor: *"să fie
+  transparent, adică să fie opac doar 40%"*). `panelSurfaceAlpha` is the blur view's `alphaValue`,
+  measured as alpha 102/255 on the composited surface; the window stays at 1.00, because the panel is
+  read before it sends and `panel.alphaValue` would fade the words and the pictures too. Over a white
+  page the ground is about 204 grey, so the panel's text rows keep the chip's `halo()`. `snapshot`
+  cannot show this: it has no desktop behind it.
 - **There is never a ✕ beside the pointer, in any state**: `anchored || !hovering`, not
   `bare || !hovering` — the old test put a ✕ on a flash riding the cursor (*"n-am cum să apăs pe
   el din moment ce acel tooltip se plimbă cu mouse-ul"*). The menu bar item is the ✕ that stays

@@ -35,6 +35,18 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
+    "height" : 69,
+    "image" : "listening-spawned-session.png",
+    "note" : "**The terminal's icon and the folder, nothing else.** Everywhere else this row is the tab's title, which names the session; a spawned session's title is Claude Code's summary of the very sentence that started it, so it only said back what he had just said. No branch either (2026-11-05). The panel's `To:` line keeps the task.",
+    "shape" : "chip",
+    "slug" : "listening-spawned-session",
+    "title" : "Into a session this app opened",
+    "when" : "Bound to a window the app spawned itself, from the bind that adopts it until the binding moves.",
+    "width" : 215
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
     "height" : 93,
     "image" : "listening-kamikaze.png",
     "note" : "**A row under the others**, like everything the sentence carries. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
