@@ -2,7 +2,7 @@ import XCTest
 @testable import WalkieTalkie
 
 /// `VoiceAffect`, the pure half (2026-09-27): where a `[?]` goes, when a
-/// sentence is `[voice: hesitant]`, and that a fluent one carries nothing.
+/// sentence carries 🤷‍♂️, and that a fluent one carries nothing.
 /// Thresholds are always passed explicitly, so a `~/.walkie-talkie/voice-affect.json`
 /// on this Mac cannot change a verdict here.
 final class VoiceAffectTests: XCTestCase {
@@ -64,7 +64,7 @@ final class VoiceAffectTests: XCTestCase {
         XCTAssertEqual(r.marked.count, 2)
         XCTAssertTrue(r.verdict.hesitant)        // pause ratio 0.61, rate 1.1 w/s, 2 fillers in 11 words
         XCTAssertEqual(r.verdict.why.count, 3)
-        XCTAssertEqual(r.verdict.tag, "[voice: hesitant]")
+        XCTAssertEqual(r.verdict.tag, "[🤷‍♂️]")
         // The marks sit between the two words around each pause, and nowhere else.
         let marked = VoiceAffect.marked(words: words, report: r)
         XCTAssertEqual(text(marked), "fă un endpoint pentru… [?] ăăă clienți, cred, [?] sau mmm poate comenzi.")
@@ -214,7 +214,7 @@ final class VoiceAffectTests: XCTestCase {
         XCTAssertNotNil(off.energySpreadDb)      // measured and filed all the same
         let on = VoiceAffect.analyse(words: words, hops: hops, thresholds: defaults, tense: true)
         XCTAssertTrue(on.verdict.tense)
-        XCTAssertEqual(on.verdict.tag, "[voice: tense]")
+        XCTAssertEqual(on.verdict.tag, "[😡]")
     }
 
     // MARK: - Text, fillers, the file

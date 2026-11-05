@@ -6,7 +6,7 @@ import Foundation
 /// Victor's rules (spec: `~/workspace/voice-distill/docs/voice-affect.md`,
 /// *Design propus*, decided 2026-09-26 — *"de acord"*):
 ///
-/// - **exactly two global tags**, `[voice: hesitant]` and `[voice: tense]`, and
+/// - **exactly two global tags**, 🤷‍♂️ (hesitant) and 😡 (tense), and
 ///   otherwise **nothing** — fluent is his assertive mode and carries no tag;
 /// - **the tag says only what is lost in transcription** — no statistics, no
 ///   z-scores, nothing concluded from the words (*"nu știu"* is already in the
@@ -31,7 +31,7 @@ enum VoiceAffect {
     static var isEnabled: Bool { flag("WT_VOICE_AFFECT", defaults: "voiceAffect", fallback: true) }
 
     /// **`WT_VOICE_TENSE`** — same chain (`voiceTense`), **off** by default. On,
-    /// the energy-spread half of *tense* may raise `[voice: tense]`; off, the
+    /// the energy-spread half of *tense* may raise the 😡 tag; off, the
     /// spread is still measured and filed in the outbox, never tagged.
     static var tenseEnabled: Bool { flag("WT_VOICE_TENSE", defaults: "voiceTense", fallback: false) }
 
@@ -282,12 +282,15 @@ enum VoiceAffect {
         var why: [String] = []
 
         /// **The one footer line, or nothing** — the only thing an agent ever
-        /// sees of all this besides the `[?]` marks.
+        /// sees of all this besides the `[?]` marks. An emoji since 2026-11-05
+        /// (Victor: *"să pui în mod scurt emoția"*), `[voice: …]` before. **Keeps
+        /// the brackets**: the `walkie-inbox` mod's footer is a run of `[…]` lines,
+        /// and a bare emoji ends the run and leaves the whole envelope on screen.
         var tag: String? {
             switch (hesitant, tense) {
-            case (true, true): return "[voice: hesitant, tense]"
-            case (true, false): return "[voice: hesitant]"
-            case (false, true): return "[voice: tense]"
+            case (true, true): return "[🤷‍♂️😡]"
+            case (true, false): return "[🤷‍♂️]"
+            case (false, true): return "[😡]"
             default: return nil
             }
         }
@@ -312,7 +315,7 @@ enum VoiceAffect {
         let voicedRate: Double?
         /// Level spread of the voiced hops, dB — tense's energy half.
         let energySpreadDb: Double?
-        let verdict: Verdict
+        var verdict: Verdict
         let thresholds: Thresholds
         let language: String?
 

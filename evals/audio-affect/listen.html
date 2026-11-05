@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Voice Listening Test</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f6f5f2;--fg:#1c1b19;--mut:#6c6a63;--card:#fff;--line:#dcd9d1;--acc:#2f6f5e}
+@media (prefers-color-scheme:dark){:root{--bg:#191a1c;--fg:#ecebe6;--mut:#9a988f;--card:#242528;--line:#393a3e;--acc:#6bc2a8}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.45 -apple-system,system-ui,sans-serif;display:flex;justify-content:center;padding:32px 16px}
+main{width:100%;max-width:560px}h1{font-size:20px;margin:0 0 4px}p{color:var(--mut);margin:0 0 20px}
+audio{width:100%;margin:12px 0 20px}
+.bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-bottom:24px}.bar i{display:block;height:100%;background:var(--acc)}
+button{display:flex;justify-content:space-between;width:100%;padding:13px 16px;margin-bottom:10px;font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;cursor:pointer}
+button:hover{border-color:var(--acc)}kbd{color:var(--mut);font:14px ui-monospace,monospace}
+</style></head><body><main>
+<h1>How does this voice sound?</h1>
+<p>Judge the voice, not the words. You can answer before the clip ends.</p>
+<div class="bar"><i id="b"></i></div><div id="n"></div>
+<audio id="a" controls autoplay></audio>
+<div id="o">
+<button data-l="neutral">Neutral, knows what he wants <kbd>1</kbd></button>
+<button data-l="hesitant">Hesitant, unsure <kbd>2</kbd></button>
+<button data-l="tense">Tense, annoyed <kbd>3</kbd></button>
+<button data-l="both">Both <kbd>4</kbd></button>
+<button data-l="skip">Can't tell <kbd>5</kbd></button>
+</div></main>
+<script>
+const a=document.getElementById('a'),L=['neutral','hesitant','tense','both','skip'];let q=[],all=0;
+function show(){document.getElementById('b').style.width=(100*(all-q.length)/all)+'%';
+ if(!q.length){document.querySelector('main').innerHTML='<h1>Done, thank you.</h1><p>You can close this tab.</p>';return}
+ document.getElementById('n').textContent=(all-q.length+1)+' of '+all;a.src=q[0];a.play().catch(()=>{})}
+async function say(l){if(!q.length)return;const c=q.shift();await fetch('/label',{method:'POST',body:JSON.stringify({clip:c,label:l})});show()}
+document.getElementById('o').onclick=e=>{const b=e.target.closest('button');if(b)say(b.dataset.l)};
+addEventListener('keydown',e=>{const i=+e.key-1;if(L[i])say(L[i]);if(e.key==' '){e.preventDefault();a.currentTime=0;a.play()}});
+fetch('/clips').then(r=>r.json()).then(d=>{all=d.clips.length;q=d.clips.filter(c=>!d.done.includes(c));show()});
+</script></body></html>

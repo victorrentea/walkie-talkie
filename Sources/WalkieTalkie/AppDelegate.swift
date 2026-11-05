@@ -1799,6 +1799,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.listening || self.source.isRecording || self.speculative || self.held != nil
         }
         status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
+        picker.onTestTension = { wav in
+            guard let reading = VoiceTension.read(wav: URL(fileURLWithPath: wav)) else { return ["reading": NSNull()] }
+            return ["score": reading.score, "frames": reading.frames, "tense": reading.tense]
+        }
         status.onReplayLast = { [weak self] in self?.replayLastDictation() }
         status.isReplayable = { [weak self] in self?.replayableTake != nil }
         status.isReplaying = { [weak self] in self?.lastTakeReplay.playing != nil }
@@ -4541,6 +4545,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         result.text = clean ? spokenText : resolvingMarkers(result.text, words: result.words,
                                                             said: result.said, asr: result.asr,
                                                             duration: result.duration)
+        // **😡 from the sound alone** (2026-11-05, `VoiceTension`), on every engine:
+        // the take's WAV, not its words.
+        if envelope, VoiceAffect.isEnabled, let wav = result.audio {
+            let began = CFAbsoluteTimeGetCurrent()
+            if let reading = VoiceTension.read(wav: wav) {
+                Log.info(String(format: "😡 voice tension %+.2f (bar %.2f) on %d pitched frames, %.0f ms%@",
+                                reading.score, VoiceTension.bar, reading.frames,
+                                (CFAbsoluteTimeGetCurrent() - began) * 1000, reading.tense ? " — tagged" : ""))
+                if reading.tense {
+                    var report = pendingAffect ?? VoiceAffect.analyse(words: [])
+                    report.verdict.tense = true
+                    report.verdict.why.append(String(format: "voice tension %+.2f", reading.score))
+                    pendingAffect = report
+                }
+            }
+        }
         // **The corpus gets neither the marker nor the paragraph.** Wispr's
         // recording heard the marker and the relay's did not; *neither* of them
         // heard the text he had highlighted, which this app has just written
@@ -10446,7 +10466,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let text = m.text, !text.isEmpty { parts.append(leading(m) + text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
             parts.append(dictatedHint(m))
-            // **`[voice: hesitant]` / `[voice: tense]`, beside the hint, or
+            // **🤷‍♂️ (hesitant) / 😡 (tense), beside the hint, or
             // nothing** (2026-09-27) — what the transcript lost, never a number.
             if let tag = m.affect?.verdict.tag { parts.append(tag) }
             if text.contains("?") { parts.append(questionHint) }

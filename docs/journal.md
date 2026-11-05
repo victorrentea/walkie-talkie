@@ -16064,6 +16064,21 @@ It answered nothing on 4 clips, and those are the takes the local model called `
 speech. So the second listen is Scribe pinned to `ro`, the local model behind it for offline and a late answer,
 and the local model's own words pass the same check. TF1–TF4 prove the four roads, with the harness's fake Scribe.
 
+## Voice affect without words: the eval (2026-11-05)
+
+Victor: *"din amplitudinea undelor să te prinzi când sunt pauze, când volumul e mare"*, so that the tags reach Wispr
+Flow and the local model. `evals/audio-affect/README.md` has the numbers. **His blind listening test, 40 clips,
+overturned the machine truths**: hesitant by ear ~30 % on either verdict against 20 % on neutral controls, so silence
+is not hesitation; tense 7 of 10 on top arousal against 1 of 27 elsewhere; two whispered clips fooled the meter.
+The machines said: on 2,355 clips and held-out days the meter's hops rank the hesitant verdict
+at AUROC 0.90, and they agree with Silero about pauses better than Whisper's timings do (0.82–0.92 against
+0.69–0.82), so the word verdict is a noisy truth; its thresholds do not transfer (median pause ratio 0.51 against
+0.11). A `[?]` cannot find its word from audio alone (median 2.8 words off, p90 16.5). Arousal is cheap (0.84 from
+hops, 0.935 with F0), but it is not annoyance (AUROC 0.55–0.63 against the words' annoyance). No app code changed.
+
+Same day, his ask: the tag becomes an emoji, 🤷‍♂️ hesitant, 😡 tense, `Verdict.tag` (*"să pui în mod scurt emoția"*).
+The format only: when it fires did not change, so it still needs Scribe and 😡 stays behind `WT_VOICE_TENSE`.
+
 ## Replay Last Dictation (2026-11-05)
 
 Victor: *"I would like a feature to replay the audio recorded during the last voice dictation, just
@@ -16072,3 +16087,12 @@ nothing of its own: `LastTakeReplay` plays the newest of the corpus's last WAV a
 so a failed or cancelled take counts and a restart loses nothing. Greyed while a sentence is open or
 in flight, since that take is not on disk yet and the newest file would be the dictation before it.
 A sentence opening stops the playback, or the microphone would hear the speakers.
+
+## 😡 from the sound alone (2026-11-05)
+
+Victor, on the study: *"apucă-te să implementezi … nu pe cuvinte, totul e pe sunet, pe undele sonore și pune și un
+emoji de anger în varianta prescurtată … dacă este detectată furia sau supărarea s-o marchez, dacă nu, nu"*.
+`VoiceTension` reads the pitch of the take's WAV on every engine, tags `[😡]` over the bar, and the `walkie-inbox` mod
+shows 😡 in the short line. Tense only: his ear heard no hesitation in audio verdicts. Two bugs paid for: the first
+tracker stopped on the shoulder of the correlation peak, almost a semitone high (a synthetic 150 Hz test caught it);
+the bare-emoji tag from that morning would have ended the mod's `[…]` footer run and shown the whole envelope.

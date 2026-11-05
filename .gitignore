@@ -15,3 +15,7 @@ evals/envelope-symbols/run.log
 # ~1.6 GB of it. A broad `git add` swept them in on 2026-09-22 and made master
 # unpushable: git keeps blobs forever, and this is the public repo.
 docs/projectm/captures/
+
+# Audio-affect eval: his voice and transcripts, and this repo is public.
+evals/audio-affect/out/
+evals/audio-affect/__pycache__/

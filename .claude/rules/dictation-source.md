@@ -625,10 +625,23 @@ in Wispr (`config.json` `prefs.user.selectedLanguages`), so **that setting is no
   phantom number.
 - **No live captions:** Scribe realtime gives timings only on committed text from a smaller model.
 
+## 😡 from the sound alone (2026-11-05, `VoiceTension`)
+
+- **Every engine, on the take's WAV, never the words**: Victor, *"nu pe cuvinte, totul e pe sunet, pe undele
+  sonore"*. Only on an envelope, as the tag below, and under `WT_VOICE_AFFECT`. Hesitation stays Scribe-only: his
+  blind test found audio cannot hear it (`evals/audio-affect/README.md`).
+- **Pitch only, no level**: the level is the microphone's as much as his. Under 3 s of pitched voice (a whisper
+  has none) it says nothing. `VoiceTension.pitch` is `evals/audio-affect/tense_app.py` line for line: 40 clips
+  through `POST /test/tension` differ by under 0.0001. Change one, change both.
+- **The bar (0.99) fires on one sentence in ten**, set before looking at his ear: 4 of 6 heard tense over it, 4 of
+  27 under it. Log: `😡 voice tension +x.xx`, on every envelope, which is what to tune it with. About 35 ms.
+- **The tag stays a `[…]` clause, `[😡]`.** The `walkie-inbox` mod's footer is a run of `[…]` lines: a bare emoji
+  ends the run and the whole envelope stays on screen. The mod puts 😡 in the short line under the words.
+
 ## Voice affect: what the transcript loses (2026-09-27, `VoiceAffect`)
 
 Victor's rules (spec `~/workspace/voice-distill/docs/voice-affect.md`, *Design propus*): **two
-global tags, `[voice: hesitant]` / `[voice: tense]`, otherwise nothing**; the tag says only what
+global tags, 🤷‍♂️ hesitant / 😡 tense (`[voice: …]` until 2026-11-05), otherwise nothing**; the tag says only what
 transcription lost — no numbers, nothing concluded from the words; **more important: `[?]` WHERE
 he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag. → journal:
 *Voice affect* (2026-09-27)
@@ -641,7 +654,7 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
   (`markerCues` ± 0.3 s) is the gesture's — never marked, so a `[?]` never sits inside a marker.
   Text rebuilt from the marked tokens only if the words spell the transcript; the corpus copy uses
   the unmarked words.
-- **`[voice: hesitant]` is one line right after `[Dictated in RO or EN]`** (`terminalLine`), only on
+- **🤷‍♂️ is one line right after `[Dictated in RO or EN]`** (`terminalLine`), only on
   a positive verdict; outbox `affect: {pauses, fillers, restarts, rate, verdict, why, …}`; corpus
   nothing. Applies to a bound terminal, a spawn, the forward click's caret prompt — never the back
   click's plain words or a legacy caret sentence.
@@ -671,7 +684,7 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
 | `WT_WISPR_HISTORY_ROUTE=0` | wait `pasteGrace` for a ⌘V before the row |
 | `WT_KEY_TRACE=1` | log every key event + verdict, keycode/pid only (`POST /test/key-trace`) |
 | `WT_MARKER_TIMESTAMPS=0` · `WT_SHOT_MARKERS=1` · `WT_MARKER_DEVICE` | timestamp markers off / spoken on / device |
-| `WT_VOICE_AFFECT=0` · `WT_VOICE_TENSE=1` | `[?]` marks + `[voice: hesitant]` off (default on) / the energy half of `[voice: tense]` on (default off); env → `elevenlabs.env` → `voiceAffect` / `voiceTense` defaults |
+| `WT_VOICE_AFFECT=0` · `WT_VOICE_TENSE=1` | `[?]` marks + 🤷‍♂️ off (default on) / the energy half of 😡 on (default off); env → `elevenlabs.env` → `voiceAffect` / `voiceTense` defaults |
 | `WT_WISPR_RAW_PROMPTS=0` | prompts carry Wispr's `formattedText` again instead of `asrText` (2026-10-06) |
 | `WT_WISPR_COPY_FALLBACK=1` | re-enable `copy_last_text` — see below |
 | `WT_WISPR_DB=<path>` | a fake `flow.sqlite` instead of Wispr's (test-only, 2026-09-28): env → `elevenlabs.env`, re-read ≤ 1 s; `evals/plan/fake_wispr_db.py` (`desk-testing.md`) |

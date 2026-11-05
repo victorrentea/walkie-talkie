@@ -516,6 +516,9 @@ final class ElementPicker {
     /// toggle, then `state.replay` to see what it did.
     var onTestReplayLast: (() -> Void)?
 
+    /// `POST /test/tension {"wav"}` — `VoiceTension`'s reading of a file.
+    var onTestTension: ((String) -> [String: Any])?
+
     /// `POST /test/local-now` — ⌘⌃X's action (2026-09-28), for the harness.
     var onTestLocalNow: (() -> Void)?
 
@@ -996,6 +999,11 @@ final class ElementPicker {
         case ("POST", "/test/recover"):
             onTestRecover?()
             respond(conn, 200, ["ok": true])
+
+        case ("POST", "/test/tension"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            guard let wav = body?["wav"] as? String else { return respond(conn, 400, ["error": "wav"]) }
+            respond(conn, 200, onTestTension?(wav) ?? [:])
 
         case ("POST", "/test/replay-last"):
             onTestReplayLast?()

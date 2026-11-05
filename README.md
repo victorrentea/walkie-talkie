@@ -156,7 +156,7 @@ kamikaze
 ### Other markers
 
 - **`kamikaze`** (🔼 ↓): appended on its own line, the agent's cue to close its terminal when done. Again to take it back.
-- **`[voice: hesitant]` / `[voice: tense]`** and **`[?]` where you paused**: what the transcript loses. ElevenLabs only, since it needs word timings.
+- **😡 when your voice is tense**, read off the pitch of the recording, on every engine. **🤷‍♂️ (hesitant)** and **`[?]` where you paused**: ElevenLabs only, since they need word timings.
 
 ## The held prompt
 
