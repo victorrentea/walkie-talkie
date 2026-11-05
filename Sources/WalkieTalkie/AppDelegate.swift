@@ -1303,7 +1303,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// while the relay's own microphone was the only one that could be open.
     private var listening = false {
         didSet {
-            if listening, !oldValue { listeningSince = CFAbsoluteTimeGetCurrent() }
+            if listening, !oldValue {
+                listeningSince = CFAbsoluteTimeGetCurrent()
+                // The speakers must not be dictated.
+                lastTakeReplay.stop()
+            }
             // The microphone closed with the 🔽 ↓ box up: what is typed goes in
             // before the words are sent (2026-10-07).
             if !listening, oldValue {
@@ -1322,6 +1326,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// is a bug. This one is a **policy** — a microphone left open is ended and
     /// its words delivered — and reaching it is the feature.
     private var dictationCeiling: DispatchWorkItem?
+
+    private let lastTakeReplay = LastTakeReplay()
 
     /// A message that is built, shown, and *not yet written*. It lives here for
     /// the few seconds the overlay displays it, so Cancel has something to stop.
@@ -1793,6 +1799,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.listening || self.source.isRecording || self.speculative || self.held != nil
         }
         status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
+        status.onReplayLast = { [weak self] in self?.replayLastDictation() }
+        status.isReplayable = { [weak self] in self?.replayableTake != nil }
+        status.isReplaying = { [weak self] in self?.lastTakeReplay.playing != nil }
+        picker.onTestReplayLast = { [weak self] in
+            DispatchQueue.main.async { self?.replayLastDictation() }
+        }
         // Wispr Flow's microphone, faked — the only way the ⚡ ring, the
         // chevrons and the ✕'s cancel are reachable without talking into
         // another app. Straight onto main: everything it reaches is AppKit's.
@@ -7488,6 +7500,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **The relay has to be up before Victor starts talking**, and since ⌘⌃B
     /// moved into this app there is nothing else left to launch it: the key that
     /// starts a session is served by the very process that has to be running to
+    /// The take `Replay Last Dictation` would play. Nil while a sentence is open
+    /// or still being read: its audio is not filed yet, so the newest file on
+    /// disk would be the dictation before the one he means.
+    private var replayableTake: URL? {
+        guard !listening, sentencesInFlight == 0 else { return nil }
+        return LastTakeReplay.latest(corpusRoot: VoiceCorpus.root,
+                                     cancelled: cancelledAudio.map { (url: $0.url, at: $0.at) })
+    }
+
+    /// The menu row: plays the last take, or stops the one playing.
+    private func replayLastDictation() {
+        if lastTakeReplay.playing != nil {
+            lastTakeReplay.stop()
+            return
+        }
+        guard let take = replayableTake else {
+            overlay.flash("⚠️ nothing to replay")
+            return
+        }
+        if !lastTakeReplay.play(take) { overlay.flash("⚠️ could not play the last dictation") }
+    }
+
     /// hear it. A login item is the whole of what that requires — the app is an
     /// accessory with no window, so starting it costs a menu bar icon and 56 MB.
     /// **The model comes up with it** (see `applicationDidFinishLaunching`):
@@ -9065,6 +9099,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["elevenFault"] = ["batch": batchFault, "live": liveFault]
         let cost = ElevenLabsCost.summary()
         out["elevenCost"] = ["total": cost.total, "label": ElevenLabsCost.label, "lines": cost.lines]
+        out["replay"] = ["playing": lastTakeReplay.playing?.path ?? NSNull(),
+                         "take": replayableTake?.path ?? NSNull()] as [String: Any]
         // 🧾 what the account has left — the menu row's numbers (2026-09-28).
         out["elevenQuota"] = ElevenLabsQuota.shared.describe()
         out["micOpened"] = MicRecorder.lastOpened.map { ["device": $0.device, "rate": $0.rate, "channels": $0.channels, "at": Outbox.iso($0.at)] } ?? NSNull()

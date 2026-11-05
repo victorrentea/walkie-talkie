@@ -512,6 +512,10 @@ final class ElementPicker {
     var onTestRecover: (() -> Void)?
 
     /// `POST /test/local-now` — ⌘⌃X's action (2026-09-28), for the harness.
+    /// `POST /test/replay-last` — the menu's **Replay Last Dictation**: the row's
+    /// toggle, then `state.replay` to see what it did.
+    var onTestReplayLast: (() -> Void)?
+
     var onTestLocalNow: (() -> Void)?
 
     /// `POST /test/local-auto {"on"?, "wisprDown"?, "fakeLaunch"?, "wisprAge"?,
@@ -993,6 +997,22 @@ final class ElementPicker {
             respond(conn, 200, ["ok": true])
 
         // ⌘⌃X — the local model, now (2026-09-28): the key's action, not the key.
+        case ("POST", "/test/replay-last"):
+            onTestReplayLast?()
+            respond(conn, 200, ["ok": true])
+
+        // The stop's wave alone, no sentence behind it (2026-11-05). `capturable`
+        // lets a screenshot see this one, as no real one can be.
+        case ("POST", "/test/stop-wave"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let x = body?["x"] as? Double, y = body?["y"] as? Double
+            let capturable = body?["capturable"] as? Bool ?? false
+            DispatchQueue.main.async {
+                let point = x.flatMap { x in y.map { NSPoint(x: x, y: $0) } } ?? NSEvent.mouseLocation
+                StopWave.fire(at: point, capturable: capturable)
+            }
+            respond(conn, 200, ["ok": true])
+
         case ("POST", "/test/local-now"):
             onTestLocalNow?()
             respond(conn, 200, ["ok": true])

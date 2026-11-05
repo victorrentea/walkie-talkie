@@ -122,6 +122,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// moment the answer has to be right.
     var isRecoverable: (() -> Bool)?
 
+    /// Play the last dictation's audio, or stop it if it is playing.
+    var onReplayLast: (() -> Void)?
+    /// Is there a finished take to play? Only ever one — the last.
+    var isReplayable: (() -> Bool)?
+    var isReplaying: (() -> Bool)?
+
     /// Picked from **Start Dictation** — open the microphone, the same thing
     /// mouse 5 does. The other end of the pair that already had two ways out and
     /// only one way in.
@@ -277,6 +283,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// The undo of the row above it, and directly under it for that reason.
     private let recoverDictation = NSMenuItem(title: "Recover Dictation",
                                               action: nil, keyEquivalent: "")
+    /// One row that renames itself, like `Record Screen`: one verb, one thing playing.
+    private let replayLast = NSMenuItem(title: "Replay Last Dictation",
+                                        action: nil, keyEquivalent: "")
     /// A dictation whose destination is a terminal that does not exist yet — it
     /// opens in `~/workspace`, which the title no longer spells out: the folder
     /// never varies, so it was a word the row spent on something already known,
@@ -1030,6 +1039,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         recoverDictation.action = #selector(recoverDictationClicked)
         recoverDictation.target = self
         recoverDictation.isEnabled = false
+        replayLast.image = Self.symbolIcon("play.circle")
+        replayLast.action = #selector(replayLastClicked)
+        replayLast.target = self
+        replayLast.isEnabled = false
         screenRecording.image = Self.symbolIcon("video")
         screenRecording.action = #selector(screenRecordingClicked)
         screenRecording.target = self
@@ -1133,6 +1146,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         menu.addItem(cancelDictation)
         menu.addItem(localNowItem)
         menu.addItem(recoverDictation)
+        menu.addItem(replayLast)
         // **Under the dictation verbs, because it is one of them.** A recording
         // only exists inside a sentence, so the row belongs with the rows that
         // open and close one rather than down with the two gesture legends.
@@ -2125,6 +2139,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // Not while one is running: two transcripts arriving at one panel is an
         // ordering problem there is no reason to create from a menu.
         recoverDictation.isEnabled = !recording && (isRecoverable?() ?? false)
+        let replaying = isReplaying?() ?? false
+        replayLast.isEnabled = replaying || (isReplayable?() ?? false)
+        replayLast.title = replaying ? "Stop Replay" : "Replay Last Dictation"
+        replayLast.image = Self.symbolIcon(replaying ? "stop.circle" : "play.circle")
         // The one row that does not ask about a binding — it brings its own
         // destination. Only a dictation already running takes it away: the row
         // *starts* one, and the sentence already open is re-aimed by the wheel's
@@ -2330,6 +2348,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func cancelDictationClicked() { onCancelDictation?() }
     @objc private func screenRecordingClicked() { onToggleScreenRecording?() }
     @objc private func recoverDictationClicked() { onRecoverDictation?() }
+    @objc private func replayLastClicked() { onReplayLast?() }
     @objc private func startDictationClicked() { onStartDictation?() }
     @objc private func bindClicked() { onBind?() }
 

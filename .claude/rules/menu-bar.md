@@ -60,6 +60,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
 | `End Dictation` | `mic.slash` | `🛞` |
 | `Cancel Dictation` | 🗑️ | `🛞 2s` |
 | `Recover Dictation` (`Recover Cancelled Dictation` until 2026-09-22) | `arrow.up.trash` — out of the bin | |
+| `Replay Last Dictation` / `Stop Replay` (2026-11-05) | `play.circle` / `stop.circle` | none — the newest of the corpus's last WAV and the cancelled take (`LastTakeReplay`), read from disk so it survives a restart; greyed while a sentence is open or in flight, because that take is not filed yet; a sentence opening stops it |
 | `Take Screenshot` | 📷 | `⬇️` |
 | `Select Screen Area` | ✂️ | `🛞 drag` |
 | `Pick from Chrome` (`Pick Element in Chrome` until 2026-09-22) | ✋ | `⌘⇧ + ⬅️` |

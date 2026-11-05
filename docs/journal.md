@@ -16063,3 +16063,12 @@ everywhere, *de ce nu mai pot să fac scroll cu mouse-ul* against *SCROW cu mous
 It answered nothing on 4 clips, and those are the takes the local model called `Thank you.`: their WAVs hold no
 speech. So the second listen is Scribe pinned to `ro`, the local model behind it for offline and a late answer,
 and the local model's own words pass the same check. TF1–TF4 prove the four roads, with the harness's fake Scribe.
+
+## Replay Last Dictation (2026-11-05)
+
+Victor: *"I would like a feature to replay the audio recorded during the last voice dictation, just
+the last one, not more than that."* A menu row under `Recover Dictation`, no gesture, and it records
+nothing of its own: `LastTakeReplay` plays the newest of the corpus's last WAV and the cancelled take,
+so a failed or cancelled take counts and a restart loses nothing. Greyed while a sentence is open or
+in flight, since that take is not on disk yet and the newest file would be the dictation before it.
+A sentence opening stops the playback, or the microphone would hear the speakers.
