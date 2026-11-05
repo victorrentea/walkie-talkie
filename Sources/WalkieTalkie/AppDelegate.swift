@@ -7500,11 +7500,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Register the app as a login item, once, quietly.
-    ///
-    /// **The relay has to be up before Victor starts talking**, and since ⌘⌃B
-    /// moved into this app there is nothing else left to launch it: the key that
-    /// starts a session is served by the very process that has to be running to
     /// The take `Replay Last Dictation` would play. Nil while a sentence is open
     /// or still being read: its audio is not filed yet, so the newest file on
     /// disk would be the dictation before the one he means.
@@ -7527,6 +7522,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !lastTakeReplay.play(take) { overlay.flash("⚠️ could not play the last dictation") }
     }
 
+    /// Register the app as a login item, once, quietly.
+    ///
+    /// **The relay has to be up before Victor starts talking**, and since ⌘⌃B
+    /// moved into this app there is nothing else left to launch it: the key that
+    /// starts a session is served by the very process that has to be running to
     /// hear it. A login item is the whole of what that requires — the app is an
     /// accessory with no window, so starting it costs a menu bar icon and 56 MB.
     /// **The model comes up with it** (see `applicationDidFinishLaunching`):
@@ -9099,14 +9099,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["lastFailure"] = lastFailure.map { ["why": $0.why, "engine": $0.engine, "at": Outbox.iso($0.at)] } ?? NSNull()
         out["recoverable"] = cancelledAudio.map { ["path": $0.url.path, "duration": $0.duration,
                                                    "expiresAt": Outbox.iso($0.at.addingTimeInterval(300))] } ?? NSNull()
+        out["replay"] = ["playing": lastTakeReplay.playing?.path ?? NSNull(),
+                         "take": replayableTake?.path ?? NSNull()] as [String: Any]
         out["live"] = elevenLiveSource.liveDescribe() ?? NSNull()
         let batchFault: Any = ElevenLabsSource.fault?.describe() ?? NSNull()
         let liveFault: Any = ElevenLabsLive.fault ?? NSNull()
         out["elevenFault"] = ["batch": batchFault, "live": liveFault]
         let cost = ElevenLabsCost.summary()
         out["elevenCost"] = ["total": cost.total, "label": ElevenLabsCost.label, "lines": cost.lines]
-        out["replay"] = ["playing": lastTakeReplay.playing?.path ?? NSNull(),
-                         "take": replayableTake?.path ?? NSNull()] as [String: Any]
         // 🧾 what the account has left — the menu row's numbers (2026-09-28).
         out["elevenQuota"] = ElevenLabsQuota.shared.describe()
         out["micOpened"] = MicRecorder.lastOpened.map { ["device": $0.device, "rate": $0.rate, "channels": $0.channels, "at": Outbox.iso($0.at)] } ?? NSNull()
