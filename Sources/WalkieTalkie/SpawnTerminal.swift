@@ -84,7 +84,9 @@ enum SpawnTerminal {
     ///
     /// Runs subprocesses — call it off the main thread.
     static func resumeClaude(session: String, directory: String, near: CGPoint? = nil) -> Outcome {
-        open(resumeScript(session: session, directory: directory),
+        // It goes into a script, and Claude only ever names a session by uuid.
+        guard UUID(uuidString: session) != nil else { return .failed("not a session id") }
+        return open(resumeScript(session: session, directory: directory),
              stamp: Self.stamp(), directory: directory, near: near,
              what: "resumed session \(session.prefix(8))")
     }
@@ -454,14 +456,14 @@ enum SpawnTerminal {
     /// session belongs to. No file is staged for it — a session id is a uuid, so
     /// there is nothing here that needs keeping out of a command line, which is
     /// the whole reason the prompt gets a file of its own.
-    private static func resumeScript(session: String, directory: String) -> String {
+    static func resumeScript(session: String, directory: String) -> String {
         """
         #!/bin/zsh
         # Written by Walkie Talkie — a session picked out of the Rebind to… search.
         PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
         cd \(quote(directory)) 2>/dev/null || cd "$HOME"
         if ! command -v claude >/dev/null; then
-          echo "walkie: claude is not on the PATH — could not resume \(session)"
+          echo 'walkie: claude is not on the PATH — could not resume:' \(quote(session))
           exec /bin/zsh -l
         fi
         exec claude \(claudeFlags) --resume \(quote(session))

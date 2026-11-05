@@ -770,6 +770,10 @@ final class ElementPicker {
     }
 
     private func reply(to request: Request, on conn: NWConnection) {
+        if BrowserGate.refuses(host: request.host, origin: request.origin, fetchSite: request.fetchSite) {
+            Log.info("🚫 refused \(request.method) \(request.path.prefix(60)) from a web page")
+            return respond(conn, 403, ["ok": false, "error": "not from a web page"])
+        }
         switch (request.method, request.path) {
         // The extension asks this before it arms: with no relay running, ⌘ in
         // Chrome must go back to meaning exactly what Chrome says it means.
@@ -1473,6 +1477,9 @@ final class ElementPicker {
     /// A request is only a request once its body is all here — `nil` means "keep
     /// reading", which is the only signal the receive loop needs.
     private struct Request {
+        let host: String?
+        let origin: String?
+        let fetchSite: String?
         let method: String
         let path: String
         let body: Data
@@ -1485,12 +1492,17 @@ final class ElementPicker {
             let request = lines.removeFirst().components(separatedBy: " ")
             guard request.count >= 2 else { return nil }
 
-            let length = lines.compactMap { line -> Int? in
-                let parts = line.split(separator: ":", maxSplits: 1)
-                guard parts.count == 2,
-                      parts[0].lowercased() == "content-length" else { return nil }
-                return Int(parts[1].trimmingCharacters(in: .whitespaces))
-            }.first ?? 0
+            func header(_ name: String) -> String? {
+                lines.lazy.compactMap { line -> String? in
+                    let parts = line.split(separator: ":", maxSplits: 1)
+                    guard parts.count == 2, parts[0].lowercased() == name else { return nil }
+                    return parts[1].trimmingCharacters(in: .whitespaces)
+                }.first
+            }
+            let length = header("content-length").flatMap { Int($0) } ?? 0
+            self.host = header("host")
+            self.origin = header("origin")
+            self.fetchSite = header("sec-fetch-site")
 
             let body = buffer[range.upperBound...]
             guard body.count >= length else { return nil }
@@ -1501,5 +1513,33 @@ final class ElementPicker {
             self.path = request[1].components(separatedBy: "?")[0]
             self.body = Data(body.prefix(length))
         }
+    }
+}
+
+/// **Everything on this port can reach an agent or a shell, and any web page can
+/// aim at it**: loopback keeps other machines out, not the browser on this one. A
+/// page cannot read a CORS-refused answer, but its POST has already been obeyed.
+///
+/// A token would mean teaching every eval, lab script and `curl` one, so this goes
+/// by what browsers cannot help saying and tools never say. `Origin` is set on
+/// their POSTs, `Sec-Fetch-Site` on everything else (an `<img>` has no `Origin`),
+/// and a page can set neither. The extension talks from its service worker, under
+/// its own `chrome-extension://` origin. `Host` stops DNS rebinding, where a page's
+/// own domain resolves here, and a container coming in on `host.docker.internal`.
+enum BrowserGate {
+    private static let localHosts: Set<String> = ["127.0.0.1", "localhost", "[::1]", "::1"]
+
+    static func refuses(host: String?, origin: String?, fetchSite: String?) -> Bool {
+        if let host, !isLocal(host) { return true }
+        if origin?.lowercased().hasPrefix("chrome-extension://") == true { return false }
+        if origin != nil { return true }
+        return fetchSite.map { $0.lowercased() != "none" } ?? false
+    }
+
+    private static func isLocal(_ host: String) -> Bool {
+        let name = host.lowercased()
+        if localHosts.contains(name) { return true }
+        guard let colon = name.lastIndex(of: ":") else { return false }
+        return localHosts.contains(String(name[..<colon]))
     }
 }
