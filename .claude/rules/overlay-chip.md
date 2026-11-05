@@ -472,12 +472,17 @@ yields to `--label`).
   message).** Anchored = bare text, no blur, no rounded rect, no shadow, alpha 0.80, trailing the
   cursor. Panel = top-left of the current screen, blur, ✕ on hover, full opacity, entered by a
   prompt and **by nothing else since 2026-09-02**. → journal: *Two shapes: the chip and the panel*
-- **The panel's surface is 40 % opaque; its words are not** (2026-11-05, Victor: *"să fie
-  transparent, adică să fie opac doar 40%"*). `panelSurfaceAlpha` is the blur view's `alphaValue`,
-  measured as alpha 102/255 on the composited surface; the window stays at 1.00, because the panel is
-  read before it sends and `panel.alphaValue` would fade the words and the pictures too. Over a white
-  page the ground is about 204 grey, so the panel's text rows keep the chip's `halo()`. `snapshot`
-  cannot show this: it has no desktop behind it.
+- **The panel's surface is 30 % opaque, solid under the hand; its words are always solid**
+  (2026-11-05: 40 %, then Victor: *"Când dau mouse-ul pe acel panou … să devină opac … în mod normal
+  să fie nu 40, ci 30%, să fie abia schițat"*). `panelSurfaceAlpha` is the blur view's `alphaValue`;
+  the window stays at 1.00, because the panel is read before it sends and `panel.alphaValue` would
+  fade the words and the pictures too. `syncPanelSurface` fades it in 0.12 s from the pointer's
+  geometry (`pointerReachedPanel`, the autosend pause's rule: landed, and the pointer has moved since
+  it appeared), on every pointer move and hover edge — so a pointer the panel unfolded over leaves it
+  sketched. A spawn's held dialog is inactive and stays sketched. `prompt.surface` in `GET /test/state`
+  is the target; `pinPanelSurfaceSolid` is the states page's way in, since it has no pointer. The
+  panel's text rows keep the chip's `halo()`. `snapshot` has no desktop behind it, so it cannot show
+  how see-through it is.
 - **There is never a ✕ beside the pointer, in any state**: `anchored || !hovering`, not
   `bare || !hovering` — the old test put a ✕ on a flash riding the cursor (*"n-am cum să apăs pe
   el din moment ce acel tooltip se plimbă cu mouse-ul"*). The menu bar item is the ✕ that stays

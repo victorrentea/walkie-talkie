@@ -850,7 +850,7 @@
     "group" : "The held prompt",
     "height" : 331,
     "image" : "prompt-hover.png",
-    "note" : "The ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
+    "note" : "The surface goes from 30 % to solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
     "shape" : "panel",
     "slug" : "prompt-hover",
     "title" : "The prompt, cursor over it",
