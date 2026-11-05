@@ -98,11 +98,11 @@ final class GestureHintBar {
         case .parked:
             // A left click drops the half-transparent copy riding the pointer
             // (2026-10-19, `CropSelectionOverlay.leftClicked`).
-            return MouseHint(left: "📍 drop", wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
+            return MouseHint(left: "📍 drop", wheel: "🎯 drag there", right: "🗑️ discard", body: "Esc cancel")
         case .drawing:
             // The right button is not taken while the destination is drawn: it
             // cancels, as parked (2026-10-25, the hint audit).
-            return MouseHint(wheel: "🎯 drag there", right: "🗑️ cancel", body: "Esc cancel")
+            return MouseHint(wheel: "🎯 drag there", right: "🗑️ discard", body: "Esc cancel")
         }
     }
 
@@ -125,14 +125,14 @@ final class GestureHintBar {
         guard s.listening, !s.held else { return [] }
         var front = Cross(right: nil)
         var back = Cross()
-        front.left = "🗑️ cancel"
+        front.left = "🗑️ discard"
         // **Every gesture that acts, labelled, in every stage** (2026-10-25, Victor:
         // *"Am dat Forward sus și mi-a trecut ask în modul de terminal nou. Am dat
         // back stânga și mi-a făcut cancel. Ăsta n-apar pe … diagrama de butoane
         // live"*). Three audits traced each F-key to its handler: 🔽 ← cancels any
         // open microphone (2026-10-21) and 🔼 ↑ makes any sentence a new-session
         // prompt — neither was drawn outside a prompt, 🔽 ← nowhere.
-        back.left = "🗑️ cancel"
+        back.left = "🗑️ discard"
         front.up = s.spawn ? "📂 folder" : "✨ new"
         if s.prompting {
             front.click = "🏁 end"

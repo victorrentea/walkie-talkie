@@ -283,14 +283,14 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 Victor: *"Am dat Forward sus și mi-a trecut ask în modul de terminal nou. Am dat back stânga și mi-a
 făcut cancel. Ăsta n-apar pe … diagrama de butoane live"*. Three read-only audits traced each F-key
 to its handler per stage and `GestureHintBar.crosses` now says what the code does:
-- **every stage**: 🔽 ← `🗑️ cancel` (2026-10-21's cancel was never drawn); 🔼 ↑ `✨ new`, `📂 folder`
+- **every stage**: 🔽 ← `🗑️ discard` (`🗑️ cancel` until 2026-11-05 — Victor: *"să fie discard unde e coșul de gunoi"*; 2026-10-21's cancel was never drawn); 🔼 ↑ `✨ new`, `📂 folder`
   once a spawn (its folder menu again).
 - **prompt**: 🔽 `⏹️ / ⌃P` while a film runs (the shutter is its stop); 🔼 → `🏁 end` on a spawn
   (nothing to flip to), else no box as before.
 - **⚡ question**: 🔼 → `💻 terminal` (`dropQuestion`), 🔽 → `🔎 google`; 🔽 ↑ stays grey and
   **`toggleFilm` refuses over a question** — a film there was never sent and kept running.
 - **plain**: 🔼 `⏹️`, 🔽 ↓ `⏹️`, 🔼 → `💻 terminal`, 🔼 ↓ `☠️ last` (`kamikazeAfterTheWords`).
-- **crop, drawing the destination**: right `🗑️ cancel`.
+- **crop, drawing the destination**: right `🗑️ discard`.
 - Bugs the audit found under the labels: a plain sentence made a prompt by 🔼 → / 🔼 ↑ drew the
   plain bar (`syncHalo`'s `overlay.prompting` ignored `cleanRedirected`); after ⌃P made it a
   prompt, `hotkeys.ownCleanSentence` stayed up, so right ⌘ ×2 and 🔽 ↓ did nothing
