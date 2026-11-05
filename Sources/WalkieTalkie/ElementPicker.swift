@@ -1001,6 +1001,11 @@ final class ElementPicker {
             onTestReplayLast?()
             respond(conn, 200, ["ok": true])
 
+        // ⌘⌃X — the local model, now (2026-09-28): the key's action, not the key.
+        case ("POST", "/test/replay-last"):
+            onTestReplayLast?()
+            respond(conn, 200, ["ok": true])
+
         // The stop's wave alone, no sentence behind it (2026-11-05). `capturable`
         // lets a screenshot see this one, as no real one can be.
         case ("POST", "/test/stop-wave"):
