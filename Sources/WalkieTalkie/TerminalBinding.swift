@@ -1955,6 +1955,24 @@ final class TerminalBinding {
             return "gone"
         end tell
         """
+        // Claude Code's `chat:sendNow`. `do script` adds its `\r`, in the same write:
+        // measured on a busy Haiku session, the chord still lands, and on an idle
+        // one with an empty box the whole of it does nothing.
+        let sendNow = """
+        tell application "Terminal"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    try
+                        if tty of t is "\(escape(tty))" then
+                            do script ((ASCII character 24) & (ASCII character 19)) in t
+                            return "ok"
+                        end if
+                    end try
+                end repeat
+            end repeat
+            return "gone"
+        end tell
+        """
         // **Press again while the sentence is still in the prompt box** (2026-09-28):
         // the hint (`asksForReview`) is one reason, the sentence sitting under `❯`
         // with no submit is the other (`stillInPrompt`). A submitted sentence is
@@ -1971,12 +1989,24 @@ final class TerminalBinding {
         // submitted (`submitted`), or 4 s, or 4 extra Returns.
         var presses = 0
         var reads = 1
+        var lookedAgain = false
         let deadline = Date().addingTimeInterval(4)
         while true {
             // The review hint is read in the last 600 (a collapsed paste has no
             // echo to anchor on, and an older hint further up must not count);
             // the box in 1500, since a long envelope fills more than 600.
             let shown = String(tail.suffix(600))
+            // **A sentence that landed in a running turn does not wait for it**
+            // (2026-11-05, Victor: *"să poată trimite cu Control X, Control S, să
+            // injecteze … în conversație mai repede, să n-aștepte"*). The chord is
+            // pressed only on Claude Code's own `to send now` under this sentence,
+            // so an idle session never gets it. Before the Returns: the review
+            // notice outlives the queueing, and they would land on an empty box.
+            if waitsToSendNow(tail: shown, sent: text) {
+                guard osascript(sendNow) == "ok" else { break }
+                Log.info("⌨️ ⌃X ⌃S — the sentence was queued behind a running turn, sent now")
+                break
+            }
             var why: String?
             if asksForReview(tail: shown, sent: text) { why = "Claude Code read the block as a paste and asked to review it" }
             else if stillInPrompt(tail: tail, sent: text) { why = "the sentence was still in the prompt box" }
@@ -1986,7 +2016,16 @@ final class TerminalBinding {
                 Log.info("⌨️ Return #\(presses + 2) — \(why)")
                 usleep(500_000)
             } else {
-                if why == nil, submitted(tail: shown, sent: text) { break }
+                if why == nil, submitted(tail: shown, sent: text) {
+                    // One more look: the hint is drawn a beat after the echo.
+                    if lookedAgain { break }
+                    lookedAgain = true
+                    usleep(400_000)
+                    reads += 1
+                    guard let more = osascript(read), more.hasPrefix("ok\n") else { break }
+                    tail = String(more.dropFirst(3))
+                    continue
+                }
                 guard Date() < deadline else { break }
                 usleep(why == nil ? 900_000 : 500_000)
             }
@@ -2817,6 +2856,23 @@ final class TerminalBinding {
             }
         }
         return String(out)
+    }
+
+    /// **Whether this sentence sits queued under Claude Code's `ctrl+x ctrl+s to
+    /// send now`** — read only after its own echo, like `asksForReview`, so a
+    /// sentence that *says* those words does not press the chord.
+    static func waitsToSendNow(tail: String, sent: String) -> Bool {
+        func squash(_ s: String) -> String {
+            String(String.UnicodeScalarView(s.unicodeScalars.filter {
+                !CharacterSet.whitespacesAndNewlines.contains($0) && !(0x2500...0x257F).contains($0.value)
+            }))
+        }
+        let screen = squash(tail)
+        let lastLine = sent.split(whereSeparator: { $0 == "\n" || $0 == "\r" }).last.map(String.init) ?? sent
+        let echo = String(squash(lastLine).suffix(24))
+        var after = Substring(screen)
+        if !echo.isEmpty, let r = screen.range(of: echo, options: .backwards) { after = screen[r.upperBound...] }
+        return after.range(of: "tosendnow", options: .caseInsensitive) != nil
     }
 
     /// **Whether the tab asks for the review Return** — read only *after* the

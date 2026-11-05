@@ -467,7 +467,10 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   glow `sin(π·p)` around it. The glyph keeps `ShineGlyph.pad` (0.3 × the font, the glow's blur) on every
   side so the halo is never cut square, kerned back out of the line so nothing moves. Reviewed with
   **`WT_SHOOT_TAB=<png>`** (`WT_TAB_TEXT`, `〰` for the wave): nine moments of the pass, stacked; the tab
-  itself is `sharingType = .none`.
+  itself is `sharingType = .none`. **The engine's name is part of its glyph** (2026-11-05, Victor: *"să
+  strălucească și textul furnizorului de transcriere"*): `☁️ Wispr Flow` is one `ShineGlyph`, so one
+  band and one halo; a last attachment on a truncating line came out as `…`, so the label clips, and its
+  frame is `ShineGlyph.pad` wider each side, or the field cuts the glow square.
 - **`resolve()` is the single answer**, read by `select` (what records), by the chip's mark and by
   the menu's top row. Three readers computing "which microphone" separately is three ways for the
   glyph, the tick and the recording to disagree. → journal: *The chip says which microphone, and the menu picks it (2026-09-19)*

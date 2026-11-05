@@ -6489,7 +6489,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // (`WisprFlowSource.stopMachine`). Only the chip moves: the recipient, the
         // ring and the budget still belong to the close.
         if listening, recorderBehindListening {
-            if chipStoppedAt == nil { chipStoppedAt = CFAbsoluteTimeGetCurrent() }
+            if chipStoppedAt == nil {
+                chipStoppedAt = CFAbsoluteTimeGetCurrent()
+                // **And so does the whole screen, once a sentence** (2026-11-05):
+                // a second press during the bridge's drain is not a second stop.
+                StopWave.fire(at: NSEvent.mouseLocation)
+            }
             overlay.setListening(false)
             overlay.setTranscribing(true, audio: spokenSoFar)
         }
@@ -8936,6 +8941,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "halo": caretHalo.windowsReport(),
             // The orange outline and the caret the heads aim at (2026-10-13).
             "focusFrame": focusFrame.report,
+            "stopWave": StopWave.report,
             "pasteHint": pasteHint.report,
             // **Which microphone the halo is breathing on**, because *the effect
             // looks dead* and *the effect is being fed silence* are the same

@@ -119,6 +119,14 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HALO"] {
     exit(0)
 }
 
+// The stop's wave at four moments, on a dark ground and a light one, and quit.
+// No capture can contain it. See `StopWave.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_WAVE"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    StopWave.shoot(to: out)
+    exit(0)
+}
+
 // The chip's `📋 Re-paste ⌘⇧P` row on a dark ground and a light one — alone,
 // and under `☠️ Kamikaze` for comparison — and quit. The chip cannot be
 // captured, so this is the only way to see it. See `PasteHint.shoot`.

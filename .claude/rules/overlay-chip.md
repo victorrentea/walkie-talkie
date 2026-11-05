@@ -3,6 +3,7 @@ paths:
   - "Sources/WalkieTalkie/RelayWindow.swift"
   - "Sources/WalkieTalkie/OverlayStates.swift"
   - "Sources/WalkieTalkie/Glyphs.swift"
+  - "Sources/WalkieTalkie/StopWave.swift"
   - "docs/build-overlay-states.py"
   - "docs/shoot-overlay-states.sh"
   - "docs/states/**"
@@ -368,6 +369,15 @@ yields to `--label`).
   calls are then no-ops. A sentence that ends with no close takes the row down at
   `dictationEndedForGood`'s tail, since no settle exists for `endSettling` to do it. Log: `⏳ the chip
   said Transcribing N ms before the microphone closed`.
+- **The stop press sends a wave across the screen** (2026-11-05, Victor: *"un fel de inel gros care să
+  se ducă din locul în care e mouse-ul în jur radial, semitransparent alb, abia vizibil … până iese din
+  ecran"*). `StopWave.fire` from `endDictation`, beside the chip's `Transcribing`, once a sentence
+  (`chipStoppedAt`): a second press during the bridge's drain sends none. A cancel sends none. 240 pt
+  thick, white 14 % at the crest, ~1600 pt/s from the pointer until the inner edge has passed the
+  farthest corner of the pointer's screen. A radial `CAGradientLayer` whose `locations` move, so the
+  thickness holds and main stays free. White on a white page cannot be seen. Not on the states page, it is a
+  transition. `sharingType = .none`: review with `WT_SHOOT_WAVE=<png>`, or `POST /test/stop-wave
+  {"capturable": true}` and a screenshot. `GET /test/state.stopWave {fired, up, last}`.
 - **The meter constants come from the corpus replay and are transferable only because
   `MicRecorder.meter` runs on the converted 16 kHz mono buffer** (`evals/voiced-seconds.py`). Per
   1024 frames (64 ms): RMS against an adaptive noise floor, 9 dB over it to count as speech,

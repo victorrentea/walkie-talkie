@@ -240,7 +240,7 @@ private final class BottomTab {
         tab.addSubview(tintV)
         let l = NSTextField(labelWithString: "")
         l.font = Self.font
-        l.lineBreakMode = .byTruncatingTail
+        l.lineBreakMode = .byClipping
         l.attributedStringValue = Self.attributed(text)
         l.frame = labelFrame(width: width, label: l)
         tab.addSubview(l)
@@ -359,11 +359,12 @@ private final class BottomTab {
 
     /// White, centred, bold 40 — with `MicAnnouncer.wave` drawn as `WaveGlyph`
     /// and the first emoji on either side of it (the microphone, the engine's
-    /// ☁️ / 💻) drawn as `ShineGlyph`, always, so the tab is as wide lit or not.
+    /// ☁️ / 💻, with the engine's name) drawn as `ShineGlyph`, always, so the tab
+    /// is as wide lit or not.
     private static func attributed(_ text: String, pass: CGFloat? = nil) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
         para.alignment = .center
-        para.lineBreakMode = .byTruncatingTail
+        para.lineBreakMode = .byClipping
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white, .paragraphStyle: para]
         let lit = lights(pass)
         let out = NSMutableAttributedString()
@@ -395,13 +396,20 @@ private final class BottomTab {
             // the other, until Victor: "reduce a bit the space to left/right of
             // the sound wave").
             out.append(NSAttributedString(string: String(part[..<at]), attributes: attrs))
-            let glyph = ShineGlyph.image(String(part[at]), font: font, shine: shine)
+            // **The engine's name shines with its emoji** (2026-11-05, Victor: *"să
+            // strălucească și textul furnizorului de transcriere … să fie un glow
+            // sub el, exact cum faci și la restul"*): one glyph, so one band
+            // crosses `☁️ Wispr Flow` and one halo swells round the whole of it.
+            let lit = i == 1 ? part[at...] : part[at...at]
+            let glyph = ShineGlyph.image(String(lit), font: font, shine: shine)
             let a = NSTextAttachment()
             a.attachmentCell = OverhangCell(glyph.image, bounds: glyph.bounds, overhang: ShineGlyph.pad(font))
             let s = NSMutableAttributedString(attachment: a)
             s.addAttributes(attrs, range: NSRange(location: 0, length: s.length))
             out.append(s)
-            out.append(NSAttributedString(string: String(part[part.index(after: at)...]), attributes: attrs))
+            if i == 0 {
+                out.append(NSAttributedString(string: String(part[part.index(after: at)...]), attributes: attrs))
+            }
         }
         return out
     }
@@ -426,7 +434,7 @@ private final class BottomTab {
             mid.layer?.backgroundColor = NSColor.red.cgColor
             let l = NSTextField(labelWithString: "")
             l.font = font
-            l.lineBreakMode = .byTruncatingTail
+            l.lineBreakMode = .byClipping
             l.attributedStringValue = row
             l.frame = labelFrame(width: w, lead: 0, label: l)
             cell.addSubview(l)
@@ -465,8 +473,11 @@ private final class BottomTab {
             h = max(h, lm.defaultLineHeight(for: emoji))
         }
         h = ceil(max(h, label.attributedStringValue.size().height))
-        return NSRect(x: padding + lead, y: ((height - h) / 2).rounded(),
-                      width: width - 2 * padding - lead, height: h)
+        // The glow's room on both sides, inside the tab's padding: it hangs over
+        // the line (`OverhangCell`), and a field cuts what leaves its frame.
+        let room = ShineGlyph.pad(font)
+        return NSRect(x: padding + lead - room, y: ((height - h) / 2).rounded(),
+                      width: width - 2 * padding - lead + 2 * room, height: h)
     }
 
     private static func screenUnderMouse() -> NSScreen? {
@@ -525,7 +536,11 @@ enum ShineGlyph {
     /// room for the glow on every side whether lit or not, so nothing beside it
     /// moves when the light comes.
     static func image(_ emoji: String, font: NSFont, shine: CGFloat?) -> (image: NSImage, bounds: NSRect) {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: emoji, attributes: [.font: font]))
+        // White for the engine's words; an emoji ignores it.
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: emoji, attributes: [
+            .font: font, .foregroundColor: NSColor.white,
+            NSAttributedString.Key(kCTForegroundColorAttributeName as String): NSColor.white.cgColor,
+        ]))
         var ascent: CGFloat = 0, descent: CGFloat = 0, leading: CGFloat = 0
         let w = CGFloat(CTLineGetTypographicBounds(line, &ascent, &descent, &leading))
         let pad = Self.pad(font)
