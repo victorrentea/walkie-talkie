@@ -13,6 +13,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 
 ## Superseded on the way
 
+- *The whole panel rests at 30 %* (2026-11-05) — superseded 2026-11-06: the panel is not on screen at rest, an atom stands in the corner and the dialog comes under the hand (*The prompt at rest is an atom*).
 The journal contradicts itself over time, because it was written as things changed. The
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
 
@@ -16096,3 +16097,17 @@ emoji de anger în varianta prescurtată … dacă este detectată furia sau sup
 shows 😡 in the short line. Tense only: his ear heard no hesitation in audio verdicts. Two bugs paid for: the first
 tracker stopped on the shoulder of the correlation peak, almost a semitone high (a synthetic 150 Hz test caught it);
 the bare-emoji tag from that morning would have ended the mod's `[…]` footer run and shown the whole envelope.
+
+## The prompt at rest is an atom (2026-11-06)
+
+Victor, a day after the 30 % panel: *"în loc de panoul acela din stânga sus semitransparent care mai mult îmi
+obscurează privirea, vreau să pui în loc o animație … niște arcuri de cerc, niște elipse … suprapuse, albastru și
+albastru și roz … cam atât de mare … dacă dau cu mouse-ul pe el apare abia atunci … dialogul acela opac … el stă
+acolo atâta cât ar fi stat … dialogul"*. He drew the box: 178 × 163 pt, 28 pt in, under the menu bar.
+
+`PromptAtom`: a comet painted on a flat ring, spun about its axis, seen tilted, the tilted plane turning slowly: the
+head really runs along an ellipse, and the render server does all of it. The panel keeps its whole life (clock, keys,
+edit, `showSentPrompt`), at alpha 0 and `ignoresMouseEvents`, and only the rest state changed. What the empty rectangle
+was still doing had to move with it: the send's outline, the effect's dock and the `»` all pointed at a dialog that is
+not there, and the hover zone would have been his page. A live check through `POST /test/prompt {"do": "show"}`,
+which has no sentence behind it because `POST /test/dictation` on the installed app delivers.

@@ -487,9 +487,28 @@ yields to `--label`).
 
 - **`anchored` is the switch: chip (rest and dictating) vs panel (the message, and only the
   message).** Anchored = bare text, no blur, no rounded rect, no shadow, alpha 0.80, trailing the
-  cursor. Panel = top-left of the current screen, blur, ✕ on hover, 30 % until the hand reaches it, entered by a
+  cursor. Panel = top-left of the current screen, blur, ✕ on hover, **not on screen until the hand reaches the atom** (below), entered by a
   prompt and **by nothing else since 2026-09-02**. → journal: *Two shapes: the chip and the panel*
-- **The whole panel rests at 30 %, words and pictures too, and is solid under the hand** (2026-11-05:
+- **The prompt at rest is an atom in the corner; the dialog comes only under the hand** (2026-11-06,
+  Victor: *"în loc de panoul acela din stânga sus semitransparent care mai mult îmi obscurează privirea,
+  vreau să pui în loc o animație … elipse … suprapuse, albastru și albastru și roz … dacă dau cu mouse-ul
+  pe el apare abia atunci … dialogul acela opac … el stă acolo atâta cât ar fi stat … dialogul"*).
+  `PromptAtom`: three comet rings (blue, sky, pink), tilted so they read as ellipses, a little off
+  centre (*"nu concentrice"*), 170 pt at (28, 44) from the `visibleFrame`'s corner, his drawn box.
+  Core Animation only, nothing per frame on the app's side. It **ignores the mouse**, and so does the
+  panel at rest (`ignoresMouseEvents`, an alpha-0 window still takes clicks): the page under the corner
+  stays clickable, and the hover is geometry. `panelRestAlpha` is 0; `syncPromptAtom` is the one place
+  that decides. **Hover zone**: the atom at rest, atom ∪ panel when revealed (`PromptAtom.zone`), or a
+  one-line dialog would flicker under the pointer that brought it. Up as long as the dialog would have
+  been, the hold after the send included. **The send's outline leaves the atom** (`promptFarewell`),
+  **the effect docks on the atom** (`sentPromptFrame`), **the `»` shows only on a revealed dialog** (alone
+  in the air it means nothing). The chip's fade is cut in one frame at the show, or it crosses the
+  screen as a ghost on the panel's slide. Autosend's rule below is unchanged: only a moved pointer counts,
+  and leaving restarts the hold. Under Autosend the hold is 1 s, so the atom is that short unless the
+  delivery holds it. `PromptAtom.still()` is the picture for the page (`shape: "atom"`) because a
+  flat render of the layers loses the tilt. `POST /test/prompt {"do": "show", "capturable": true}` shows
+  it for real with nothing behind it. The 30 % below stands as history.
+- **~~The whole panel rests at 30 %~~, words and pictures too, and is solid under the hand** (2026-11-05:
   surface at 40 %, then 30 % *"abia schițat"* with the words solid, then Victor: *"să fie
   semi-transparent, dar și pozele dinăuntru să fie semi-transparente și textul. Întregul panel … dacă
   mut mouse-ul pe el … opaque complet"*). `panelRestAlpha` is `panel.alphaValue`; the blur view stays
@@ -499,9 +518,9 @@ yields to `--label`).
   appeared), so a pointer the panel unfolded over leaves it sketched. **Editing the transcript keeps it
   solid**, the hand is on the keyboard then. The spawn's held dialog answers with
   `pointerReadsSpawnPanel`: it stays inactive, and still comes up to be read. Its fade owns the alpha
-  once released. `prompt.opacity` in `GET /test/state` is the target. `snapshot` cannot carry a
-  window's alpha, so the page shows it in CSS through `Shot.alpha`: only the `prompt` shot is at 0.30,
-  the rest are solid to stay readable. The real value is `kCGWindowAlpha` from `CGWindowList`, which
+  once released. `prompt.opacity` in `GET /test/state` is the target, `prompt.atom` whether it stands
+  there. `snapshot` cannot carry a window's alpha, so the page shows it in CSS through `Shot.alpha`.
+  The real value is `kCGWindowAlpha` from `CGWindowList`, which
   sees this window although no capture can.
 - **There is never a ✕ beside the pointer, in any state**: `anchored || !hovering`, not
   `bare || !hovering` — the old test put a ✕ on a flash riding the cursor (*"n-am cum să apăs pe

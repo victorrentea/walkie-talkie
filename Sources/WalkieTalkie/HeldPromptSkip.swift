@@ -17,7 +17,8 @@ import AppKit
 /// dialog's bottom-right corner (top-right until 2026-10-27, Victor: *"nu în
 /// colțul dreapta sus, ci în colțul dreapta jos al panelului de preview"*) —
 /// `FilmBorder`'s `REC` badges are built the same way. A click fades the dialog and nothing else: the prompt has already gone
-/// and its delivery (the Returns, the session watch) carries on.
+/// and its delivery (the Returns, the session watch) carries on. Up only while the
+/// dialog is on screen, under the hand: at rest the atom stands there (2026-11-06).
 final class HeldPromptSkip {
     private var panel: NSPanel?
     var onClick: (() -> Void)?

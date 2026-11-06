@@ -1399,8 +1399,9 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     // MARK: - Setup
 
-    /// How opaque the whole prompt panel is, with no hand on it.
-    private static let panelRestAlpha: CGFloat = 0.30
+    /// How opaque the whole prompt panel is, with no hand on it: not at all, the
+    /// atom stands in for it (2026-11-06, `PromptAtom`). 0.30 until then.
+    private static let panelRestAlpha: CGFloat = 0
     /// The panel coming up under the pointer, and going back.
     private static let panelHandFade: TimeInterval = 0.12
 
@@ -1445,6 +1446,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         let wanted = ProcessInfo.processInfo.environment["RELAY_CAPTURABLE"] == "1" || ReplyPanel.shareZoomOn
         panel.sharingType = wanted && !ReplyPanel.inShot ? .readOnly : .none
         if heldSkip.isVisible { heldSkip.show(over: panel.frame, level: panel.level, sharing: panel.sharingType) }
+        promptAtom.setSharing(panel.sharingType)
     }
 
     private func configureViews() {
@@ -4643,6 +4645,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             ctx.duration = 0.18
             panel.animator().alphaValue = target
         }
+        syncPromptAtom()
     }
 
     // MARK: - Animations
@@ -5795,11 +5798,19 @@ private let heardLabel = NSTextField(labelWithString: "")
             let area = screen.visibleFrame
             unfoldOrigin = NSPoint(x: area.minX + margin, y: area.maxY - margin)
             homeScreen = screen
+            promptAtomHome = PromptAtom.home(in: area)
         }
         promptHoverPaused = false
         promptShownAt = Date()
         promptPointerAtShow = NSEvent.mouseLocation
         promptPointerMoved = false
+        // Out in one frame, not faded: the chip it was would otherwise cross the
+        // screen as a ghost on the panel's slide in.
+        panelOpacityShown = Self.panelRestAlpha
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0
+            panel.animator().alphaValue = Self.panelRestAlpha
+        }
         applyTitleText()         // the first line names the recipient (`panelRecipient`)
         layoutContent(animated: true)
         refreshOpacity()
@@ -5875,16 +5886,21 @@ private let heardLabel = NSTextField(labelWithString: "")
            hypot(pointer.x - at.x, pointer.y - at.y) > Self.promptPointerSlack {
             promptPointerMoved = true
         }
-        return panel.isVisible && panel.frame.contains(pointer) && promptPointerMoved
+        return panel.isVisible && promptZone.contains(pointer) && promptPointerMoved
     }
 
-    /// **The whole panel is sketched at 30 %, solid under the hand** (2026-11-05,
-    /// Victor: *"panelul … să fie semi-transparent, dar și pozele dinăuntru să fie
-    /// semi-transparente și textul. Întregul panel"*, then *"dacă mut mouse-ul pe el
-    /// … opaque complet"*). The window's alpha, so the words and the pictures go
-    /// with the surface. While the transcript is edited the hand is on the
-    /// keyboard, and the words being corrected stay solid. The held spawn dialog
-    /// answers its own question: it is inactive, and its pointer rule is its own.
+    /// `PromptAtom.zone`, for the state the prompt is in.
+    private var promptZone: NSRect {
+        PromptAtom.zone(atom: promptAtomHome, panel: panel.frame, revealed: panelRevealed)
+    }
+    private var panelRevealed: Bool { panelOpacityShown == 1 }
+
+    /// **The whole panel is gone until the hand reaches the atom, then solid**
+    /// (2026-11-06, `PromptAtom`; sketched at 30 % from 2026-11-05: Victor, *"dacă
+    /// mut mouse-ul pe el … opaque complet"*). The window's alpha, so the words and
+    /// the pictures go with the surface. While the transcript is edited the hand is
+    /// on the keyboard, and the words being corrected stay solid. The held spawn
+    /// dialog answers its own question: it is inactive, and its pointer rule is its own.
     private var panelOpacity: CGFloat {
         let handOn = editingPrompt || (spawnPanelHeld ? pointerReadsSpawnPanel : pointerReachedPanel())
         return handOn ? 1 : Self.panelRestAlpha
@@ -5903,6 +5919,30 @@ private let heardLabel = NSTextField(labelWithString: "")
             ctx.duration = Self.panelHandFade
             panel.animator().alphaValue = target
         }
+        syncPromptAtom()
+        // The panel ignored the mouse until now, so its tracking area may never
+        // report the pointer already on it: the ✕ goes by the same edge.
+        if sentPrompt != nil { setHovering(target == 1) }
+    }
+
+    /// **The prompt at rest is the atom** (2026-11-06, Victor: *"pune în loc o
+    /// animație … dacă dau cu mouse-ul pe el apare abia atunci … dialogul acela
+    /// opac"*). Up from the moment the panel would have rested until the moment it
+    /// would have gone: a held prompt and the dialog kept after the send both count.
+    private let promptAtom = PromptAtom()
+    private var promptAtomHome: NSRect = .zero
+
+    /// An invisible panel still takes the clicks of the whole rectangle (see
+    /// `orderOut` in `refreshPresence`'s rule), so at rest it lets them through.
+    private func syncPromptAtom() {
+        guard !Self.shooting else { return }
+        let resting = (sentPrompt != nil || spawnPanelHeld) && !panelRevealed
+        if resting {
+            promptAtom.show(at: promptAtomHome, level: panel.level, sharing: panel.sharingType)
+        } else {
+            promptAtom.hide()
+        }
+        if !spawnPanelHeld, !spawnPanelFading { panel.ignoresMouseEvents = sentPrompt != nil && resting }
     }
 
     private func syncHoverPause() {
@@ -6122,7 +6162,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // so the only picture of it is the one it draws of itself, here, at the
         // frame it was just read at. `releaseHeld` flies it to the terminal the
         // words were sent to. A cancel leaves nothing behind to fly.
-        promptFarewell = send ? panel.frame : nil
+        // At rest the flight leaves the atom: the dialog's rectangle is empty air.
+        promptFarewell = send ? (panelRevealed ? panel.frame : promptAtomHome) : nil
         // **Held for every send that has a flight to make, not only a spawn**
         // (Victor, 2026-09-07: *"când pleacă mesajul din dialog către terminal
         // existent, la fel … abia atunci începe să facă fade dialogul"*). The
@@ -6302,7 +6343,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // After this turn of the run loop: the hold is set before the panel's
         // last layout, and the button belongs on the frame it ends up at.
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.spawnPanelHeld, self.panel.isVisible else { return }
+            guard let self, self.spawnPanelHeld, self.panel.isVisible, self.panelRevealed else { return }
             self.heldSkip.show(over: self.panel.frame, level: self.panel.level, sharing: self.panel.sharingType)
         }
         // **It follows the dialog** (night test 2026-10-23: the dialog still moved and
@@ -6316,6 +6357,13 @@ private let heardLabel = NSTextField(labelWithString: "")
                 t.invalidate()
                 self?.heldSkip.hide()
                 self?.heldSkipFollow = nil
+                return
+            }
+            // **Only over a dialog that is on screen** (2026-11-06): at rest the
+            // atom stands there, and a » alone in empty air would mean nothing.
+            guard self.panelRevealed else {
+                self.heldSkip.hide()
+                shownFor = .zero
                 return
             }
             let f = self.panel.frame
@@ -6355,6 +6403,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         spawnLinger?.invalidate(); spawnLinger = nil
         spawnPanelHeld = false
         spawnPanelFading = true
+        promptAtom.hide(fadeOver: seconds)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = seconds
             panel.animator().alphaValue = 0
@@ -6383,7 +6432,7 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     private var pointerReadsSpawnPanel: Bool {
         let p = NSEvent.mouseLocation
-        guard panel.isVisible, panel.frame.contains(p) else { return false }
+        guard panel.isVisible, promptZone.contains(p) else { return false }
         guard let at = spawnHoldPointer else { return true }
         return hypot(p.x - at.x, p.y - at.y) > Self.promptPointerSlack
     }
@@ -6529,7 +6578,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         var out: [String: Any] = ["held": true, "verb": sendVerb, "text": promptWords ?? prompt,
                                   "buttons": promptButtons, "editing": editingPrompt,
                                   "paused": promptHoverPaused,
-                                  "opacity": panelOpacityShown ?? Self.panelRestAlpha]
+                                  "opacity": panelOpacityShown ?? Self.panelRestAlpha,
+                                  "atom": promptAtom.frame != nil,
+                                  "clickThrough": panel.ignoresMouseEvents]
         out["deadline"] = promptDeadline.map { max(0, $0.timeIntervalSinceNow) } ?? NSNull()
         out["heard"] = promptHeard ?? NSNull()
         // The words' full height against the row they got — `true` when the scroller is up.
@@ -6566,9 +6617,12 @@ private let heardLabel = NSTextField(labelWithString: "")
 
     /// **Where the held prompt's panel is settling** — the frame the last
     /// layout asked for, not the one mid-unfold — for the halo to dock on
-    /// (`CaretHalo.dock(onto:)`, 2026-10-07). Nil once no prompt is held.
+    /// (`CaretHalo.dock(onto:)`, 2026-10-07). Nil once no prompt is held. **The
+    /// atom's corner at rest** (2026-11-06): docked on the dialog's empty rectangle
+    /// the effect would be the very thing over his page that the atom replaced.
     var sentPromptFrame: NSRect? {
-        sentPrompt != nil && panel.isVisible ? laidOutFrame : nil
+        guard sentPrompt != nil, panel.isVisible else { return nil }
+        return panelRevealed ? laidOutFrame : promptAtomHome
     }
 }
 

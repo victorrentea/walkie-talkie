@@ -1849,6 +1849,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var answer: [String: Any] = ["ok": false, "error": "gone"]
             DispatchQueue.main.sync {
                 guard let self else { return }
+                // **The atom and its dialog with no sentence behind them** (2026-11-06):
+                // `releaseHeld` finds nothing held, so nothing can be delivered. `send`
+                // then leaves the dialog held, and `release` is what lets it go.
+                if verb == "show" {
+                    let words = text ?? "the atom's dialog, with nothing behind it"
+                    self.overlay.showSentPrompt(words, hold: 30, words: words, buttons: false)
+                    answer = ["ok": true, "did": verb, "prompt": self.overlay.promptState]
+                    return
+                }
+                if verb == "release" {
+                    self.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+                    answer = ["ok": true, "did": verb]
+                    return
+                }
                 guard self.overlay.isHoldingPrompt else {
                     answer = ["ok": false, "error": "no prompt on the panel", "prompt": self.overlay.promptState]
                     return
@@ -1858,7 +1872,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "cancel": self.overlay.cancelHeldPrompt()
                 case "edit": self.overlay.testEditPrompt(text)
                 default:
-                    answer = ["ok": false, "error": "\"do\" is send, cancel or edit"]
+                    answer = ["ok": false, "error": "\"do\" is show, send, cancel, edit or release"]
                     return
                 }
                 Log.info("🧪 POST /test/prompt — \(verb)\(text.map { " (\($0.count) chars)" } ?? "")")

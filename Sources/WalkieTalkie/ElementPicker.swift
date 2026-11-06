@@ -1228,6 +1228,7 @@ final class ElementPicker {
         // The held prompt panel — see `onTestPrompt`.
         case ("POST", "/test/prompt"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            if let capturable = body?["capturable"] as? Bool { PromptAtom.capturable = capturable }
             let answer = onTestPrompt?(body?["do"] as? String ?? "", body?["text"] as? String) ?? ["ok": false]
             respond(conn, (answer["ok"] as? Bool) == true ? 200 : 409, answer)
 

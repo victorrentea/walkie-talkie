@@ -43,7 +43,8 @@ enum OverlayStates {
         /// `chip` — bare text beside the cursor, no blur, no shadow.
         /// `flash` — a chip that borrowed the blur for a few seconds; still
         /// beside the pointer, still 0.80. `panel` — the held prompt: top-left,
-        /// full opacity, ✕ on hover. `none` — nothing visible at all.
+        /// full opacity, ✕ on hover. `atom` — what stands in for it until the hand
+        /// comes (`PromptAtom`, a still of its own). `none` — nothing visible at all.
         let shape: String
         /// The window's alpha, which the drawing cannot carry: the view is drawn
         /// opaque and the window fades it afterwards.
@@ -571,10 +572,18 @@ enum OverlayStates {
             },
 
             // ---- the panel: the held prompt --------------------------------
+            Shot(slug: "prompt-atom", group: "The held prompt", title: "The prompt at rest: an atom in the corner",
+                 when: "From the moment the words are ready until they have gone, with no hand on it (2026-11-06).",
+                 note: "Three tilted rings, two blue and one pink, each with a comet running along its ellipse, 170 pt in the corner the panel used to rest in, and nothing over the page: it ignores the mouse, and so does the dialog until the hand comes. Moving the pointer onto it brings the solid dialog, which stays until the pointer leaves it; under Autosend that also stops the clock. It stays up exactly as long as the dialog would have, including the hold after the send, and the send's outline leaves from it. This is one frame of an animation.",
+                 shape: "atom", alpha: 1.0) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)
+            },
+
             Shot(slug: "prompt", group: "The held prompt", title: "The held prompt",
-                 when: "The seconds between the model answering and the words reaching the agent.",
-                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so. The whole panel, words and pictures too, rests at 30 % until the hand reaches it (2026-11-05); this is the one picture here at that alpha, the others are solid so they can be read.",
-                 shape: "panel", alpha: 0.30) { o in
+                 when: "The pointer reached the atom, in the seconds between the model answering and the words reaching the agent.",
+                 note: "The one thing he must actually read: what the model heard, while Cancel can still stop it. The panel takes only the width the text needs, up to a third of the screen — a four-word dictation in a half-screen window is empty space parked over his work. The last two lines name the microphone that heard it and the engine that wrote it (2026-10-06) — what this sentence actually went through, so a local fallback or ⌘⌃X says so. The panel is not on screen at all until the hand reaches the atom (2026-11-06; at 30 % for a day before that).",
+                 shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)
             },
@@ -766,7 +775,7 @@ enum OverlayStates {
 
             Shot(slug: "prompt-hover", group: "The held prompt", title: "The prompt, cursor over it",
                  when: "While the pointer is on the panel.",
-                 note: "The whole panel goes from 30 % to solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
+                 note: "The whole panel comes up solid, for showing the details on it, and the ✕ appears — end the session. It exists only on the panel: an end-session button on something that moves away as you reach for it means nothing, which is why the chip has none and the menu bar keeps one that stays put.",
                  shape: "panel", alpha: 1.0) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.showSentPrompt(transcript, hold: 6, shots: mockShots(2),
@@ -811,9 +820,10 @@ enum OverlayStates {
                 ]
                 if shot.shape != "none" {
                     let path = (dir as NSString).appendingPathComponent("\(shot.slug).png")
-                    overlay.snapshot(to: path)
+                    if shot.shape == "atom" { PromptAtom.writeStill(to: path) } else { overlay.snapshot(to: path) }
                     row["image"] = "\(shot.slug).png"
-                    let size = overlay.chipFrame.size
+                    let size = shot.shape == "atom" ? NSSize(width: PromptAtom.side, height: PromptAtom.side)
+                                                    : overlay.chipFrame.size
                     row["width"] = Int(size.width.rounded())
                     row["height"] = Int(size.height.rounded())
                 }
