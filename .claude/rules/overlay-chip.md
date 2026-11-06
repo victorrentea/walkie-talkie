@@ -377,7 +377,14 @@ yields to `--label`).
   farthest corner of the pointer's screen. A radial `CAGradientLayer` whose `locations` move, so the
   thickness holds and main stays free. White on a white page cannot be seen. Not on the states page, it is a
   transition. `sharingType = .none`: review with `WT_SHOOT_WAVE=<png>`, or `POST /test/stop-wave
-  {"capturable": true}` and a screenshot. `GET /test/state.stopWave {fired, up, last}`.
+  {"capturable": true}` and a screenshot. `GET /test/state.stopWave {fired, up, last, wiped, lastWipe}`.
+- **The wave wipes what froze** (2026-11-06, Victor: *"ringul acela să curețe orice animație care a
+  înghețat pe ecran la momentul opririi dictării … un fel de ștergere a ecranului"*). `StopWave.wipe`
+  puts on a view a radial mask with the ring's stops, geometry and `beginTime`, built by the same
+  `travel`, so the two cannot drift: the picture is gone behind the crest and whole at the outer edge,
+  86 pt of soft edge under the brightest line. The one thing that freezes is `CaretHalo`'s effect
+  (`replace-wispr-and-halo.md`); the subtitle band closes with the microphone. The chip, the red
+  outline and the heads are information and are not wiped.
 - **The meter constants come from the corpus replay and are transferable only because
   `MicRecorder.meter` runs on the converted 16 kHz mono buffer** (`evals/voiced-seconds.py`). Per
   1024 frames (64 ms): RMS against an adaptive noise floor, 9 dB over it to count as speech,

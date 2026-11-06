@@ -699,6 +699,23 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   rewind freezes and does not come back. `WT_HALO_STILL=0` brings the flights back. Log `⏪ the … freeze
   at the close and fade`, `⏪ the effect is back on the terminal's middle (x, y)`,
   `◯ halo not docked on the prompt panel — it froze and faded at the close`.
+- **The stop's wave wipes the frozen effect, at the press** (2026-11-06, Victor: *"ringul acela să
+  curețe orice animație care a înghețat … s-o șteargă pe măsură ce merge"*). Supersedes `stillFade`
+  whenever a wave leaves; the 0.4 s fade stays only for a sentence no press of his ended.
+  `AppDelegate.endDictation` → `StopWave.fire`, then `CaretHalo.wipeWithTheWave`: same condition as
+  the close's freeze (`freezesAtClose`), but **the freeze moves to the press**, because on Wispr the
+  close is 171 ms later at the median and 6.5 s at worst, and a picture still alive under the ring
+  would lose in one frame all the ring had crossed. The close finds `frozeThisRing` and only says
+  where a bound effect lands. The panel is alpha 0 and the mask off once the crest has passed its
+  farthest corner (`StopWave.clearing`, ~0.35 s for the 1117 pt bound square, not the wave's 1.1 s),
+  so `landStill` does not wait for the ring to leave the screen. **A frozen panel does not ride**
+  (`follow` returns while `frozenAt` is set): the mask is cut for where it froze. `show` takes a
+  mask left behind. Caret sentences do not freeze, they fly, so the wave leaves them alone.
+  Review on the real page: `WT_PROJECTM_DIR="/Applications/Walkie Talkie.app/Contents/Resources/projectm"
+  WT_HALO_ENGINE=native WT_HALO_DEMO=8 WT_HALO_DEMO_DEST=bound WT_HALO_DEMO_WIPE=3.6 WT_HALO_DEMO_AUDIO=1
+  ./.build/debug/WalkieTalkie` with `screencapture -V`; **press while the effect is loud**, at a pause
+  in the clip milkdrop7 has already gone out by itself and it reads as a wipe ahead of the ring. Log
+  `🌊 the wave wipes …`, `⏪ the … freeze at the press`.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets

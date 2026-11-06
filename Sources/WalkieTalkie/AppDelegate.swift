@@ -6514,6 +6514,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // **And so does the whole screen, once a sentence** (2026-11-05):
                 // a second press during the bridge's drain is not a second stop.
                 StopWave.fire(at: NSEvent.mouseLocation)
+                caretHalo.wipeWithTheWave()
             }
             overlay.setListening(false)
             overlay.setTranscribing(true, audio: spokenSoFar)

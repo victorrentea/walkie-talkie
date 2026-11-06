@@ -17,6 +17,13 @@ import QuartzCore
 /// `locations` itself, so main stays free for the stop, which is the busiest
 /// moment of the sentence.
 ///
+/// **And it wipes the screen as it goes** (2026-11-06, Victor: *"ringul acela să
+/// curețe orice animație care a înghețat pe ecran la momentul opririi dictării …
+/// să fie un fel de ștergere a ecranului"*). What froze at the stop is
+/// `CaretHalo`'s effect: `wipe` hangs on it a mask with the wave's own geometry and
+/// the wave's own clock, so the picture goes under the crest instead of fading
+/// everywhere at once.
+///
 /// Click-through, on every Space, over Victor Addons' zoom
 /// (`CaptureFlash.flightLevel`), and `sharingType = .none`, so a shot a moment
 /// later cannot photograph it. Which is why `shoot` and the `capturable` flag of
@@ -34,15 +41,36 @@ enum StopWave {
     /// Where the ring starts: a dot at the pointer, which opens into the band.
     private static let birth: CGFloat = 8
 
+    /// The ring's brightest line, as a share of the band: what a wiped picture
+    /// is gone behind.
+    private static let crest: CGFloat = 0.82
+
     /// The ring's profile across the band, inside to outside: a long tail and a
     /// steep front, which is what makes it read as moving outward.
     private static let shape: [(at: CGFloat, ink: CGFloat)] = [
-        (0, 0), (0.35, 0.35), (0.7, 0.9), (0.82, 1), (0.92, 0.5), (1, 0),
+        (0, 0), (0.35, 0.35), (0.7, 0.9), (crest, 1), (0.92, 0.5), (1, 0),
     ]
 
+    /// How the front spends its time: off the pointer fast and slowing, like
+    /// anything struck. The `CAMediaTimingFunction`'s control points, because
+    /// `clearing` has to run the same curve backwards.
+    private static let ease = (x1: 0.3, y1: 0.6, x2: 0.6, y2: 1.0)
+
+    /// **One wave on its way**: all a mask needs to travel exactly with it.
+    private struct Sweep {
+        let point: NSPoint
+        let radius: CGFloat
+        let duration: CFTimeInterval
+        /// `CACurrentMediaTime` at the press, set as both animations' `beginTime`.
+        let began: CFTimeInterval
+    }
+
+    private static var travelling: Sweep?
     private static var active: [NSPanel] = []
     private static var fired = 0
+    private static var wiped = 0
     private static var last: [String: Any] = [:]
+    private static var lastWipe: [String: Any] = [:]
 
     /// The distance at which the ring has left a rectangle: the farthest corner.
     static func reach(from point: NSPoint, in screen: NSRect) -> CGFloat {
@@ -68,6 +96,41 @@ enum StopWave {
         return shape.map { (inner + $0.at * (front - inner)) / radius }
     }
 
+    /// How much of a wiped picture is left at this share of the band: nothing
+    /// behind the crest, all of it at the ring's outer edge.
+    static func left(at share: CGFloat) -> CGFloat {
+        share <= crest ? 0 : (share - crest) / (1 - crest)
+    }
+
+    /// **The seconds after the press at which the crest has passed all of
+    /// `frame`.** The landing of a bound effect waits for this, not for the wave's
+    /// end: the ring is off a square in the middle of the screen long before it is
+    /// out of the farthest corner. The band is still opening below `band`, with
+    /// the crest at its share of `front`; after that the crest is a fixed distance
+    /// behind it, and `min` picks the phase.
+    static func clearing(_ frame: NSRect, from point: NSPoint, radius: CGFloat,
+                         duration: CFTimeInterval) -> CFTimeInterval {
+        let far = reach(from: point, in: frame)
+        let front = min(far / crest, far + (1 - crest) * band)
+        let travelled = (min(front, radius) - birth) / (radius - birth)
+        return duration * timeShare(travelled: Double(max(0, travelled)))
+    }
+
+    /// `ease` backwards: the share of the time at which the front has travelled
+    /// this share of the way. A Bézier has no closed inverse; 24 halvings of its
+    /// parameter are far below a pixel.
+    private static func timeShare(travelled: Double) -> Double {
+        func bezier(_ s: Double, _ a: Double, _ b: Double) -> Double {
+            3 * (1 - s) * (1 - s) * s * a + 3 * (1 - s) * s * s * b + s * s * s
+        }
+        var low = 0.0, high = 1.0
+        for _ in 0..<24 {
+            let s = (low + high) / 2
+            if bezier(s, ease.y1, ease.y2) < travelled { low = s } else { high = s }
+        }
+        return bezier((low + high) / 2, ease.x1, ease.x2)
+    }
+
     /// Start and end of the radial gradient, in the layer's unit space: an end
     /// `radius` away on both axes draws a circle on a screen that is not square.
     private static func place(_ layer: CAGradientLayer, at point: NSPoint, on screen: NSRect, radius: CGFloat) {
@@ -84,6 +147,63 @@ enum StopWave {
         layer.frame = frame
         layer.colors = shape.map { NSColor.white.withAlphaComponent(peak * $0.ink).cgColor }
         return layer
+    }
+
+    /// The mask `wipe` hangs on a view: the ring's own stops, inked with what is
+    /// left of the picture. Beyond its outer edge a radial gradient keeps its last
+    /// colour, so everything the wave has not reached stays whole.
+    private static func mask(frame: CGRect) -> CAGradientLayer {
+        let layer = CAGradientLayer()
+        layer.type = .radial
+        layer.frame = frame
+        layer.colors = shape.map { NSColor.black.withAlphaComponent(left(at: $0.at)).cgColor }
+        return layer
+    }
+
+    /// `locations` moving outward: the same animation for the ring and the mask,
+    /// which is why the two cannot drift. Both gradients are `radius` long.
+    private static func travel(_ sweep: Sweep) -> CAKeyframeAnimation {
+        let radius = sweep.radius
+        func keyframe(_ front: CGFloat) -> [NSNumber] {
+            locations(front: front, radius: radius).map { NSNumber(value: Double($0)) }
+        }
+        let wave = CAKeyframeAnimation(keyPath: "locations")
+        wave.values = [keyframe(birth), keyframe(band), keyframe(radius)]
+        wave.keyTimes = [0, NSNumber(value: Double((band - birth) / (radius - birth))), 1]
+        wave.timingFunction = CAMediaTimingFunction(controlPoints: Float(ease.x1), Float(ease.y1),
+                                                    Float(ease.x2), Float(ease.y2))
+        wave.duration = sweep.duration
+        wave.beginTime = sweep.began
+        return wave
+    }
+
+    /// The gradient's stops once the wave has left: where a layer rests when its
+    /// animation has been taken off.
+    private static func gone(_ layer: CAGradientLayer, radius: CGFloat) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.locations = locations(front: radius, radius: radius).map { NSNumber(value: Double($0)) }
+        CATransaction.commit()
+    }
+
+    /// **Wipe `view` with the wave on its way** (`frame` is its window's, in global
+    /// Cocoa coordinates): the picture goes as the crest reaches it. Answers the
+    /// seconds until the crest has passed all of it, or nil with no wave travelling.
+    /// Whoever asked takes the mask off once the window is out of sight, or the
+    /// picture stays erased under it.
+    static func wipe(_ view: NSView, in frame: NSRect) -> CFTimeInterval? {
+        guard let sweep = travelling, let host = view.layer else { return nil }
+        let wipe = mask(frame: view.bounds)
+        place(wipe, at: sweep.point, on: frame, radius: sweep.radius)
+        gone(wipe, radius: sweep.radius)
+        wipe.add(travel(sweep), forKey: "wave")
+        host.mask = wipe
+        let cleared = clearing(frame, from: sweep.point, radius: sweep.radius, duration: sweep.duration)
+        let left = max(0, cleared - (CACurrentMediaTime() - sweep.began))
+        wiped += 1
+        lastWipe = ["frame": NSStringFromRect(frame), "clearsAfter": cleared, "left": left]
+        Log.info(String(format: "🌊 the wave wipes %.0f×%.0f, gone %.2f s after the press", frame.width, frame.height, cleared))
+        return left
     }
 
     /// **Send one wave out of `point`** (global Cocoa coordinates), on the screen
@@ -116,21 +236,10 @@ enum StopWave {
         panel.orderFrontRegardless()
         active.append(panel)
 
-        func keyframe(_ front: CGFloat) -> [NSNumber] {
-            locations(front: front, radius: radius).map { NSNumber(value: Double($0)) }
-        }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        ring.locations = keyframe(radius)
-        CATransaction.commit()
-
-        let wave = CAKeyframeAnimation(keyPath: "locations")
-        wave.values = [keyframe(birth), keyframe(band), keyframe(radius)]
-        wave.keyTimes = [0, NSNumber(value: Double((band - birth) / (radius - birth))), 1]
-        // Off the pointer fast and slowing, like anything struck.
-        wave.timingFunction = CAMediaTimingFunction(controlPoints: 0.3, 0.6, 0.6, 1)
-        wave.duration = duration
-        ring.add(wave, forKey: "wave")
+        let sweep = Sweep(point: point, radius: radius, duration: duration, began: CACurrentMediaTime())
+        travelling = sweep
+        gone(ring, radius: radius)
+        ring.add(travel(sweep), forKey: "wave")
 
         fired += 1
         last = ["x": Double(point.x), "y": Double(point.y), "radius": Double(radius),
@@ -141,17 +250,19 @@ enum StopWave {
         DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.05) {
             panel.orderOut(nil)
             active.removeAll { $0 === panel }
+            if travelling?.began == sweep.began { travelling = nil }
         }
     }
 
     /// `GET /test/state.stopWave`: nothing here can be screenshot.
     static var report: [String: Any] {
-        ["fired": fired, "up": active.count, "last": last]
+        ["fired": fired, "up": active.count, "last": last, "wiped": wiped, "lastWipe": lastWipe]
     }
 
-    /// **`WT_SHOOT_WAVE=/tmp/wave.png`**: the real layer at four moments, on a dark
+    /// **`WT_SHOOT_WAVE=/tmp/wave.png`**: the real layers at four moments, on a dark
     /// ground and a light one, the pointer marked with a red cross, off-centre so
-    /// that a mirrored axis shows.
+    /// that a mirrored axis shows. The blue square stands for a frozen effect, under
+    /// the real mask.
     static func shoot(to path: String) {
         let screen = NSRect(x: 0, y: 0, width: 1728, height: 1117)
         let point = NSPoint(x: 520, y: 760)
@@ -178,10 +289,23 @@ enum StopWave {
                 cg.scaleBy(x: scale, y: scale)
                 cg.setFillColor(ground.cgColor)
                 cg.fill(screen)
+                let stops = locations(front: max(birth, share * radius), radius: radius)
+                    .map { NSNumber(value: Double($0)) }
+                let frozen = NSRect(x: 310, y: 0, width: 1117, height: 1117)
+                let picture = CALayer()
+                picture.frame = frozen
+                picture.backgroundColor = NSColor.systemBlue.cgColor
+                let wipe = mask(frame: picture.bounds)
+                place(wipe, at: point, on: frozen, radius: radius)
+                wipe.locations = stops
+                picture.mask = wipe
+                cg.saveGState()
+                cg.translateBy(x: frozen.minX, y: frozen.minY)
+                picture.render(in: cg)
+                cg.restoreGState()
                 let ring = gradient(frame: screen)
                 place(ring, at: point, on: screen, radius: radius)
-                ring.locations = locations(front: max(birth, share * radius), radius: radius)
-                    .map { NSNumber(value: Double($0)) }
+                ring.locations = stops
                 ring.render(in: cg)
                 cg.setStrokeColor(NSColor.systemRed.cgColor)
                 cg.setLineWidth(6)

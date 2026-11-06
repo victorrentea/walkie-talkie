@@ -1329,8 +1329,7 @@ final class CaretHalo {
         }
         // **A spawn's stars freeze and go** (2026-10-29) — see `freezeAndFade`.
         // A bound sentence's effect freezes too, then lands on the terminal below.
-        let freezes = !Self.stillOff && web != nil && live
-            && (destination == .spawn || (destination == .bound && flies))
+        let freezes = frozeThisRing || freezesAtClose
         if freezes && destination == .spawn {
             freezeAndFade(lands: false)
             return false
@@ -1389,15 +1388,13 @@ final class CaretHalo {
     /// over and the window has answered, and fades back in over `stillReturn`,
     /// fed the take backwards as before. `WT_HALO_STILL=0` brings the flights back.
     private func freezeAndFade(lands: Bool) {
-        guard !frozeThisRing, let panel else { return }
-        frozeThisRing = true
-        frozenAt = CFAbsoluteTimeGetCurrent()
-        stillFaded = false
-        renderTimer?.invalidate(); renderTimer = nil
-        web?.stop(); under?.stop()
-        pageRunning = false
-        stillGeneration &+= 1
-        let generation = stillGeneration
+        // The press froze it already: the wave has it, or has done with it.
+        if frozeThisRing {
+            if lands { landStill() }
+            return
+        }
+        guard let panel else { return }
+        let generation = freeze()
         Log.info(lands ? "⏪ the effect freezes at the close and fades — it comes back on the terminal's middle"
                        : "⏪ the \(drawn.rawValue) freeze at the close and fade — nothing flies to the prompt panel")
         NSAnimationContext.runAnimationGroup { ctx in
@@ -1407,6 +1404,45 @@ final class CaretHalo {
             guard let self, self.stillGeneration == generation else { return }
             self.stillFaded = true
             if lands { self.landStill() }
+        }
+    }
+
+    /// The engine stops on its last frame and the panel stops riding. Answers the
+    /// generation an end of the fade must still hold.
+    private func freeze() -> Int {
+        frozeThisRing = true
+        frozenAt = CFAbsoluteTimeGetCurrent()
+        stillFaded = false
+        renderTimer?.invalidate(); renderTimer = nil
+        web?.stop(); under?.stop()
+        pageRunning = false
+        stillGeneration &+= 1
+        return stillGeneration
+    }
+
+    /// **The stop's wave wipes the frozen effect off the screen** (2026-11-06,
+    /// Victor: *"ringul acela să curețe orice animație care a înghețat pe ecran la
+    /// momentul opririi dictării … pe măsură ce merge … un fel de ștergere a
+    /// ecranului"*). Supersedes `stillFade` for every stop that sends a wave, which
+    /// leaves that fade to a sentence ended by no press of his.
+    ///
+    /// **At the press, not at the close**, because that is when the wave leaves: on
+    /// Wispr the close comes 171 ms later at the median and 6.5 s at worst, and a
+    /// picture frozen there would stay alive under the passing ring, then lose in
+    /// one frame everything the ring had already crossed. His voice is cut at the
+    /// press, so nothing is lost by stopping the engine there. The close finds the
+    /// ring frozen and only says where a bound effect lands.
+    func wipeWithTheWave() {
+        guard !frozeThisRing, freezesAtClose, let panel, let view = panel.contentView,
+              let left = StopWave.wipe(view, in: panel.frame) else { return }
+        let generation = freeze()
+        Log.info("⏪ the \(drawn.rawValue) freeze at the press — the stop's wave wipes them")
+        DispatchQueue.main.asyncAfter(deadline: .now() + left) { [weak self] in
+            guard let self, self.stillGeneration == generation else { return }
+            panel.alphaValue = 0
+            view.layer?.mask = nil
+            self.stillFaded = true
+            self.landStill()
         }
     }
 
@@ -1431,6 +1467,12 @@ final class CaretHalo {
             panel.animator().alphaValue = 1
         }
         if let p = rewindAim { Log.info(String(format: "⏪ the effect is back on the terminal's middle (%.0f, %.0f)", p.x, p.y)) }
+    }
+    /// **This ring's picture stops where it is when the sentence does**, rather
+    /// than flying or turning into the tunnel: a spawn's, and a bound one that rides.
+    private var freezesAtClose: Bool {
+        !Self.stillOff && web != nil && live && !quick
+            && (destination == .spawn || (destination == .bound && flies))
     }
     /// This rewind ends still on the window's middle (`freezeAndFade(lands: true)`).
     private var stillLanding = false
@@ -1938,6 +1980,8 @@ final class CaretHalo {
         frozenAt = nil
         stillGeneration &+= 1
         let panel = self.panel ?? makePanel()
+        // A wave's mask whose end the generation above has just cancelled.
+        panel.contentView?.layer?.mask = nil
         // **A collapse still in the air is taken back whole**, before anything
         // else: he stopped and started again inside half a second, and what has
         // to be on screen is a full-size ring at rest, not the tail of the last
@@ -2581,7 +2625,9 @@ final class CaretHalo {
         // words are landing here* — on the caret since 2026-10-13 (`headsAt`),
         // re-placed here as well as on every caret reading.
         // Docked on the prompt panel, the ring no longer rides the pointer.
-        guard dock == nil, live || closing || delivering, let panel = panel else { return }
+        // **Frozen, it rides nothing** (2026-11-06): the wave's mask is cut for the
+        // place the picture froze, and `landStill` clears this before it asks.
+        guard dock == nil, frozenAt == nil, live || closing || delivering, let panel = panel else { return }
         // **A screen-sized panel stays put and the pointer is handed in.**
         // Unless the pointer has crossed to a screen of another size, in
         // which case the panel is rebuilt for that screen.
@@ -3875,6 +3921,15 @@ extension CaretHalo {
             }
         }
         ring(rings)
+        // **`WT_HALO_DEMO_WIPE=<s>`: the stop's wave at that second** (2026-11-06),
+        // capturable, wiping the effect. Needs `WT_HALO_DEMO_DEST=spawn` or `bound`,
+        // the two that freeze; the only way to see the mask on the real page.
+        if let at = ProcessInfo.processInfo.environment["WT_HALO_DEMO_WIPE"].flatMap(Double.init) {
+            Timer.scheduledTimer(withTimeInterval: at, repeats: false) { _ in
+                StopWave.fire(at: NSEvent.mouseLocation, capturable: true)
+                halo.wipeWithTheWave()
+            }
+        }
         NSApplication.shared.run()
     }
 }
