@@ -248,7 +248,7 @@ me to dismiss it explicitly"*.
   at Wispr's start or a Hub dictionary action, and only then does the running Wispr use it. `walkie-dict
   sync` is a three-way merge against `~/.walkie-talkie/vocabulary-sync.json` (adds and deletes travel
   both ways; Wispr's auto-learned `user_edits` rows and snippets are never pulled);
-  `tools/ro.victorrentea.walkie-dict-sync.plist` runs it every 10 min. Writing that table is not
+  Victor Addons runs it every 10 min (`WalkieDictSync`, its `docs/walkie-dict-sync.md`; a LaunchAgent for one hour before that) — the dependency points that way only. Writing that table is not
   the forbidden *Wispr database as a recogniser* (`whisper-and-corpus.md`): nothing is read back as
   words. The ⚡ quick question drops the hint with `questionHint` (no tools there).
 - **Not when the sender is the terminal in front** (2026-10-13, Victor: *"if I'm focusing the window,

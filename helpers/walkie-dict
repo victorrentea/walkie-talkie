@@ -2,7 +2,7 @@
 """walkie-dict — one dictionary for both engines (2026-11-09).
 
     walkie-dict add "<right>" [--heard "<as it came out>"]   # both dictionaries, then sync
-    walkie-dict sync [--dry-run]                             # merge both ways (LaunchAgent, 10 min)
+    walkie-dict sync [--dry-run]                             # merge both ways (Victor Addons, every 10 min)
 
 **Why.** Victor, 2026-11-09: *"când modelul este 100% sigur … că mesajul dictat conține
 un cuvânt greșit … Claude să poată adăuga în dicționarul folosit de Walkie Talkie
