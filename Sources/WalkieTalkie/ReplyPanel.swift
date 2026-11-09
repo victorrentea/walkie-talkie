@@ -624,8 +624,11 @@ enum ReplyPanel {
         return (out + rest, links)
     }
     static func plain(_ text: String) -> String {
-        parseLinks(text).plain.replacingOccurrences(of: dots, with: "…").replacingOccurrences(of: trailMark, with: "\n\n")
+        let cut = text.components(separatedBy: trailMark)
+        let sites = trailSites(cut.dropFirst().joined(separator: "\n"))
+        return parseLinks(cut[0]).plain.replacingOccurrences(of: dots, with: "…")
             .replacingOccurrences(of: signed, with: "🤖").replacingOccurrences(of: adversary, with: "😠")
+            + (sites.isEmpty ? "" : "\n\n" + sites.map { "🌐 " + $0.domain }.joined(separator: "  "))
     }
 
     /// **The ⚡ footer's two robots** (2026-10-22, Victor: *"în loc de minusul din
@@ -639,7 +642,23 @@ enum ReplyPanel {
     /// half the body's size (`trailFont`), in a box at most `trailMaxH` tall that
     /// scrolls — the wheel over it scrolls the list instead of zooming the pop-up.
     static let trailMark = "\u{7}"
-    private static let trailFont = NSFont.systemFont(ofSize: 7.5)
+    /// 7.5 pt until the same afternoon — *"fontul de la URL mai mare cu 30%, prea mic e"*.
+    private static let trailFont = NSFont.systemFont(ofSize: 9.75)
+    /// The trail's lines, `<domain>\t<url>\t<url>…` (`QuickAsk.Trail.text`).
+    static func trailSites(_ trail: String) -> [(domain: String, urls: [URL])] {
+        trail.split(separator: "\n").compactMap { line in
+            let f = line.split(separator: "\t").map(String.init)
+            guard let d = f.first, !d.isEmpty else { return nil }
+            return (d, f.dropFirst().compactMap(URL.init(string:)))
+        }
+    }
+    /// **Its pages, on hover** (*"doar la hover … ce URL-uri ai deschis … cu bule
+    /// dacă sunt mai multe"*): the one URL, or a `•` line each — eight at most.
+    static func trailTip(_ urls: [URL]) -> String {
+        guard urls.count > 1 else { return urls.first.map(ReplyRoot.shown) ?? "" }
+        let shown = urls.prefix(8).map { "• " + ReplyRoot.shown($0) }
+        return (shown + (urls.count > 8 ? ["+\(urls.count - 8) more"] : [])).joined(separator: "\n")
+    }
     private static let trailMaxH: CGFloat = 62
     private static weak var trailScroll: NSScrollView?
     /// The wheel at `p` (window points) is over the trail, which scrolls itself.
@@ -844,7 +863,7 @@ enum ReplyPanel {
         // hover and the link's click (`LinkedBody`).
         let parts = whole.components(separatedBy: trailMark)
         let text = parts[0]
-        let trailText = parts.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let sites = trailSites(parts.dropFirst().joined(separator: "\n"))
         var (words, links) = parseLinks(text)
         let body: NSView
         let bodySize: NSSize
@@ -918,12 +937,23 @@ enum ReplyPanel {
         // **The trail**: laid out at 1× like the body, magnified with it.
         var trailView: LinkedBody?
         var trailNatural: CGFloat = 0, trailBoxH: CGFloat = 0
-        if !trailText.isEmpty {
+        if !sites.isEmpty {
+            // **🌐 <domain>, one after the other** (2026-11-09, later: *"doar numele
+            // domeniului … cu un glob în fața lor"*), wrapping; each one's pages on hover.
             let style = NSMutableParagraphStyle()
-            style.lineSpacing = 1
-            let v = LinkedBody(NSAttributedString(string: trailText, attributes: [
-                .font: trailFont, .foregroundColor: NSColor.white.withAlphaComponent(0.6), .paragraphStyle: style]),
-                width: baseWidth - 42)
+            style.lineSpacing = 2
+            let line = NSMutableAttributedString()
+            var tips: [(range: NSRange, text: String)] = []
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: trailFont, .foregroundColor: NSColor.white.withAlphaComponent(0.6), .paragraphStyle: style]
+            for (i, site) in sites.enumerated() {
+                if i > 0 { line.append(NSAttributedString(string: "   ", attributes: attrs)) }
+                let item = "🌐\u{00A0}" + site.domain
+                tips.append((NSRange(location: line.length, length: (item as NSString).length), trailTip(site.urls)))
+                line.append(NSAttributedString(string: item, attributes: attrs))
+            }
+            let v = LinkedBody(line, width: baseWidth - 42)
+            v.tips = tips
             trailNatural = ceil(v.naturalHeight * s)
             trailBoxH = min(trailNatural, trailMaxH * s)
             trailView = v
@@ -1008,6 +1038,13 @@ enum ReplyPanel {
             scroll.contentView.scroll(to: NSPoint(x: 0, y: v.isFlipped ? 0 : trailNatural - trailBoxH))
             root.addSubview(scroll)
             trailScroll = scroll
+            root.trailTip = { [weak root, weak v] p in
+                guard let root, let v else { return nil }
+                let q = v.convert(p, from: root)
+                // Not over the part of the list scrolled out of sight.
+                guard v.visibleRect.contains(q), let hit = v.tip(at: q) else { return nil }
+                return (hit.text, root.convert(hit.rect, from: v))
+            }
             v.onCopy = { [weak root, weak v] rect in
                 guard let root, let v else { return }
                 root.showCopied(under: root.convert(rect, from: v))
@@ -1240,13 +1277,15 @@ private final class ReplyRoot: NSView {
     /// **A link in the words under this point** (2026-10-10, `QuickAsk.cited`):
     /// its URL and its rect, both in this view.
     var bodyLink: ((NSPoint) -> (url: URL, rect: NSRect)?)?
+    /// **A trail domain under this point**: its pages and its rect, in this view.
+    var trailTip: ((NSPoint) -> (text: String, rect: NSRect)?)?
     /// The pressed link in the words, opened on a release that did not drag.
     private var pressedURL: URL?
     /// **Its URL under it on hover** (Victor: *"la hover pe acela să apară
     /// URL-ul complet"*) — drawn here: AppKit's tool tips do not show for an
     /// app that is not frontmost, and this one never is.
     private var tip: NSTextField?
-    private var tipFor: URL?
+    private var tipFor: String?
     private var press = PressOrDrag()
     private var onLink = false
 
@@ -1260,7 +1299,11 @@ private final class ReplyRoot: NSView {
     private func arrow(at p: NSPoint) {
         if let hit = bodyLink?(p) {
             NSCursor.pointingHand.set()
-            showTip(for: hit.url, under: hit.rect)
+            showTip(Self.shown(hit.url), under: hit.rect)
+            return
+        }
+        if let hit = trailTip?(p) {
+            showTip(hit.text, under: hit.rect)
             return
         }
         hideTip()
@@ -1285,10 +1328,10 @@ private final class ReplyRoot: NSView {
         return s.removingPercentEncoding ?? s
     }
 
-    private func showTip(for url: URL, under rect: NSRect) {
-        guard tipFor != url else { return }
+    private func showTip(_ text: String, under rect: NSRect) {
+        guard tipFor != text else { return }
         hideTip()
-        let t = InertLabel(wrappingLabelWithString: Self.shown(url))
+        let t = InertLabel(wrappingLabelWithString: text)
         t.font = NSFont.systemFont(ofSize: 12)
         t.textColor = NSColor.white.withAlphaComponent(0.9)
         t.drawsBackground = true
@@ -1308,7 +1351,7 @@ private final class ReplyRoot: NSView {
         t.layer?.masksToBounds = true
         addSubview(t)
         tip = t
-        tipFor = url
+        tipFor = text
     }
 
     /// Desk: the tip on screen, and every link's rect in this view.
@@ -1472,21 +1515,34 @@ private final class LinkedBody: NSTextView {
 
     /// The link under `p` (this view's points) and its laid-out rect.
     func link(at p: NSPoint) -> (url: URL, rect: NSRect)? {
-        guard !links.isEmpty, let lm = layoutManager, let tc = textContainer else { return nil }
+        guard let i = hit(p, in: links.map(\.range)) else { return nil }
+        return (links[i.index].url, i.rect)
+    }
+
+    /// **A run with words of its own on hover** (the trail's domains): drawn by
+    /// `ReplyRoot` like a link's URL, but no click — the press still selects.
+    var tips: [(range: NSRange, text: String)] = []
+    func tip(at p: NSPoint) -> (text: String, rect: NSRect)? {
+        guard let i = hit(p, in: tips.map(\.range)) else { return nil }
+        return (tips[i.index].text, i.rect)
+    }
+
+    private func hit(_ p: NSPoint, in ranges: [NSRange]) -> (index: Int, rect: NSRect)? {
+        guard !ranges.isEmpty, let lm = layoutManager, let tc = textContainer else { return nil }
         let g = lm.glyphIndex(for: p, in: tc)
         // A few points around the glyph: a lone ↗ is a small target.
         guard lm.boundingRect(forGlyphRange: NSRange(location: g, length: 1), in: tc).insetBy(dx: -4, dy: -2).contains(p)
         else { return nil }
         let c = lm.characterIndexForGlyph(at: g)
-        guard let hit = links.first(where: { NSLocationInRange(c, $0.range) }) else { return nil }
-        let glyphs = lm.glyphRange(forCharacterRange: hit.range, actualCharacterRange: nil)
+        guard let index = ranges.firstIndex(where: { NSLocationInRange(c, $0) }) else { return nil }
+        let glyphs = lm.glyphRange(forCharacterRange: ranges[index], actualCharacterRange: nil)
         // The part of the link on the pointer's line, when it wraps.
         var rect = NSRect.zero
         lm.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
                                    in: tc) { r, stop in
             if r.insetBy(dx: -4, dy: -2).contains(p) { rect = r; stop.pointee = true }
         }
-        return (hit.url, rect == .zero ? lm.boundingRect(forGlyphRange: glyphs, in: tc) : rect)
+        return (index, rect == .zero ? lm.boundingRect(forGlyphRange: glyphs, in: tc) : rect)
     }
 }
 

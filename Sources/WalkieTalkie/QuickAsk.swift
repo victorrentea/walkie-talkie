@@ -265,30 +265,36 @@ final class QuickAsk {
         case fetch(URL)
     }
 
-    /// One stage's steps, as the pop-up lists them: `🔎 <query> — <domains>`, `📄 <domain>`.
+    /// **The sites the web check went through, by domain** (2026-11-09, second
+    /// pass, Victor: *"doar numele domeniului … cu un glob în fața lor … review-urile
+    /// nu mă interesează … doar la hover … ce URL-uri ai deschis … cu bule dacă sunt
+    /// mai multe"*): every page it fetched and every link a search brought back, its
+    /// domain listed once, first seen first, its pages behind it. No queries.
     struct Trail {
-        private var lines: [(query: String?, domains: [String])] = []
-        var isEmpty: Bool { lines.isEmpty }
+        private var sites: [(domain: String, urls: [URL])] = []
+        var isEmpty: Bool { sites.isEmpty }
 
         mutating func add(_ step: WebStep) {
             switch step {
-            case .search(let q):
-                lines.append((q, []))
-            case .results(let q, let urls):
-                var seen = Set<String>()
-                let domains = urls.map { Trail.domain($0) }.filter { !$0.isEmpty && seen.insert($0).inserted }
-                if let i = lines.lastIndex(where: { $0.query == q && $0.domains.isEmpty }) { lines[i].domains = domains }
-                else { lines.append((q, domains)) }
-            case .fetch(let url):
-                lines.append((nil, [Trail.domain(url)]))
+            case .search: break
+            case .results(_, let urls): urls.forEach { add($0) }
+            case .fetch(let url): add(url)
             }
         }
 
+        private mutating func add(_ url: URL) {
+            let d = Trail.domain(url)
+            guard !d.isEmpty else { return }
+            if let i = sites.firstIndex(where: { $0.domain == d }) {
+                if !sites[i].urls.contains(url) { sites[i].urls.append(url) }
+            } else {
+                sites.append((d, [url]))
+            }
+        }
+
+        /// One line a site: `<domain>\t<url>\t<url>…` — `ReplyPanel.trailSites` reads it back.
         var text: String {
-            lines.map { l in
-                guard let q = l.query else { return "📄 " + (l.domains.first ?? "?") }
-                return "🔎 " + q + (l.domains.isEmpty ? "" : " — " + l.domains.joined(separator: ", "))
-            }.joined(separator: "\n")
+            sites.map { ([$0.domain] + $0.urls.map(\.absoluteString)).joined(separator: "\t") }.joined(separator: "\n")
         }
 
         /// `srv1.worldometers.info` → `worldometers.info`; `bbc.co.uk` stays whole.

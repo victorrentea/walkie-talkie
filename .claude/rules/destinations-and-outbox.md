@@ -517,3 +517,14 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   (`\u{7}`): 7.5 pt at 60 % white under a hairline, ≤ 62 pt tall, a legacy mini scroller when longer;
   the wheel over it scrolls it (`overTrail`), never zooms. `plain` and `peek` read it after a blank
   line. Log `⚡ 🔎 🌐 Internet on the web: 🔎 … | 📄 …`.
+
+- **Only the sites, by domain, 🌐 before each; the pages on hover** (2026-11-09, later, Victor:
+  *"vreau să apară doar numele domeniului … cu un glob în fața lor … review-urile nu mă
+  interesează … doar la hover pe acele URL-uri să-mi arate ce URL-uri ai deschis … cu bule dacă
+  sunt mai multe"*, then *"fontul de la URL mai mare cu 30%"*). Supersedes the queries, the
+  `🌐 Internet` / `😠 Review` titles and 7.5 pt above. `QuickAsk.Trail` keeps domain → URLs (every
+  link a search returned and every page fetched, first seen first) for the **web check only**, one
+  trail merged over 🪏 more rounds; it travels as `<domain>\t<url>…` lines (`ReplyPanel.trailSites`).
+  Drawn `🌐 domain   🌐 domain …`, wrapping, **9.75 pt**; hovering a domain shows its URL, or a `• `
+  line each (≤ 8, then `+n more`), in `ReplyRoot`'s drawn tip (`LinkedBody.tips`,
+  `ReplyRoot.trailTip`). No click. Log `⚡ 🌐 sites (round n): a.com, b.org`.
