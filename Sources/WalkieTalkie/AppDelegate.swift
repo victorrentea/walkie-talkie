@@ -2212,7 +2212,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             var linkOut: [String: Any]?
             if let l = body["link"] as? [String: Any], let i = l["index"] as? Int {
                 linkOut = DispatchQueue.main.sync {
-                    ReplyPanel.testLink(i, click: l["click"] as? Bool == true, open: l["open"] as? Bool ?? true)
+                    ReplyPanel.testLink(i, click: l["click"] as? Bool == true, open: l["open"] as? Bool ?? true,
+                                       trail: l["trail"] as? Bool == true)
                 }
             }
             // `hint: {on: "name" | "pin" | "skull", hold?}` — the pointer on that

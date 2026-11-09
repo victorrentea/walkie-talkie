@@ -628,7 +628,7 @@ enum ReplyPanel {
         let sites = trailSites(cut.dropFirst().joined(separator: "\n"))
         return parseLinks(cut[0]).plain.replacingOccurrences(of: dots, with: "…")
             .replacingOccurrences(of: signed, with: "🤖").replacingOccurrences(of: adversary, with: "😠")
-            + (sites.isEmpty ? "" : "\n\n" + sites.map { "🌐 " + $0.domain }.joined(separator: "  "))
+            + (sites.isEmpty ? "" : "\n\n" + sites.map { "🌐 " + $0.domain }.joined(separator: "\n"))
     }
 
     /// **The ⚡ footer's two robots** (2026-10-22, Victor: *"în loc de minusul din
@@ -712,11 +712,13 @@ enum ReplyPanel {
 
     /// **Desk** (`POST /test/quick {"link": …}`): mouse events at the centre of
     /// the open pop-up's `index`-th link, sent to its root view as the window
-    /// would — the hover's tip, and with `click` the URL a click opens.
-    static func testLink(_ index: Int, click: Bool, open: Bool) -> [String: Any] {
+    /// would — the hover's tip, and with `click` the URL a click opens. With
+    /// `trail`, the `index`-th 🌐 domain under the footer instead (hover only).
+    static func testLink(_ index: Int, click: Bool, open: Bool, trail: Bool = false) -> [String: Any] {
         guard let p = panel, let root = p.contentView as? ReplyRoot else { return ["ok": false, "error": "no pop-up"] }
-        guard let rect = root.linkRects.dropFirst(index).first else {
-            return ["ok": false, "error": "no link \(index)", "links": root.linkRects.count]
+        let rects = trail ? root.trailRects : root.linkRects
+        guard let rect = rects.dropFirst(index).first else {
+            return ["ok": false, "error": "no \(trail ? "domain" : "link") \(index)", "links": rects.count]
         }
         let at = root.convert(NSPoint(x: rect.midX, y: rect.midY), to: nil)
         func event(_ t: NSEvent.EventType) -> NSEvent? {
@@ -724,7 +726,9 @@ enum ReplyPanel {
                                windowNumber: p.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)
         }
         if let e = event(.mouseMoved) { root.mouseMoved(with: e) }
-        var out: [String: Any] = ["ok": true, "links": root.linkRects.count, "tip": root.tipText ?? NSNull(),
+        var out: [String: Any] = ["ok": true, "links": rects.count, "tip": root.tipText ?? root.trailHintText ?? NSNull(),
+                                  "hint": hintWindow.isVisible ? ["x": hintWindow.frame.minX, "y": hintWindow.frame.minY,
+                                                                  "w": hintWindow.frame.width, "h": hintWindow.frame.height] : NSNull(),
                                   "rect": ["x": rect.minX, "y": rect.minY, "w": rect.width, "h": rect.height]]
         if click, let down = event(.leftMouseDown), let up = event(.leftMouseUp) {
             lastOpened = nil
@@ -779,10 +783,16 @@ enum ReplyPanel {
         label.font = .systemFont(ofSize: 12)
         label.textColor = .white
         label.alignment = .center
-        label.wantsLayer = true
-        label.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
-        label.layer?.cornerRadius = 5
         return label
+    }()
+    /// The label's rounded grey card — the window's content, the label inset in it.
+    private static let hintBox: NSView = {
+        let box = NSView()
+        box.wantsLayer = true
+        box.layer?.backgroundColor = NSColor(white: 0.25, alpha: 1).cgColor
+        box.layer?.cornerRadius = 5
+        box.addSubview(hintLabel)
+        return box
     }()
     private static let hintWindow: NSPanel = {
         let w = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -791,18 +801,39 @@ enum ReplyPanel {
         w.ignoresMouseEvents = true
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         w.hidesOnDeactivate = false
-        w.contentView = hintLabel
+        w.contentView = hintBox
         return w
     }()
 
     /// `rect` in `view`; `leading` lines the hint up with its left edge, as under
-    /// a title as long as the pop-up, instead of centring it.
-    private static func showHint(_ text: String, over rect: NSRect, of view: NSView, leading: Bool = false) {
+    /// a title as long as the pop-up, instead of centring it. **`lines`: several
+    /// lines, left-aligned, as wide as the longest** — a trail domain's URLs, whole
+    /// (2026-11-09, Victor: *"tooltipul cât trebuie de mare să ai URL-urile complete
+    /// la bullet-uri"*): out of the pop-up, so its width does not cut them; wrapped
+    /// only past the screen's.
+    fileprivate static func showHint(_ text: String, over rect: NSRect, of view: NSView, leading: Bool = false,
+                                     lines: Bool = false) {
         guard let p = view.window else { return }
         let at = p.convertToScreen(view.convert(rect, to: nil))
-        hintLabel.stringValue = text
-        let size = NSSize(width: ceil(hintLabel.intrinsicContentSize.width) + 14, height: 20)
         let room = p.screen?.visibleFrame ?? at.insetBy(dx: 0, dy: -100)
+        hintLabel.stringValue = text
+        hintLabel.alignment = lines ? .left : .center
+        hintLabel.maximumNumberOfLines = lines ? 0 : 1
+        hintLabel.lineBreakMode = lines ? .byCharWrapping : .byClipping
+        let textSize: NSSize
+        if lines {
+            let maxW = room.width - 16 - 20
+            hintLabel.preferredMaxLayoutWidth = maxW
+            let fit = hintLabel.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: maxW, height: .greatestFiniteMagnitude)) ?? .zero
+            textSize = NSSize(width: min(ceil(fit.width), maxW), height: ceil(fit.height))
+        } else {
+            hintLabel.preferredMaxLayoutWidth = 0
+            textSize = NSSize(width: ceil(hintLabel.intrinsicContentSize.width), height: ceil(hintLabel.intrinsicContentSize.height))
+        }
+        let size = lines ? NSSize(width: textSize.width + 20, height: textSize.height + 12)
+                         : NSSize(width: textSize.width + 14, height: 20)
+        hintLabel.frame = NSRect(x: (size.width - textSize.width) / 2, y: (size.height - textSize.height) / 2,
+                                 width: textSize.width, height: textSize.height)
         let x = min(max(room.minX, leading ? at.minX : at.midX - size.width / 2), room.maxX - size.width)
         let y = at.maxY + 4 + size.height <= room.maxY ? at.maxY + 4 : at.minY - 4 - size.height
         hintWindow.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
@@ -815,7 +846,7 @@ enum ReplyPanel {
         hintWindow.orderFront(nil)
     }
 
-    private static func hideHint() {
+    fileprivate static func hideHint() {
         hintWindow.parent?.removeChildWindow(hintWindow)
         hintWindow.orderOut(nil)
     }
@@ -938,8 +969,9 @@ enum ReplyPanel {
         var trailView: LinkedBody?
         var trailNatural: CGFloat = 0, trailBoxH: CGFloat = 0
         if !sites.isEmpty {
-            // **🌐 <domain>, one after the other** (2026-11-09, later: *"doar numele
-            // domeniului … cu un glob în fața lor"*), wrapping; each one's pages on hover.
+            // **🌐 <domain>, one a line** (2026-11-09, later: *"doar numele domeniului …
+            // cu un glob în fața lor"*, *"fiecare site pe linia lui … cu overflow vertical
+            // cu scrollbar"*); each one's pages on hover.
             let style = NSMutableParagraphStyle()
             style.lineSpacing = 2
             let line = NSMutableAttributedString()
@@ -947,7 +979,7 @@ enum ReplyPanel {
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: trailFont, .foregroundColor: NSColor.white.withAlphaComponent(0.6), .paragraphStyle: style]
             for (i, site) in sites.enumerated() {
-                if i > 0 { line.append(NSAttributedString(string: "   ", attributes: attrs)) }
+                if i > 0 { line.append(NSAttributedString(string: "\n", attributes: attrs)) }
                 let item = "🌐\u{00A0}" + site.domain
                 tips.append((NSRange(location: line.length, length: (item as NSString).length), trailTip(site.urls)))
                 line.append(NSAttributedString(string: item, attributes: attrs))
@@ -1044,6 +1076,10 @@ enum ReplyPanel {
                 // Not over the part of the list scrolled out of sight.
                 guard v.visibleRect.contains(q), let hit = v.tip(at: q) else { return nil }
                 return (hit.text, root.convert(hit.rect, from: v))
+            }
+            root.trailRectsInRoot = { [weak root, weak v] in
+                guard let root, let v else { return [] }
+                return v.tipRects().map { root.convert($0, from: v) }
             }
             v.onCopy = { [weak root, weak v] rect in
                 guard let root, let v else { return }
@@ -1286,6 +1322,15 @@ private final class ReplyRoot: NSView {
     /// app that is not frontmost, and this one never is.
     private var tip: NSTextField?
     private var tipFor: String?
+    /// The trail domain's URLs shown in `ReplyPanel`'s hint window.
+    private var hintFor: String?
+    private func hideTrailHint() {
+        guard hintFor != nil else { return }
+        hintFor = nil
+        ReplyPanel.hideHint()
+    }
+    /// Desk: the trail's URLs on screen.
+    var trailHintText: String? { hintFor }
     private var press = PressOrDrag()
     private var onLink = false
 
@@ -1302,11 +1347,15 @@ private final class ReplyRoot: NSView {
             showTip(Self.shown(hit.url), under: hit.rect)
             return
         }
+        hideTip()
         if let hit = trailTip?(p) {
-            showTip(hit.text, under: hit.rect)
+            if hintFor != hit.text {
+                hintFor = hit.text
+                ReplyPanel.showHint(hit.text, over: hit.rect, of: self, leading: true, lines: true)
+            }
             return
         }
-        hideTip()
+        hideTrailHint()
         if hot.contains(where: { $0.contains(p) }) { return }
         // The words take the press now (2026-10-29): the I-beam over them.
         if hitTest(convert(p, to: superview)) is LinkedBody { NSCursor.iBeam.set() } else { NSCursor.arrow.set() }
@@ -1358,6 +1407,9 @@ private final class ReplyRoot: NSView {
     var tipText: String? { tip?.stringValue }
     var linkRects: [NSRect] { linkRectsInRoot?() ?? [] }
     var linkRectsInRoot: (() -> [NSRect])?
+    /// Desk: every trail domain's rect in this view.
+    var trailRects: [NSRect] { trailRectsInRoot?() ?? [] }
+    var trailRectsInRoot: (() -> [NSRect])?
 
     private func hideTip() {
         tip?.removeFromSuperview()
@@ -1390,7 +1442,7 @@ private final class ReplyRoot: NSView {
         }
     }
 
-    override func mouseExited(with event: NSEvent) { hideTip() }
+    override func mouseExited(with event: NSEvent) { hideTip(); hideTrailHint() }
     override func cursorUpdate(with event: NSEvent) { arrow(event) }
     override func mouseEntered(with event: NSEvent) { arrow(event) }
     override func mouseMoved(with event: NSEvent) { arrow(event) }
@@ -1501,11 +1553,13 @@ private final class LinkedBody: NSTextView {
     }
 
     /// Each link's first laid-out rect, in order.
-    func rects() -> [NSRect] {
+    func rects() -> [NSRect] { firstRects(links.map(\.range)) }
+    func tipRects() -> [NSRect] { firstRects(tips.map(\.range)) }
+    private func firstRects(_ ranges: [NSRange]) -> [NSRect] {
         guard let lm = layoutManager, let tc = textContainer else { return [] }
-        return links.map { l in
+        return ranges.map { range in
             var first = NSRect.zero
-            lm.enumerateEnclosingRects(forGlyphRange: lm.glyphRange(forCharacterRange: l.range, actualCharacterRange: nil),
+            lm.enumerateEnclosingRects(forGlyphRange: lm.glyphRange(forCharacterRange: range, actualCharacterRange: nil),
                                        withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0), in: tc) { r, stop in
                 first = r; stop.pointee = true
             }

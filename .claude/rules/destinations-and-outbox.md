@@ -525,6 +525,9 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   `🌐 Internet` / `😠 Review` titles and 7.5 pt above. `QuickAsk.Trail` keeps domain → URLs (every
   link a search returned and every page fetched, first seen first) for the **web check only**, one
   trail merged over 🪏 more rounds; it travels as `<domain>\t<url>…` lines (`ReplyPanel.trailSites`).
-  Drawn `🌐 domain   🌐 domain …`, wrapping, **9.75 pt**; hovering a domain shows its URL, or a `• `
-  line each (≤ 8, then `+n more`), in `ReplyRoot`'s drawn tip (`LinkedBody.tips`,
-  `ReplyRoot.trailTip`). No click. Log `⚡ 🌐 sites (round n): a.com, b.org`.
+  Drawn **one `🌐 domain` a line** (same afternoon: *"fiecare site pe linia lui … cu overflow vertical cu
+  scrollbar"*), **9.75 pt**, in the ≤ 62 pt box that scrolls; hovering a domain shows its URL, or a `• `
+  line each (≤ 8, then `+n more`), **whole, never cut by the pop-up's width** (*"tooltipul cât trebuie de mare să ai URL-urile complete"*):
+  `ReplyPanel.showHint(lines: true)` — the hint window above the domain, left-aligned, as wide as the
+  longest URL, wrapped only past the screen (`LinkedBody.tips`, `ReplyRoot.trailTip`). No click.
+  Desk: `POST /test/quick {"link": {"index": i, "trail": true}}` → `tip`, `hint` (its frame). Log `⚡ 🌐 sites (round n): a.com, b.org`.
