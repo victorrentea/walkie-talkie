@@ -505,3 +505,15 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   `https://www.google.com/search?q=…`; a failure Googles the words as said. Flash `🔎 Google`, the
   envelope still goes on the clipboard (Q17), no pop-up, no checks. Desk: `POST /test/quick {"text",
   "google": true, "open"?: true}` → `{query, url}`. Log `🔎 Google: "…"`.
+
+- **The searches and sites, listed small under the ⚡ footer** (2026-11-09, Victor: *"după ce termini
+  un search de internet … să-mi arăți … domeniile și căutările pe net, termenii pe care i-ai folosit
+  într-o listă cu font mic … la jumătate de restul … cu scrollbar"*). `QuickAsk.Worker` reads each
+  check's stream-json: an `assistant` `tool_use` gives a `WebSearch` query / a `WebFetch` URL, a
+  `user` line's `tool_use_result {query, results}` the links a search found (`QuickAsk.WebStep`).
+  `QuickAsk.Trail` lists them as `🔎 <query> — <domains>` / `📄 <domain>` (`srv1.worldometers.info` →
+  `worldometers.info`); `askQuick` adds a stage's list under `🌐 Internet` / `😠 Review` (`×n` on a
+  🪏 more round) **once that stage is done**, every round kept. It rides after `ReplyPanel.trailMark`
+  (`\u{7}`): 7.5 pt at 60 % white under a hairline, ≤ 62 pt tall, a legacy mini scroller when longer;
+  the wheel over it scrolls it (`overTrail`), never zooms. `plain` and `peek` read it after a blank
+  line. Log `⚡ 🔎 🌐 Internet on the web: 🔎 … | 📄 …`.

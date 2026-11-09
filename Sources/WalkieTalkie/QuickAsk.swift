@@ -248,6 +248,56 @@ final class QuickAsk {
         var review: (_ text: String, _ done: Bool) -> Void
         /// Everything is over: answered and checked, failed, or cancelled.
         var end: () -> Void
+        /// Each search and page a check took, as it takes them (`WebStep`).
+        var step: (_ stage: Stage, _ step: WebStep) -> Void = { _, _ in }
+    }
+
+    enum Stage { case web, review }
+
+    /// **What a check did on the web** (2026-11-09, Victor: *"după ce termini un
+    /// search de internet … să-mi arăți … domeniile și căutările pe net, termenii pe
+    /// care i-ai folosit într-o listă cu font mic … cu scrollbar"*): read off the
+    /// stream-json — a `WebSearch` call's query, its result links when it returns
+    /// (`tool_use_result.results`), a `WebFetch` call's URL.
+    enum WebStep {
+        case search(String)
+        case results(query: String, urls: [URL])
+        case fetch(URL)
+    }
+
+    /// One stage's steps, as the pop-up lists them: `🔎 <query> — <domains>`, `📄 <domain>`.
+    struct Trail {
+        private var lines: [(query: String?, domains: [String])] = []
+        var isEmpty: Bool { lines.isEmpty }
+
+        mutating func add(_ step: WebStep) {
+            switch step {
+            case .search(let q):
+                lines.append((q, []))
+            case .results(let q, let urls):
+                var seen = Set<String>()
+                let domains = urls.map { Trail.domain($0) }.filter { !$0.isEmpty && seen.insert($0).inserted }
+                if let i = lines.lastIndex(where: { $0.query == q && $0.domains.isEmpty }) { lines[i].domains = domains }
+                else { lines.append((q, domains)) }
+            case .fetch(let url):
+                lines.append((nil, [Trail.domain(url)]))
+            }
+        }
+
+        var text: String {
+            lines.map { l in
+                guard let q = l.query else { return "📄 " + (l.domains.first ?? "?") }
+                return "🔎 " + q + (l.domains.isEmpty ? "" : " — " + l.domains.joined(separator: ", "))
+            }.joined(separator: "\n")
+        }
+
+        /// `srv1.worldometers.info` → `worldometers.info`; `bbc.co.uk` stays whole.
+        static func domain(_ url: URL) -> String {
+            var labels = (url.host ?? "").lowercased().split(separator: ".").map(String.init)
+            if labels.first == "www" { labels.removeFirst() }
+            let keep = labels.count >= 3 && labels[labels.count - 1].count == 2 && labels[labels.count - 2].count <= 3 ? 3 : 2
+            return labels.suffix(keep).joined(separator: ".")
+        }
     }
 
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.quick-ask")
@@ -455,6 +505,8 @@ final class QuickAsk {
         let asked = webInput ?? "Question: \(question)\n\nQuick answer, from memory: \(answer)"
         stage(run, web, Self.content(asked, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
             DispatchQueue.main.async { checks.web(text, false) }
+        }, onStep: { step in
+            DispatchQueue.main.async { checks.step(.web, step) }
         }, onDone: { found, error in
             DispatchQueue.main.async { checks.web(found ?? "⚠️ \(error ?? "no result")", true) }
             guard let reviewer else {
@@ -467,6 +519,8 @@ final class QuickAsk {
                 ?? asked + "\n\n(The web check failed: \(error ?? "?"). Search yourself.)"
             self.stage(run, reviewer, Self.content(all, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
                 DispatchQueue.main.async { checks.review(text, false) }
+            }, onStep: { step in
+                DispatchQueue.main.async { checks.step(.review, step) }
             }, onDone: { verdict, error in
                 DispatchQueue.main.async { checks.review(verdict ?? "⚠️ \(error ?? "no review")", true) }
                 self.endLocked(run)
@@ -484,7 +538,8 @@ final class QuickAsk {
     /// Sends `input` to `w` and calls `onDone` once — the result, its exit, or
     /// the timeout — on `queue`, unless the run was cancelled. Stops `w` after.
     private func stage(_ run: Run, _ w: Worker, _ input: Any, timeout: TimeInterval,
-                       onText: @escaping (String) -> Void, onDone: @escaping (String?, String?) -> Void) {
+                       onText: @escaping (String) -> Void, onStep: ((WebStep) -> Void)? = nil,
+                       onDone: @escaping (String?, String?) -> Void) {
         var finished = false
         let finish: (String?, String?) -> Void = { text, error in
             self.queue.async {
@@ -495,6 +550,7 @@ final class QuickAsk {
             }
         }
         w.onText = { text in if !run.cancelled { onText(text) } }
+        w.onStep = onStep.map { f in { step in if !run.cancelled { f(step) } } }
         w.onResult = { text, error in finish(text, error) }
         w.onExit = { w in finish(nil, "the model exited — \(w.stderrTail)") }
         w.send(input)
@@ -520,6 +576,7 @@ final class QuickAsk {
         for w in run.workers {
             w.onResult = nil
             w.onText = nil
+            w.onStep = nil
             w.stop()
         }
         return true
@@ -535,6 +592,8 @@ final class QuickAsk {
         private var errText = ""
         private let lock = NSLock()
         var onText: ((String) -> Void)?
+        /// A web search or fetch the process made (`QuickAsk.WebStep`).
+        var onStep: ((WebStep) -> Void)?
         var onResult: ((String?, String?) -> Void)?
         var onExit: ((Worker) -> Void)?
         /// The model id the process says it runs (`claude-opus-5-5`), from its init line.
@@ -598,6 +657,7 @@ final class QuickAsk {
             // A late answer from a stopped process reaches no one (review 2026-10-22).
             onResult = nil
             onText = nil
+            onStep = nil
             try? stdin.fileHandleForWriting.close()
             if process.isRunning { process.terminate() }
         }
@@ -623,6 +683,24 @@ final class QuickAsk {
                       let t = d["text"] as? String else { return }
                 text += t
                 onText?(text)
+            case "assistant":
+                // The calls: a search's query, a fetch's URL.
+                let blocks = (e["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
+                for b in blocks where b["type"] as? String == "tool_use" {
+                    let input = b["input"] as? [String: Any] ?? [:]
+                    switch b["name"] as? String {
+                    case "WebSearch": if let q = input["query"] as? String { onStep?(.search(q)) }
+                    case "WebFetch": if let u = (input["url"] as? String).flatMap(URL.init(string:)) { onStep?(.fetch(u)) }
+                    default: break
+                    }
+                }
+            case "user":
+                // A search's answer: the links it found.
+                guard let r = e["tool_use_result"] as? [String: Any], let q = r["query"] as? String,
+                      let results = r["results"] as? [Any] else { return }
+                let urls = results.compactMap { ($0 as? [String: Any])?["content"] as? [[String: Any]] }
+                    .flatMap { $0 }.compactMap { ($0["url"] as? String).flatMap(URL.init(string:)) }
+                onStep?(.results(query: q, urls: urls))
             case "result":
                 let isError = e["is_error"] as? Bool ?? false
                 let result = (e["result"] as? String) ?? text

@@ -325,7 +325,11 @@ enum ReplyPanel {
         animateDots(raw, from: label)
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { text = "…" }
-        if text.count > maxChars { text = String(text.prefix(maxChars)) + "…" }
+        // The words are cut, never the trail under them.
+        let cut = text.components(separatedBy: trailMark)
+        if cut[0].count > maxChars {
+            text = String(cut[0].prefix(maxChars)) + "…" + (cut.count > 1 ? trailMark + cut[1...].joined() : "")
+        }
         if let p = panel, liveOpen {
             let root = fit(text, from: label, tty: nil)
             // The size first: assigning the content view resizes it to the
@@ -620,7 +624,7 @@ enum ReplyPanel {
         return (out + rest, links)
     }
     static func plain(_ text: String) -> String {
-        parseLinks(text).plain.replacingOccurrences(of: dots, with: "…")
+        parseLinks(text).plain.replacingOccurrences(of: dots, with: "…").replacingOccurrences(of: trailMark, with: "\n\n")
             .replacingOccurrences(of: signed, with: "🤖").replacingOccurrences(of: adversary, with: "😠")
     }
 
@@ -630,6 +634,19 @@ enum ReplyPanel {
     /// `signed` starts the footer and is drawn 🤖 — from it to the end the words
     /// are `footerFont`; `adversary` is `robot-adversarial.png`, the 🧐's place.
     static let signed = "\u{5}"
+    /// **The web trail starts here** (2026-11-09, `AppDelegate.askQuick`): what
+    /// follows it is the list of searches and sites, drawn under the footer at
+    /// half the body's size (`trailFont`), in a box at most `trailMaxH` tall that
+    /// scrolls — the wheel over it scrolls the list instead of zooming the pop-up.
+    static let trailMark = "\u{7}"
+    private static let trailFont = NSFont.systemFont(ofSize: 7.5)
+    private static let trailMaxH: CGFloat = 62
+    private static weak var trailScroll: NSScrollView?
+    /// The wheel at `p` (window points) is over the trail, which scrolls itself.
+    fileprivate static func overTrail(_ p: NSPoint) -> Bool {
+        guard let t = trailScroll, let sv = t.superview, t.window != nil else { return false }
+        return t.frame.contains(sv.convert(p, from: nil))
+    }
     static let adversary = "\u{6}"
     /// 1×, like `bodyFont` — the body is magnified whole.
     private static let footerFont = NSFont.systemFont(ofSize: 14)
@@ -786,7 +803,7 @@ enum ReplyPanel {
 
     /// The pop-up's content for these words — the header, the body, the buttons —
     /// fitted to them, `baseWidth` wide. Every length is `scale` times its own.
-    private static func build(_ text: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
+    private static func build(_ whole: String, from label: String?, tty: String?, images: [URL] = []) -> ReplyRoot {
         // The control under it is about to be replaced, and sends no `mouseExited`.
         hideHint()
         let s = scale
@@ -825,6 +842,9 @@ enum ReplyPanel {
         // until then a press on the words dragged, 2026-10-08). Always a text
         // view: it knows where each word is laid out, for the selection, the
         // hover and the link's click (`LinkedBody`).
+        let parts = whole.components(separatedBy: trailMark)
+        let text = parts[0]
+        let trailText = parts.dropFirst().joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         var (words, links) = parseLinks(text)
         let body: NSView
         let bodySize: NSSize
@@ -895,7 +915,22 @@ enum ReplyPanel {
         let strip = (frames: laid.frames.map { NSRect(x: $0.minX * s, y: $0.minY * s, width: $0.width * s, height: $0.height * s) },
                      height: laid.height * s, hidden: laid.hidden)
         let stripH = strip.height > 0 ? strip.height + (text.isEmpty ? 0 : 8 * s) : 0
-        let chrome = pad + headerH + 6 * s + stripH + pad
+        // **The trail**: laid out at 1× like the body, magnified with it.
+        var trailView: LinkedBody?
+        var trailNatural: CGFloat = 0, trailBoxH: CGFloat = 0
+        if !trailText.isEmpty {
+            let style = NSMutableParagraphStyle()
+            style.lineSpacing = 1
+            let v = LinkedBody(NSAttributedString(string: trailText, attributes: [
+                .font: trailFont, .foregroundColor: NSColor.white.withAlphaComponent(0.6), .paragraphStyle: style]),
+                width: baseWidth - 42)
+            trailNatural = ceil(v.naturalHeight * s)
+            trailBoxH = min(trailNatural, trailMaxH * s)
+            trailView = v
+        }
+        // A hairline over it, 6 pt either side.
+        let trailH = trailView == nil ? 0 : trailBoxH + 13 * s
+        let chrome = pad + headerH + 6 * s + stripH + trailH + pad
         // All the words need — cut to the screen only when `fit` has no width
         // left to give them; then, and only then, they scroll.
         let natural = ceil(bodySize.height)
@@ -927,7 +962,7 @@ enum ReplyPanel {
                               width: inner - (textX - pad) - buttons * (iconSide + gap), height: 20 * s)
         root.addSubview(header)
         if !text.isEmpty {
-            let box = NSRect(x: pad, y: pad + stripH, width: inner - gutter, height: bodyH)
+            let box = NSRect(x: pad, y: pad + trailH + stripH, width: inner - gutter, height: bodyH)
             if natural > bodyH + 1 {
                 // **Scrolls when there is more than the room** — the wheel works on
                 // a panel that is never key; a press on the words selects, as
@@ -947,14 +982,40 @@ enum ReplyPanel {
                 scroll.contentView.scroll(to: NSPoint(x: 0, y: body.isFlipped ? 0 : natural - bodyH))
                 root.addSubview(scroll)
             } else {
-                body.frame = NSRect(x: pad, y: pad + stripH + bodyH - natural, width: inner - gutter, height: natural)
+                body.frame = NSRect(x: pad, y: pad + trailH + stripH + bodyH - natural, width: inner - gutter, height: natural)
                 body.setBoundsSize(NSSize(width: body.frame.width / s, height: body.frame.height / s))
                 root.addSubview(body)
             }
         }
+        if let v = trailView {
+            let line = NSBox(frame: NSRect(x: pad, y: pad + trailBoxH + 6 * s, width: inner - gutter, height: 1))
+            line.boxType = .custom
+            line.borderWidth = 0
+            line.fillColor = NSColor.white.withAlphaComponent(0.12)
+            root.addSubview(line)
+            v.frame = NSRect(x: 0, y: 0, width: inner - gutter, height: trailNatural)
+            v.setBoundsSize(NSSize(width: v.frame.width / s, height: v.frame.height / s))
+            // **A scrollbar there** (*"cu scrollbar acolo"*): the legacy one, shown
+            // whenever the list is longer than its box — an overlay one hides.
+            let scroll = NSScrollView(frame: NSRect(x: pad, y: pad, width: inner, height: trailBoxH))
+            scroll.drawsBackground = false
+            scroll.hasVerticalScroller = true
+            scroll.autohidesScrollers = true
+            scroll.scrollerStyle = .legacy
+            scroll.scrollerKnobStyle = .light
+            scroll.verticalScroller?.controlSize = .mini
+            scroll.documentView = v
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: v.isFlipped ? 0 : trailNatural - trailBoxH))
+            root.addSubview(scroll)
+            trailScroll = scroll
+            v.onCopy = { [weak root, weak v] rect in
+                guard let root, let v else { return }
+                root.showCopied(under: root.convert(rect, from: v))
+            }
+        }
         var thumbs: [NSRect] = []
         for (i, f) in strip.frames.enumerated() {
-            let thumb = ReplyThumb(frame: f.offsetBy(dx: pad, dy: pad))
+            let thumb = ReplyThumb(frame: f.offsetBy(dx: pad, dy: pad + trailH))
             thumb.image = pictures[i].1
             let rest = pictures[i...].map(\.0)
             let last = i == strip.frames.count - 1 && strip.hidden > 0
@@ -1158,7 +1219,7 @@ private final class ReplyWindow: NSPanel {
         if event.type == .scrollWheel {
             // The wheel as the hand rolled it: up = positive, natural scrolling or not.
             let dy = event.isDirectionInvertedFromDevice ? -event.scrollingDeltaY : event.scrollingDeltaY
-            if abs(dy) > abs(event.scrollingDeltaX),
+            if abs(dy) > abs(event.scrollingDeltaX), !ReplyPanel.overTrail(event.locationInWindow),
                ReplyPanel.grow(self, by: dy, precise: event.hasPreciseScrollingDeltas) { return }
         }
         super.sendEvent(event)

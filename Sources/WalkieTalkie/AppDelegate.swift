@@ -7026,9 +7026,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var answer = Self.quickPlaceholder, signature = QuickAsk.shared.answererName
         var steps: [String] = []
         var searched: String?, reviewed: String?
+        // **The searches and sites under the footer** (2026-11-09, Victor: *"după ce
+        // termini un search de internet … domeniile și căutările pe net, termenii …
+        // într-o listă cu font mic … la jumătate … cu scrollbar"*): each check's
+        // `QuickAsk.Trail`, listed once that check is done, every round's kept.
+        var trail: [String] = []
         func compose() -> String {
             guard !signature.isEmpty else { return answer }
             return answer + "\n" + ReplyPanel.signed + " " + ([signature] + steps).joined(separator: " + ")
+                + (trail.isEmpty ? "" : ReplyPanel.trailMark + trail.joined(separator: "\n"))
         }
         // **The pop-up opens the moment he has asked** (2026-10-14, Victor:
         // *"immediately after asking a question, the reply window should
@@ -7071,10 +7077,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         func makeChecks(first: Bool) -> QuickAsk.Checks {
             let mine = round
+            var webTrail = QuickAsk.Trail(), reviewTrail = QuickAsk.Trail()
+            func listTrail(_ t: QuickAsk.Trail, _ title: String) {
+                guard !t.isEmpty else { return }
+                trail.append(title + (round > 1 ? " ×\(round)" : "") + "\n" + t.text)
+                Log.info("⚡ 🔎 \(title) on the web: " + t.text.replacingOccurrences(of: "\n", with: " | "))
+            }
             return QuickAsk.Checks(web: { text, isDone in
                 // A round a dig more has replaced paints nothing more (its answer was already in flight).
                 guard isDone, mine == round else { return }
                 digOffered = true
+                listTrail(webTrail, "🌐 Internet")
                 if text.hasPrefix("⚠️") {
                     steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + " failed " + ReplyPanel.more,
                              ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
@@ -7091,6 +7104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 paint(force: true)
             }, review: { text, isDone in
                 guard isDone, mine == round else { return }
+                listTrail(reviewTrail, "😠 Review")
                 if text.hasPrefix("⚠️") {
                     steps[steps.count - 1] = ReplyPanel.adversary + " failed"
                 } else {
@@ -7118,6 +7132,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 paint(force: true)
                 ReplyPanel.finishLive(question: token)
                 if first { sendChecked() }
+            }, step: { stage, step in
+                guard mine == round else { return }
+                if stage == .web { webTrail.add(step) } else { reviewTrail.add(step) }
             })
         }
         let checks = makeChecks(first: true)
