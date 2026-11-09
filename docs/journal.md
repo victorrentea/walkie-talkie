@@ -16111,3 +16111,17 @@ edit, `showSentPrompt`), at alpha 0 and `ignoresMouseEvents`, and only the rest 
 was still doing had to move with it: the send's outline, the effect's dock and the `»` all pointed at a dialog that is
 not there, and the hover zone would have been his page. A live check through `POST /test/prompt {"do": "show"}`,
 which has no sentence behind it because `POST /test/dictation` on the installed app delivers.
+
+## The transcription is a background process: nothing on screen (2026-11-09)
+
+Victor: *"când valul care pleacă la sfârșitul dictării și începutul transcrierii curăță ecranul, pe
+durata transcrierii nu mai vreau să văd niciun alt efect pe ecran. Ajunge doar acel atom din colț care
+arată loading. E confuzant și nu-mi fac distincția între când mă ascult și când [transcrie] … ecranul
+liber pentru o nouă conversație … filozofia este că efectul grafic este când eu dictez."*
+
+`CaretHalo.quietSettle`: the stop's wave wipes whatever effect is up, for every destination, and the
+settle draws nothing — no rewind or flight, no bound effect landing back on the terminal, no coasting
+ring, no heads, no orange outline. The effect is the microphone's; a clean screen after the wave says
+*ready for the next sentence*. `WT_QUIET_SETTLE=0` restores the 2026-09-22…11-06 settle. Rule:
+`replace-wispr-and-halo.md`, *Nothing moves on screen while the words are transcribed*.
+

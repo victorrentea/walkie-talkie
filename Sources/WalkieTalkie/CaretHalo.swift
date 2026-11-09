@@ -1436,6 +1436,7 @@ final class CaretHalo {
         guard !frozeThisRing, freezesAtClose, let panel, let view = panel.contentView,
               let left = StopWave.wipe(view, in: panel.frame) else { return }
         let generation = freeze()
+        if Self.quietSettle { arrow.hide() }
         Log.info("⏪ the \(drawn.rawValue) freeze at the press — the stop's wave wipes them")
         DispatchQueue.main.asyncAfter(deadline: .now() + left) { [weak self] in
             guard let self, self.stillGeneration == generation else { return }
@@ -1472,8 +1473,20 @@ final class CaretHalo {
     /// than flying or turning into the tunnel: a spawn's, and a bound one that rides.
     private var freezesAtClose: Bool {
         !Self.stillOff && web != nil && live && !quick
-            && (destination == .spawn || (destination == .bound && flies))
+            && (Self.quietSettle || destination == .spawn || (destination == .bound && flies))
     }
+
+    /// **The transcription is a background process: nothing moves on screen
+    /// while it runs** (2026-11-09, Victor: *"când valul … curăță ecranul, pe
+    /// durata transcrierii nu mai vreau să văd niciun alt efect pe ecran. Ajunge
+    /// doar acel atom din colț … efectul grafic este când eu dictez. Transcrierea
+    /// e un proces de background"*). The wave wipes every dress, whatever the
+    /// destination, and nothing takes its place until the words land: no rewind,
+    /// no flight, no landing on the terminal, no coasting ring, no heads, no
+    /// orange outline (`AppDelegate.syncBorrowedGestures` gates those on this).
+    /// The screen the wave leaves is the screen for the next sentence.
+    /// `WT_QUIET_SETTLE=0` brings the settle's effects back.
+    static let quietSettle = ProcessInfo.processInfo.environment["WT_QUIET_SETTLE"] != "0"
     /// This rewind ends still on the window's middle (`freezeAndFade(lands: true)`).
     private var stillLanding = false
     /// The ring froze at its close — no second freeze, and no dock on the
@@ -2734,7 +2747,9 @@ final class CaretHalo {
 
     /// `pinAt` as the origin of a panel the size of the ring's.
     private var headsOrigin: NSPoint? {
-        pinAt.map { NSPoint(x: ($0.x - Self.side / 2).rounded(), y: ($0.y - Self.side / 2).rounded()) }
+        // Wiped by the wave, the heads stay down too: the press ended the dictation.
+        if Self.quietSettle, frozenAt != nil { return nil }
+        return pinAt.map { NSPoint(x: ($0.x - Self.side / 2).rounded(), y: ($0.y - Self.side / 2).rounded()) }
     }
 
     /// `hold` while the words are in flight rather than `place`: it is

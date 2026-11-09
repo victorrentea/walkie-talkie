@@ -7029,12 +7029,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The searches and sites under the footer** (2026-11-09, Victor: *"după ce
         // termini un search de internet … domeniile și căutările pe net, termenii …
         // într-o listă cu font mic … la jumătate … cu scrollbar"*): each check's
-        // `QuickAsk.Trail`, listed once that check is done, every round's kept.
-        var trail: [String] = []
+        // `QuickAsk.Trail`, listed once that check is done. **Only the web check's
+        // sites, by domain, every round's merged** (same day, later: *"doar numele
+        // domeniului … review-urile nu mă interesează"*).
+        var webTrail = QuickAsk.Trail(), trail = ""
         func compose() -> String {
             guard !signature.isEmpty else { return answer }
             return answer + "\n" + ReplyPanel.signed + " " + ([signature] + steps).joined(separator: " + ")
-                + (trail.isEmpty ? "" : ReplyPanel.trailMark + trail.joined(separator: "\n"))
+                + (trail.isEmpty ? "" : ReplyPanel.trailMark + trail)
         }
         // **The pop-up opens the moment he has asked** (2026-10-14, Victor:
         // *"immediately after asking a question, the reply window should
@@ -7077,17 +7079,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         func makeChecks(first: Bool) -> QuickAsk.Checks {
             let mine = round
-            var webTrail = QuickAsk.Trail(), reviewTrail = QuickAsk.Trail()
-            func listTrail(_ t: QuickAsk.Trail, _ title: String) {
-                guard !t.isEmpty else { return }
-                trail.append(title + (round > 1 ? " ×\(round)" : "") + "\n" + t.text)
-                Log.info("⚡ 🔎 \(title) on the web: " + t.text.replacingOccurrences(of: "\n", with: " | "))
-            }
             return QuickAsk.Checks(web: { text, isDone in
                 // A round a dig more has replaced paints nothing more (its answer was already in flight).
                 guard isDone, mine == round else { return }
                 digOffered = true
-                listTrail(webTrail, "🌐 Internet")
+                if !webTrail.isEmpty {
+                    trail = webTrail.text
+                    Log.info("⚡ 🌐 sites (round \(round)): " + ReplyPanel.trailSites(trail).map(\.domain).joined(separator: ", "))
+                }
                 if text.hasPrefix("⚠️") {
                     steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + " failed " + ReplyPanel.more,
                              ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
@@ -7104,7 +7103,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 paint(force: true)
             }, review: { text, isDone in
                 guard isDone, mine == round else { return }
-                listTrail(reviewTrail, "😠 Review")
                 if text.hasPrefix("⚠️") {
                     steps[steps.count - 1] = ReplyPanel.adversary + " failed"
                 } else {
@@ -7134,7 +7132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if first { sendChecked() }
             }, step: { stage, step in
                 guard mine == round else { return }
-                if stage == .web { webTrail.add(step) } else { reviewTrail.add(step) }
+                if stage == .web { webTrail.add(step) }
             })
         }
         let checks = makeChecks(first: true)
@@ -8402,7 +8400,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The same should happen for the plain dictation"*). The prompt at the
         // caret and the plain sentence both, from the first word to the ⌘V; not
         // a ⚡ question (typed nowhere), not Wispr's own sentence (`atCaret`).
-        focusFrame.setActive(atCaret && !quickAsk && (listening || speculative || settling))
+        // **Nothing on screen through the settle** (2026-11-09, `CaretHalo.quietSettle`):
+        // the outline, the rewind, the heads and the coasting ring are all the
+        // dictation's, and the transcription is a background process.
+        let quiet = CaretHalo.quietSettle
+        focusFrame.setActive(atCaret && !quickAsk && (listening || speculative || (settling && !quiet)))
         if settling { caretHalo.rewindAim = settleAim }
         // **A ⚡ quick question has one effect** (2026-10-09): Reverse tunnel
         // while he asks, then the collapse into the pointer — no rewind, no
@@ -8411,14 +8413,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **No 𝓯𝔁 on battery** (2026-10-20, `BatteryFx`): the ring, the rewind,
         // the coast and the pin all stay down; the chip and the outline do not.
         let fxHeld = BatteryFx.holdsEffects
-        caretHalo.setRewind(settling && !listening && !speculative && !quickAsk && !fxHeld,
+        caretHalo.setRewind(settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet,
                             take: settleTake, estimate: settleEstimate)
-        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk && !fxHeld, estimate: settleEstimate)
+        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk && !fxHeld && !quiet, estimate: settleEstimate)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
         // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,
         // like `setDelivering`, so the ring is told to fade rather than to go.
-        let coasting = settling && !listening && !speculative && !quickAsk && !fxHeld
+        let coasting = settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet
         caretHalo.setCoasting(coasting, estimate: settleEstimate)
         // **The halo dial listens exactly while the ring is up** (2026-09-20)
         // — the same expression, pushed into the tap here so the gesture and

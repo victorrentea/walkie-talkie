@@ -716,6 +716,17 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   ./.build/debug/WalkieTalkie` with `screencapture -V`; **press while the effect is loud**, at a pause
   in the clip milkdrop7 has already gone out by itself and it reads as a wipe ahead of the ring. Log
   `🌊 the wave wipes …`, `⏪ the … freeze at the press`.
+- **Nothing moves on screen while the words are transcribed** (2026-11-09, Victor: *"când valul …
+  curăță ecranul, pe durata transcrierii nu mai vreau să văd niciun alt efect pe ecran. Ajunge doar
+  acel atom din colț … efectul grafic este când eu dictez. Transcrierea e un proces de background"*).
+  `CaretHalo.quietSettle` (on; `WT_QUIET_SETTLE=0` brings the old settle back). The wave now wipes
+  **every** dress at the press (`freezesAtClose` no longer asks the destination — caret, bound,
+  spawn, Wispr), and from there to the words' landing `syncBorrowedGestures` keeps down the rewind /
+  flight / `landStill`, the coasting ring, the delivering heads and the orange `FocusFrame` (it stays
+  for the microphone, not the settle). After the wipe `headsOrigin` answers nil, so the heads do not
+  come back during Wispr's drain. What is left: the chip's `Transcribing…` row and the corner atom.
+  Supersedes, while it is on, every *through the settle* bullet in this file (rewind, flights, dust
+  orbit, heads held, `landStill`). A film dress (no web view) cannot freeze: it collapses at the close.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets
