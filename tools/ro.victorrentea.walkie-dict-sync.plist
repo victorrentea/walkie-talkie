@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ro.victorrentea.walkie-dict-sync</string>
+    <!-- Keeps ~/.walkie-talkie/vocabulary.txt and Wispr Flow's Dictionary in sync
+         (helpers/walkie-dict). A word added in Wispr's Hub reaches the ✍️ editor
+         within ten minutes; a run takes milliseconds and writes only on a difference.
+         Install:
+           cp tools/ro.victorrentea.walkie-dict-sync.plist ~/Library/LaunchAgents/
+           launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ro.victorrentea.walkie-dict-sync.plist -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>/Users/victorrentea/workspace/walkie-talkie/helpers/walkie-dict</string>
+        <string>sync</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/victorrentea/.walkie-talkie/vocabulary-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/victorrentea/.walkie-talkie/vocabulary-sync.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>

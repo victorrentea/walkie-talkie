@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""walkie-dict — one dictionary for both engines (2026-11-09).
+
+    walkie-dict add "<right>" [--heard "<as it came out>"]   # both dictionaries, then sync
+    walkie-dict sync [--dry-run]                             # merge both ways (LaunchAgent, 10 min)
+
+**Why.** Victor, 2026-11-09: *"când modelul este 100% sigur … că mesajul dictat conține
+un cuvânt greșit … Claude să poată adăuga în dicționarul folosit de Walkie Talkie
+cuvântul … inclusiv în Wispr Flow Dictionary … dicționarul local și cel al Wispr
+Flow-ului să fie în sync"*. The trigger was "Wispr Flow" heard as "Whisperflow". Every
+dictated prompt carries `AppDelegate.dictionaryHint`, which tells the agent to run `add`.
+
+**The two dictionaries.**
+- local: `~/.walkie-talkie/vocabulary.txt`, read by the ✍️ editor (`DictationEditor`):
+  one term a line, `heard → written` for a replacement.
+- Wispr: the `Dictionary` table of `~/Library/Application Support/Wispr Flow/flow.sqlite`
+  (personal team id, `isSnippet = 0`). `phrase` is what is heard, `replacement` what is
+  written (NULL for a plain term) — the same pair as a local `→` line.
+
+**Writing into Wispr's table is how Wispr's own sync works.** `DictionaryManager.syncDictionary`
+(app.asar) pushes every local row the server lacks (by id, or by phrase + team) to
+`POST /api/v1/dictionary/personal` and pulls the rest, so a row added here reaches the
+cloud and the other devices. It runs at Wispr's start and after any dictionary action in
+its Hub (the ⟳ sync button there too) — until then the running Wispr keeps its cached list,
+so a word added now is used by Wispr from its next start or Hub sync, by the ✍️ editor at
+once. Wispr itself is never touched (no kill, no restart: `feedback_leave_wispr_flow_alone`).
+
+**Three-way merge** against `~/.walkie-talkie/vocabulary-sync.json`, the set both sides
+agreed on last time: present on one side and not in the base → added to the other; in the
+base but gone from one side → deleted from the other (Wispr: `isDeleted = 1`, which its
+sync propagates). Wispr's auto-learned rows (`source = user_edits`: `fix.yv`, `test.gl`,
+`exfiltration.com?pass`…) and snippets are not pulled into the local file. Stdlib only.
+"""
+import datetime
+import fcntl
+import json
+import os
+import re
+import sqlite3
+import sys
+import tempfile
+import uuid
+
+HOME = os.path.expanduser("~/.walkie-talkie")
+VOCAB = os.path.join(HOME, "vocabulary.txt")
+BASE = os.path.join(HOME, "vocabulary-sync.json")
+LOCK = os.path.join(HOME, "vocabulary-sync.lock")
+WISPR_DB = os.path.expanduser("~/Library/Application Support/Wispr Flow/flow.sqlite")
+PERSONAL = "00000000-0000-0000-0000-000000000000"
+SECTION = "# Synced with Wispr Flow (walkie-dict)"
+
+
+def key(phrase):
+    return phrase.strip().lower()
+
+
+# ---- local file -------------------------------------------------------------------------
+
+def parse_line(raw):
+    """Same rules as `DictationEditor.parseVocabulary`: (heard, written|None) or None."""
+    l = raw.strip()
+    if not l or l.startswith("#"):
+        return None
+    if " #" in l:
+        l = l[: l.index(" #")].strip()
+    for arrow in ("→", "->"):
+        if arrow in l:
+            heard, written = (p.strip() for p in l.split(arrow, 1))
+            return (heard, written) if heard and written else None
+    return (l, None)
+
+
+def read_local():
+    lines = open(VOCAB, encoding="utf-8").read().split("\n") if os.path.exists(VOCAB) else []
+    entries = {}
+    for raw in lines:
+        e = parse_line(raw)
+        if e:
+            entries.setdefault(key(e[0]), e)
+    return lines, entries
+
+
+def render(e):
+    return f"{e[0]} → {e[1]}" if e[1] else e[0]
+
+
+def write_local(lines, adds, removes, changes):
+    out = []
+    for raw in lines:
+        e = parse_line(raw)
+        if e and key(e[0]) in removes:
+            continue
+        if e and key(e[0]) in changes:
+            out.append(render(changes.pop(key(e[0]))))
+            continue
+        out.append(raw)
+    while out and out[-1] == "":
+        out.pop()
+    if adds:
+        if SECTION not in out:
+            out += ["", SECTION]
+        out += [render(e) for e in adds]
+    fd, tmp = tempfile.mkstemp(dir=HOME, prefix=".vocabulary.")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+    os.replace(tmp, VOCAB)
+
+
+# ---- Wispr ------------------------------------------------------------------------------
+
+def now():
+    t = datetime.datetime.now(datetime.timezone.utc)
+    return t.strftime("%Y-%m-%d %H:%M:%S.") + f"{t.microsecond // 1000:03d} +00:00"
+
+
+def wispr():
+    db = sqlite3.connect(WISPR_DB, timeout=10)
+    db.execute("PRAGMA busy_timeout = 10000")
+    return db
+
+
+def read_wispr(db):
+    """Active rows by key, and every row by key (deleted and auto-learned included)."""
+    active, every = {}, {}
+    for phrase, repl, source, deleted in db.execute(
+            "SELECT phrase, replacement, source, isDeleted FROM Dictionary "
+            "WHERE teamDictionaryId = ? AND isSnippet = 0", (PERSONAL,)):
+        k = key(phrase)
+        every[k] = (phrase, repl, source, deleted)
+        if not deleted:
+            active[k] = (phrase.strip(), repl, source)
+    return active, every
+
+
+def wispr_put(db, every, heard, written):
+    k, t = key(heard), now()
+    row = every.get(k)
+    if row:
+        db.execute("UPDATE Dictionary SET replacement = ?, isDeleted = 0, manualEntry = 1, "
+                   "source = 'manual', modifiedAt = ? WHERE phrase = ? AND teamDictionaryId = ?",
+                   (written, t, row[0], PERSONAL))
+    else:
+        db.execute("INSERT INTO Dictionary (id, phrase, replacement, teamDictionaryId, lastUsed, "
+                   "frequencyUsed, remoteFrequencyUsed, manualEntry, createdAt, modifiedAt, isDeleted, "
+                   "source, isSnippet, isStarred) VALUES (?, ?, ?, ?, NULL, 0, 0, 1, ?, ?, 0, 'manual', 0, 0)",
+                   (str(uuid.uuid4()), heard, written, PERSONAL, t, t))
+
+
+def wispr_delete(db, every, k):
+    db.execute("UPDATE Dictionary SET isDeleted = 1, frequencyUsed = 0, modifiedAt = ? "
+               "WHERE phrase = ? AND teamDictionaryId = ?", (now(), every[k][0], PERSONAL))
+
+
+# ---- merge ------------------------------------------------------------------------------
+
+def sync(dry=False, quiet=False):
+    lines, local = read_local()
+    base = json.load(open(BASE)) if os.path.exists(BASE) else {}
+    db = wispr()
+    active, every = read_wispr(db)
+    log = []
+    l_add, l_rm, l_chg = [], set(), {}
+    w_put, w_rm = [], []
+    for k in sorted(set(local) | set(active) | set(base)):
+        L, W, B = local.get(k), active.get(k), base.get(k)
+        if L and W:
+            if (L[1] or None) != (W[1] or None):
+                if B is not None and (W[1] or None) == B and (L[1] or None) != B:
+                    w_put.append(L); log.append(f"wispr  ✎ {render(L)}")
+                elif B is not None and (L[1] or None) == B:
+                    l_chg[k] = (L[0], W[1]); log.append(f"local  ✎ {render((L[0], W[1]))}")
+                else:  # first meeting, or both edited: the file wins, it is the one Claude writes
+                    w_put.append(L); log.append(f"wispr  ✎ {render(L)}")
+        elif L:
+            if k in base:
+                l_rm.add(k); log.append(f"local  − {render(L)}   (deleted in Wispr)")
+            else:
+                w_put.append(L); log.append(f"wispr  + {render(L)}")
+        elif W:
+            if k in base:
+                w_rm.append(k); log.append(f"wispr  − {render(W)}   (deleted locally)")
+            elif W[2] != "user_edits":
+                l_add.append((W[0], W[1])); log.append(f"local  + {render(W)}")
+    if not quiet or log:
+        print("\n".join(log) if log else "in sync")
+    if dry:
+        return
+    if w_put or w_rm:
+        with db:
+            for e in w_put:
+                wispr_put(db, every, e[0], e[1])
+            for k in w_rm:
+                wispr_delete(db, every, k)
+    if l_add or l_rm or l_chg:
+        write_local(lines, l_add, l_rm, l_chg)
+    # The new base: every key both sides now hold (auto-learned Wispr rows stay out of it).
+    _, local = read_local()
+    active, _ = read_wispr(db)
+    agreed = {k: (local[k][1] or None) for k in local if k in active}
+    tmp = BASE + ".tmp"
+    json.dump(agreed, open(tmp, "w"), ensure_ascii=False, indent=0, sort_keys=True)
+    os.replace(tmp, BASE)
+
+
+def add(right, heard=None):
+    lines, local = read_local()
+    adds = []
+    if key(right) not in local:
+        adds.append((right, None))
+    if heard and key(heard) != key(right):
+        if key(heard) in local and local[key(heard)][1] != right:
+            write_local(lines, [], set(), {key(heard): (heard, right)}); lines, local = read_local()
+        elif key(heard) not in local:
+            adds.append((heard, right))
+    if adds:
+        write_local(lines, adds, set(), {})
+    sync(quiet=True)
+    print(f"✓ {right}" + (f"  ({heard} → {right})" if heard else "") +
+          " — ✍️ editor now; Wispr from its next start or Hub sync")
+
+
+def main(argv):
+    with open(LOCK, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if argv[:1] == ["sync"]:
+            return sync(dry="--dry-run" in argv)
+        if argv[:1] == ["add"] and len(argv) >= 2:
+            heard = argv[argv.index("--heard") + 1] if "--heard" in argv[:-1] else None
+            right = argv[1]
+            if not right.strip() or right.startswith("-"):
+                sys.exit("walkie-dict: add needs the right spelling first")
+            return add(right.strip(), heard.strip() if heard else None)
+    sys.exit(__doc__.split("\n\n")[1])
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

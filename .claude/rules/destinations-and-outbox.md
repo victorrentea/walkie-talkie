@@ -238,6 +238,19 @@ me to dismiss it explicitly"*.
   că au terminat … un pic abuz"*. Then, the same night: *"exclusiv când eu întreb ceva. Atât … Niciodată
   să nu fie folosit ca să mă întrebe Claude pe mine ceva"* — **only the answer to his question; never
   a question for him, never a completion notice.**
+- **Every dictation also carries `AppDelegate.dictionaryHint`** (2026-11-09, Victor: *"când modelul
+  este 100% sigur … că mesajul dictat conține un cuvânt greșit … Claude să poată adăuga în
+  dicționarul folosit de Walkie Talkie … inclusiv în Wispr Flow Dictionary … să fie în sync"* —
+  "Wispr Flow" had come out "Whisperflow"): the agent runs `walkie-dict add "<right>" --heard "<as
+  transcribed>"` (`helpers/walkie-dict`, linked into `~/.local/bin`), silently. It writes
+  `~/.walkie-talkie/vocabulary.txt` (the ✍️ editor, at once) and Wispr's `Dictionary` table
+  (personal team id, `source = manual`) — Wispr's own `syncDictionary` pushes a row its server lacks,
+  at Wispr's start or a Hub dictionary action, and only then does the running Wispr use it. `walkie-dict
+  sync` is a three-way merge against `~/.walkie-talkie/vocabulary-sync.json` (adds and deletes travel
+  both ways; Wispr's auto-learned `user_edits` rows and snippets are never pulled);
+  `tools/ro.victorrentea.walkie-dict-sync.plist` runs it every 10 min. Writing that table is not
+  the forbidden *Wispr database as a recogniser* (`whisper-and-corpus.md`): nothing is read back as
+  words. The ⚡ quick question drops the hint with `questionHint` (no tools there).
 - **Not when the sender is the terminal in front** (2026-10-13, Victor: *"if I'm focusing the window,
   don't use the reply pop-up"*): `POST /reply` asks `TerminalBinding.focusedTTY()` (Terminal.app's
   focused tab when Terminal is frontmost, or VS Code's terminal holding the caret) and, when it is the

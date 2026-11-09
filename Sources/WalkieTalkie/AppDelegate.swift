@@ -4625,7 +4625,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pendingVia = result.via
             pendingEngine = result.engineLabel
             let line = caretLine(words: result.text, full: true)
-                .components(separatedBy: "\n").filter { $0 != Self.questionHint }.joined(separator: "\n")
+                .components(separatedBy: "\n").filter { $0 != Self.questionHint && $0 != Self.dictionaryHint }.joined(separator: "\n")
             pendingVia = nil
             pendingEngine = nil
             let pictures = frames.map { ScreenCapture.zoom(for: $0) ?? ScreenCapture.handover(for: $0) }
@@ -9906,6 +9906,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ceva."* — his question in, its answer out; nothing else rides it.
     static let questionHint = "[If I asked you a question, also run: walkie-reply \"<the answer in ≤2 short sentences>\" [--image <path> when a small picture says it better]. Only to answer me — never to ask me something, never to report work done.]"
 
+    /// **A word the engine got wrong goes into both dictionaries** (2026-11-09,
+    /// Victor: *"când modelul este 100% sigur … că mesajul dictat conține un
+    /// cuvânt greșit … Claude să poată adăuga în dicționarul folosit de Walkie
+    /// Talkie cuvântul … inclusiv în Wispr Flow Dictionary"* — "Wispr Flow" had
+    /// come out "Whisperflow"). `walkie-dict` (`helpers/`, linked into
+    /// `~/.local/bin`) writes `vocabulary.txt` and Wispr's `Dictionary` table and
+    /// keeps them in sync. On every dictation, not only on a `?`: the agent is the
+    /// only reader who can tell a misheard term from his words.
+    static let dictionaryHint = "[If you are 100% sure a term I said came out misheard (a name, a tool, a technical word — not a Romanian ending), also run: walkie-dict add \"<right spelling>\" --heard \"<as transcribed>\". Silently, no need to tell me.]"
+
     /// **`[Transcribed in RO or EN by <engine>]`** (2026-10-12, Victor: *"let's
     /// call it transcribed in RO or EN, and then you place the name of the engine
     /// that transcribed it"*). Reverses the 2026-09-19 cut above (`questionHint` sits between): the clause now
@@ -10485,6 +10495,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // nothing** (2026-09-27) — what the transcript lost, never a number.
             if let tag = m.affect?.verdict.tag { parts.append(tag) }
             if text.contains("?") { parts.append(questionHint) }
+            parts.append(dictionaryHint)
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
