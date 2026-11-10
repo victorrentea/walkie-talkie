@@ -727,6 +727,27 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   come back during Wispr's drain. What is left: the chip's `Transcribing…` row and the corner atom.
   Supersedes, while it is on, every *through the settle* bullet in this file (rewind, flights, dust
   orbit, heads held, `landStill`). A film dress (no web view) cannot freeze: it collapses at the close.
+- **Two things come back into the quiet settle** (2026-11-10). **The caret pin**, with its ring
+  filling in the hole (Victor: *"când fac dictare la caret sau promptare la caret, în continuare
+  trebuie să arate pinul acela cu progresbarul interior ca înainte"*): `setDelivering` is no longer
+  gated on `quiet`, the wave hides the arrow only off the caret, and `headsOrigin` answers for a
+  caret sentence after the freeze. **The pin no longer breathes** (*"să facă la fel un fel de shine
+  la diagonală … să nu se umfle și să se dezumfle … să rămână fix în locul … în care va intra
+  textul"*): `DropArrow.pulses` off (`WT_PIN_PULSE=1` brings it back) — held at `holdScale`, the
+  glint sweeping unbroken and the ring filling are what move. **Reverse tunnel in the atom's
+  corner** (*"în locul acelui atom din colțul ecranului … pune-i efectul de reverse tunnel, redând
+  audio înregistrat pentru [propoziția] care acum se transcrie"*): `CornerTunnel`, its own
+  `ProjectMHalo` square (230 pt, the preset with no trail canvas, a radial mask so no square edge
+  shows) on `PromptAtom.home`, fed the take backwards at `take / DecodeRate.predict` (1…8×,
+  looped) — from the close to the landing (`settle`, from `syncBorrowedGestures`), and on through the
+  held prompt in the atom's place (`hold`, from `RelayWindow.syncPromptAtom`, which then shows no
+  atom; a hover that reveals the dialog fades it, leaving brings it back). The atom stays the
+  fallback where there is no take: typed prompt, test route, a take under 0.5 s, battery, ⚡. A take
+  is this sentence's only — still settling, landed < 3 s ago, or already claimed by the held prompt;
+  `release` drops it when no prompt rests. `WT_CORNER_TUNNEL=0` turns it off. Desk: `POST
+  /test/corner-tunnel {"on": true, "capturable": true, "seconds": 6}` (a synthetic 140 Hz take),
+  `GET /test/state.prompt.cornerTunnel`. Log `🌀 …`. Trap paid for: `show` after a `hide` still
+  fading must animate the alpha back — a plain `alphaValue = 1` loses to the running animator.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets

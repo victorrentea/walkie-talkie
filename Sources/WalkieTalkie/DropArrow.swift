@@ -22,7 +22,7 @@ import QuartzCore
 /// |---|---|---|
 /// | talking | nothing | the pin, plain |
 /// | `patience` of quiet, then `swell` | the heads fade in | the glint and the glow fade in |
-/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, pulsing, glint unbroken, **no glow outside** (2026-10-22), a ring filling in the hole |
+/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, still (no breath since 2026-11-10), glint unbroken, **no glow outside** (2026-10-22), a ring filling in the hole |
 /// | the ⌘V | cut | cut |
 ///
 /// **Always up while he talks**, because the pin answers *where*, and that is
@@ -84,6 +84,8 @@ final class DropArrow {
     static let pulseScale: CGFloat = 1.15
     /// One breath, out and back.
     private static let pulsePeriod: CFTimeInterval = 0.9
+    /// The breath is off since 2026-11-10 — see `setInFlight`.
+    static let pulses = ProcessInfo.processInfo.environment["WT_PIN_PULSE"] == "1"
 
     /// **A thin ring round the pin's hole fills until the local model would
     /// take the sentence anyway** (2026-10-20, Victor: *"a progress bar inside
@@ -243,7 +245,11 @@ final class DropArrow {
         guard let pin else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if on {
+        // **No breathing since 2026-11-10** (Victor: *"pinul să facă la fel un fel
+        // de shine la diagonală … să nu se umfle și să se dezumfle ca înainte, ci să
+        // rămână fix în locul … în care va intra textul"*): held at `holdScale`, the
+        // glint sweeping and the ring filling are what move. `WT_PIN_PULSE=1` brings it back.
+        if on && Self.pulses {
             let a = CABasicAnimation(keyPath: "transform.scale")
             a.fromValue = Self.holdScale
             a.toValue = Self.holdScale * Self.pulseScale

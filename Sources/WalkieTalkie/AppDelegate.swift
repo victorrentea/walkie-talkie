@@ -79,6 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The orange outline round the window a caret sentence will be typed into,
     /// and the caret in it for the heads (2026-10-13) — see `FocusFrame`.
     private let focusFrame = FocusFrame()
+    /// Reverse tunnel in the atom's corner while the words are transcribed (2026-11-10).
+    private let cornerTunnel = CornerTunnel()
 
     /// **`⌘⇧P`, shown for five seconds after every delivered sentence** — see
     /// `PasteHint`. Until 2026-09-23 it was faint and said only after a caret
@@ -1492,6 +1494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ✍️ And the dictation editor's, Haiku (`DictationEditor`).
         DictationEditor.shared.warm()
         overlay = RelayWindow()
+        overlay.cornerTunnel = cornerTunnel
 
         // **The ✕ cancels the dictation before it ends anything.** It ended the
         // session outright until 2026-09-12, which is the wrong verb at the one
@@ -8416,11 +8419,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fxHeld = BatteryFx.holdsEffects
         caretHalo.setRewind(settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet,
                             take: settleTake, estimate: settleEstimate)
-        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk && !fxHeld && !quiet, estimate: settleEstimate)
+        // **The pin stays through a quiet settle** (2026-11-10, Victor: *"când fac
+        // dictare la caret sau promptare la caret, în continuare trebuie să arate
+        // pinul acela cu progresbarul interior ca înainte"*): it is not an effect,
+        // it says where the words go and how long is left.
+        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk && !fxHeld, estimate: settleEstimate)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
         // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,
         // like `setDelivering`, so the ring is told to fade rather than to go.
+        // **The one picture of a quiet settle is in the prompt's corner** (2026-11-10,
+        // `CornerTunnel`): Reverse tunnel on the take backwards, where the atom stands.
+        cornerTunnel.held = fxHeld || quickAsk
+        if quiet { cornerTunnel.settle(settling && !listening && !speculative && !quickAsk, take: settleTake) }
         let coasting = settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet
         caretHalo.setCoasting(coasting, estimate: settleEstimate)
         // **The halo dial listens exactly while the ring is up** (2026-09-20)

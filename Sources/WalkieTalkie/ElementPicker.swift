@@ -1025,6 +1025,19 @@ final class ElementPicker {
             }
             respond(conn, 200, ["ok": true])
 
+        // Reverse tunnel in the atom's corner (2026-11-10, `CornerTunnel.demo`).
+        case ("POST", "/test/corner-tunnel"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let on = body?["on"] as? Bool ?? true
+            let seconds = body?["seconds"] as? Double ?? 6
+            let capturable = body?["capturable"] as? Bool ?? false
+            var report: [String: Any] = [:]
+            DispatchQueue.main.sync {
+                CornerTunnel.current?.demo(on, seconds: seconds, capturable: capturable)
+                report = CornerTunnel.current?.report ?? [:]
+            }
+            respond(conn, 200, ["ok": true].merging(report) { _, new in new })
+
         // ⌘⌃X — the local model, now (2026-09-28): the key's action, not the key.
         case ("POST", "/test/local-now"):
             onTestLocalNow?()

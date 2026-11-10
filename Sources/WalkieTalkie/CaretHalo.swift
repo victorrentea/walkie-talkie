@@ -1436,7 +1436,8 @@ final class CaretHalo {
         guard !frozeThisRing, freezesAtClose, let panel, let view = panel.contentView,
               let left = StopWave.wipe(view, in: panel.frame) else { return }
         let generation = freeze()
-        if Self.quietSettle { arrow.hide() }
+        // A caret sentence keeps its pin (2026-11-10): the wave wipes effects, not it.
+        if Self.quietSettle, !atCaret { arrow.hide() }
         Log.info("⏪ the \(drawn.rawValue) freeze at the press — the stop's wave wipes them")
         DispatchQueue.main.asyncAfter(deadline: .now() + left) { [weak self] in
             guard let self, self.stillGeneration == generation else { return }
@@ -2747,8 +2748,9 @@ final class CaretHalo {
 
     /// `pinAt` as the origin of a panel the size of the ring's.
     private var headsOrigin: NSPoint? {
-        // Wiped by the wave, the heads stay down too: the press ended the dictation.
-        if Self.quietSettle, frozenAt != nil { return nil }
+        // Wiped by the wave, the heads stay down too: the press ended the dictation —
+        // except a caret sentence's pin, which waits for its words (2026-11-10).
+        if Self.quietSettle, frozenAt != nil, !atCaret, !delivering { return nil }
         return pinAt.map { NSPoint(x: ($0.x - Self.side / 2).rounded(), y: ($0.y - Self.side / 2).rounded()) }
     }
 

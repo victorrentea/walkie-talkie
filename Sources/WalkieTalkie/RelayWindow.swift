@@ -5931,17 +5931,23 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// would have gone: a held prompt and the dialog kept after the send both count.
     private let promptAtom = PromptAtom()
     private var promptAtomHome: NSRect = .zero
+    /// **Reverse tunnel stands in the atom's place while it has a take to play**
+    /// (2026-11-10, `CornerTunnel`); the atom only where it has none.
+    var cornerTunnel: CornerTunnel?
 
     /// An invisible panel still takes the clicks of the whole rectangle (see
     /// `orderOut` in `refreshPresence`'s rule), so at rest it lets them through.
     private func syncPromptAtom() {
         guard !Self.shooting else { return }
-        let resting = (sentPrompt != nil || spawnPanelHeld) && !panelRevealed
-        if resting {
+        let owned = sentPrompt != nil || spawnPanelHeld
+        let resting = owned && !panelRevealed
+        if resting, cornerTunnel?.hold(true, atom: promptAtomHome) != true {
             promptAtom.show(at: promptAtomHome, level: panel.level, sharing: panel.sharingType)
         } else {
             promptAtom.hide()
+            if !resting { cornerTunnel?.hold(false, atom: promptAtomHome) }
         }
+        if !owned { cornerTunnel?.release() }
         if !spawnPanelHeld, !spawnPanelFading { panel.ignoresMouseEvents = sentPrompt != nil && resting }
     }
 
@@ -6574,12 +6580,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// is held, the green button's verb, seconds left on its clock (nil while
     /// paused or edited), the words, and why it is not counting.
     var promptState: [String: Any] {
-        guard let prompt = sentPrompt else { return ["held": false] }
+        guard let prompt = sentPrompt else { return ["held": false, "cornerTunnel": cornerTunnel?.report ?? NSNull()] }
         var out: [String: Any] = ["held": true, "verb": sendVerb, "text": promptWords ?? prompt,
                                   "buttons": promptButtons, "editing": editingPrompt,
                                   "paused": promptHoverPaused,
                                   "opacity": panelOpacityShown ?? Self.panelRestAlpha,
                                   "atom": promptAtom.frame != nil,
+                                  "cornerTunnel": cornerTunnel?.report ?? NSNull(),
                                   "clickThrough": panel.ignoresMouseEvents]
         out["deadline"] = promptDeadline.map { max(0, $0.timeIntervalSinceNow) } ?? NSNull()
         out["heard"] = promptHeard ?? NSNull()

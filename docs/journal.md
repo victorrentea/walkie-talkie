@@ -16125,3 +16125,21 @@ ring, no heads, no orange outline. The effect is the microphone's; a clean scree
 *ready for the next sentence*. `WT_QUIET_SETTLE=0` restores the 2026-09-22…11-06 settle. Rule:
 `replace-wispr-and-halo.md`, *Nothing moves on screen while the words are transcribed*.
 
+## The pin is back at the caret, and Reverse tunnel stands in the atom's corner (2026-11-10)
+
+Victor, the morning after the quiet settle: *"în locul acelui atom din colțul ecranului pus acum în timpul
+transcrierii … unde [e] panoul de prompt preview, pune-i efectul de reverse tunnel, redând audio înregistrat
+pentru [propoziția] care acum se transcrie"*, then *"când fac dictare la caret sau promptare la caret, în
+continuare trebuie să arate pinul acela cu progresbarul interior ca înainte"* and *"pinul să facă la fel un fel
+de shine la diagonală … doar să nu se umfle și să se dezumfle … să rămână fix în locul … în care va intra
+textul"*.
+
+The wave still wipes every effect at the press. Two pictures come back, both information rather than
+decoration: the caret pin with its filling ring (no breath now, the glint still sweeping), and a small
+Reverse tunnel in the prompt's corner, fed the take backwards — the rewind's sound in the atom's place,
+not the rewind's geometry over his page. It is its own engine square (`CornerTunnel`), because the halo's
+panel is a screen-sized canvas that belongs to the pointer and the wave has just wiped it. It stays through
+the held prompt in place of the atom; the atom is left for prompts with no take. First desk shot showed a
+straight cut on the square's right edge (the preset's fade does not reach zero at the sides): a radial mask
+fixed it. Rule: `replace-wispr-and-halo.md`, *Two things come back into the quiet settle*.
+
