@@ -748,6 +748,10 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   /test/corner-tunnel {"on": true, "capturable": true, "seconds": 6}` (a synthetic 140 Hz take),
   `GET /test/state.prompt.cornerTunnel`. Log `🌀 …`. Trap paid for: `show` after a `hide` still
   fading must animate the alpha back — a plain `alphaValue = 1` loses to the running animator.
+  **Second trap, same day: the pin's caret comes from `FocusFrame`** (`onCaret` → `headsAt`). The
+  quiet settle had turned the frame off, and `setActive(false)` answers `onCaret(nil)` — no `pinAt`,
+  `armed` false, the pin gone with the wave though `setDelivering` was on. The frame now stays active
+  through the settle with `outlines = false`: it reads the caret every 0.2 s and draws no red line.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets

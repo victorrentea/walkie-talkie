@@ -71,6 +71,19 @@ final class FocusFrame {
     private(set) var active = false
     private(set) var reading = Reading()
 
+    /// **Reading the caret without drawing the outline** (2026-11-10): a quiet
+    /// settle draws no red line round the window, but the pin still needs the
+    /// caret to stand on — off, `setActive(false)` answered `onCaret(nil)` and the
+    /// pin went with the wave (Victor: *"nu se curăță atunci când vine valul acela
+    /// alb … rămâne acolo pinul roșu … cu progress bar-ul înăuntru pe durata
+    /// transcrierii"*).
+    var outlines = true {
+        didSet {
+            guard outlines != oldValue else { return }
+            if !outlines { hide() } else if let w = reading.window, reading.visible { show(around: w) }
+        }
+    }
+
     private static let tick: TimeInterval = 0.2
     /// **The map pin's red** (2026-10-26, Victor: *"border-ul care apare în jurul
     /// ferestrei … să fie aceeași culoare cu pin-ul roșu, să se înțeleagă că e
@@ -228,7 +241,7 @@ final class FocusFrame {
                 Log.info("🟧 the words go to \(r.app ?? "nothing") — no focused window, nothing outlined\(r.noCaret != nil ? ", the pin crossed out on the screen" : "")")
             }
         }
-        if let w = r.window, r.visible { show(around: w) } else { hide() }
+        if let w = r.window, r.visible, outlines { show(around: w) } else { hide() }
         if r.caret != old.caret { onCaret?(r.caret) }
         if r.noCaret != old.noCaret { onNoCaret?(r.noCaret) }
     }

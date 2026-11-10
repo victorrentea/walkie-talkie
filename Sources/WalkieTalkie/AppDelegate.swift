@@ -8408,7 +8408,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the outline, the rewind, the heads and the coasting ring are all the
         // dictation's, and the transcription is a background process.
         let quiet = CaretHalo.quietSettle
-        focusFrame.setActive(atCaret && !quickAsk && (listening || speculative || (settling && !quiet)))
+        // …but it keeps reading the caret through the settle, outline off (2026-11-10):
+        // the pin stands on that caret until the words land.
+        focusFrame.outlines = !(quiet && settling && !listening && !speculative)
+        focusFrame.setActive(atCaret && !quickAsk && (listening || speculative || settling))
         if settling { caretHalo.rewindAim = settleAim }
         // **A ⚡ quick question has one effect** (2026-10-09): Reverse tunnel
         // while he asks, then the collapse into the pointer — no rewind, no
