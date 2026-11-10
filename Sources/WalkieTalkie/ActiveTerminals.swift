@@ -152,9 +152,14 @@ enum ActiveTerminals {
     /// a session is on its way out and is not offered (2026-10-07, *"only if
     /// you've never sent Kamikaze to that session yet"*). The word inside a
     /// sentence is not the gesture.
+    ///
+    /// **Or the summary line ending `· 💀 kamikaze`** (2026-11-10): the
+    /// `walkie-inbox` mod moves the word off its own line onto the end of
+    /// `🎙️ · ☁️ · 📸 ×N`, and that is what the transcript keeps.
     static func isKamikaze(prompt: String) -> Bool {
         prompt.split(whereSeparator: \.isNewline).contains {
-            $0.trimmingCharacters(in: .whitespaces).lowercased() == "kamikaze"
+            let line = $0.trimmingCharacters(in: .whitespaces).lowercased()
+            return line == "kamikaze" || line.hasSuffix("· 💀 kamikaze") || line == "💀 kamikaze"
         }
     }
 

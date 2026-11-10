@@ -109,6 +109,8 @@ final class ActiveTerminalsTests: XCTestCase {
 
     func testKamikazeIsTheWordOnALineOfItsOwn() {
         XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "kamikaze"))
+        XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "Fix it.\n\n🎙️ · ☁️ · 📸 ×7 · 💀 kamikaze"))
+        XCTAssertFalse(ActiveTerminals.isKamikaze(prompt: "a kamikaze pilot"))
         XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "Fix it.\n\nkamikaze\n\n[Dictated in RO or EN]"))
         XCTAssertTrue(ActiveTerminals.isKamikaze(prompt: "Fix it.\n\n Kamikaze "))
         XCTAssertFalse(ActiveTerminals.isKamikaze(prompt: "E2E test of the kamikaze gesture."))
