@@ -549,7 +549,7 @@ enum OverlayStates {
             },
 
             Shot(slug: "heard-words", group: "Flashes", title: "Heard — the first words, after every sentence",
-                 when: "Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release, the source's own insert), then half a second fading. Not after a cancelled prompt.",
+                 when: "Five seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release, the source's own insert), then half a second fading. Not after a cancelled prompt.",
                  note: "**2026-11-11**, Victor: *\"după ce s-a trimis dictarea … primele cuvinte din textul transcris … în tooltip, sub mouse, ca să văd ce efectiv s-a înțeles. Și să dispară repede\"*. The first six words (≤ 48 characters), the envelope's brackets taken out, `…` when the sentence goes on — enough to catch a mis-hearing without reading the destination. Right above `📋 Re-paste`, on its own clock: a key keeps the paste row up, never this one.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setHeard(PasteHint.excerpt("Walkie Talkie, I'd like one more effect after the dictation was sent"))

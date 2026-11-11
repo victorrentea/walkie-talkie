@@ -102,8 +102,9 @@ final class PasteHint {
     /// **The `👂 “…”` row: the first words heard, for a glance** (2026-11-11,
     /// `RelayWindow.heardRow`). Its own clock, shorter than the paste row's and
     /// never extended by a key — Victor: *"să dispară repede înapoi, după câteva
-    /// secunde"*.
-    static let heardHold: TimeInterval = 3.0
+    /// secunde"*; 5 s since the same morning (*"lasă-l un timp mai mult pe ecran,
+    /// cinci secunde"*), 3 s for its first hour.
+    static let heardHold: TimeInterval = 5.0
     /// How many words, and the most characters they may take on the chip.
     static let heardWords = 6
     static let heardChars = 48

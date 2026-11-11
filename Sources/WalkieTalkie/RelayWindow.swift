@@ -367,7 +367,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let localNowInfo = NSTextField(labelWithString: "")
     private let pasteInfo = NSTextField(labelWithString: "\(PasteHint.label)  \(PasteHint.keys)")
     /// **`👂 “the first words…”`** (2026-11-11) — right above the paste row, for
-    /// three seconds after a sentence lands: the first few words the recogniser
+    /// five seconds after a sentence lands: the first few words the recogniser
     /// heard, so a mis-hearing shows by the pointer without reading the
     /// destination. Victor: *"după ce s-a trimis dictarea … afișezi … primele
     /// cuvinte din textul transcris … în tooltip, sub mouse, ca să văd ce
