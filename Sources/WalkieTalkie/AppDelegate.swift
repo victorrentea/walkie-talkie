@@ -1198,6 +1198,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// spus"*). Set by `HotkeyTap.onQuickGoogle`, which also ends the sentence;
     /// `deliver` sends the envelope to `googleQuestion` instead of `askQuick`.
     private var quickGoogle = false
+    /// **🔼 ↓ over a ⚡ question: Google it AND answer it** (2026-11-11, Victor:
+    /// *"dacă în timpul unei întrebări … fac gestul forward-swipe down … să deschidă
+    /// Google în browser cu un search query succint … și în același timp, imediat
+    /// după ce deschizi Google search, continui cu răspunsul tău din training data,
+    /// apoi research pe net, adversarial"*). Set by `onGestureKamikaze`, which ends
+    /// the sentence as 🔼 does; `deliver` asks `askQuick(google: true)`: the reply
+    /// pop-up with its 🌐 + 🧐 checks as ever, and the browser on the query
+    /// (`QuickAsk.ask(search:)`, its own process, started at the flick).
+    private var quickGoogleToo = false
 
     /// Somewhere for this dictation to go: a terminal already bound, one it is
     /// about to open for itself, the caret — or, since 2026-09-11, one he has
@@ -1609,6 +1618,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let wordsComing = self.listening || self.settling || self.fallingBack
                     || self.source.phase.isWaitingForWords
                 let plain = self.cleanSentence && !self.cleanRedirected
+                // **Over a ⚡ question: Google it and answer it** (2026-11-11,
+                // `quickGoogleToo`) — a question takes no kamikaze (`deliver`
+                // drops the word), so the flick is free for this. While the
+                // microphone is open it ends the question, as 🔼 would; once
+                // closed (words in flight) it only marks it.
+                if wordsComing, self.quickAsk {
+                    guard !self.quickGoogleToo else { return }
+                    self.quickGoogleToo = true
+                    self.quickGoogle = false
+                    QuickAsk.shared.warmSearch()
+                    Log.info("🔎⚡ 🔼 ↓ over the ⚡ question — Google it, and answer it in the pop-up as well")
+                    self.overlay.flash("🔎 Google + ⚡ answer", duration: 1.5)
+                    if self.listening || self.source.isRecording { self.endDictation() }
+                    return
+                }
                 // **The prompt on the panel is not committed yet** (2026-09-26,
                 // TG16): it may still be marked, and unmarked. A sentence
                 // still being spoken or transcribed outranks it — it is the
@@ -2254,11 +2278,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 _ = done.wait(timeout: .now() + 30)
                 return (200, out)
             }
+            // `googleToo: true` — 🔼 ↓'s question (2026-11-11): the answer as ever,
+            // and `query` / `url` / `queryMs` from the process beside it; opens the
+            // browser only with `open: true`.
+            let googleToo = body["googleToo"] as? Bool == true
+            let asked = CFAbsoluteTimeGetCurrent()
+            var googledOut: [String: Any] = [:]
+            if googleToo { QuickAsk.shared.warmSearch() }
             DispatchQueue.main.async {
                 // `images: [path]` and `followUp: true` — a prompt's pictures, and a
                 // question asked over the ⚡ answer on screen (2026-10-15).
                 self.askQuick(text, images: body["images"] as? [String] ?? [],
-                              followUp: body["followUp"] as? Bool == true, done: { answer, error, first, total in
+                              followUp: body["followUp"] as? Bool == true,
+                              google: googleToo, openGoogle: body["open"] as? Bool == true,
+                              googled: { q, url in
+                    googledOut = ["query": q, "url": url.absoluteString,
+                                  "queryMs": Int((CFAbsoluteTimeGetCurrent() - asked) * 1000)]
+                }, done: { answer, error, first, total in
                     out = ["ok": answer != nil, "answer": answer ?? NSNull(), "error": error ?? NSNull(),
                            "firstWordMs": first.map { Int($0 * 1000) } ?? NSNull(), "totalMs": Int(total * 1000),
                            "model": QuickAsk.shared.model,
@@ -2277,7 +2313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard done.wait(timeout: .now() + limit) == .success else {
                 return (504, ["ok": false, "error": "no answer"])
             }
-            return (200, out)
+            return (200, DispatchQueue.main.sync { out.merging(googledOut) { a, _ in a } })
         }
         picker.onTestWisprHook = { [weak self] path, body in
             guard let self else { return (503, ["ok": false, "error": "gone"]) }
@@ -4513,9 +4549,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quick = quickAsk
         let followUp = quickFollowUp
         let google = quick && quickGoogle
+        let googleToo = quick && quickGoogleToo && !google
         quickAsk = false
         quickFollowUp = false
         quickGoogle = false
+        quickGoogleToo = false
         cleanSentence = false
         caretPrompt = false
         submitAfterClean = false
@@ -4639,7 +4677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             holdOnClipboard(line, why: "a ⚡ quick question")
             if google { googleQuestion(spokenText, prompt: line, images: pictures) }
-            else { askQuick(spokenText, prompt: line, images: pictures, followUp: followUp) }
+            else { askQuick(spokenText, prompt: line, images: pictures, followUp: followUp, google: googleToo) }
             return
         }
         pendingPromptWarning = result.warning
@@ -5751,6 +5789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickAsk = false
             quickFollowUp = false
             quickGoogle = false
+            quickGoogleToo = false
             submitAfterClean = false
         }
         if !bg { hotkeys.ownCleanSentence = false }
@@ -6298,6 +6337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAsk = false
         quickFollowUp = false
         quickGoogle = false
+        quickGoogleToo = false
         Log.info("⚡ the question goes to \(label) as a prompt — no quick answer")
     }
 
@@ -6421,6 +6461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickAsk = quick
         quickFollowUp = quick && followUp
         quickGoogle = false
+        quickGoogleToo = false
         hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
@@ -6488,6 +6529,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickAsk = false
             quickFollowUp = false
             quickGoogle = false
+            quickGoogleToo = false
             hotkeys.ownCleanSentence = false
             // W19: none of this gesture's flags outlive its refusal.
             clearSpawn()
@@ -6968,15 +7010,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func googleQuestion(_ question: String, prompt: String, images: [String],
                                 open: Bool = true, done: ((String, URL) -> Void)? = nil) {
         QuickAsk.shared.searchQuery(prompt, images: images) { query, error in
-            let q = query ?? question
-            if let error { Log.info("🔎 no query from the model (\(error)) — Googling the words as said") }
-            var c = URLComponents(string: "https://www.google.com/search")!
-            c.queryItems = [URLQueryItem(name: "q", value: q)]
-            guard let url = c.url else { return }
-            Log.info("🔎 Google: \"\(q)\"")
-            if open { NSWorkspace.shared.open(url) }
-            done?(q, url)
+            Self.google(query, error: error, said: question, open: open, done: done)
         }
+    }
+
+    /// The query, or the words as said when the model gave none, as a Google
+    /// search URL — opened in the default browser when `open`. On main.
+    static func google(_ query: String?, error: String?, said: String, open: Bool = true,
+                       done: ((String, URL) -> Void)? = nil) {
+        let q = query ?? said
+        if let error { Log.info("🔎 no query from the model (\(error)) — Googling the words as said") }
+        var c = URLComponents(string: "https://www.google.com/search")!
+        c.queryItems = [URLQueryItem(name: "q", value: q)]
+        guard let url = c.url else { return }
+        Log.info("🔎 Google: \"\(q)\"")
+        if open { NSWorkspace.shared.open(url) }
+        done?(q, url)
     }
 
     /// The `Asking` row on the chip while a question is spoken.
@@ -6997,6 +7046,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var quickToken = 0
     static let quickPlaceholder = "Replying from training data" + ReplyPanel.dots
     private func askQuick(_ question: String, prompt: String? = nil, images: [String] = [], followUp: Bool = false,
+                          google: Bool = false, openGoogle: Bool = true,
+                          googled: ((String, URL) -> Void)? = nil,
                           done: ((String?, String?, TimeInterval?, TimeInterval) -> Void)? = nil,
                           checked: ((_ web: String?, _ review: String?) -> Void)? = nil) {
         quickToken += 1
@@ -7159,7 +7210,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             QuickAsk.shared.more(asked, images: images, history: history, answer: ReplyPanel.plain(answer),
                                  sources: sources.filter { seen.insert($0).inserted }, checks: makeChecks(first: false))
         }
-        QuickAsk.shared.ask(asked, images: images, history: history, checks: checks, onText: { text in
+        // 🔼 ↓ over the question (2026-11-11, `quickGoogleToo`): the browser on
+        // its query too, made by a process of its own beside the answer's.
+        let search: ((String?, String?) -> Void)? = google ? { query, error in
+            Self.google(query, error: error, said: question, open: openGoogle, done: googled)
+        } : nil
+        QuickAsk.shared.ask(asked, images: images, history: history, checks: checks, search: search, onText: { text in
             answer = text
             paint()
         }, onDone: { text, error, first, model in
@@ -13743,7 +13799,7 @@ extension AppDelegate {
         var kamikaze = false, contextAtWheelRelease = false
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
-        var quickAsk = false, quickFollowUp = false, quickGoogle = false
+        var quickAsk = false, quickFollowUp = false, quickGoogle = false, quickGoogleToo = false
         var latchedAtCaret = false, cleanRedirected = false
         var latch: Latch?
         var latchedMouse: CGPoint?
@@ -13785,7 +13841,7 @@ extension AppDelegate {
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
-        e.quickGoogle = quickGoogle
+        e.quickGoogle = quickGoogle; e.quickGoogleToo = quickGoogleToo
         e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
@@ -13800,7 +13856,7 @@ extension AppDelegate {
         kamikaze = false
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
-        quickAsk = false; quickFollowUp = false; quickGoogle = false
+        quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false
         latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
         pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
         pendingAffect = nil
@@ -13844,7 +13900,7 @@ extension AppDelegate {
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp
-        quickGoogle = e.quickGoogle
+        quickGoogle = e.quickGoogle; quickGoogleToo = e.quickGoogleToo
         latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning

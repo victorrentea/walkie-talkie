@@ -308,6 +308,8 @@ final class QuickAsk {
 
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.quick-ask")
     private var ready: Worker?
+    /// The process 🔼 ↓'s Google query will use, started at the flick (`warmSearch`).
+    private var spareSearch: Worker?
     /// The question being answered or checked — 🔼 ← or the ✕ take it down.
     private var current: Run?
     private var failedStarts = 0
@@ -389,7 +391,8 @@ final class QuickAsk {
     /// answered (`Opus 5.5`). Then, when `checks` is given, the 🔎 web check and
     /// the 🧐 review of it. All callbacks on main.
     func ask(_ question: String, images: [String] = [], history: [Turn] = [],
-             checks: Checks? = nil, onText: @escaping (String) -> Void,
+             checks: Checks? = nil, search: ((_ query: String?, _ error: String?) -> Void)? = nil,
+             onText: @escaping (String) -> Void,
              onDone: @escaping (_ answer: String?, _ error: String?, _ firstWord: TimeInterval?, _ model: String) -> Void) {
         queue.async {
             // A new question ends whatever the last one was still doing.
@@ -418,6 +421,7 @@ final class QuickAsk {
             if !pictures.isEmpty || !history.isEmpty {
                 Log.info("⚡ asking with \(pictures.count) picture(s) and \(history.count) earlier turn(s)")
             }
+            if let search { self.searchBeside(asked, pictures: pictures, done: search) }
             self.stage(run, w, Self.content(asked, pictures: pictures), timeout: Self.timeout, onText: { text in
                 if first == nil { first = CFAbsoluteTimeGetCurrent() - started }
                 DispatchQueue.main.async { onText(text) }
@@ -473,6 +477,51 @@ final class QuickAsk {
                 }
             })
             self.warmLocked()
+        }
+    }
+
+    /// **The Google query beside the answer** (2026-11-11, 🔼 ↓ over a ⚡ question —
+    /// `AppDelegate.quickGoogleToo`). The answer keeps the waiting process; the
+    /// query gets `spareSearch`, started at the flick while the words were still
+    /// being transcribed (a cold `claude -p` spends ~2 s starting), else a cold
+    /// one now. **A run of its own, never `current`**: a ✕ on the pop-up or the
+    /// next question cannot keep the browser from opening, and the query cannot
+    /// end the answer. On `queue`; `done` on main.
+    private func searchBeside(_ question: String, pictures: [(label: String, path: String)],
+                              done: @escaping (String?, String?) -> Void) {
+        let warm = spareSearch?.alive == true
+        let w = warm ? spareSearch : try? Worker(model: model, effort: effort, prompt: Self.systemPrompt)
+        spareSearch = nil
+        guard let w else {
+            DispatchQueue.main.async { done(nil, "the search process did not start") }
+            return
+        }
+        Log.info("🔎⚡ the Google query on a \(warm ? "waiting" : "cold") process, beside the answer")
+        let run = Run()
+        run.workers = [w]
+        stage(run, w, Self.content(Self.searchOrder + "\n\n" + question, pictures: pictures),
+              timeout: Self.searchTimeout + (warm ? 0 : 4), onText: { _ in }, onDone: { query, error in
+            let line = query?.split(separator: "\n").first
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " \"'`*")) }
+            DispatchQueue.main.async {
+                if let line, !line.isEmpty { done(line, nil) } else { done(nil, error ?? "an empty query") }
+            }
+        })
+    }
+
+    /// 🔼 ↓ over a ⚡ question: start the process its Google query will use, while
+    /// the words are transcribed (`searchBeside`). Nothing if one is waiting.
+    func warmSearch() {
+        queue.async {
+            if self.spareSearch?.alive == true { return }
+            guard let w = try? Worker(model: self.model, effort: self.effort, prompt: Self.systemPrompt) else { return }
+            self.spareSearch = w
+            // A question cancelled after the flick never asks for it.
+            self.queue.asyncAfter(deadline: .now() + 120) {
+                guard self.spareSearch === w else { return }
+                self.spareSearch = nil
+                w.stop()
+            }
         }
     }
 

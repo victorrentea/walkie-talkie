@@ -434,6 +434,23 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-11-11: "dacă în timpul unei întrebări (în modul ask) fac
+            # gestul forward-swipe down … să deschidă Google în browser cu un search
+            # query succint … și în același timp … continui cu răspunsul tău din
+            # training data, apoi research pe net, adversarial".
+            "row": ("🔼 forward", "drag down over a ⚡ question"),
+            "does": "END the question, GOOGLE it AND answer it — the reply pop-up and its 🌐 + 🧐 checks as ever",
+            "checks": [
+                ("the flick over a question marks it and ends it, before any kamikaze", "AppDelegate `onGestureKamikaze`",
+                 lambda: before(closure(src, "hotkeys.onGestureKamikaze"),
+                                r"if wordsComing, self\.quickAsk \{.*?self\.quickGoogleToo = true.*?self\.endDictation\(\)",
+                                r"self\.kamikaze\.toggle\(\)")),
+                ("its words go to the reply pop-up, with the Google beside", "AppDelegate `deliver`",
+                 lambda: has(function(src, ad, "deliver"),
+                             r"else \{ askQuick\(spokenText, prompt: line, images: pictures, followUp: followUp, google: googleToo\) \}")),
+            ],
+        },
+        {
             # Victor, 2026-10-05: "If I do the gesture for back and swipe to the
             # left at any point, this means an Enter." A cancel until then.
             # 2026-10-21: "during a dictation or a prompt … either the Forward
@@ -651,6 +668,8 @@ MUTATIONS = [
      "            rescueFromRow(after: process)"),
     ("plain dictation gets the kamikaze word", "AppDelegate.swift",
      "if clean || quick { kamikaze = false }", "if quick { kamikaze = false }"),
+    ("🔼 ↓ over a ⚡ question is a kamikaze again (before 2026-11-11)", "AppDelegate.swift",
+     "                if wordsComing, self.quickAsk {", "                if false {"),
     ("⌘⌃X passes to the front app on autorepeat (acted on twice)", "HotkeyTap.swift",
      "if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow(\"⌘⌃X (autorepeat)\", type, event) }", ""),
     ("⌘⌃X stops the take the ordinary way (the cloud still gets it)", "AppDelegate.swift",

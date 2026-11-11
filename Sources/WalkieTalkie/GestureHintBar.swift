@@ -154,9 +154,10 @@ final class GestureHintBar {
             // shutter and ↓ the typing box, as while prompting; no kamikaze, no
             // film (`toggleFilm` refuses it) — a question's answer is the reply
             // pop-up. 🔼 → sends it to the terminal as a prompt (`dropQuestion`),
-            // 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`).
+            // 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`); 🔼 ↓ does both.
             front.click = "⚡ ask"
-            front.down = ""
+            // 🔼 ↓ Googles it AND answers it (2026-11-11, `quickGoogleToo`).
+            front.down = "🔎 + ⚡"
             front.right = "💻 terminal"
             back.click = "📸 shot"
             back.up = ""

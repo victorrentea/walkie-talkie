@@ -16143,3 +16143,23 @@ the held prompt in place of the atom; the atom is left for prompts with no take.
 straight cut on the square's right edge (the preset's fade does not reach zero at the sides): a radial mask
 fixed it. Rule: `replace-wispr-and-halo.md`, *Two things come back into the quiet settle*.
 
+
+## 🔼 ↓ over a ⚡ question: Google it and answer it (2026-11-11)
+
+Victor: *"dacă în timpul unei întrebări (în modul ask) fac gestul forward-swipe down, care în mod
+normal înseamnă kamikaze, în acest mod va însemna să deschidă Google în browser cu un search query
+succint … și în același timp, imediat după ce deschizi Google search, continui cu răspunsul tău din
+training data, apoi research pe net, adversarial … deci practic acest gest este un mod de a termina
+întrebarea prin a cere ȘI Google search ȘI research-ul tău."*
+
+The flick was free over a question: `deliver` already dropped the kamikaze word on a ⚡ sentence. It is
+🔽 → (Google only, 2026-10-25) plus 🔼 (answer only) in one motion. What was not obvious: both
+`QuickAsk.ask` and `QuickAsk.searchQuery` begin with `cancelLocked()` and take the **one** waiting
+process, so calling them back to back would have the answer kill the query. So the query runs **beside**
+the answer, in a `Run` of its own that is never `current` (a ✕ on the pop-up, or the next question,
+cannot keep the browser shut, and the query cannot end the answer), on `spareSearch` — a second process
+started **at the flick**, while the words are still being transcribed, since a cold `claude -p` spends
+~2 s starting (measured earlier in this journal). The waiting process stays the answer's, so the pop-up is as fast as
+ever. No spare (it failed, or a desk call with no flick) → a cold one, 4 s more patience. An unused spare
+is stopped after 120 s. Once the microphone has closed the flick only marks the question (words still in
+flight); a second flick changes nothing — no take-back, the question has ended.
