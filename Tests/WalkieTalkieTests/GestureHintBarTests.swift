@@ -44,8 +44,8 @@ final class GestureHintBarTests: XCTestCase {
     /// Googles it. 2026-11-11: 🔼 ↓ Googles it and answers it.
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
-            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: "🔎 + ⚡", left: "🗑️ discard", right: "💻 terminal"),
-            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "🗑️ discard", right: "🔎 google"),
+            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: "💻 terminal"),
+            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "🗑️ discard", right: GestureHintBar.google + " Google"),
         ])
     }
 

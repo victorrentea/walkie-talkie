@@ -157,12 +157,12 @@ final class GestureHintBar {
             // 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`); 🔼 ↓ does both.
             front.click = "⚡ ask"
             // 🔼 ↓ Googles it AND answers it (2026-11-11, `quickGoogleToo`).
-            front.down = "🔎 + ⚡"
+            front.down = Self.google + " + ⚡"
             front.right = "💻 terminal"
             back.click = "📸 shot"
             back.up = ""
             back.down = "⌨️ type"
-            back.right = "🔎 google"
+            back.right = Self.google + " Google"
         } else {
             // A plain sentence: 🔼 and 🔽 ↓ stop it without a Return, 🔼 → makes it
             // a prompt to the terminal (`retarget`), 🔼 ↓ is the last prompt's
@@ -234,6 +234,11 @@ final class GestureHintBar {
 
     /// A label starting with this is drawn crossed out, without it.
     static let struck = "~"
+    /// **Google's four-colour G, drawn where this character stands in a label**
+    /// (2026-11-11, Victor: *"să apară și iconița Google în gesturi acolo, nu doar o
+    /// lupă. Așa înțeleg că ajunge în browser, în Google"*) — no emoji or font has
+    /// it, so `drawBox` paints it (`drawGoogleG`). A private-use code point.
+    static let google = "\u{E0A0}"
 
     private var panel: NSPanel?
     private var board: Board?
@@ -625,6 +630,40 @@ final class GestureHintBar {
             return p
         }
 
+        /// Google's G: a ring in four arcs — red over the top, yellow on the left,
+        /// green along the bottom, blue up the right and into the bar — with the
+        /// mouth open on the upper right.
+        static func drawGoogleG(in r: NSRect) {
+            let c = NSPoint(x: r.midX, y: r.midY)
+            // The bar's view is flipped: the angles below are drawn y-up.
+            NSGraphicsContext.saveGraphicsState()
+            defer { NSGraphicsContext.restoreGraphicsState() }
+            let up = NSAffineTransform()
+            up.translateX(by: 0, yBy: c.y * 2)
+            up.scaleX(by: 1, yBy: -1)
+            up.concat()
+            let t = r.width * 0.22
+            let radius = r.width / 2 - t / 2
+            func arc(_ from: CGFloat, _ to: CGFloat, _ hex: UInt32) {
+                let p = NSBezierPath()
+                p.appendArc(withCenter: c, radius: radius, startAngle: from, endAngle: to)
+                p.lineWidth = t
+                p.lineCapStyle = .butt
+                color(hex).setStroke()
+                p.stroke()
+            }
+            func color(_ hex: UInt32) -> NSColor {
+                NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
+                        blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+            }
+            arc(42, 145, 0xEA4335)    // red
+            arc(145, 215, 0xFBBC05)   // yellow
+            arc(215, 322, 0x34A853)   // green
+            arc(322, 360, 0x4285F4)   // blue, the right side under the mouth
+            color(0x4285F4).setFill()
+            NSRect(x: c.x - t * 0.15, y: c.y - t / 2, width: r.maxX - (c.x - t * 0.15), height: t).fill()
+        }
+
         private func drawBox(_ label: String, in r: NSRect, path given: NSBezierPath? = nil) {
             let struck = label.hasPrefix(GestureHintBar.struck)
             let text = struck ? String(label.dropFirst(GestureHintBar.struck.count)) : label
@@ -649,9 +688,26 @@ final class GestureHintBar {
                 .paragraphStyle: style,
             ]
             let s = text as NSString
-            let ts = s.size(withAttributes: attrs)
-            s.draw(in: NSRect(x: r.minX + 4, y: r.midY - ts.height / 2, width: r.width - 8, height: ts.height),
-                   withAttributes: attrs)
+            var ts = s.size(withAttributes: attrs)
+            if let at = text.range(of: GestureHintBar.google) {
+                // The G in its own square, the words around it drawn left-aligned
+                // from where the centred whole would start.
+                let before = String(text[..<at.lowerBound]) as NSString
+                let after = String(text[at.upperBound...]) as NSString
+                let left: [NSAttributedString.Key: Any] = attrs.filter { $0.key != .paragraphStyle }
+                let g = GestureHintBar.font.capHeight + 4
+                let wb = before.size(withAttributes: left).width, wa = after.size(withAttributes: left).width
+                ts.width = wb + g + wa
+                var x = max(r.minX + 4, r.midX - ts.width / 2)
+                let y = r.midY - ts.height / 2
+                before.draw(at: NSPoint(x: x, y: y), withAttributes: left)
+                x += wb
+                Self.drawGoogleG(in: NSRect(x: x, y: r.midY - g / 2, width: g, height: g))
+                after.draw(at: NSPoint(x: x + g, y: y), withAttributes: left)
+            } else {
+                s.draw(in: NSRect(x: r.minX + 4, y: r.midY - ts.height / 2, width: r.width - 8, height: ts.height),
+                       withAttributes: attrs)
+            }
             guard struck else { return }
             let half = min(ts.width, r.width - 8) / 2 + 3
             let slash = NSBezierPath()
