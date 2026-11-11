@@ -16163,3 +16163,16 @@ started **at the flick**, while the words are still being transcribed, since a c
 ever. No spare (it failed, or a desk call with no flick) → a cold one, 4 s more patience. An unused spare
 is stopped after 120 s. Once the microphone has closed the flick only marks the question (words still in
 flight); a second flick changes nothing — no take-back, the question has ended.
+
+## 📍 The caret pin waits for the words to be in (2026-11-11)
+
+Victor: *"spinul acela roșu pentru promptul sau dictarea la caret să nu dispară decât după ce ai
+confirmarea că ai inserat textul în acel loc. Am văzut că îl ștergi și abia după o secundă, două, apare
+efectiv textul în terminalul Claude."* The log agreed and was worse: every caret prompt that evening
+had `⬇︎ the pin goes — the words landed` 5–6 s before `⏎ caret prompt typed into Claude Code`
+(19:45:04 → 19:45:09, 19:45:47 → 19:45:53). The settle is the transcription's, and `deliver` ends it
+the moment it *starts* the caret route — before `submitPrompt` types into the tty, before
+`DictationEditor` hands back a plain sentence. Rather than move the settle's end (the ready row, the
+next sentence's start and the give-up clock all read it), the pin gets its own hold, `caretLanding`,
+released by each route at its own confirmation. Why the Terminal.app write takes ~5 s is not looked
+into here.

@@ -668,6 +668,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// What the ring was saying about the destination when the microphone closed,
     /// so the chevrons do not disarm underneath the settle.
     private var settlingAtCaret = false
+    /// **📍 The pin stays until the words are in** (2026-11-11, Victor: *"pinul acela
+    /// roșu pentru promptul sau dictarea la caret să nu dispară decât după ce ai
+    /// confirmarea că ai inserat textul în acel loc. Am văzut că îl ștergi și abia
+    /// după o secundă, două, apare efectiv textul în terminalul Claude"*). The settle
+    /// ends when `deliver` starts the caret's delivery, but a caret prompt is typed
+    /// into Claude Code's tty after that (19:45:04 pin down → 19:45:09 *typed*), and a
+    /// plain sentence waits for `DictationEditor` first. Non-zero while a caret
+    /// sentence's words travel after the settle: the serial `pinLanded` must match.
+    private var caretLanding = 0
+    private var caretLandingSerial = 0
+    /// The longest the pin waits for a delivery to say it landed.
+    static let caretLandingCeiling: TimeInterval = 12
+
+    /// Called just before the settle of a caret sentence ends: the pin stays.
+    private func holdPinUntilLanded() -> Int {
+        caretLandingSerial += 1
+        let serial = caretLandingSerial
+        caretLanding = serial
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.caretLandingCeiling) { [weak self] in
+            self?.pinLanded(serial, "no confirmation in \(Int(Self.caretLandingCeiling)) s")
+        }
+        return serial
+    }
+
+    /// The words are in at the caret (or will never be): the pin may go. On main.
+    private func pinLanded(_ serial: Int, _ why: String) {
+        guard caretLanding == serial, serial != 0 else { return }
+        caretLanding = 0
+        Log.info("📍 the pin goes — \(why)")
+        syncBorrowedGestures()
+    }
     private var settlingFrom: CFAbsoluteTime = 0
     /// How long the words are expected to take, fixed at the close — the
     /// chip's bar and the ring's fade (`CaretHalo.setCoasting`) read this one
@@ -4012,6 +4043,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !listening, !speculative else { return }
         speculative = true
         transcriptDisowned = false
+        caretLanding = 0
         endSettling(reason: "a new dictation started", quiet: true)
         syncBorrowedGestures()
         Log.info(String(format: "⚡ ring up %.1f ms after %@ (speculative — waiting for the microphone)",
@@ -4068,6 +4100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         kamikaze = false
         speculative = false
         transcriptDisowned = false
+        caretLanding = 0
         endSettling(reason: "a new dictation started", quiet: true)
 
         // **The microphone half of the mark is re-read here** (2026-09-19), not
@@ -4735,6 +4768,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that is here: the relay has just taken Wispr's paste and is putting
         // the words through the prompt panel instead. `⚡ ring down: routed to
         // …` is the one line in the file that says the wrap worked.
+        let landing = atCaret && !answeringInBackground ? holdPinUntilLanded() : 0
         endSettling(reason: atCaret ? "pasting at the caret"
                                     : "routed to \((latched.map { $0.target } ?? terminal.target)?.label ?? "the next bind")")
         guard !atCaret else {
@@ -4769,7 +4803,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // dictation ends with it — `DictationResult.unsure`.
             let mic = clean && result.unsure ? " 🎤" : ""
             if prompt {
-                deliverCaretPrompt(line, to: result.focusPid)
+                deliverCaretPrompt(line, to: result.focusPid, landing: landing)
             } else if clean, DictationEditor.applies(toEngine: result.engine) {
                 // **✍️ Edited against the screen first** (2026-10-22,
                 // `DictationEditor`): the paste waits for it, never past its budget.
@@ -4777,12 +4811,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DictationEditor.shared.edit(line, pid: pid, language: result.language) { [weak self] edited in
                     guard let self else { return }
                     self.pasteText(edited + mic, to: pid)
+                    self.pinLanded(landing, "the edited words were pasted")
                     if submit { self.submitAfterCleanWords() }
                     self.pasteHint.pulse(reason: "an edited plain sentence has just landed", words: edited)
                 }
                 return
             } else {
                 pasteText(line + mic, to: result.focusPid)
+                pinLanded(landing, "the words were pasted")
                 if submitClean { submitAfterCleanWords() }
             }
             // **The key that says it again, at the instant the ⌘V goes out.**
@@ -8467,7 +8503,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // …but it keeps reading the caret through the settle, outline off (2026-11-10):
         // the pin stands on that caret until the words land.
         focusFrame.outlines = !(quiet && settling && !listening && !speculative)
-        focusFrame.setActive(atCaret && !quickAsk && (listening || speculative || settling))
+            && !(caretLanding != 0 && !listening && !speculative)
+        focusFrame.setActive((atCaret && !quickAsk && (listening || speculative || settling)) || caretLanding != 0)
         if settling { caretHalo.rewindAim = settleAim }
         // **A ⚡ quick question has one effect** (2026-10-09): Reverse tunnel
         // while he asks, then the collapse into the pointer — no rewind, no
@@ -8482,7 +8519,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictare la caret sau promptare la caret, în continuare trebuie să arate
         // pinul acela cu progresbarul interior ca înainte"*): it is not an effect,
         // it says where the words go and how long is left.
-        caretHalo.setDelivering(settling && settlingAtCaret && !quickAsk && !fxHeld, estimate: settleEstimate)
+        // …and past it, until the delivery says the words are in (2026-11-11, `caretLanding`).
+        caretHalo.setDelivering(((settling && settlingAtCaret) || caretLanding != 0) && !quickAsk && !fxHeld,
+                                estimate: settleEstimate)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
         // mersul cât transcrierea e în curs"*. `setCoasting` before `setActive`,
@@ -10251,7 +10290,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Off the main thread for the `osascript` and the `ps`; a sentence whose
     /// source remembered a *different* app than the one in front (`focusPid`)
     /// is not second-guessed and is pasted to that app.
-    private func deliverCaretPrompt(_ line: String, to pid: pid_t?) {
+    private func deliverCaretPrompt(_ line: String, to pid: pid_t?, landing: Int = 0) {
         let front = NSWorkspace.shared.frontmostApplication
         let frontIsTarget = pid == nil || pid == front?.processIdentifier
         let bundle = frontIsTarget ? front?.bundleIdentifier : nil
@@ -10267,6 +10306,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let already = line.contains("\n\nkamikaze")
                 if let vscodeTTY, let frontPid {
                     self.pasteText(line, to: pid, settles: false)
+                    self.pinLanded(landing, "pasted into Claude Code in VS Code")
                     self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: line.count)
                     // A queued flick waits out the prompt's own Return.
                     self.offerKamikaze(already: already, at: "VS Code \(vscodeTTY)", serial: serial,
@@ -10291,10 +10331,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // settle standing now is the next sentence's (Q12) — not ours to end.
                 guard submitted, let tty else {
                     self.pasteText(line, to: pid, settles: false)
+                    self.pinLanded(landing, "pasted at the caret (no Claude Code prompt in front)")
                     self.promptWentNowhere(serial, why: "the prompt went to no Claude Code prompt")
                     return
                 }
                 Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
+                self.pinLanded(landing, "typed into Claude Code on \(tty)")
                 self.lastDictation = line
                 self.offerKamikaze(already: already, at: tty, serial: serial) { [weak self] in
                     DispatchQueue.global(qos: .userInitiated).async {

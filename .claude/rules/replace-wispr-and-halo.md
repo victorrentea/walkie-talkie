@@ -752,6 +752,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   quiet settle had turned the frame off, and `setActive(false)` answers `onCaret(nil)` — no `pinAt`,
   `armed` false, the pin gone with the wave though `setDelivering` was on. The frame now stays active
   through the settle with `outlines = false`: it reads the caret every 0.2 s and draws no red line.
+- **📍 The pin stays until the delivery says the words are in** (2026-11-11, Victor: *"pinul acela
+  roșu … să nu dispară decât după ce ai confirmarea că ai inserat textul … abia după o secundă, două,
+  apare efectiv textul în terminalul Claude"*). The settle ends when `deliver` *starts* a caret
+  delivery; a caret prompt is typed into Claude Code's tty after that (log, 19:45:04 pin down →
+  19:45:09 `⏎ caret prompt typed`), and a plain sentence waits for `DictationEditor` first.
+  `AppDelegate.caretLanding` (a serial from `holdPinUntilLanded`, taken just before that
+  `endSettling`) keeps `setDelivering` on and `FocusFrame` reading the caret, outline off, until
+  `pinLanded`: `submitPrompt` returned, VS Code's paste, the ⌘V (edited or not), or the fallback
+  paste; a new dictation drops it, 12 s is the ceiling (`caretLandingCeiling`). Log `📍 the pin goes — …`.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets
