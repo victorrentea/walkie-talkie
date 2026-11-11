@@ -596,6 +596,18 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
+    "height" : 70,
+    "image" : "heard-words.png",
+    "note" : "**2026-11-11**, Victor: *\"după ce s-a trimis dictarea … primele cuvinte din textul transcris … în tooltip, sub mouse, ca să văd ce efectiv s-a înțeles. Și să dispară repede\"*. The first six words (≤ 48 characters), the envelope's brackets taken out, `…` when the sentence goes on — enough to catch a mis-hearing without reading the destination. Right above `📋 Re-paste`, on its own clock: a key keeps the paste row up, never this one.",
+    "shape" : "chip",
+    "slug" : "heard-words",
+    "title" : "Heard — the first words, after every sentence",
+    "when" : "Three seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release, the source's own insert), then half a second fading. Not after a cancelled prompt.",
+    "width" : 310
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
     "height" : 46,
     "image" : "flash-nothing-to-paste.png",
     "note" : "The only thing the re-paste ever says out loud. A paste that lands is silent — the words appear at the caret, which is the whole of the evidence — so this row exists for the one case where nothing happens at all.",
@@ -704,14 +716,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 642,
+    "height" : 626,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -740,14 +752,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 485,
+    "height" : 469,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -831,19 +843,19 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 1002,
+    "height" : 1036,
     "image" : "prompt-scrolling.png",
     "note" : "The words sit in a scroll view (2026-10-26, Victor: *\"dacă prompt preview panel devine prea înalt, să-i apară scrollbar\"*): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.",
     "shape" : "panel",
     "slug" : "prompt-scrolling",
     "title" : "A transcript taller than the screen",
     "when" : "A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,

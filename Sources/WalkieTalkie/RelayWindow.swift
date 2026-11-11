@@ -366,6 +366,16 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let localNowGlyph = NSImageView()
     private let localNowInfo = NSTextField(labelWithString: "")
     private let pasteInfo = NSTextField(labelWithString: "\(PasteHint.label)  \(PasteHint.keys)")
+    /// **`👂 “the first words…”`** (2026-11-11) — right above the paste row, for
+    /// three seconds after a sentence lands: the first few words the recogniser
+    /// heard, so a mis-hearing shows by the pointer without reading the
+    /// destination. Victor: *"după ce s-a trimis dictarea … afișezi … primele
+    /// cuvinte din textul transcris … în tooltip, sub mouse, ca să văd ce
+    /// efectiv s-a înțeles. Și să dispară repede înapoi, după câteva secunde."*
+    /// `PasteHint` times it (`heardHold`, its own clock — keys do not extend it).
+    private let heardRow = NSView()
+    private let heardGlyph = NSImageView()
+    private let heardInfo = NSTextField(labelWithString: "")
     /// **`📨 N waiting — bind to send`** (2026-09-26) — sentences spoken with
     /// nothing bound, held in memory for the next bind (`AppDelegate.awaitingBind`).
     /// Victor, Q1: *"mi-ar trebui un cue vizual să știu că trebuie să las mesajul
@@ -1591,6 +1601,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         filmRow.isHidden = true
         root.addSubview(filmRow)
         installEmojiRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, emoji: "☠️")
+        installEmojiRow(heardRow, glyph: heardGlyph, label: heardInfo, emoji: "👂")
         installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
         installEmojiRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, emoji: "💻")
         installEmojiRow(heldRow, glyph: heldGlyph, label: heldInfo, emoji: "📨")
@@ -2110,7 +2121,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         // Written before it is measured, for the selection row's reason below.
         if heldCount > 0 { heldInfo.stringValue = Self.heldText(heldCount) }
         if let text = localNowShown { localNowInfo.stringValue = text }
-        for (on, label) in [(kamikaze, kamikazeInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
+        if let heardWords { heardInfo.stringValue = heardWords }
+        for (on, label) in [(kamikaze, kamikazeInfo), (localNow != nil, localNowInfo),
+                            (heardWords != nil, heardInfo), (pasteHint, pasteInfo),
                             (heldCount > 0, heldInfo), (readyForNext, readyInfo)] where on {
             label.sizeToFit()
             let lead = glyphColumn + recordDotGap
@@ -2366,6 +2379,16 @@ private let heardLabel = NSTextField(labelWithString: "")
             rows.append((localNowRow, recordRowHeight))
         } else {
             localNowRow.isHidden = true
+        }
+
+        // What was heard, right above the paste row — see `heardRow`.
+        if heardWords != nil {
+            heardInfo.sizeToFit()
+            layoutGlyphRow(heardRow, glyph: heardGlyph, label: heardInfo, width: innerWidth)
+            heardRow.isHidden = false
+            rows.append((heardRow, recordRowHeight))
+        } else {
+            heardRow.isHidden = true
         }
 
         // The paste row, the same way — see `pasteRow`.
@@ -3801,6 +3824,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         kamikazeGlyph.wantsLayer = true
         pasteInfo.wantsLayer = true
         pasteGlyph.wantsLayer = true
+        heardInfo.wantsLayer = true
+        heardGlyph.wantsLayer = true
         localNowInfo.wantsLayer = true
         localNowGlyph.wantsLayer = true
         heldInfo.wantsLayer = true
@@ -3832,6 +3857,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             pasteInfo.shadow = Self.halo()
             pasteInfo.textColor = .white
             pasteGlyph.shadow = Self.halo()
+            heardInfo.shadow = Self.halo()
+            heardInfo.textColor = .white
+            heardGlyph.shadow = Self.halo()
             localNowInfo.shadow = Self.halo()
             localNowInfo.textColor = .white
             localNowGlyph.shadow = Self.halo()
@@ -3893,6 +3921,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             pasteInfo.shadow = nil
             pasteInfo.textColor = .secondaryLabelColor
             pasteGlyph.shadow = nil
+            heardInfo.shadow = nil
+            heardInfo.textColor = .secondaryLabelColor
+            heardGlyph.shadow = nil
             localNowInfo.shadow = nil
             localNowInfo.textColor = .secondaryLabelColor
             localNowGlyph.shadow = nil
@@ -4638,7 +4669,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // label about the pointer; it shows where the pointer is, drawn or not.
         // The paste row is the same kind of thing: said *to* him, for three
         // seconds, right after a caret sentence he may already be typing past.
-        let target: CGFloat = (anchored && typing && !listening && flashMessage == nil && !pasteHint) ? 0.0
+        let target: CGFloat = (anchored && typing && !listening && flashMessage == nil && !pasteHint && heardWords == nil) ? 0.0
                             : (anchored ? 0.80 : panelOpacity)
         panelOpacityShown = anchored ? nil : target
         NSAnimationContext.runAnimationGroup { ctx in
@@ -5392,6 +5423,29 @@ private let heardLabel = NSTextField(labelWithString: "")
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = seconds
             pasteRow.animator().alphaValue = 0
+        }, completionHandler: done)
+    }
+
+    /// The `👂 “…”` row's words, nil = no row — see `heardRow`; `PasteHint` times it.
+    private(set) var heardWords: String?
+
+    func setHeard(_ words: String?) {
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0
+            heardRow.animator().alphaValue = 1
+        }
+        guard heardWords != words else { return }
+        heardWords = words
+        layoutContent()
+        refreshOpacity()
+    }
+
+    /// Half a second out, like the paste row's (`fadeOutPasteHint`).
+    func fadeOutHeard(seconds: TimeInterval, done: @escaping () -> Void) {
+        guard heardWords != nil else { return done() }
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = seconds
+            heardRow.animator().alphaValue = 0
         }, completionHandler: done)
     }
 

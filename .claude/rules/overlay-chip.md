@@ -193,6 +193,16 @@ yields to `--label`).
   `🎙️ sent`; not for `held` (its own flash; the notice comes at the bind's delivery). No engine's
   name. Shot `flash-local-fallback`.
 
+- **`👂 “the first words…”` — 3 s after every delivered sentence, right above `📋 Re-paste`**
+  (2026-11-11, Victor: *"după ce s-a trimis dictarea … primele cuvinte din textul transcris … în
+  tooltip, sub mouse, ca să văd ce efectiv s-a înțeles. Și să dispară repede"*). `PasteHint.pulse(
+  reason:words:)` → `RelayWindow.setHeard` (`heardRow`, built like the paste row, both halo branches);
+  `PasteHint.excerpt`: brackets (`[📸1]`, `[selected: …]`) out, the first 6 words, ≤ 48 chars, `…`
+  when cut. Its own clock (`heardHold` 3 s + 0.5 s fade), **never extended by a key**; `hide` takes it
+  down; a cancelled prompt shows none. A terminal sentence shows `Message.text`, a caret one the
+  words as heard (the ✍️-edited words when the editor ran). `GET /test/state.pasteHint.heard`. Shot
+  `heard-words`.
+
 - **`🌐 Foreign words fixed` — 3 s, once a sentence heard in another language has landed mended**
   (2026-11-04, `TranscriptGuard.notice`; `dictation-source.md`). Through `localNotice` for `via:
   local-guard`/`scribe-guard`, from `finishGuard` for a splice or a cut, which keep the engine's `via`. Shot
