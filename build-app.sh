@@ -168,6 +168,8 @@ cp "$DIR/helpers/word_onsets.py" "$CONTENTS/Resources/word_onsets.py"
 # The search field on `Rebind to…` runs this one, on a pause in his typing, over
 # Claude Code's session journals. Same two-place lookup as the two above.
 cp "$DIR/helpers/session_search.py" "$CONTENTS/Resources/session_search.py"
+# 👂 "Hey Claude" (2026-11-12, `WakeWord`): run by its own venv, ~/.walkie-talkie/wake/venv.
+cp "$DIR/helpers/wake_word.py" "$CONTENTS/Resources/wake_word.py"
 
 # The menu bar item's two faces: the device alone at rest, the full icon with its
 # ring once the relay is pointed at a terminal. Copied rather than declared as SPM
@@ -260,6 +262,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>Walkie Talkie needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Walkie Talkie records your dictation so it can transcribe it locally and relay it to your coding agent.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>While a prompt records, Walkie Talkie reads two frames a second on this Mac to tag what the words lose: a smile, tiredness, or that you were away from the screen. No picture is kept.</string>
 </dict>
 </plist>
 PLIST

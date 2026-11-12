@@ -519,6 +519,11 @@ final class ElementPicker {
     /// `POST /test/tension {"wav"}` — `VoiceTension`'s reading of a file.
     var onTestTension: ((String) -> [String: Any])?
 
+    /// `POST /test/wake` — 👂 the wake word without saying it (2026-11-12):
+    /// `{"event": "wake"｜"silence"｜"timeout"}` as the helper would say it, or
+    /// `{"text"}` — a finished wake sentence into the real `deliver`.
+    var onTestWake: (([String: Any]) -> [String: Any])?
+
     /// `POST /test/local-now` — ⌘⌃X's action (2026-09-28), for the harness.
     var onTestLocalNow: (() -> Void)?
 
@@ -1008,6 +1013,10 @@ final class ElementPicker {
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
             guard let wav = body?["wav"] as? String else { return respond(conn, 400, ["error": "wav"]) }
             respond(conn, 200, onTestTension?(wav) ?? [:])
+
+        case ("POST", "/test/wake"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            respond(conn, 200, onTestWake?(body) ?? [:])
 
         case ("POST", "/test/replay-last"):
             onTestReplayLast?()

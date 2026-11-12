@@ -1220,6 +1220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// frame, the shutter, the crops, the highlights and the picks ride it, and
     /// `deliver` hands the envelope and its pictures to `QuickAsk`.
     private var quickAsk = false
+    /// **This sentence was opened by "Hey Claude"** (2026-11-12, `WakeWord`):
+    /// started as a spawn, turned into a ⚡ question at delivery when the words
+    /// open with *I have a question*, and closed by the helper's silence.
+    private var wakeTake = false
     /// **A follow-up to the ⚡ answer on screen** (2026-10-15): 🔼 → over its
     /// pop-up opens it (`askFollowUp`), and `askQuick` sends `quickThread` with it.
     private var quickFollowUp = false
@@ -1523,17 +1527,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FromWalkieDevice.set(true, reason: "launch")
         WisprWedge.isQuiet = { [weak self] in self?.wisprQuietForRestart ?? false }
         Outbox.prepare()
+        DispatchQueue.global(qos: .utility).async { AgentRules.install() }
         // The recording device's gain is put back when it falls to nothing (2026-10-15).
         GainGuard.start { [weak self] text in self?.overlay.flash(text, duration: 6) }
         // Synthesised once per Mac and loaded off the main thread — a shutter
         // press must never wait for `say`. → `ShotMarker`
-        DispatchQueue.global(qos: .utility).async { AgentRules.install() }
         ShotMarker.prepare()
         // ⚡ The quick model's process, started now so the first 🔼 ← question
         // does not pay its ~4 s start-up (`QuickAsk`).
         QuickAsk.shared.warm()
         // ✍️ And the dictation editor's, Haiku (`DictationEditor`).
         DictationEditor.shared.warm()
+        // 👂 "Hey Claude" (2026-11-12, `WakeWord`) — its own helper, its own venv.
+        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil {
+            WakeWord.shared.onEvent = { [weak self] in self?.wakeEvent($0) }
+            if WakeWord.enabled { WakeWord.shared.start() }
+        }
         overlay = RelayWindow()
         overlay.cornerTunnel = cornerTunnel
 
@@ -1760,6 +1769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         status.onToggleAutoLocal = { [weak self] on in self?.setAutoLocal(on, from: "the Engine menu") }
+        status.onToggleWakeWord = { [weak self] on in self?.setWakeWord(on) }
         status.onToggleLocalLive = { [weak self] on in
             LocalLive.isOn = on
             Log.info("💬 live captions (local) \(on ? "on" : "off") — from the menu")
@@ -1858,6 +1868,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.listening || self.source.isRecording || self.speculative || self.held != nil
         }
         status.onRecoverDictation = { [weak self] in self?.recoverCancelledDictation() }
+        picker.onTestWake = { [weak self] body in
+            guard let self else { return [:] }
+            if let name = body["event"] as? String {
+                let event: WakeWord.Event? = ["wake": .wake(score: 1), "silence": .silence, "timeout": .timeout, "speech": .speech][name]
+                guard let event else { return ["ok": false, "error": "event"] }
+                DispatchQueue.main.async { self.wakeEvent(event) }
+                return ["ok": true]
+            }
+            guard let text = body["text"] as? String else { return ["ok": false, "error": "text or event"] }
+            var out: [String: Any] = ["ok": false]
+            DispatchQueue.main.sync {
+                guard !self.listening, !self.source.isRecording, self.startBlocker() == nil else {
+                    out["error"] = "a sentence is in flight"; return
+                }
+                let quick = WakeWord.question(in: text) != nil
+                self.wakeTake = true
+                self.spawnPending = true
+                self.deliver(DictationResult(text: text, language: nil, audio: nil, duration: 2, engine: "test",
+                                             warning: nil, delivery: .route, via: "test"))
+                out = ["ok": true, "route": quick ? "quick" : "spawn"]
+            }
+            return out
+        }
         picker.onTestTension = { wav in
             guard let reading = VoiceTension.read(wav: URL(fileURLWithPath: wav)) else { return ["reading": NSNull()] }
             return ["score": reading.score, "frames": reading.frames, "tense": reading.tense]
@@ -4063,6 +4096,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// means.
     private func dictationBegan() {
         guard !listening else { return }
+        // 🙂 The camera, for a sentence to an agent only (2026-11-12, `FaceRead`).
+        if !cleanSentence { FaceRead.shared.begin() }
         // **The sentence this microphone is** (Q12). A live one still here was
         // not parked by `startDictation`, so nothing is waiting for it.
         if let stale = liveSentence, !stale.finished {
@@ -4231,6 +4266,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func dictationStoppedListening() {
         guard listening else { return }
         listening = false
+        FaceRead.shared.end()
         // The microphone is shut, however it got shut — the ceiling has nothing
         // left to end, and a deadline left standing would fire into whatever
         // sentence is open ten minutes from now.
@@ -4580,7 +4616,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let autoBoundPlain = cleanSentence && cleanRedirected && cleanAutoBound
         // A question redirected to a terminal or a spawn mid-sentence lost its
         // flag there (`retarget`, `convertDictationToSpawn`).
-        let quick = quickAsk
+        var quick = quickAsk
+        // **👂 "Hey Claude, I have a question …" is a ⚡ question** (2026-11-12);
+        // any other wake sentence stays the spawn it was started as. Decided on
+        // the words as heard, before any marker or `[?]` is put into them.
+        let wake = wakeTake
+        wakeTake = false
+        var wakeQuestion: String?
+        if wake, !quick {
+            if let asked = WakeWord.question(in: result.text) {
+                Log.info("👂 the wake sentence opens with \"I have a question\" — a ⚡ question, not a new session")
+                quick = true
+                wakeQuestion = asked
+                clearSpawn()
+                overlay.setSpawnDestination(nil)
+            } else {
+                result.text = WakeWord.withoutWakeWord(result.text)
+            }
+        }
         let followUp = quickFollowUp
         let google = quick && quickGoogle
         let googleToo = quick && quickGoogleToo && !google
@@ -4651,6 +4704,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        // **🙂 What the face did** (2026-11-12, `FaceRead`): the reading of the
+        // take that just closed, on a sentence for an agent only.
+        if envelope, let face = FaceRead.shared.take() {
+            if face.tag != nil || pendingAffect != nil {
+                var report = pendingAffect ?? VoiceAffect.analyse(words: [])
+                report.verdict.face = face
+                pendingAffect = report
+            }
+        } else if !envelope {
+            FaceRead.shared.discard()
+        }
         // **The corpus gets neither the marker nor the paragraph.** Wispr's
         // recording heard the marker and the relay's did not; *neither* of them
         // heard the text he had highlighted, which this app has just written
@@ -4700,6 +4764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stateLock.unlock()
             pendingVia = result.via
             pendingEngine = result.engineLabel
+            if let asked = wakeQuestion { result.text = WakeWord.question(in: result.text) ?? asked }
             let line = caretLine(words: result.text, full: true)
                 .components(separatedBy: "\n").filter { $0 != Self.questionHint && $0 != Self.dictionaryHint }.joined(separator: "\n")
             pendingVia = nil
@@ -4710,8 +4775,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 overlay.clearSelection()
             }
             holdOnClipboard(line, why: "a ⚡ quick question")
-            if google { googleQuestion(spokenText, prompt: line, images: pictures) }
-            else { askQuick(spokenText, prompt: line, images: pictures, followUp: followUp, google: googleToo) }
+            let asked = wakeQuestion ?? spokenText
+            if google { googleQuestion(asked, prompt: line, images: pictures) }
+            else { askQuick(asked, prompt: line, images: pictures, followUp: followUp, google: googleToo) }
             return
         }
         pendingPromptWarning = result.warning
@@ -6399,7 +6465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// press, so the picture is of the screen his finger left.
     private func startDictation(spawn: Bool = false, paste: Bool = false,
                                 deferContext: Bool = false, clean: Bool = false, quick: Bool = false,
-                                followUp: Bool = false) {
+                                followUp: Bool = false, wake: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -6499,6 +6565,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickFollowUp = quick && followUp
         quickGoogle = false
         quickGoogleToo = false
+        wakeTake = wake
         hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
@@ -6567,6 +6634,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickFollowUp = false
             quickGoogle = false
             quickGoogleToo = false
+            wakeTake = false
             hotkeys.ownCleanSentence = false
             // W19: none of this gesture's flags outlive its refusal.
             clearSpawn()
@@ -6582,7 +6650,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
             // **As early as the press allows** — Victor's ask, 2026-09-04. Its
             // clock is his reading time, which starts at the accepted start.
-            offerSpawnFolders()
+            // **Not for a wake** (2026-11-12): he may be across the room, and
+            // the menu's default is the folder anyway.
+            if !wake { offerSpawnFolders() }
         }
         // **And now nothing happens until the microphone is open.** For the local
         // model that is this same turn; for Wispr Flow it is Electron waking up.
@@ -7329,6 +7399,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @discardableResult
     private func cancelDictationInFlight(reason: String, quiet: Bool = false) -> Bool {
         guard listening || source.isRecording || speculative || settling else { return false }
+        FaceRead.shared.discard()
         Log.info("🗑️ dictation cancelled via \(reason)")
         // **A recogniser with nothing to cancel leaves the relay's own state
         // standing, and until now nothing could take it down** (2026-09-14,
@@ -7419,6 +7490,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// counting as it always has (the panel has ⎋ and ✕ of its own).
     /// True when there was something to cancel.
     @discardableResult
+    // MARK: - 👂 "Hey Claude" (2026-11-12, `WakeWord`)
+
+    /// The menu row's new value.
+    func setWakeWord(_ on: Bool) {
+        WakeWord.enabled = on
+        Log.info("👂 wake word \(on ? "on" : "off") from the menu")
+        if on { WakeWord.shared.start() } else { WakeWord.shared.stop() }
+    }
+
+    /// **A wake opens a sentence for a new session; his silence ends it.**
+    /// Refused — said in the log only, he may be across the room — whenever a
+    /// gesture would be: a microphone open, words in flight, a held panel.
+    private func wakeEvent(_ event: WakeWord.Event) {
+        switch event {
+        case .ready(let device):
+            Log.info("👂 wake word listening on \(device)")
+        case .wake(let score):
+            guard WakeWord.enabled else { return }
+            let busy = listening || source.isRecording || speculative || settling
+                || source.phase.isWaitingForWords || held != nil
+            if busy || startBlocker() != nil {
+                Log.info(String(format: "👂 \"Hey Claude\" (%.2f) while busy — ignored", score))
+                return
+            }
+            Log.info(String(format: "👂 \"Hey Claude\" (%.2f) — a sentence for a new session", score))
+            startDictation(spawn: true, wake: true)
+            if listening || source.isRecording { overlay.flash("👂 Hey Claude — listening", duration: 2) }
+        case .speech:
+            break
+        case .silence:
+            guard wakeTake, listening || source.isRecording else { return }
+            Log.info("👂 the wake sentence ended in silence — stopping")
+            endDictation()
+        case .timeout:
+            guard wakeTake, listening || source.isRecording else { return }
+            Log.info("👂 nothing said after \"Hey Claude\" — cancelled")
+            _ = cancelDictationInFlight(reason: "👂 no words after the wake word", quiet: true)
+            wakeTake = false
+            clearSpawn()
+            overlay.setSpawnDestination(nil)
+        case .error(let why):
+            Log.error("👂 wake word helper: \(why)")
+        }
+    }
+
     private func cancelSentenceOrPanel(reason: String) -> Bool {
         let micOpen = listening || source.isRecording || speculative
         if held != nil, !micOpen, overlay.isHoldingPrompt {
@@ -12868,6 +12984,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// avoid, since it is silent and he would only notice by talking into a void.
     func applicationWillTerminate(_ notification: Notification) {
         terminating = true
+        WakeWord.shared.stop()
         // Before either branch: a relay that quits mid-sentence must not leave
         // Chrome silent. The extension also resumes on a dead socket, but that is
         // the safety net for a crash, not the way an orderly quit should look.

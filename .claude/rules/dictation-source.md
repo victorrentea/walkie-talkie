@@ -625,6 +625,24 @@ in Wispr (`config.json` `prefs.user.selectedLanguages`), so **that setting is no
   phantom number.
 - **No live captions:** Scribe realtime gives timings only on committed text from a smaller model.
 
+## 🙂 What the face did while he prompted (2026-11-12, `FaceRead`)
+
+Victor: *"nu o să mă urmărești tot timpul"* (only during a prompt), *"supărarea e corectă … oboseala, da"*;
+*"nu-mi vorbește mie"* was rejected — he often dictates from across the room or while talking to others.
+
+- **The built-in camera only, between `dictationBegan` and `dictationStoppedListening`, on every sentence
+  but a plain one** (`!cleanSentence`); two frames a second (`VNDetectFaceLandmarksRequest`, 640×480),
+  read and dropped — numbers only, never a picture. `cancelDictationInFlight` and a non-envelope
+  delivery `discard()`. Never a Continuity iPhone or a virtual camera (`.builtInWideAngleCamera`).
+- **Tags name a movement, never a feeling**, in words because no agent was told what they mean:
+  `[face: 🙂 smiled while saying it · 🥱 looked tired · 🚶 away from the screen]`, its own footer line
+  beside the voice's (`Verdict.face`, filed in the outbox `affect.face`).
+- **Ratios to his own face** (`~/.walkie-talkie/face/baseline.json`, running medians, a tenth of the way
+  per take with a face in ≥ 60 % of frames); **no tag at all before 8 such takes**. Thresholds in
+  `FaceRead.judge` (spec: `FaceReadTests`). Not yet fitted on real takes — read the `🙂 face:` log lines.
+- Switch: `WT_FACE` / the Engine submenu's `🙂 Read my face while prompting` (default on). Camera grant
+  asked at the first prompt; that take goes without.
+
 ## 😡 from the sound alone (2026-11-05, `VoiceTension`)
 
 - **Every engine, on the take's WAV, never the words**: Victor, *"nu pe cuvinte, totul e pe sunet, pe undele

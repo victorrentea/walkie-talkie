@@ -278,6 +278,9 @@ enum VoiceAffect {
     struct Verdict: Equatable {
         var hesitant = false
         var tense = false
+        /// **What the face did** (2026-11-12, `FaceRead`) — its own footer line
+        /// (`face?.tag`), beside this one.
+        var face: FaceRead.Reading? = nil
         /// For the outbox only — never rendered to the agent.
         var why: [String] = []
 
@@ -344,6 +347,7 @@ enum VoiceAffect {
             if let v = voicedRate { o["voicedRate"] = round2(v) }
             if let e = energySpreadDb { o["energySpreadDb"] = round2(e) }
             if let l = language { o["language"] = l }
+            if let f = verdict.face { o["face"] = f.json }
             return o
         }
     }

@@ -696,6 +696,29 @@ gate*.
   locks; the tap itself is a measurement, not a test — `python3
   helpers/human_watch.py` is the live readout.
 
+## 👂 "Hey Claude" (2026-11-12, `WakeWord` + `helpers/wake_word.py`)
+
+Victor: *"să facem Hey Claude și apoi … I have a question … modul de întrebare … Dacă nu auzi, I have a
+question, … să faci direct treaba într-un terminal nou"*.
+
+- **A child process with its own input stream and its own venv** (`~/.walkie-talkie/wake/venv`:
+  openwakeword, onnxruntime, sounddevice), never a second tap in `MicRecorder`. TCC attributes it to the
+  app. Model `~/.walkie-talkie/wake/hey_claude.onnx` (gdiamos/hey-claude, Apache-2.0, synthetic-trained);
+  `WT_WAKE_MODEL`, `WT_WAKE_THRESHOLD` (0.5), `WT_WAKE_PYTHON`. Missing venv/model → logged, off.
+- **Its device is the resolver's** (`InputDevice.resolve()` by name), re-asked every 10 s; a change
+  restarts the helper. Death → restart with 2 s × n backoff (≤ 60 s).
+- **Protocol** (JSON lines): `ready`, `wake {score}`, `speech`, `silence {after}` (1.2 s quiet after
+  speech — the app's meter shape), `timeout` (nothing in 6 s), `error`. stdin: `pause`/`resume`/`quit`.
+- **A wake = `startDictation(spawn: true, wake: true)`** (no folder menu — `~/workspace`), refused in
+  the log whenever a gesture would be. `silence` → `endDictation()`; `timeout` → cancelled, quiet.
+  At `deliver`, words opening with *I have a question* / *am o întrebare* (`WakeWord.question`) become
+  the ⚡ question (that opening taken off); anything else is the spawn's prompt, a leading *Claude,* off.
+- **Measured** (2026-11-12, `evals/wake-word/`): 1 false wake (0.87) in 116 min of his corpus (300
+  clips); his two mid-sentence *hey Claude* scored 0.001 / 0.014 — the threshold waits for deliberate
+  takes of the phrase.
+- Switch: `WT_WAKE_WORD` / the Engine submenu's `👂 "Hey Claude" starts a session` (default on). The
+  orange microphone dot stays on while it listens.
+
 ## Do not
 
 - **Never start an `AVAudioEngine` that has already been stopped** (2026-10-13). `close()` swaps in a

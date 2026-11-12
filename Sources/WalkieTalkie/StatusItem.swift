@@ -1658,6 +1658,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "It fixes misheard words and names, drops fillers and keeps only a self-correction.\n"
             + "Wispr Flow's words are already edited by Wispr. Waits at most \(Int(DictationEditor.budget)) s, then pastes the raw words."
         engineSubmenu.addItem(editorRow)
+        // **👂 "Hey Claude"** (2026-11-12, `WakeWord`) — a microphone of its own
+        // while on, so a switch beside the engine's.
+        let wakeRow = NSMenuItem(title: WakeWord.menuTitle, action: #selector(wakeClicked), keyEquivalent: "")
+        wakeRow.target = self
+        wakeRow.image = WakeWord.enabled ? Self.symbolIcon("checkmark") : Self.blankIcon
+        wakeRow.toolTip = "Say \"Hey Claude\", then the task: it starts a new Claude Code session in ~/workspace with your words. "
+            + "Open with \"I have a question\" and it is a ⚡ quick question instead, answered in the pop-up. "
+            + "The sentence ends when you stop talking.\n"
+            + "A small model listens all the time on this Mac (nothing leaves it); macOS shows the microphone as in use."
+        engineSubmenu.addItem(wakeRow)
+        // **🙂 The face while prompting** (2026-11-12, `FaceRead`).
+        let faceRow = NSMenuItem(title: FaceRead.menuTitle, action: #selector(faceClicked), keyEquivalent: "")
+        faceRow.target = self
+        faceRow.image = FaceRead.enabled ? Self.symbolIcon("checkmark") : Self.blankIcon
+        faceRow.toolTip = "While a prompt records, the camera takes two frames a second, read on this Mac and thrown away. "
+            + "The prompt gets a tag only for what the words lose: you smiled, you look tired, or you were away from the screen.\n"
+            + "Nothing is stored but the numbers in the outbox. Never on a plain dictation."
+        engineSubmenu.addItem(faceRow)
         // **🧾 What the account has left, under a line of its own** (2026-09-28,
         // moved here from Victor Addons the same morning — *"quota lui 11labs
         // are sens doar in walkie"*). Below the rows he picks from, because it
@@ -1814,6 +1832,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     @objc private func localLiveClicked() {
         onToggleLocalLive?(!LocalLive.isOn)
+    }
+
+    /// The `Hey Claude` row's new value.
+    var onToggleWakeWord: ((Bool) -> Void)?
+
+    @objc private func wakeClicked() {
+        onToggleWakeWord?(!WakeWord.enabled)
+    }
+
+    @objc private func faceClicked() {
+        FaceRead.enabled.toggle()
+        Log.info("🙂 face reading \(FaceRead.enabled ? "on" : "off") from the menu")
     }
 
     @objc private func editorClicked() {
