@@ -2,14 +2,51 @@
 paths:
   - "Sources/WalkieTalkie/StatusItem.swift"
   - "Sources/WalkieTalkie/MessageLog.swift"
-  - "Sources/WalkieTalkie/AboutWindow.swift"
+  - "Sources/WalkieTalkie/GestureGuide.swift"
 ---
 
 # The menu bar item
 
 Rules for the 🤖 in the menu bar and its menu (`StatusItem`), the Prompt Log page (`MessageLog`)
-and the About panel (`AboutWindow`).
+and the Gesture Guide (`GestureGuide`, which replaced the About panel `AboutWindow`).
 Full history and reasoning: docs/journal.md — see the sections named after each rule below.
+
+## The menu teaches nothing; the Gesture Guide does (2026-11-12) — supersedes the legend rules below
+
+Victor: *"The Walkie Talkie menu is huge and useless. Rather than having this endless list of
+gestures that are explained prefer to have a page to teach schematically the gestures. Starting
+from the image of the Logi mouse I have. The sketch animated … in a window that shows when the
+user clicks the menu entry. You can remove most of those things in there and bring the options
+that are right now in engine top level."*
+
+- **The menu, top to bottom:** header · Bind / Disconnect / Rebind to… · Paste last prompt /
+  Prompt History ▸ / Recover Dictation / Replay Last Dictation · End Dictation / Cancel Dictation ·
+  Mic ▸ / Engine ▸ / Last used / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
+  **the five engine switches** (Backup Local Pre-Transcribe, Live captions (local), ✍️ Edit plain
+  dictation, 👂 Hey Claude, 🙂 Read my face) · **Gesture Guide** · `Built …` · Quit.
+- **Gone:** the legend rows (`Prompt at caret`, `Prompt to bound`, `Prompt to new`, `Dictate (no
+  Enter)`, `Transcribe Locally Now`, `Record Screen`, `Take Screenshot`, `Select Screen Area`,
+  `Pick from Chrome`), their callbacks (`onStartDictation`, `onNewSession`, `onShot`,
+  `onToggleScreenRecording`, `onLocalNow`, `isFilming`), and the whole one-glyph shortcut column
+  (`gestureRows`, `Chord`, `applyGestureColumn`). **No row carries a chord.** End / Cancel stay as
+  the rescue for a sentence the mouse can no longer end.
+- **`Engine ▸` is the engines and the 🧾 quota only**; the five switches are top-level ticks
+  (`applySwitchRows`, at every open, `checkmark`/blank like Autosend).
+- **`GestureGuide`**: a `.nonactivatingPanel` holding a `WKWebView` (the page is only a drawing
+  surface — nothing fetched, links open in the browser). Each card animates one gesture on
+  `Glyphs.mouseIso` (rendered to PNG once per pressed state, one CSS class each — inlined per card
+  the page was 2 MB): the held button red, the mouse sliding the way of the swipe, a ring for a
+  click; keycaps for keys, a trackpad for the ⌃⌥⌘ chord, a bubble for 👂. Sections: Forward,
+  Back, while a prompt records, Keyboard, Trackpad, Voice, and the build at the foot (`#about`).
+  `Gesture Guide` opens it at the top, `Built …` and the Dock's About at the foot. The texts are
+  the Logi set, written by hand in `GestureGuide.cards` — **a gesture changed in `HotkeyTap` is
+  changed there too**. With *Gestures: Wheel* a banner says the side buttons are off.
+  `GestureGuide.logiGesturesOn` is published by `StatusItem` at launch and on the tick
+  (`GestureHintBar` reads it; `AboutWindow`'s copy was only ever set on an About click).
+- **Review:** `GUIDE_HTML=<dir> swift test --filter GestureGuideTests` writes `guide.html` and
+  `frozen.html` (every scene paused mid-gesture) for a browser; `POST /test/about` opens the real
+  window and answers `{shown, window, frame, loaded, cards}` — `screencapture -l <window>` photographs
+  it (it is not `sharingType = .none`: it is a guide he may show a room).
 
 ## The header and the menu's job
 
@@ -516,6 +553,8 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   → journal: *The 🤖 on the other screens* (superseded)
 
 ## Do not
+
+- Do not put gesture legend rows or chords back in the menu — they live in `GestureGuide` (2026-11-12).
 
 - Do not hide a row the app cannot act on right now — grey it.
 - Do not put `Rebind to…` back as a submenu, and do not put its panel up inline from the click.

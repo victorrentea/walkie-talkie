@@ -39,7 +39,7 @@ import AppKit
 /// nowhere to flee, so the pointer within `dodge` of the corner fades it out
 /// and leaving fades it back. See `spot`.
 ///
-/// Only in Logi mode — the glyphs are the side buttons' (`AboutWindow.logiGesturesOn`).
+/// Only in Logi mode — the glyphs are the side buttons' (`GestureGuide.logiGesturesOn`).
 /// Never in a screenshot (`sharingType = .none`), never takes the mouse, and it
 /// does not ride the pointer: a fixed spot, so it is read at a glance.
 final class GestureHintBar {
@@ -275,7 +275,7 @@ final class GestureHintBar {
     func update(_ stage: Stage) {
         // The trackpad's crosses need no Options+ profile, so no Logi gate.
         let trackpad = stage.fingers || (stage.noMouse && stage.listening && !stage.held && stage.crop == nil)
-        let visible = trackpad || (stage.listening && !stage.held && AboutWindow.logiGesturesOn)
+        let visible = trackpad || (stage.listening && !stage.held && GestureGuide.logiGesturesOn)
         guard stage != shown || (panel != nil) != visible else { return }
         shown = stage
         guard visible else { hide(); return }

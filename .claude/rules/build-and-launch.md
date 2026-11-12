@@ -173,13 +173,13 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   were Activity Monitor or a `pkill` in a terminal — possibly the very terminal the relay was
   typing into (2026-09-07, the deadlock).
   → journal: *The Dock tile is the escape hatch*
-- **Nothing calls `NSApp.activate`.** The overlay and the About panel (`AboutWindow`) are
+- **Nothing calls `NSApp.activate`.** The overlay and the Gesture Guide (`GestureGuide`, the About panel `AboutWindow` until 2026-11-12) are
   `.nonactivatingPanel`s; the Prompt Log opens a page in the browser. The one change is that a click on
   the tile makes the app frontmost — so `main.swift` installs a minimal main menu (About, Hide,
   Quit ⌘Q); a `.regular` app with no `mainMenu` shows an empty menu bar, which reads as a broken
   app.
   → journal: *The Dock tile is the escape hatch*
-- **The "never becomes key" comments (`SpawnFolderMenu`, `RelayWindow`, `AboutWindow`) are still
+- **The "never becomes key" comments (`SpawnFolderMenu`, `RelayWindow`, `GestureGuide`) are still
   right in spirit.** Each is about a mouse monitor or a click-through: the app is never frontmost
   *by its own doing*, so every click still arrives at a background app and counts as a first click.
   Clicking the Dock tile is the deliberate exception, ending in Force Quit or ⌘Q.

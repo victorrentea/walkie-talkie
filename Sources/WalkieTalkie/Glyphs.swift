@@ -436,7 +436,7 @@ extension Glyphs {
     /// deliberate rather than unfinished: from the side the two main buttons are
     /// one unbroken shell, and colouring it would be a picture claiming to name
     /// a button it cannot distinguish. The caller picks the view that can answer
-    /// its question — `AboutWindow` pairs the two, so every button is shown by
+    /// its question — the About panel paired the two, so every button is shown by
     /// the drawing that actually sees it.
     static func mouseSide(height: CGFloat,
                           pressed: Buttons = [],

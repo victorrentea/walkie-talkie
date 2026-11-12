@@ -1634,14 +1634,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         micAnnouncer.start()
-        // **The menu's way into the recording**, and the same call 🔽 ↑ makes —
-        // the row and the gesture must not be able to drift apart. It exists for
-        // `Start Dictation`'s reason: the gesture lives in a Logi Options+
-        // profile, and a Mac without that profile has no other way in.
-        status.onToggleScreenRecording = { [weak self] in
-            DispatchQueue.main.async { self?.toggleFilm() }
-        }
-        status.isFilming = { [weak self] in self?.film != nil }
         // 🔽 ↑ — the screen recording. Hops to main because everything it
         // touches (the film, the overlay, the pending state) is main's.
         hotkeys.onGestureFilm = { [weak self] in
@@ -2631,8 +2623,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestLocalNow = { [weak self] in
             DispatchQueue.main.async { self?.transcribeLocallyNow(from: "POST /test/local-now") }
         }
-        status.onLocalNow = { [weak self] in self?.transcribeLocallyNow(from: "the menu") }
-        status.isLocalNowAvailable = { [weak self] in self?.localNowAvailability().available ?? false }
         picker.onTestRecover = { [weak self] in
             // The listener's thread; everything this touches is the main queue's.
             DispatchQueue.main.async { self?.recoverCancelledDictation() }
@@ -2641,7 +2631,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let kept = self?.cancelledAudio else { return false }
             return FileManager.default.fileExists(atPath: kept.url.path)
         }
-        status.onStartDictation = { [weak self] in self?.startDictation() }
         // The *Close Wispr Scratchpad* row went from the menu on 2026-09-14
         // (Victor: *"sterge!"*) — the window is closed by
         // `closeScratchpadAfterwards` and the idle sweep already, so the row was
@@ -2734,19 +2723,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onSelectionDragEnded = { [weak self] in
             guard AutoAttach.isOn(.selection) else { return }
             self?.selectionQueue.async { self?.probeSelectionAfterDrag() }
-        }
-        // The menu's copy of the spawn chord. The same call, so the window it opens
-        // and the destination it arms cannot drift from the gesture's.
-        status.onNewSession = { [weak self] in
-            DispatchQueue.main.async { self?.startDictation(spawn: true) }
-        }
-        // The menu's shutter row. **After a beat**, because the menu is dismissed
-        // by AppKit and the screen redrawn a frame or two later — a capture fired
-        // on the click would photograph the menu that ordered it.
-        status.onShot = { [weak self] in
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                self?.plusOneShot(cursor: NSEvent.mouseLocation)
-            }
         }
         status.onBind = { [weak self] in
             // Off the main thread: `bindFrontmostTerminal` asks it for the front
@@ -3439,13 +3415,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return box.value
         }
         picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
-        // The About panel from a desk, answering the size it came up at — the
-        // one fact its own snapshot harness could not see. Hops to main: it
-        // builds AppKit views.
+        // The Gesture Guide from a desk (`POST /test/about`, the About panel's
+        // route — the guide replaced it on 2026-11-12), answering the size it came
+        // up at and whether its page loaded. Hops to main: it builds AppKit views.
         picker.onTestAbout = { [weak self] in
             guard self != nil else { return ["shown": false] }
             var out: [String: Any] = [:]
-            DispatchQueue.main.sync { out = AboutWindow.describe() }
+            DispatchQueue.main.sync { out = GestureGuide.describe() }
             return out
         }
         picker.onPickEngine = { [weak self] id in

@@ -190,7 +190,7 @@ private func installAppMenu(_ app: NSApplication) {
 /// status item's own controller does not exist yet at this point in launch.
 private final class AppMenuActions: NSObject {
     static let shared = AppMenuActions()
-    @objc func about() { AboutWindow.show() }
+    @objc func about() { GestureGuide.show(at: .about) }
 }
 
 /// Re-exec through `open` when this bundle's executable was started by path.

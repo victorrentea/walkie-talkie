@@ -17,6 +17,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 The journal contradicts itself over time, because it was written as things changed. The
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
 
+- *The chip teaches nothing; the menu does*, *Every row has an icon, and two alphabets share the column*, *The About page becomes a window* — superseded 2026-11-12: the menu's legend rows and one-glyph chords are gone and `AboutWindow` with them; the gestures are taught by the animated Gesture Guide (*The menu teaches nothing; the Gesture Guide does*)
 - The reply pop-up's *"the text shouldn't be selectable"* (2026-10-08, *The panel is a surface*) — superseded 2026-10-29 for the words: they select and copy on release; the rest still drags (*The reply pop-up's words are selectable*)
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
 - *The order of the rows, and Chrome is last (2026-09-09)*'s destination-second — superseded 2026-10-26: the destination row (pin or terminal icon + `folder@branch`) is the chip's last row (*The destination row is the chip's foot, on black bands*)
@@ -16235,4 +16236,35 @@ and a silent take decoded into one. Three cuts, approved by Victor (*"go"*): the
 cut with a `✂️` flash, a sign-off alone is `heardNothing`, and a take with no voiced audio is not decoded.
 Rules and numbers: `dictation-source.md`, *The sign-off Whisper invents, and the silent take*. Not done:
 `hallucination_silence_threshold` in `whisper_helper.py` (unverified that mlx_whisper takes it).
+
+## 2026-11-12 — The menu teaches nothing; the Gesture Guide does
+
+Victor (dictated): *"The Walkie Talkie menu is huge and useless. Rather than having this endless list
+of gestures that are explained prefer to have a page to teach schematically the gestures. Starting
+from the image of the Logi mouse I have. The sketch animated, what it feels trigger different
+gestures. Like a user guide somehow in a window that shows when the user clicks the menu entry. You
+can remove most of those things in there and bring the options that are right now in engine top
+level."*
+
+- **Reverses *The chip teaches nothing; the menu does*.** The menu was the app's only legend from
+  2026-09-04: every gesture a row, greyed when it could not act, its chord squeezed into one glyph in
+  AppKit's shortcut column (2026-09-22), and the About panel decoding those glyphs on a still mouse.
+  By November that was nine rows nobody clicked plus a column of dotted and doubled arrows.
+- **What went**: the nine legend / gesture-duplicate rows and their callbacks, the shortcut column
+  (`gestureRows`, `Chord`, `layOutGestures`, `applyGestureColumn`, `gestureTip`), and
+  `AboutWindow.swift`. **What stayed**: the destination rows, Paste / History / Recover / Replay,
+  End / Cancel (the rescue for a dead mouse battery — the reason they were added in August still
+  holds), the pickers. **What moved**: the five switches under `Engine` are top-level ticks.
+- **`GestureGuide`**: a native panel holding a `WKWebView`, because twenty looping scenes are CSS
+  keyframes there and a layer tree each in Core Animation. The mouse is `Glyphs.mouseIso` (the
+  three-quarter traced off Logitech's own M650 render) as PNG data URIs — one per pressed state, in
+  the style sheet once (inlined per card the page weighed 2.16 MB; now 465 KB). A scene: the held
+  button fades red, the mouse slides 52 pt the way of the swipe along a dashed arrow, fades, comes
+  back — 3.2 s a loop; a click is a red ring at the button's spot (the part centres `mouseIso`
+  draws). Keys are keycaps that press; the trackpad card holds ⌃⌥⌘ and slides one or two fingers;
+  the 👂 cards type their phrase into a bubble. Reviewed frozen at 61 % of the loop in headless
+  Chrome (dark and light), then in the real window via `POST /test/about` + `screencapture -l`, three
+  captures 0.7 s apart all different.
+- `evals/test_gesture_spec.py` reports 13 ✗ — the same 13 on the commit before this one (checked on
+  a `git archive` of HEAD); nothing here touches `HotkeyTap` or `deliver`.
 

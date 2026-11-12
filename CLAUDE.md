@@ -27,14 +27,14 @@ This file holds only what every session needs. The rest is disclosed on demand:
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `InputDevice`, `VoiceCorpus`, `helpers/` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, `PasteHint` |
   | `spawn.md` | `SpawnTerminal`, folder menu, `ProjectList` |
-  | `menu-bar.md` | `StatusItem`, `MessageLog`, About |
+  | `menu-bar.md` | `StatusItem`, `MessageLog`, `GestureGuide` |
 
 ## UI language: English only
 
 Every string the app renders is English (projector, international rooms) — chip rows, flashes,
 menus, About, the Chrome extension. Logs, comments and commits are unaffected. Strings live in
 `RelayWindow.swift`, `flash(_:)` / `flashTitle(_:)` in `AppDelegate.swift`, `StatusItem.swift`,
-`AboutWindow.swift`, `chrome-extension/inspect.js` and `relay.js`. Hidden rows count too.
+`GestureGuide.swift`, `chrome-extension/inspect.js` and `relay.js`. Hidden rows count too.
 
 ## Build, install, restart
 
