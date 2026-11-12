@@ -69,6 +69,20 @@ menus, About, the Chrome extension. Logs, comments and commits are unaffected. S
   `--home` moves outbox, corpus and key. **`~/Library/Caches/ro.victorrentea.wispr-relay/`**: shots
   staging (≤ 300 frames), `cancelled/`, message log.
 
+## Agent rules: installed once, not sent with every prompt (2026-11-12)
+
+- **The standing instructions (`walkie-reply`, `walkie-dict`) live in each agent's global
+  instructions; a dictation carries only data** (engine · mic, folder, frames). Source of truth:
+  `AgentRules.swift` (`text`, `version`). Installed at every launch: `~/.walkie-talkie/agent-rules.md`
+  (read by the `walkie-inbox` mod → a system-prompt section in Claude Code), and a marked block in
+  `~/.codex/AGENTS.md` and `~/.copilot/copilot-instructions.md`.
+- **Change the rules' text ⇒ raise `AgentRules.version`.** Every agent then gets the long envelope
+  until it holds the new version (Claude: a new session; Codex/Copilot: the next Walkie launch).
+- **The short envelope goes only where the version is proven present** (`AgentRules.known(onTTY:)`:
+  the mod's `.alive` beat says `rules: N`; the harness file holds the marker). Caret, IDE chat,
+  unknown program, older mod → the long envelope. Never make the short form unconditional.
+- **A new instruction for agents goes into `AgentRules.text`, never as a new per-message clause.**
+
 ## The overlay is photographed
 
 **No overlay change is finished until `./docs/shoot-overlay-states.sh` has run** (regenerates

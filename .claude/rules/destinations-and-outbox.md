@@ -238,6 +238,16 @@ me to dismiss it explicitly"*.
   că au terminat … un pic abuz"*. Then, the same night: *"exclusiv când eu întreb ceva. Atât … Niciodată
   să nu fie folosit ca să mă întrebe Claude pe mine ceva"* — **only the answer to his question; never
   a question for him, never a completion notice.**
+- **Since 2026-11-12 both hints ride only to an agent that does not hold `AgentRules`** (Victor:
+  *"you're shoveling a lot of tokens in every of your injected text … Everyone should know this
+  instruction … Walkie Talkie should have an installation process"*). `AgentRules.install()` (launch)
+  writes `~/.walkie-talkie/agent-rules.md` and a marked block into `~/.codex/AGENTS.md` and
+  `~/.copilot/copilot-instructions.md`; the `walkie-inbox` mod adds the file as a system-prompt
+  section (`prompt.compose`) and reports `rules: N` in its `.alive` beat. `commit` asks
+  `AgentRules.known(onTTY:)` (a spawn: `knownForSpawn`, the mod's `agent-rules.claude` stamp) and
+  `terminalLine(m, rulesKnown: true)` leaves `questionHint` and `dictionaryHint` out; log `📜 short
+  envelope`. Unproven (caret, IDE chat, held, older mod, other program) → the clauses below, as before.
+  A change to the rules' text raises `AgentRules.version`. Tests: `AgentRulesTests`, the mod's `split.test.ts`.
 - **Every dictation also carries `AppDelegate.dictionaryHint`** (2026-11-09, Victor: *"când modelul
   este 100% sigur … că mesajul dictat conține un cuvânt greșit … Claude să poată adăuga în
   dicționarul folosit de Walkie Talkie … inclusiv în Wispr Flow Dictionary … să fie în sync"* —

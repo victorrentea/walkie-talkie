@@ -1527,6 +1527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         GainGuard.start { [weak self] text in self?.overlay.flash(text, duration: 6) }
         // Synthesised once per Mac and loaded off the main thread — a shutter
         // press must never wait for `say`. → `ShotMarker`
+        DispatchQueue.global(qos: .utility).async { AgentRules.install() }
         ShotMarker.prepare()
         // ⚡ The quick model's process, started now so the first 🔼 ← question
         // does not pay its ~4 s start-up (`QuickAsk`).
@@ -10618,7 +10619,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private static func terminalLine(_ m: Message) -> String {
+    /// `rulesKnown`: the destination holds `AgentRules` at this version, so the
+    /// two instruction clauses stay home (2026-11-12) — only the data rides.
+    private static func terminalLine(_ m: Message, rulesKnown: Bool = false) -> String {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(leading(m) + text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
@@ -10626,8 +10629,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // **🤷‍♂️ (hesitant) / 😡 (tense), beside the hint, or
             // nothing** (2026-09-27) — what the transcript lost, never a number.
             if let tag = m.affect?.verdict.tag { parts.append(tag) }
-            if text.contains("?") { parts.append(questionHint) }
-            parts.append(dictionaryHint)
+            if let tag = m.affect?.verdict.face?.tag { parts.append(tag) }
+            if !rulesKnown {
+                if text.contains("?") { parts.append(questionHint) }
+                parts.append(dictionaryHint)
+            }
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
@@ -13329,7 +13335,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `deliverToTerminal` and `spawnClaude` make, so what he pastes (and
         // what the Message Log's Copy puts on the clipboard, via the outbox's
         // `line`) is byte for byte what the session received.
-        let line = Self.terminalLine(m)
+        // **The short envelope only where the rules are proven present**
+        // (`AgentRules`, 2026-11-12): the latched or bound terminal's agent, or
+        // a spawn's `claude`. Held, caret, unknown → the whole envelope.
+        let rulesKnown: Bool = {
+            guard m.kind == "dictation" else { return false }
+            if m.spawn { return AgentRules.knownForSpawn() }
+            guard isBound || m.target != nil, let tty = (m.target ?? terminal.target)?.handle.tty else { return false }
+            return AgentRules.known(onTTY: tty)
+        }()
+        let line = Self.terminalLine(m, rulesKnown: rulesKnown)
+        if rulesKnown { Log.info("📜 short envelope — the destination holds agent rules v\(AgentRules.version)") }
         // Also what decides the `⌘⇧P` hint below: a hint offered for a message
         // with no words would paste the sentence before it.
         var pastable = false

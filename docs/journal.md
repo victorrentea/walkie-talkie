@@ -16187,3 +16187,29 @@ way."* The row (`RelayWindow.heardRow`, `PasteHint.excerpt`/`heardHold`, `pulse(
 `GET /test/state.pasteHint.heard`, shot `heard-words`) is taken out whole — commits `5fd39d5` and
 `8d8e42f` reversed in the sources. A glance the eye never makes catches nothing: a hallucination has
 to be caught by the app, not by reading.
+
+## 📜 The standing instructions move out of the envelope (2026-11-12)
+
+Victor, over a session whose every dictation ended with the same two clauses: *"I believe you're
+shoveling a lot of tokens in every of your injected text into terminals … having these instructions
+somehow registered in a global place across all the harnesses I use … Everyone should know this
+instruction … Walkie Talkie should have an installation process to set up these rules"*, then
+*"technically these system-wide prompts should be a required installation step, so actual prompts
+are kept small"*.
+
+`questionHint` (on a `?`) and `dictionaryHint` (always) were instructions, not data: ~120 tokens a
+sentence, identical every time, 100 dictations = ~12k tokens of repeated rules in one context.
+`AgentRules.swift` holds them once (`text`, `version`) and installs them at launch:
+`~/.walkie-talkie/agent-rules.md` for the `walkie-inbox` mod (a `session` section of Claude Code's
+system prompt, `prompt.compose`), and a block between `<!-- walkie-talkie rules vN -->` and
+`<!-- walkie-talkie rules end -->` in `~/.codex/AGENTS.md` and `~/.copilot/copilot-instructions.md`
+(replaced in place by a newer version, everything outside it untouched, no folder made for a
+harness that is not installed).
+
+**The short envelope is sent only on proof.** A Claude session's mod writes `rules: N` into the
+`.alive` beat it already kept on its tty (fresh within 10 s); Codex and Copilot are recognised by
+their process in the tty's foreground job (`TerminalBinding.agentCLI`) and the marker in their file;
+a spawn reads the version the last starting session stamped (`agent-rules.claude`). Anything else —
+the caret, an IDE chat, a held sentence, a mod older than the rules — gets the long envelope, so
+raising `version` is safe by construction. `~/.claude/CLAUDE.md` was not used for Claude: the mod's section reaches every session the same
+way (and is cached with the rest of the system prompt), without editing a file that is Victor's own.

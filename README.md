@@ -62,6 +62,7 @@ wheel. The menu bar icon lists every action next to the gesture that does it.
 - 🔏 Without `CODESIGN_IDENTITY` the app is signed ad hoc, and macOS forgets the Accessibility grant on every rebuild; any local self-signed code-signing certificate fixes that.
 - 🔐 Grant **Accessibility**, **Screen Recording** and **Microphone** when asked.
 - 🗣️ Pick a recogniser from the menu: **ElevenLabs Scribe** (key in `~/.walkie-talkie/elevenlabs.env`), a **local Whisper** (`pip install mlx-whisper`, plus `ffmpeg`) or **Wispr Flow**.
+- 📜 **Agent rules — a required step, done by the app at every launch.** Walkie writes its standing instructions (when to run `walkie-reply`, when `walkie-dict`) once, where each agent reads its global instructions, so a dictation carries only data. Nothing to run by hand; what it needs from you is below, under [Agent rules](#agent-rules-the-instructions-live-in-the-agent-not-in-every-prompt).
 - 🧩 Optional, for picking elements in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** → `chrome-extension/`.
 
 👉 Every state the overlay can be in, photographed: [docs/overlay-states.html](docs/overlay-states.html)
@@ -130,6 +131,50 @@ kamikaze
 [Transcribed in RO or EN by ☁️ ElevenLabs Scribe]
 [📁=$WALKIE_SHOTS/2026-10-04-17-13-27]
 [📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 3456x2234px]
+```
+
+### Agent rules: the instructions live in the agent, not in every prompt
+
+Until 2026-11-12 every dictation ended with two instruction clauses (~120 tokens, the same words
+each time). They are now installed **once per agent**, and the envelope keeps only what changes.
+
+| agent | where the rules are installed | who installs them |
+|---|---|---|
+| Claude Code | a system-prompt section added by the `walkie-inbox` mod (`victor-skills-private/mods/walkie-inbox`), read from `~/.walkie-talkie/agent-rules.md` | **you enable the mod once** (`walkie-inbox@victor-skills-private` in `~/.claude/settings.json`); Walkie writes the file at launch |
+| Codex CLI | a marked block in `~/.codex/AGENTS.md` | Walkie, at launch |
+| Copilot CLI | a marked block in `~/.copilot/copilot-instructions.md` | Walkie, at launch |
+
+The block sits between `<!-- walkie-talkie rules vN -->` and `<!-- walkie-talkie rules end -->`;
+everything outside it is yours and is never touched. A newer Walkie replaces the block in place.
+To uninstall, delete the block (it comes back at the next launch while the app is installed).
+
+**A destination that does not hold the current version gets the long envelope**, exactly as
+before: the caret, an IDE chat, a Claude Code session without the mod (or started before the rules
+changed), any other program. So a short prompt never reaches an agent that cannot read it. The log
+says `📜 short envelope` each time one is sent.
+
+Before (what an agent without the rules still gets):
+
+```
+[📸0 auto]
+why is the build red?
+
+[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]
+[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>" [--image <path> when a small picture says it better]. Only to answer me — never to ask me something, never to report work done.]
+[If you are 100% sure a term I said came out misheard (a name, a tool, a technical word — not a Romanian ending), also run: walkie-dict add "<right spelling>" --heard "<as transcribed>". Silently, no need to tell me.]
+[📁=$WALKIE_SHOTS/2026-11-12-13-09-24]
+[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]
+```
+
+After (an agent that holds the rules):
+
+```
+[📸0 auto]
+why is the build red?
+
+[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]
+[📁=$WALKIE_SHOTS/2026-11-12-13-09-24]
+[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]
 ```
 
 ### Screenshots

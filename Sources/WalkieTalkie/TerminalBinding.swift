@@ -2343,6 +2343,18 @@ final class TerminalBinding {
     /// `git log` is `git` + `less`, `sudo -s` without a pty is `sudo` + `zsh`, and
     /// the verdict must be about the process that would hand the words on — so the
     /// job reports `less` / `sudo`, which `refusesDelivery` then refuses.
+    /// **Which agent CLI holds the tty's foreground job** — `claude`, `codex` or
+    /// `copilot`, nil for anything else (2026-11-12, `AgentRules.known`). Any
+    /// process of the job counts, since `caffeinate` or an MCP server can be
+    /// listed ahead of the agent itself.
+    static func agentCLI(onTTY tty: String) -> String? {
+        let names = foregroundJob(onTTY: tty).map { path -> String in
+            let first = path.split(separator: " ").first.map(String.init) ?? path
+            return (first as NSString).lastPathComponent
+        }
+        return ["claude", "codex", "copilot"].first { names.contains($0) }
+    }
+
     private static func foregroundCommand(onTTY tty: String) -> String? {
         let job = foregroundJob(onTTY: tty)
         guard !job.isEmpty else { return nil }
