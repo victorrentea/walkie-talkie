@@ -1878,7 +1878,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWake = { [weak self] body in
             guard let self else { return [:] }
             if let name = body["event"] as? String {
-                let event: WakeWord.Event? = ["wake": .wake(score: 1), "silence": .silence(head: body["head"] as? String, voiced: 1),
+                let event: WakeWord.Event? = ["wake": .wake(score: 1, word: body["word"] as? String ?? "hey claude"), "silence": .silence(head: body["head"] as? String, voiced: 1),
                                               "timeout": .timeout, "speech": .speech][name]
                 guard let event else { return ["ok": false, "error": "event"] }
                 DispatchQueue.main.async { self.wakeEvent(event) }
@@ -7527,17 +7527,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch event {
         case .ready(let device):
             Log.info("👂 wake word listening on \(device)")
-        case .wake(let score):
+        case .wake(let score, let word):
             guard WakeWord.enabled else { return }
             let busy = listening || source.isRecording || speculative || settling
                 || source.phase.isWaitingForWords || held != nil
             if busy || startBlocker() != nil {
-                Log.info(String(format: "👂 \"Hey Claude\" (%.2f) while busy — ignored", score))
+                Log.info(String(format: "👂 \"%@\" (%.2f) while busy — ignored", word, score))
                 return
             }
-            Log.info(String(format: "👂 \"Hey Claude\" (%.2f) — a sentence for a new session", score))
+            Log.info(String(format: "👂 \"%@\" (%.2f) — a sentence for a new session", word, score))
             startDictation(spawn: true, wake: true)
-            if listening || source.isRecording { overlay.flash("👂 Hey Claude — listening", duration: 2) }
+            if listening || source.isRecording { overlay.flash(word == "hey santa" ? "🎅 Hey Santa — listening" : "👂 Hey Claude — listening", duration: 2) }
         case .speech:
             break
         case .silence(let head, let voiced):

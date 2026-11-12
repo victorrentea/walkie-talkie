@@ -8,7 +8,7 @@ to disk and never decides what a wake *means* — the app does (a spawn, or a �
 question when the words open with "I have a question").
 
     {"event": "ready", "device": "...", "rate": 16000}
-    {"event": "wake", "score": 0.93}
+    {"event": "wake", "score": 0.93, "word": "hey claude"}
     {"event": "speech"}                      the first voiced hop after a wake
     {"event": "silence", "after": 1.2, "voiced": 2.3, "head": "/…/head.wav"}
                                              that much quiet after speech: the end;
@@ -48,10 +48,49 @@ def say(**event):
     sys.stdout.flush()
 
 
+class WhisperWake:
+    """A wake word on Whisper's encoder (`evals/wake-word/train_whisper_wake.py`):
+    the last 2 s, every 0.4 s, mean+max of tiny's encoder → a logistic regression.
+    A phrase stays in view for several strides; the cooldown after a wake keeps
+    it to one."""
+
+    def __init__(self, path):
+        import numpy as np
+        from faster_whisper import WhisperModel
+        z = np.load(path)
+        self.np = np
+        self.mean, self.scale, self.coef = z["mean"], z["scale"], z["coef"]
+        self.intercept = float(z["intercept"])
+        self.win = int(float(z["window_seconds"]) * 16000)
+        self.keep = int(z["keep_frames"])
+        self.m = WhisperModel(str(z["whisper_model"]), device="cpu", compute_type="int8", cpu_threads=2)
+        self.fx = self.m.feature_extractor
+        self.reset()
+
+    def reset(self):
+        self.buf = self.np.zeros(0, self.np.int16)
+        self.since = 0
+
+    def feed(self, chunk):
+        np = self.np
+        self.buf = np.concatenate([self.buf, chunk])[-self.win:]
+        self.since += len(chunk)
+        if self.since < 6400 or len(self.buf) < self.win:
+            return None
+        self.since = 0
+        mel = self.fx(self.buf.astype(np.float32) / 32768.0)[..., : self.fx.nb_max_frames]
+        out = np.array(self.m.encode(mel))[0][: self.keep]
+        v = np.concatenate([out.mean(0), out.max(0)])
+        z = float(((v - self.mean) / self.scale) @ self.coef + self.intercept)
+        return 1 / (1 + math.exp(-z))
+
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--model", required=True)
+    p.add_argument("--model", default="", help="an openWakeWord .onnx (\"hey claude\")")
     p.add_argument("--threshold", type=float, default=0.5)
+    p.add_argument("--whisper-wake", default="", help="a Whisper-encoder wake word .npz (\"hey santa\")")
+    p.add_argument("--whisper-threshold", type=float, default=0.6)
     p.add_argument("--device", default="", help="a substring of the input's name; empty = system default")
     p.add_argument("--silence-s", type=float, default=1.2)
     p.add_argument("--no-speech-s", type=float, default=6.0)
@@ -67,8 +106,12 @@ def main():
     import numpy as np
     from openwakeword.model import Model
 
-    model = Model(wakeword_models=[a.model], inference_framework="onnx")
-    key = list(model.models.keys())[0]
+    model = Model(wakeword_models=[a.model], inference_framework="onnx") if a.model else None
+    key = list(model.models.keys())[0] if model else None
+    whisper = WhisperWake(a.whisper_wake) if a.whisper_wake else None
+    if not model and not whisper:
+        say(event="error", error="no wake word model given")
+        return 2
     chunks: "queue.Queue[np.ndarray]" = queue.Queue(maxsize=200)
     paused = threading.Event()
     stop = threading.Event()
@@ -187,11 +230,22 @@ def main():
         voiced = rms > max(180.0, floor * 10 ** (9 / 20))
 
         if mode == "wake":
-            score = float(model.predict(chunk)[key])
-            if score >= a.threshold and not paused.is_set() and clock >= cooldown_until:
-                say(event="wake", score=round(score, 3))
+            hit = None
+            if model:
+                score = float(model.predict(chunk)[key])
+                if score >= a.threshold:
+                    hit = ("hey claude", score)
+            if whisper:
+                score = whisper.feed(chunk)
+                if score is not None and score >= a.whisper_threshold and hit is None:
+                    hit = ("hey santa", score)
+            if hit and not paused.is_set() and clock >= cooldown_until:
+                say(event="wake", score=round(hit[1], 3), word=hit[0])
                 mode, woke_at, voiced_at, heard, voiced_s, head = "command", clock, None, False, 0.0, []
-                model.reset()
+                if model:
+                    model.reset()
+                if whisper:
+                    whisper.reset()
         elif mode == "command":
             if clock - woke_at <= a.head_s:
                 head.append(chunk)

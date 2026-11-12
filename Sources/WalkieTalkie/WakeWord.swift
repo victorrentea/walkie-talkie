@@ -26,7 +26,7 @@ final class WakeWord {
 
     enum Event {
         case ready(device: String)
-        case wake(score: Double)
+        case wake(score: Double, word: String)
         case speech
         /// `head`: the first seconds from the wake on, gapless — what decides
         /// question or task (the app's own take opens later). `voiced`: seconds.
@@ -52,7 +52,7 @@ final class WakeWord {
         set { UserDefaults.standard.set(newValue, forKey: "wakeWord") }
     }
 
-    static let menuTitle = "👂 \"Hey Claude\" starts a session"
+    static let menuTitle = "👂 \"Hey Claude\" / \"Hey Santa\" starts a session"
 
     /// `WT_WAKE_THRESHOLD`, 0…1. 0.5 is the model card's; fitted to his voice
     /// in `evals/wake-word/`.
@@ -64,6 +64,15 @@ final class WakeWord {
     static var home: URL { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".walkie-talkie/wake") }
     static var python: String { ProcessInfo.processInfo.environment["WT_WAKE_PYTHON"] ?? home.appendingPathComponent("venv/bin/python3").path }
     static var model: String { ProcessInfo.processInfo.environment["WT_WAKE_MODEL"] ?? home.appendingPathComponent("hey_claude.onnx").path }
+    /// **"Hey Santa"** (2026-11-12, Victor: *"I think it's more sound, easy to
+    /// hear"*) — a Whisper-encoder detector trained on his corpus
+    /// (`evals/wake-word/train_whisper_wake.py`), beside the openWakeWord one.
+    static var santaModel: String { ProcessInfo.processInfo.environment["WT_SANTA_MODEL"] ?? home.appendingPathComponent("hey_santa_whisper.npz").path }
+    /// `WT_SANTA_THRESHOLD` — fitted in `evals/wake-word/README.md`.
+    static var santaThreshold: Double {
+        let raw = ProcessInfo.processInfo.environment["WT_SANTA_THRESHOLD"] ?? ElevenLabsSource.fileValue("WT_SANTA_THRESHOLD")
+        return raw.flatMap(Double.init).map { min(max($0, 0.05), 0.999) } ?? 0.6
+    }
 
     // MARK: - The helper
 
@@ -132,14 +141,18 @@ final class WakeWord {
             Log.info("👂 wake word off — no venv at \(Self.python) (see WakeWord.swift for the setup)")
             return
         }
-        guard fm.fileExists(atPath: Self.model) else {
-            Log.info("👂 wake word off — no model at \(Self.model)")
+        let claude = fm.fileExists(atPath: Self.model), santa = fm.fileExists(atPath: Self.santaModel)
+        guard claude || santa else {
+            Log.info("👂 wake word off — no model at \(Self.model) nor \(Self.santaModel)")
             return
         }
         device = Self.resolvedDevice()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: Self.python)
-        p.arguments = ["-I", script, "--model", Self.model, "--threshold", String(Self.threshold), "--device", device]
+        var args = ["-I", script, "--device", device]
+        if claude { args += ["--model", Self.model, "--threshold", String(Self.threshold)] }
+        if santa { args += ["--whisper-wake", Self.santaModel, "--whisper-threshold", String(Self.santaThreshold)] }
+        p.arguments = args
         let input = Pipe(), output = Pipe(), errors = Pipe()
         p.standardInput = input
         p.standardOutput = output
@@ -184,7 +197,8 @@ final class WakeWord {
         }
         process = p
         stdin = input.fileHandleForWriting
-        Log.info("👂 wake word helper up (pid \(p.processIdentifier)) on \(device.isEmpty ? "the default input" : device), threshold \(Self.threshold)")
+        Log.info("👂 wake word helper up (pid \(p.processIdentifier)) on \(device.isEmpty ? "the default input" : device)"
+                 + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa ? " — hey santa ≥ \(Self.santaThreshold)" : ""))
     }
 
     private func terminate() {
@@ -224,7 +238,7 @@ final class WakeWord {
         case "ready":
             queue.async { self.restarts = 0 }
             event = .ready(device: obj["device"] as? String ?? "")
-        case "wake": event = .wake(score: obj["score"] as? Double ?? 0)
+        case "wake": event = .wake(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "hey claude")
         case "speech": event = .speech
         case "silence": event = .silence(head: obj["head"] as? String, voiced: obj["voiced"] as? Double ?? 0)
         case "timeout": event = .timeout
@@ -282,7 +296,7 @@ final class WakeWord {
     /// (and its comma) is taken off; nothing later in the sentence is touched.
     static func withoutWakeWord(_ text: String) -> String {
         var rest = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        for lead in ["hey claude", "hei claude", "hey, claude", "claude"] {
+        for lead in ["hey claude", "hei claude", "hey, claude", "hey santa", "hey, santa", "hei santa", "claude", "santa"] {
             if rest.folding(options: [.caseInsensitive], locale: nil).hasPrefix(lead) {
                 let after = rest.dropFirst(lead.count)
                 // A whole word only: "Claudette" stays.

@@ -725,6 +725,12 @@ question, … să faci direct treaba într-un terminal nou"*.
   nothing said** → `timeout`, cancelled. Same test: a 1.4 s take of nothing became Whisper's *"Thank
   you."*, the second listen's *"Da, vă mulțumim."*, and a spawned session with it.
 - **His voice wakes it:** 0.63–0.98 on six live *Hey Claude*s (DJI receiver), 0.5 stays.
+- **"Hey Santa" too** (same evening, *"more sound, easy to hear"*): a second detector in the same
+  helper — Whisper tiny's encoder + a logistic regression (`--whisper-wake`,
+  `~/.walkie-talkie/wake/hey_santa_whisper.npz`, `WT_SANTA_MODEL`, `WT_SANTA_THRESHOLD` 0.6), trained
+  by `evals/wake-word/train_whisper_wake.py` on synthetic positives and **his corpus as the
+  negatives**; numbers in `evals/wake-word/README.md`. Needs `faster-whisper scikit-learn` in the wake
+  venv. `wake {word}` says which phrase; the chip flashes `🎅 Hey Santa — listening`.
 - **Measured** (2026-11-12, `evals/wake-word/`): 1 false wake (0.87) in 116 min of his corpus (300
   clips); his two mid-sentence *hey Claude* scored 0.001 / 0.014 — the threshold waits for deliberate
   takes of the phrase.
