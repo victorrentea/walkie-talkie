@@ -34,9 +34,13 @@ that are right now in engine top level."*
   (`applySwitchRows`, at every open, `checkmark`/blank like Autosend).
 - **`GestureGuide`**: a `.nonactivatingPanel` holding a `WKWebView` (the page is only a drawing
   surface — nothing fetched, links open in the browser). Each card animates one gesture on
-  `Glyphs.mouseIso` (rendered to PNG once per pressed state, one CSS class each — inlined per card
+  `Glyphs.mouse` (rendered to PNG once per pressed state, one CSS class each — inlined per card
   the page was 2 MB): the held button red, the mouse sliding the way of the swipe, a ring for a
-  click; keycaps for keys, a trackpad for the ⌃⌥⌘ chord, a bubble for 👂. Sections: Forward,
+  click; keycaps for keys, a trackpad for the ⌃⌥⌘ chord, a bubble for 👂. **The mouse is seen from
+  above, nose up** (`Glyphs.mouse(guide: true)`: no island round the wheel, both thumb buttons always
+  drawn) — the three-quarter `mouseIso` of the first build made a swipe right look like pushing the
+  mouse away (Victor: *"ori din spate reprezentat, ori de sus"*). **A normal-level window**, not
+  floating (*"să nu mai stea on top"*). Sections: Forward,
   Back, while a prompt records, Keyboard, Trackpad, Voice, and the build at the foot (`#about`).
   `Gesture Guide` opens it at the top, `Built …` and the Dock's About at the foot. The texts are
   the Logi set, written by hand in `GestureGuide.cards` — **a gesture changed in `HotkeyTap` is

@@ -16267,4 +16267,13 @@ level."*
   captures 0.7 s apart all different.
 - `evals/test_gesture_spec.py` reports 13 ✗ — the same 13 on the commit before this one (checked on
   a `git archive` of HEAD); nothing here touches `HotkeyTap` or `deliver`.
+- **Same evening, the mouse turned to be seen from above.** The first build drew `Glyphs.mouseIso`, the
+  three-quarter view; Victor: *"Nu e bine, pentru că mouse-ul e reprezentat din lateral … Când îl muți
+  dreapta, pare că îl muți cumva în spate … ori din spate reprezentat, ori … de sus"*. In a
+  three-quarter view the screen's x axis runs diagonally across the mouse, so a slide right reads as a
+  slide backwards. The top view (`Glyphs.mouse`, nose up) maps screen directions to hand directions
+  one to one. `guide: true` drops the island the wheel sits in (*"ce reprezintă bara asta … e doar
+  wheel-ul"* — it is the real M650's well, not a button), lets the seam split the two buttons down to
+  the deck's end, and always draws the thumb pair. The panel is `.normal` level, not floating
+  (*"să nu mai stea on top"*, as transcribed: *"în port"*).
 
