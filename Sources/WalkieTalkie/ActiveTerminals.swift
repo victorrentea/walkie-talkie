@@ -155,11 +155,14 @@ enum ActiveTerminals {
     ///
     /// **Or the summary line ending `· 💀 kamikaze`** (2026-11-10): the
     /// `walkie-inbox` mod moves the word off its own line onto the end of
-    /// `🎙️ · ☁️ · 📸 ×N`, and that is what the transcript keeps.
+    /// `🎙️ · ☁️ · 📸 ×N`, and that is what the transcript keeps. **Since
+    /// 2026-11-12 the line ends with the skull alone, `· 💀`** (Victor: *"hide
+    /// this word, letting just the skull"*) — the word went to the hidden context.
     static func isKamikaze(prompt: String) -> Bool {
         prompt.split(whereSeparator: \.isNewline).contains {
             let line = $0.trimmingCharacters(in: .whitespaces).lowercased()
             return line == "kamikaze" || line.hasSuffix("· 💀 kamikaze") || line == "💀 kamikaze"
+                || line.hasSuffix(" · 💀")
         }
     }
 
