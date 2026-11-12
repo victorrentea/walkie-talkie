@@ -2109,7 +2109,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // **No RAM on the tab** (2026-10-14, Victor: *"I don't want to see the
         // gigabytes"*) — the footprint stays in the menu's Engine row.
         if id == "eleven" || id == "eleven-live" { return engineShortTitle(id) }
-        return "\(Self.local) " + WhisperModels.displayName(WhisperModels.selected)
+        // **`Whisper V3 Turbo +LoRA`, no `Local`** (2026-11-12) — `WhisperModels.tabName`.
+        return "\(Self.local) " + WhisperModels.tabName(WhisperModels.selected)
     }
 
     private func engineShortTitle(_ id: String) -> String {

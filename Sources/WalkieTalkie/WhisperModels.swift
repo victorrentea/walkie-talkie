@@ -342,6 +342,19 @@ enum WhisperModels {
         if id.hasPrefix("/"), let option = option(for: id) { return option.title }
         return name((id as NSString).lastPathComponent)
     }
+
+    /// **The bottom tab's name: the model, not the category** (2026-11-12, Victor:
+    /// *"don't add "Local " prefix but only "Wisper V3 Turbo +Lora""*) — `Whisper
+    /// V3 Turbo +LoRA`, `Whisper V3 Turbo`, `Whisper V3 Large +LoRA`; the 💻 in front
+    /// already says local. Only the launch and microphone tab; everywhere else
+    /// keeps `displayName`. A name of another shape is left as it is.
+    static func tabName(_ id: String) -> String { tabName(fromDisplay: displayName(id)) }
+
+    static func tabName(fromDisplay shown: String) -> String {
+        let words = shown.split(separator: " ").map(String.init)
+        guard words.first == "Local", words.count >= 2 else { return shown }
+        return "Whisper V3 \(words[1])" + (words.contains("LoRA") ? " +LoRA" : "")
+    }
     /// `whisper-large-v3-turbo` → `Local Turbo`, `whisper-turbo-victor` →
     /// `Local Turbo LoRA`, `whisper-large-victor` → `Local Large LoRA`
     /// (2026-10-21, Victor: *"call the first one Local Turbo … emphasize the

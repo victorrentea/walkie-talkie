@@ -214,6 +214,10 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   fallback, deliberately, because an engine that can run but cannot be picked is the one state
   where the chip and the menu disagree.
 
+- **The bottom tab names the local model `💻 Whisper V3 Turbo +LoRA`, never `Local …`** (2026-11-12, Victor:
+  *"don't add "Local " prefix but only "Wisper V3 Turbo +Lora""*) — `WhisperModels.tabName`, read by
+  `engineBannerTitle` (launch tab and the green microphone tab) only; the menu, the panel and the
+  envelope keep `displayName`.
 - **Every engine name starts with ☁️ or 💻, everywhere** (2026-10-09, Victor: *"be sure to start
   with the laptop emoji everywhere … so it's clear from the first character if this is a local …
   in the overlay in the bottom, in the pre-flight panel, everywhere"*) — **supersedes every

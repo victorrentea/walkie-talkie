@@ -62,6 +62,13 @@ final class WhisperModelsTests: XCTestCase {
         XCTAssertEqual(WhisperModels.options(in: dir).first?.card?.params, "809M")
     }
 
+    func testTheBottomTabNamesTheModel() {
+        XCTAssertEqual(WhisperModels.tabName(fromDisplay: "Local Turbo LoRA"), "Whisper V3 Turbo +LoRA")
+        XCTAssertEqual(WhisperModels.tabName(fromDisplay: "Local Turbo"), "Whisper V3 Turbo")
+        XCTAssertEqual(WhisperModels.tabName(fromDisplay: "Local Large LoRA"), "Whisper V3 Large +LoRA")
+        XCTAssertEqual(WhisperModels.tabName(fromDisplay: "some-model"), "some-model")
+    }
+
     func testOneNameEverywhere() {
         XCTAssertEqual(WhisperModels.name("whisper-large-v3-turbo"), "Local Turbo")
         XCTAssertEqual(WhisperModels.name("whisper-turbo-victor"), "Local Turbo LoRA")
