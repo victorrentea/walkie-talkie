@@ -16,12 +16,20 @@ import WebKit
 /// panel's 2026-09-22 rule: *"să fie nu webpage ci pagina swift"*) — the page is
 /// only the drawing surface, because CSS keyframes animate twenty small scenes for
 /// free where Core Animation would be a layer tree per card. Nothing is fetched:
-/// the mouse pictures are `Glyphs.mouseIso` (traced off Logitech's own render of
-/// the Signature M650 L) rendered here to PNG and inlined, so the drawing is the
-/// same one the chip and the hint bar use.
+/// the mouse pictures are `Glyphs.mouse` (traced off the Signature M650 L's
+/// wireframe) rendered here to PNG and inlined, so the drawing is the one the chip
+/// and the hint bar use.
+///
+/// **From above, nose up** (2026-11-12, Victor, on the first build's three-quarter
+/// `mouseIso`: *"pare că îl muți cumva în spate … ori din spate reprezentat, ori de
+/// sus"*): a swipe right on the page is the mouse moving right under his hand, a
+/// swipe up is pushing it away. `guide: true` draws the wheel without the island it
+/// sits in (*"ce reprezintă bara asta … e doar wheel-ul"*) and both thumb buttons on
+/// the left flank always.
 ///
 /// **Each scene is the gesture itself**: the button you hold turns red, the mouse
-/// moves the way you swipe, a ring marks a click. The texts are the Logi set
+/// moves the way you swipe, a ring marks a click. **A normal window, not floating**
+/// (same evening: *"să nu mai stea on top"*) — a guide is read beside the work. The texts are the Logi set
 /// (`mouse-gestures.md`, *Logi mode*); with *Gestures: Wheel* ticked a banner says
 /// the side buttons are off. A gesture that changes in `HotkeyTap` changes here
 /// by hand — this table is the page's, as the menu's legends were the menu's.
@@ -55,8 +63,8 @@ enum GestureGuide {
                         styleMask: [.titled, .closable, .resizable, .miniaturizable, .nonactivatingPanel],
                         backing: .buffered, defer: false)
         p.title = "Walkie Talkie — Gesture Guide"
-        p.isFloatingPanel = true
-        p.level = .floating
+        p.isFloatingPanel = false
+        p.level = .normal
         p.becomesKeyOnlyIfNeeded = true
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
@@ -115,7 +123,7 @@ enum GestureGuide {
 
     // MARK: - The mouse, as pictures
 
-    /// `Glyphs.mouseIso` with the named buttons red, as a 2× PNG data URI. The body
+    /// `Glyphs.mouse` (from above, `guide: true`) with the named buttons red, as a 2× PNG data URI. The body
     /// is a mid grey so one picture reads on both the light and the dark page.
     /// **One `<i>` per picture, the PNG once per page** — a class per pressed
     /// state, its data URI written into the style sheet once (`pictureCSS`).
@@ -132,11 +140,11 @@ enum GestureGuide {
 
     private static func mouseURI(_ pressed: Glyphs.Buttons) -> String {
         if let hit = mouseCache[pressed.rawValue] { return hit }
-        let height: CGFloat = 220
+        let height: CGFloat = 260
         var out = ""
         NSAppearance(named: .aqua)?.performAsCurrentDrawingAppearance {
-            let img = Glyphs.mouseIso(height: height, pressed: pressed,
-                                      body: NSColor(white: 0.50, alpha: 1), highlight: .systemRed)
+            let img = Glyphs.mouse(height: height, pressed: pressed,
+                                   body: NSColor(white: 0.50, alpha: 1), highlight: .systemRed, guide: true)
             guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil,
                                              pixelsWide: Int(img.size.width * 2), pixelsHigh: Int(img.size.height * 2),
                                              bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -155,15 +163,15 @@ enum GestureGuide {
     }
     private static var mouseCache: [Int: String] = [:]
 
-    /// Where each button sits on the `mouseIso` picture, as fractions of its box
-    /// (x right, y down) — the centres of the parts `Glyphs.mouseIso` draws.
+    /// Where each button sits on the top view, as fractions of its box (x right,
+    /// y down from the nose) — the centres of the parts `Glyphs.mouse` draws.
     private static func spot(_ b: Glyphs.Buttons) -> (x: Double, y: Double) {
         switch b {
-        case .forward: return (0.645, 0.582)
-        case .back: return (0.742, 0.437)
-        case .wheel: return (0.254, 0.530)
-        case .left: return (0.400, 0.640)
-        case .right: return (0.200, 0.330)
+        case .forward: return (0.065, 0.392)
+        case .back: return (0.109, 0.525)
+        case .wheel: return (0.502, 0.217)
+        case .left: return (0.290, 0.290)
+        case .right: return (0.710, 0.290)
         default: return (0.5, 0.5)
         }
     }
@@ -343,13 +351,13 @@ enum GestureGuide {
         // A dashed track in the direction of the swipe, drawn as the mouse travels.
         let (x1, y1, x2, y2): (Int, Int, Int, Int)
         switch dir {
-        case .right: (x1, y1, x2, y2) = (40, 140, 170, 140)
-        case .left: (x1, y1, x2, y2) = (170, 140, 40, 140)
-        case .up: (x1, y1, x2, y2) = (205, 128, 205, 22)
-        case .down: (x1, y1, x2, y2) = (205, 22, 205, 128)
+        case .right: (x1, y1, x2, y2) = (70, 212, 200, 212)
+        case .left: (x1, y1, x2, y2) = (170, 212, 40, 212)
+        case .up: (x1, y1, x2, y2) = (204, 180, 204, 26)
+        case .down: (x1, y1, x2, y2) = (204, 44, 204, 198)
         }
         return """
-        <svg class="track" viewBox="0 0 240 150" aria-hidden="true"><defs><marker id="h\(dir.rawValue)" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"/></marker></defs><line class="t-line" x1="\(x1)" y1="\(y1)" x2="\(x2)" y2="\(y2)" marker-end="url(#h\(dir.rawValue))"/></svg>
+        <svg class="track" viewBox="0 0 240 224" aria-hidden="true"><defs><marker id="h\(dir.rawValue)" markerWidth="8" markerHeight="8" refX="5" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"/></marker></defs><line class="t-line" x1="\(x1)" y1="\(y1)" x2="\(x2)" y2="\(y2)" marker-end="url(#h\(dir.rawValue))"/></svg>
         """
     }
 
@@ -433,7 +441,7 @@ enum GestureGuide {
     h2 { font-size:18px; margin:0 0 2px; }
     h3 { font-size:15px; margin:0 0 2px; }
     .hero { display:flex; gap:36px; align-items:center; margin-bottom:22px; flex-wrap:wrap; }
-    .heromouse { position:relative; width:317px; height:220px; flex:none; }
+    .heromouse { position:relative; width:148px; height:260px; flex:none; margin-left:40px; }
     .mi { position:absolute; inset:0; background:center / contain no-repeat; }
     .herotext { flex:1; min-width:260px; max-width:520px; }
     .herotext p { margin:0 0 10px; color:var(--mute); }
@@ -459,8 +467,9 @@ enum GestureGuide {
     a { color:var(--accent); text-decoration:none; }
 
     /* ── the stage: one gesture, looping every 3.2 s ── */
-    .stage { position:relative; height:150px; overflow:hidden; }
-    .mouse { position:absolute; left:50%; top:50%; width:144px; height:100px; margin:-50px 0 0 -72px; }
+    .stage { position:relative; height:224px; overflow:hidden; --mw:88px; --mh:155px; }
+    .mouse { position:absolute; left:50%; top:50%; width:var(--mw); height:var(--mh);
+             margin:calc(var(--mh) / -2) 0 0 calc(var(--mw) / -2); }
     .layer { opacity:0; }
     .a-hold { animation:hold 3.2s infinite; }
     .a-click { animation:click 3.2s infinite; }
@@ -475,26 +484,26 @@ enum GestureGuide {
     .m-up    { animation:mup 3.2s infinite ease-in-out; }
     .m-down  { animation:mdown 3.2s infinite ease-in-out; }
     .m-drag  { animation:mdrag 3.2s infinite ease-in-out; }
-    @keyframes mright { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateX(52px); opacity:1 }
-                        82% { transform:translateX(52px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
-    @keyframes mleft  { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateX(-52px); opacity:1 }
-                        82% { transform:translateX(-52px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
-    @keyframes mup    { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateY(-34px); opacity:1 }
-                        82% { transform:translateY(-34px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
-    @keyframes mdown  { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateY(34px); opacity:1 }
-                        82% { transform:translateY(34px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
+    @keyframes mright { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateX(58px); opacity:1 }
+                        82% { transform:translateX(58px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
+    @keyframes mleft  { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateX(-58px); opacity:1 }
+                        82% { transform:translateX(-58px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
+    @keyframes mup    { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateY(-30px); opacity:1 }
+                        82% { transform:translateY(-30px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
+    @keyframes mdown  { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translateY(30px); opacity:1 }
+                        82% { transform:translateY(30px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
     @keyframes mdrag  { 0%,22% { transform:none; opacity:1 } 56%,74% { transform:translate(50px,30px); opacity:1 }
                         82% { transform:translate(50px,30px); opacity:0 } 84% { transform:none; opacity:0 } 94%,100% { transform:none; opacity:1 } }
     .track { position:absolute; inset:0; width:100%; height:100%; color:var(--track); }
     .t-line { stroke:currentColor; stroke-width:2.5; stroke-dasharray:6 6; fill:none; animation:track 3.2s infinite; }
     @keyframes track { 0%,20% { opacity:0 } 30%,74% { opacity:1 } 84%,100% { opacity:0 } }
     /* the area being cut: anchored where the wheel starts, grows as the mouse drags */
-    .box { position:absolute; left:calc(50% - 72px + 144px * var(--sx)); top:calc(50% - 50px + 100px * var(--sy));
+    .box { position:absolute; left:calc(50% - var(--mw) / 2 + var(--mw) * var(--sx)); top:calc(50% - var(--mh) / 2 + var(--mh) * var(--sy));
            border:2px dashed var(--red); background:color-mix(in srgb, var(--red) 12%, transparent);
            width:0; height:0; animation:box 3.2s infinite ease-in-out; }
     @keyframes box { 0%,22% { width:0; height:0; opacity:1 } 56%,74% { width:50px; height:30px; opacity:1 }
                      82% { width:50px; height:30px; opacity:0 } 84%,100% { width:0; height:0; opacity:0 } }
-    .element { position:absolute; left:14px; top:96px; width:70px; height:34px; border:2px solid var(--accent);
+    .element { position:absolute; left:14px; top:150px; width:70px; height:34px; border:2px solid var(--accent);
                border-radius:6px; opacity:0; animation:element 3.2s infinite; }
     @keyframes element { 0%,38% { opacity:0 } 42%,80% { opacity:1 } 86%,100% { opacity:0 } }
 

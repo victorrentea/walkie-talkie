@@ -259,10 +259,16 @@ extension Glyphs {
     /// Height is the size that is asked for and the width follows from the
     /// traced proportion, so the result is a tall image in a square icon box
     /// and lines up with the emoji-derived glyphs beside it.
+    ///
+    /// **`guide: true` is the Gesture Guide's dress** (2026-11-12, Victor: *"ce
+    /// reprezintă bara asta … e doar wheel-ul"*): the wheel alone, without the
+    /// island it sits in, and both thumb buttons always drawn so a still picture
+    /// shows where they are. The chip's 16 pt glyphs keep the default.
     static func mouse(height: CGFloat,
                       pressed: Buttons = [],
                       body: NSColor = .secondaryLabelColor,
-                      highlight: NSColor = .systemRed) -> NSImage {
+                      highlight: NSColor = .systemRed,
+                      guide: Bool = false) -> NSImage {
         let width = (height * Self.mouseAspect).rounded()
         return NSImage(size: NSSize(width: width, height: height), flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
@@ -318,7 +324,8 @@ extension Glyphs {
             ctx.clip()
             ctx.setFillColor(highlight.cgColor)
             for (on, sign) in [(pressed.contains(.left), CGFloat(-1)), (pressed.contains(.right), CGFloat(1))] where on {
-                let inner: CGFloat = 0.5 + sign * 0.118   // the island's near wall
+                // The island's near wall — or, with no island drawn, the seam.
+                let inner: CGFloat = guide ? 0.5 : 0.5 + sign * 0.118
                 let deck = CGMutablePath()
                 deck.move(to: p(0.5, -0.05))
                 deck.addLine(to: p(0.5, 0.085))
@@ -353,7 +360,7 @@ extension Glyphs {
             ctx.setStrokeColor(body.cgColor)
             ctx.setLineWidth(line)
             ctx.move(to: p(0.501, 0.0))
-            ctx.addLine(to: p(0.501, 0.09))
+            ctx.addLine(to: p(0.501, guide ? 0.56 : 0.09))
             ctx.strokePath()
 
             // **The island answers for the wheel.** When the wheel is the button
@@ -362,20 +369,22 @@ extension Glyphs {
             // the wheel alone is the size of the wheel. It is not a lie about
             // which button is pressed: the island *is* where the wheel is.
             let wheelPressed = pressed.contains(.wheel)
-            ctx.addPath(island)
-            ctx.setFillColor(body.withAlphaComponent(0.22).cgColor)
-            ctx.fillPath()
-            ctx.addPath(island)
-            ctx.setStrokeColor(wheelPressed ? highlight.cgColor : body.cgColor)
-            ctx.setLineWidth(wheelPressed ? line * 1.6 : line)
-            ctx.strokePath()
+            if !guide {
+                ctx.addPath(island)
+                ctx.setFillColor(body.withAlphaComponent(0.22).cgColor)
+                ctx.fillPath()
+                ctx.addPath(island)
+                ctx.setStrokeColor(wheelPressed ? highlight.cgColor : body.cgColor)
+                ctx.setLineWidth(wheelPressed ? line * 1.6 : line)
+                ctx.strokePath()
+            }
 
             part(wheel, on: wheelPressed, line: max(0.5, height * 0.020))
 
             // The two thumb buttons, as the slanted pair they are on the flank —
             // drawn only when one of them is the button being named. At 16pt two
             // extra marks on every mouse in the card is texture, not information.
-            if pressed.contains(.back) || pressed.contains(.forward) {
+            if guide || pressed.contains(.back) || pressed.contains(.forward) {
                 ctx.setLineWidth(max(1.0, width * 0.11))
                 for (on, from, to) in [(pressed.contains(.forward), (CGFloat(0.055), CGFloat(0.340)), (CGFloat(0.075), CGFloat(0.445))),
                                        (pressed.contains(.back), (CGFloat(0.088), CGFloat(0.470)), (CGFloat(0.130), CGFloat(0.580)))] {
