@@ -166,16 +166,19 @@ why is the build red?
 [📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]
 ```
 
-After (an agent that holds the rules):
+After (an agent that holds the rules — v2, the same evening: the engine and microphone as icons,
+and no row for a plain frame, since the rules say `📸n` is `📁/screenshot-n-800px.jpg`):
 
 ```
 [📸0 auto]
 why is the build red?
 
-[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]
+[dictated 💻 · 🎤]
 [📁=$WALKIE_SHOTS/2026-11-12-13-09-24]
-[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]
 ```
+
+Rows that say something of their own stay: `[📸1 at 0:04]` for a frame the words could not
+carry, areas (`✂️`), Chrome picks, recordings (`🎦`), highlights.
 
 ### Screenshots
 

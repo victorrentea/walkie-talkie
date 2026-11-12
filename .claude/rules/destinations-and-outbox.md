@@ -248,6 +248,11 @@ me to dismiss it explicitly"*.
   `terminalLine(m, rulesKnown: true)` leaves `questionHint` and `dictionaryHint` out; log `📜 short
   envelope`. Unproven (caret, IDE chat, held, older mod, other program) → the clauses below, as before.
   A change to the rules' text raises `AgentRules.version`. Tests: `AgentRulesTests`, the mod's `split.test.ts`.
+  **v2, the same evening** (Victor: *"se mai poate scurta ceva?"*): with `rulesKnown`, `dictatedHint(short:)`
+  writes `[dictated 💻 · 🎤]` (the engine name's leading icon, the mic's glyph; `[dictated]` with neither)
+  and `artifactsClause(short:)` writes no row for a plain frame under its standard name — the rules
+  say `📸n` = `📁/screenshot-n-800px.jpg`. Caption rows (`[📸1 at 0:04]`), areas, picks, films: unchanged.
+  The mod reads both rows (`WALKIE_CLAUSE`, `engineIcon`, `micIcon`). Eval: `evals/agent-rules/`.
 - **Every dictation also carries `AppDelegate.dictionaryHint`** (2026-11-09, Victor: *"când modelul
   este 100% sigur … că mesajul dictat conține un cuvânt greșit … Claude să poată adăuga în
   dicționarul folosit de Walkie Talkie … inclusiv în Wispr Flow Dictionary … să fie în sync"* —

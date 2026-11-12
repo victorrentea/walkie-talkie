@@ -24,7 +24,7 @@ import Foundation
 /// it has the new text.
 enum AgentRules {
     /// Raise with any change to `text`.
-    static let version = 1
+    static let version = 2
 
     static var beginMarker: String { "<!-- walkie-talkie rules v\(version) -->" }
     static let beginPrefix = "<!-- walkie-talkie rules v"
@@ -33,12 +33,16 @@ enum AgentRules {
     static let text = """
     ## Walkie Talkie dictation (walkie-talkie rules v\(version))
 
-    A prompt whose footer has a `[Transcribed in RO or EN by <engine> · <mic>]` clause \
-    was dictated by Victor through Walkie Talkie: speech recognised in Romanian or English, \
-    so expect misheard words. The bracketed lines under the words are metadata: `[📁=…]` the \
-    folder of the screenshots, `[📸n = …]` a screenshot, `[📸n✂️…]` an area he cut out, \
-    `[🎦n = …]` a screen recording, `[selected: …]` text he highlighted.
+    A prompt whose footer has a `[dictated <engine> · <mic>]` row (older: `[Transcribed in RO or EN \
+    by …]`) was dictated by Victor through Walkie Talkie: speech recognised in Romanian or English, \
+    so expect misheard words. The bracketed rows under the words are metadata.
 
+    - **Screenshots.** `[📁=<folder>]` is where this prompt's pictures are. `📸n` (in the words, or \
+    the leading `[📸0 auto]` — the screen as it was when he started talking) is the file \
+    `<folder>/screenshot-n-800px.jpg`: read that one. `screenshot-n-original.jpg` beside it is the \
+    full resolution, only when the small one is not enough. `[📸n at m:ss]` says when in the \
+    sentence a picture was taken. Rows about `✂️` areas, `🎦` recordings and `[selected: …]` text \
+    describe themselves.
     - **He asked you a question** → besides answering, also run \
     `walkie-reply "<the answer in ≤2 short sentences>"` (add `--image <path>` when a small \
     picture says it better). Only to answer him — never to ask him something, never to report \

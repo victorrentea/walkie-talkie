@@ -16213,3 +16213,13 @@ a spawn reads the version the last starting session stamped (`agent-rules.claude
 the caret, an IDE chat, a held sentence, a mod older than the rules — gets the long envelope, so
 raising `version` is safe by construction. `~/.claude/CLAUDE.md` was not used for Claude: the mod's section reaches every session the same
 way (and is cached with the rest of the system prompt), without editing a file that is Victor's own.
+
+### v2, the same evening: the footer is two short rows
+
+Victor: *"se mai poate scurta ceva?"* What was left under the words (~60 tokens) still spelled out
+two things that never change: `[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]` and
+`[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 3456x2234px]`. With the rules held, the first
+is `[dictated 💻 · 🎤]` and the second is not written: rules v2 say that `📸n` is
+`<folder>/screenshot-n-800px.jpg` and the original sits beside it. The long envelope is untouched,
+so a destination without v2 loses nothing. `evals/agent-rules/` gained a case that can only be
+answered by opening 📸0 from the rule alone.

@@ -10222,8 +10222,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// acelui device"* — the words are for him, the model reads them every turn.
     /// Unknown (empty, or a row with no glyph) → the clause is as before, and the
     /// mod keeps the 🎙️.
-    private static func dictatedHint(_ m: Message) -> String {
+    ///
+    /// **`[dictated 💻 · 🎤]` to an agent that holds `AgentRules`** (2026-11-12,
+    /// Victor: *"se mai poate scurta ceva?"*): the engine's icon and the
+    /// microphone's, nothing else — *in RO or EN* and what the row means are in
+    /// the rules, and no agent ever acted on the model's name.
+    private static func dictatedHint(_ m: Message, short: Bool = false) -> String {
         let engine = engineName(via: m.via, engineLabel: m.engine)
+        if short {
+            let icons = [engine.first, m.mic.first].compactMap { $0 }
+                .filter { !$0.isLetter && !$0.isNumber && !$0.isWhitespace && !$0.isASCII }
+            return icons.isEmpty ? "[dictated]" : "[dictated \(icons.map(String.init).joined(separator: " · "))]"
+        }
         guard let glyph = m.mic.first, !glyph.isLetter, !glyph.isNumber, !glyph.isWhitespace else {
             return "[Transcribed in RO or EN by \(engine)]"
         }
@@ -10785,7 +10795,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var parts: [String] = []
         if let text = m.text, !text.isEmpty { parts.append(leading(m) + text) }
         if m.kind == "dictation", let text = m.text, !text.isEmpty {
-            parts.append(dictatedHint(m))
+            parts.append(dictatedHint(m, short: rulesKnown))
             // **🤷‍♂️ (hesitant) / 😡 (tense), beside the hint, or
             // nothing** (2026-09-27) — what the transcript lost, never a number.
             if let tag = m.affect?.verdict.tag { parts.append(tag) }
@@ -10813,7 +10823,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // other is the frame that happened to be on screen when he started
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
-        parts.append(contentsOf: artifactsClause(m))
+        parts.append(contentsOf: artifactsClause(m, short: rulesKnown))
         if let clause = filmClause(m.films) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
@@ -11013,7 +11023,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return ShotMarker.Token.shot(n, mouse: m.mice[screen] ?? nil, auto: true) + "\n"
     }
 
-    private static func artifactsClause(_ m: Message) -> [String] {
+    /// `short` (2026-11-12, the destination holds `AgentRules`): a plain frame
+    /// under its standard name gets no row — the rules say `📸n` is
+    /// `📁/screenshot-n-800px.jpg`, `-original.jpg` beside it. A frame the words
+    /// could not carry keeps its caption row; areas, picks and films are unchanged.
+    private static func artifactsClause(_ m: Message, short: Bool = false) -> [String] {
         let frames = ([m.screen].compactMap { $0 } + m.paths)
         let films = m.films.filter { $0.sheet != nil }
         guard !frames.isEmpty || !films.isEmpty || !m.elements.isEmpty else { return [] }
@@ -11148,7 +11162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if foldable.contains(path) {
                 // Written once, where the first of them would have stood, so the
                 // footer still reads in the order the sentence does.
-                if path == plain.first?.path {
+                if path == plain.first?.path, !short {
                     // **No `at 800px width` since 2026-09-29** (Victor's edit):
                     // 12/12 fresh agents still read 800 as the width from the
                     // name and the original's size (`evals/envelope-width/`).
@@ -11174,6 +11188,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + "user-selected area between corners (x,y) "
                     + "(\(Int(box.minX)),\(Int(box.minY)))→(\(Int(box.maxX)),\(Int(box.maxY))) "
                     + "at \(name(cut)); full screen available at -800px and -original.jpg at \(size(path))]")
+            } else if short, plain.contains(where: { $0.path == path }) {
+                if let said = said { rows.append("[\(said)]") }
             } else {
                 rows.append("[\(said ?? ShotMarker.Token.key(shot: n, area: false)) = "
                     + "\(handed), or -original.jpg at \(size(path))]")

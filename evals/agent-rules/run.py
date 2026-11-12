@@ -11,7 +11,7 @@ the harness in an empty folder, reading the global instructions Walkie installed
 
 **Nothing is bypassed.** Each harness keeps its permission system and is allowed
 only what the cases need: `walkie-reply`, `walkie-dict`, and writing a file in its
-own empty folder (Codex: its `workspace-write` sandbox). `WALKIE_EVAL_LOG` makes the
+own empty folder (Codex: its `workspace-write` sandbox), plus reading the shots folder. `WALKIE_EVAL_LOG` makes the
 two helpers record the call instead of acting (no pop-up, no dictionary write), and
 the score is read off that record.
 
@@ -28,6 +28,8 @@ import subprocess
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+SHOTS_ROOT = os.environ.get("WALKIE_SHOTS") or os.path.expanduser(
+    "~/Library/Caches/ro.victorrentea.wispr-relay/shots")
 SHOTS = "2026-11-12-13-09-24"  # a real folder under $WALKIE_SHOTS, one frame in it
 
 QUESTION = ('[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>" '
@@ -49,17 +51,22 @@ CASES = [
     dict(id="misheard", words="Add a line to notes.txt in the current folder saying that I use cloud code, "
                                "Anthropic's coding agent for the terminal, every day.",
          reply=False, dict="claude code", file="notes.txt"),
+    # Only the rules say where 📸0 is: the short envelope names the folder and nothing else.
+    dict(id="screenshot", words="Which app's name is at the left of the menu bar at the top of my screen?",
+         reply=True, dict=None, says="terminal"),
     dict(id="question-compare", words="Which country has the larger population, Romania or Hungary?",
          reply=True, dict=None),
 ]
 
 
 def envelope(case, long):
+    if not long:  # rules v2: icons, the folder, nothing else
+        lines = ["[dictated 💻 · 🎤]", f"[📁=$WALKIE_SHOTS/{SHOTS}]"]
+        return "[📸0 auto]\n" + case["words"] + "\n\n" + "\n".join(lines)
     lines = ["[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]"]
-    if long:
-        if "?" in case["words"]:
-            lines.append(QUESTION)
-        lines.append(DICT)
+    if "?" in case["words"]:
+        lines.append(QUESTION)
+    lines.append(DICT)
     lines += [f"[📁=$WALKIE_SHOTS/{SHOTS}]", "[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]"]
     return "[📸0 auto]\n" + case["words"] + "\n\n" + "\n".join(lines)
 
@@ -68,12 +75,13 @@ def command(harness, prompt):
     if harness == "claude":
         return ["claude", "-p", prompt, "--output-format", "json",
                 "--allowedTools", "Bash(walkie-reply:*)", "Bash(walkie-dict:*)", "Write", "Edit", "Read",
+                "--add-dir", SHOTS_ROOT,
                 "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
     if harness == "codex":
         return ["codex", "exec", "--skip-git-repo-check", "--json", "-s", "workspace-write", prompt]
     extra = ["--no-custom-instructions"] if harness == "copilot-norules" else []
     return ["copilot", "-p", prompt, "--no-color", "--allow-tool", "shell(walkie-reply)",
-            "shell(walkie-dict)", "write", *extra]
+            "shell(walkie-dict)", "write", "--add-dir", SHOTS_ROOT, *extra]
 
 
 def run(job):
@@ -101,6 +109,8 @@ def run(job):
         checks["dict"] = any(case["dict"] in " ".join(a).lower() for a in dicts)
     else:
         checks["dict"] = not dicts
+    if case.get("says"):
+        checks["says"] = any(case["says"] in " ".join(a).lower() for a in replies)
     if case.get("file"):
         checks["file"] = os.path.exists(os.path.join(cwd, case["file"]))
     cost = None

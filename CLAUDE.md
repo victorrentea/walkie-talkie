@@ -82,6 +82,9 @@ menus, About, the Chrome extension. Logs, comments and commits are unaffected. S
   the mod's `.alive` beat says `rules: N`; the harness file holds the marker). Caret, IDE chat,
   unknown program, older mod → the long envelope. Never make the short form unconditional.
 - **A new instruction for agents goes into `AgentRules.text`, never as a new per-message clause.**
+- **v2 (same day): `[dictated 💻 · 🎤]` replaces `[Transcribed in RO or EN by …]` and a plain frame
+  gets no `[📸n = …]` row** — both only in the short envelope; the long one is unchanged. After any
+  change, re-run `evals/agent-rules/run.py`.
 
 ## The overlay is photographed
 
