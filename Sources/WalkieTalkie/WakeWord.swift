@@ -28,7 +28,9 @@ final class WakeWord {
         case ready(device: String)
         case wake(score: Double)
         case speech
-        case silence
+        /// `head`: the first seconds from the wake on, gapless — what decides
+        /// question or task (the app's own take opens later). `voiced`: seconds.
+        case silence(head: String?, voiced: Double)
         case timeout
         case error(String)
     }
@@ -224,7 +226,7 @@ final class WakeWord {
             event = .ready(device: obj["device"] as? String ?? "")
         case "wake": event = .wake(score: obj["score"] as? Double ?? 0)
         case "speech": event = .speech
-        case "silence": event = .silence
+        case "silence": event = .silence(head: obj["head"] as? String, voiced: obj["voiced"] as? Double ?? 0)
         case "timeout": event = .timeout
         default: event = .error(obj["error"] as? String ?? name)
         }
@@ -233,23 +235,46 @@ final class WakeWord {
 
     // MARK: - What the words mean
 
-    /// **"I have a question" opens a ⚡ question; anything else is a task for a
-    /// new session.** The opening as he says it in either language, before any
-    /// other word, punctuation and case aside. Returns the words after it, or
-    /// nil when the sentence does not open with it.
+    /// **"I have a question" / "question:" opens a ⚡ question; anything else is
+    /// a task for a new session** (2026-11-12; *"add another variant for ask
+    /// mode: hey claude, question:"*). The opening as he says it in either
+    /// language, before any other word, punctuation and case aside. Returns the
+    /// words after it, or nil when the sentence does not open with it.
     static func question(in text: String) -> String? {
+        // Longest first: "question" is the tail of the others.
         let openings = ["i have a question", "i've got a question", "i got a question",
-                        "am o întrebare", "am o intrebare"]
+                        "am o întrebare", "am o intrebare", "a question", "question", "întrebare", "intrebare"]
         let trimmed = withoutWakeWord(text)
         let folded = trimmed.folding(options: [.caseInsensitive], locale: nil)
         for opening in openings where folded.hasPrefix(opening) {
             var rest = String(trimmed.dropFirst(opening.count))
+            // A whole word: "Questionable…" is a task.
+            if let c = rest.first, c.isLetter { continue }
             while let c = rest.first, c == "," || c == "." || c == ":" || c == "!" || c == "?" || c == "-" || c == "—" || c.isWhitespace {
                 rest.removeFirst()
             }
             return rest
         }
         return nil
+    }
+
+    /// **What is left of the opening in the app's own take**, which opens a
+    /// beat after the wake and can start mid-phrase (*"…question, what time…"*,
+    /// *"have a question …"*): the remnant taken off when the gapless head
+    /// already said it was a question. Nothing left of it → the text as is.
+    static func withoutQuestionRemnant(_ text: String) -> String {
+        if let rest = question(in: text) { return rest }
+        var rest = withoutWakeWord(text)
+        for lead in ["have a question", "got a question", "o întrebare", "o intrebare"] {
+            if rest.folding(options: [.caseInsensitive], locale: nil).hasPrefix(lead) {
+                rest = String(rest.dropFirst(lead.count))
+                while let c = rest.first, c == "," || c == "." || c == ":" || c == "!" || c == "?" || c == "-" || c == "—" || c.isWhitespace {
+                    rest.removeFirst()
+                }
+                break
+            }
+        }
+        return rest
     }
 
     /// The take opens after the wake fired, but the recogniser can still catch

@@ -10,8 +10,13 @@ question when the words open with "I have a question").
     {"event": "ready", "device": "...", "rate": 16000}
     {"event": "wake", "score": 0.93}
     {"event": "speech"}                      the first voiced hop after a wake
-    {"event": "silence", "after": 1.2}       that much quiet after speech: the end
-    {"event": "timeout"}                     nothing said within --no-speech-s
+    {"event": "silence", "after": 1.2, "voiced": 2.3, "head": "/…/head.wav"}
+                                             that much quiet after speech: the end;
+                                             `head` = the first --head-s seconds from the
+                                             wake on, gapless (the app's own take opens
+                                             later and loses the first words)
+    {"event": "timeout"}                     nothing said within --no-speech-s, or under
+                                             --min-voiced-s of voice in all
     {"event": "error", "error": "..."}
 
 After a wake it watches for the end of the command on the same stream (an
@@ -52,6 +57,10 @@ def main():
     p.add_argument("--no-speech-s", type=float, default=6.0)
     p.add_argument("--max-command-s", type=float, default=60.0)
     p.add_argument("--cooldown-s", type=float, default=1.5)
+    p.add_argument("--min-voiced-s", type=float, default=0.6)
+    p.add_argument("--ignore-s", type=float, default=0.25, help="the wake word's own tail, not speech")
+    p.add_argument("--head-s", type=float, default=4.0)
+    p.add_argument("--head", default=os.path.expanduser("~/.walkie-talkie/wake/head.wav"))
     p.add_argument("--wav", default="", help="read this 16 kHz file instead of a microphone (tests)")
     a = p.parse_args()
 
@@ -131,7 +140,36 @@ def main():
     woke_at = 0.0
     voiced_at = None          # last voiced chunk in command mode
     heard = False
+    voiced_s = 0.0
+    head: list = []
     cooldown_until = 0.0
+
+    def write_head():
+        import wave
+        try:
+            os.makedirs(os.path.dirname(a.head), exist_ok=True)
+            tmp = a.head + ".tmp"
+            with wave.open(tmp, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(16000)
+                w.writeframes(np.concatenate(head).tobytes() if head else b"")
+            os.replace(tmp, a.head)
+            return a.head
+        except Exception as e:
+            say(event="error", error=f"head: {e}")
+            return None
+
+    def end(after, capped=False):
+        nonlocal mode, cooldown_until
+        mode, cooldown_until = "wake", clock + a.cooldown_s
+        if voiced_s < a.min_voiced_s:
+            say(event="timeout", voiced=round(voiced_s, 2))
+            return
+        ev = dict(event="silence", after=round(after, 2), voiced=round(voiced_s, 2), head=write_head())
+        if capped:
+            ev["capped"] = True
+        say(**ev)
     clock = 0.0               # seconds of audio seen — the wav and the mic alike
 
     while not stop.is_set() or not chunks.empty():
@@ -152,22 +190,22 @@ def main():
             score = float(model.predict(chunk)[key])
             if score >= a.threshold and not paused.is_set() and clock >= cooldown_until:
                 say(event="wake", score=round(score, 3))
-                mode, woke_at, voiced_at, heard = "command", clock, None, False
+                mode, woke_at, voiced_at, heard, voiced_s, head = "command", clock, None, False, 0.0, []
                 model.reset()
         elif mode == "command":
-            if voiced:
+            if clock - woke_at <= a.head_s:
+                head.append(chunk)
+            if voiced and clock - woke_at > a.ignore_s:
+                voiced_s += len(chunk) / 16000
                 if not heard:
                     say(event="speech")
                 heard, voiced_at = True, clock
             if heard and voiced_at is not None and clock - voiced_at >= a.silence_s:
-                say(event="silence", after=round(clock - voiced_at, 2))
-                mode, cooldown_until = "wake", clock + a.cooldown_s
+                end(clock - voiced_at)
             elif not heard and clock - woke_at >= a.no_speech_s:
-                say(event="timeout")
-                mode, cooldown_until = "wake", clock + a.cooldown_s
+                end(0)
             elif clock - woke_at >= a.max_command_s:
-                say(event="silence", after=0, capped=True)
-                mode, cooldown_until = "wake", clock + a.cooldown_s
+                end(0, capped=True)
 
     if stream is not None:
         stream.stop()

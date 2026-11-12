@@ -713,6 +713,18 @@ question, … să faci direct treaba într-un terminal nou"*.
   the log whenever a gesture would be. `silence` → `endDictation()`; `timeout` → cancelled, quiet.
   At `deliver`, words opening with *I have a question* / *am o întrebare* (`WakeWord.question`) become
   the ⚡ question (that opening taken off); anything else is the spawn's prompt, a leading *Claude,* off.
+- **The app's take opens late; the helper's head does not** (2026-11-12, his first live test): the
+  take opened ~0.5 s after the wake (plus a DJI tap restart) and lost *"I have a question"* twice — his
+  Tokyo question went to a spawn. The helper now keeps the first 4 s from the wake on
+  (`~/.walkie-talkie/wake/head.wav`, gapless, sent with `silence`); the app decodes it with the local
+  model beside the take (`decodeWakeHead`) and `deliver` parks the sentence on it (`parkedWake`,
+  ≤ 2.5 s, then the words alone decide). Question → the take's words minus what is left of the
+  opening (`withoutQuestionRemnant`). Openings since that evening also **`question:`** / `întrebare`
+  (a whole word — *Questionable…* is a task).
+- **Under 0.6 s of voice after the wake (the first 0.25 s, the wake word's own tail, not counted) is
+  nothing said** → `timeout`, cancelled. Same test: a 1.4 s take of nothing became Whisper's *"Thank
+  you."*, the second listen's *"Da, vă mulțumim."*, and a spawned session with it.
+- **His voice wakes it:** 0.63–0.98 on six live *Hey Claude*s (DJI receiver), 0.5 stays.
 - **Measured** (2026-11-12, `evals/wake-word/`): 1 false wake (0.87) in 116 min of his corpus (300
   clips); his two mid-sentence *hey Claude* scored 0.001 / 0.014 — the threshold waits for deliberate
   takes of the phrase.

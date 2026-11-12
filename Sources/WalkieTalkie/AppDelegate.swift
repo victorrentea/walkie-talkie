@@ -1224,6 +1224,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// started as a spawn, turned into a ⚡ question at delivery when the words
     /// open with *I have a question*, and closed by the helper's silence.
     private var wakeTake = false
+    /// The helper's gapless head is being decoded (`wakeEvent(.silence)`); the
+    /// sentence's delivery parks on it (`parkedWake`) for at most `wakeHeadWait`.
+    private var wakeHeadPending = false
+    private var wakeHeadText: String?
+    private var parkedWake: DictationResult?
+    private var wakeHeadToken = 0
+    private static let wakeHeadWait: TimeInterval = 2.5
     /// **A follow-up to the ⚡ answer on screen** (2026-10-15): 🔼 → over its
     /// pop-up opens it (`askFollowUp`), and `askQuick` sends `quickThread` with it.
     private var quickFollowUp = false
@@ -1871,7 +1878,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWake = { [weak self] body in
             guard let self else { return [:] }
             if let name = body["event"] as? String {
-                let event: WakeWord.Event? = ["wake": .wake(score: 1), "silence": .silence, "timeout": .timeout, "speech": .speech][name]
+                let event: WakeWord.Event? = ["wake": .wake(score: 1), "silence": .silence(head: body["head"] as? String, voiced: 1),
+                                              "timeout": .timeout, "speech": .speech][name]
                 guard let event else { return ["ok": false, "error": "event"] }
                 DispatchQueue.main.async { self.wakeEvent(event) }
                 return ["ok": true]
@@ -4575,6 +4583,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deliver(_ result: DictationResult) {
+        // **👂 A wake sentence waits for its gapless head** (2026-11-12): the
+        // helper's first seconds decide question or task, and they are still
+        // being decoded — at most `wakeHeadWait`, then it goes as the words say.
+        if wakeTake, wakeHeadPending {
+            Log.info("👂 the wake sentence waits for its head's words")
+            parkedWake = result
+            return
+        }
         // Taken here, before any early return, so a caret sentence or one the
         // source inserted itself cannot leave its latch for the next sentence.
         let latched = latch
@@ -4623,14 +4639,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wake = wakeTake
         wakeTake = false
         var wakeQuestion: String?
+        let head = wakeHeadText
+        wakeHeadText = nil
         if wake, !quick {
-            if let asked = WakeWord.question(in: result.text) {
-                Log.info("👂 the wake sentence opens with \"I have a question\" — a ⚡ question, not a new session")
+            let headSaysQuestion = head.map { WakeWord.question(in: $0) != nil } ?? false
+            if WakeWord.question(in: result.text) != nil || headSaysQuestion {
+                let asked = WakeWord.withoutQuestionRemnant(result.text)
+                Log.info("👂 the wake sentence is a ⚡ question\(headSaysQuestion ? " (its head: \"\(head!.prefix(60))\")" : "") — not a new session")
                 quick = true
                 wakeQuestion = asked
                 clearSpawn()
                 overlay.setSpawnDestination(nil)
             } else {
+                if let head { Log.info("👂 the wake sentence's head: \"\(head.prefix(60))\" — a task for a new session") }
                 result.text = WakeWord.withoutWakeWord(result.text)
             }
         }
@@ -4764,7 +4785,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             stateLock.unlock()
             pendingVia = result.via
             pendingEngine = result.engineLabel
-            if let asked = wakeQuestion { result.text = WakeWord.question(in: result.text) ?? asked }
+            if let asked = wakeQuestion { result.text = asked }
             let line = caretLine(words: result.text, full: true)
                 .components(separatedBy: "\n").filter { $0 != Self.questionHint && $0 != Self.dictionaryHint }.joined(separator: "\n")
             pendingVia = nil
@@ -7519,13 +7540,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if listening || source.isRecording { overlay.flash("👂 Hey Claude — listening", duration: 2) }
         case .speech:
             break
-        case .silence:
+        case .silence(let head, let voiced):
             guard wakeTake, listening || source.isRecording else { return }
-            Log.info("👂 the wake sentence ended in silence — stopping")
+            Log.info(String(format: "👂 the wake sentence ended in silence (%.1f s of voice) — stopping", voiced))
+            if let head { decodeWakeHead(head) }
             endDictation()
         case .timeout:
             guard wakeTake, listening || source.isRecording else { return }
-            Log.info("👂 nothing said after \"Hey Claude\" — cancelled")
+            Log.info("👂 nothing (or under 0.6 s of voice) said after \"Hey Claude\" — cancelled")
             _ = cancelDictationInFlight(reason: "👂 no words after the wake word", quiet: true)
             wakeTake = false
             clearSpawn()
@@ -7533,6 +7555,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .error(let why):
             Log.error("👂 wake word helper: \(why)")
         }
+    }
+
+    /// The head through the local model, beside the take's own decode. Its
+    /// words land in `wakeHeadText`; a delivery parked on them goes on then,
+    /// or after `wakeHeadWait` without them (a cold or absent local model).
+    private func decodeWakeHead(_ path: String) {
+        wakeHeadToken += 1
+        let token = wakeHeadToken
+        wakeHeadPending = true
+        wakeHeadText = nil
+        let began = CFAbsoluteTimeGetCurrent()
+        func release(_ text: String?, why: String) {
+            guard token == wakeHeadToken, wakeHeadPending else { return }
+            wakeHeadPending = false
+            wakeHeadText = text
+            Log.info(String(format: "👂 head %@ in %.2f s", why, CFAbsoluteTimeGetCurrent() - began))
+            if let parked = parkedWake { parkedWake = nil; deliver(parked) }
+        }
+        whisperSource.transcribe(wav: path) { r in
+            DispatchQueue.main.async { release(r?.text, why: "decoded: \"\((r?.text ?? "").prefix(60))\"") }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.wakeHeadWait) { release(nil, why: "not decoded in time — the words decide") }
     }
 
     private func cancelSentenceOrPanel(reason: String) -> Bool {

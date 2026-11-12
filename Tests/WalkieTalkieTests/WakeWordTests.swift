@@ -18,11 +18,25 @@ final class WakeWordTests: XCTestCase {
         XCTAssertEqual(WakeWord.question(in: "Hey Claude I have a question why"), "why")
     }
 
+    func testTheShortQuestionOpening() {
+        XCTAssertEqual(WakeWord.question(in: "Question: what time is it in Tokyo?"), "what time is it in Tokyo?")
+        XCTAssertEqual(WakeWord.question(in: "Hey Claude, question, why?"), "why?")
+        XCTAssertEqual(WakeWord.question(in: "Întrebare: cât e ceasul?"), "cât e ceasul?")
+    }
+
+    func testWhatTheLateTakeKeepsOfTheOpeningIsTakenOff() {
+        XCTAssertEqual(WakeWord.withoutQuestionRemnant("have a question, what time is it in Tokyo?"), "what time is it in Tokyo?")
+        XCTAssertEqual(WakeWord.withoutQuestionRemnant("a question. Why?"), "Why?")
+        XCTAssertEqual(WakeWord.withoutQuestionRemnant("What is the time in Tokyo?"), "What is the time in Tokyo?")
+        XCTAssertEqual(WakeWord.withoutQuestionRemnant("o întrebare: de ce?"), "de ce?")
+    }
+
     func testATaskIsNotAQuestion() {
         XCTAssertNil(WakeWord.question(in: "Fix the build in petclinic"))
         // Only as the opening: later in the sentence it is a task that mentions one.
         XCTAssertNil(WakeWord.question(in: "Write a test. I have a question about it later."))
         XCTAssertNil(WakeWord.question(in: ""))
+        XCTAssertNil(WakeWord.question(in: "Questionable code in the hook, fix it"))
     }
 
     func testTheWakeWordIsTakenOffATask() {
