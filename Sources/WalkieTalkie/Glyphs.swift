@@ -359,8 +359,16 @@ extension Glyphs {
             // The seam between the two buttons, from the nose down to the island.
             ctx.setStrokeColor(body.cgColor)
             ctx.setLineWidth(line)
+            // In the guide the seam runs to the deck's end, broken by the wheel —
+            // the wheel's fill is translucent, and a line through it read as part
+            // of the wheel (Victor: *"linia verticală dintre butoane nu trebuie să
+            // treacă prin rotiță"*). The gap leaves a hair of air either side.
             ctx.move(to: p(0.501, 0.0))
-            ctx.addLine(to: p(0.501, guide ? 0.56 : 0.09))
+            ctx.addLine(to: p(0.501, guide ? 0.105 : 0.09))
+            if guide {
+                ctx.move(to: p(0.501, 0.330))
+                ctx.addLine(to: p(0.501, 0.56))
+            }
             ctx.strokePath()
 
             // **The island answers for the wheel.** When the wheel is the button
