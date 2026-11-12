@@ -311,15 +311,17 @@ final class LocalWhisperSource: DictationSource {
             let end = self.meter.takeEnd
             let tail = job.pieces.isEmpty ? [] : self.meter.takeSlice(from: from, to: end)
             let hops = job.pieces.isEmpty ? [] : self.meter.meterHops
+            // This take's own speech, before a next `start` zeroes it.
+            let voiced = self.meter.voicedSeconds
             DispatchQueue.main.async {
-                self.finishRecording(closed, job: job, tail: tail, tailEnd: end, hops: hops)
+                self.finishRecording(closed, job: job, tail: tail, tailEnd: end, hops: hops, voiced: voiced)
             }
         }
     }
 
     /// The tail of `stop()`, on the main queue, exactly as it always ran.
     private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?, job: Job,
-                                 tail: [Int16], tailEnd: Int, hops: [MeterHop]) {
+                                 tail: [Int16], tailEnd: Int, hops: [MeterHop], voiced: TimeInterval = .infinity) {
         let t = job.take
         // Cancelled while closing: answered once, here, with whatever was recorded.
         if job.cancelled {
@@ -344,6 +346,23 @@ final class LocalWhisperSource: DictationSource {
         job.duration = duration
         guard !job.cancelled else { return }
         Log.info(String(format: "🎙️ local recording stopped — %.1fs (take %d)", duration, t))
+        // **A take with no speech in it is not decoded at all** (2026-11-12): the
+        // tail's floor, on the whole take. Whisper on silence invents a sentence —
+        // `Thank you.` on a 29 s WAV of digital zeros went out on 12 Nov, 08:59.
+        // The WAV goes to Recover, as every `heardNothing` does. Not with a marker
+        // spliced in: the meter never heard it, and its frames need the sentence.
+        if TranscriptGuard.isOn, voiced < Self.tailVoicedFloor, !job.markers, job.pieces.isEmpty {
+            Log.info(String(format: "🔇 local: the %.1f s take has %.2f s voiced — not decoded (Recover keeps it)",
+                            duration, voiced))
+            jobs[t] = nil
+            job.cancelled = true
+            if jobs.isEmpty { DecodeRate.noteLeft(nil) }
+            answer(t) {
+                settlePhase(.done("empty"))
+                didEnd?(.failed(why: DictationEnd.heardNothing, audio: wav, duration: duration))
+            }
+            return
+        }
         // **Chunked** (2026-10-21): the pieces already asked for, plus the tail.
         if !job.pieces.isEmpty {
             let expected = tailEnd - job.lastCut
@@ -489,6 +508,16 @@ final class LocalWhisperSource: DictationSource {
         if jobs.isEmpty { DecodeRate.noteLeft(nil) }
         guard let wav = job.wav else { return }
         let duration = job.duration
+        // **A sign-off and nothing else is silence** (2026-11-12): what Whisper
+        // says over a take with no speech in it — `TranscriptGuard.stockPhrases`.
+        if let r = result, TranscriptGuard.isOn, TranscriptGuard.stockOnly(r.text) {
+            Log.info("🔇 local: \"\(r.text.prefix(60))\" alone is the sign-off Whisper invents on silence — no words heard")
+            answer(t) {
+                settlePhase(.done("empty"))
+                didEnd?(.failed(why: DictationEnd.heardNothing, audio: wav, duration: duration))
+            }
+            return
+        }
         guard let r = result, !r.text.isEmpty else {
             // **The WAV is kept** (2026-09-26, §3.8): an empty answer and
             // a helper that answered nothing (dead, hung, timed out) are
@@ -515,12 +544,16 @@ final class LocalWhisperSource: DictationSource {
                         r.language ?? "?", r.avgLogprob, r.meanLogprob.map { String(format: "%.2f", $0) } ?? "–",
                         r.compressionRatio, r.text.count, LocalWhisper.isUnsure(r) ? " — unsure, a plain sentence ends with 🎤" : "")
                  + Self.coverageNote(r.coverage))
+        var sentence = DictationResult(
+            text: r.text, language: r.language, audio: wav, duration: duration,
+            engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
+            via: "local-whisper", markersInAudio: job.markers,
+            engineLabel: Self.modelLabel, words: r.words, unsure: LocalWhisper.isUnsure(r))
+        if let cut = TranscriptGuard.cutStockTail(&sentence) {
+            Log.info("✂️ local: \"\(cut)\" cut off the end — the sign-off Whisper invents")
+        }
         answer(t) {
-            didTranscribe?(DictationResult(
-                text: r.text, language: r.language, audio: wav, duration: duration,
-                engine: "whisper-local", warning: Self.warning(for: r), delivery: .route,
-                via: "local-whisper", markersInAudio: job.markers,
-                engineLabel: Self.modelLabel, words: r.words, unsure: LocalWhisper.isUnsure(r)))
+            didTranscribe?(sentence)
             settlePhase(.done("formatted"))
             didEnd?(.delivered)
         }

@@ -101,7 +101,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 74 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 75 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -242,9 +242,9 @@
       <section class="card" id="held-waiting">
         <header>
           <h3>Unbound, with sentences waiting for a bind</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">239×46 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">315×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/held-waiting.png" width="239" height="46" style="opacity:0.8" alt="Unbound, with sentences waiting for a bind"></div>
+        <div class="shot"><img src="states/held-waiting.png" width="315" height="46" style="opacity:0.8" alt="Unbound, with sentences waiting for a bind"></div>
         <p class="when">A sentence was spoken with nothing bound (Victor&#x27;s Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.</p>
         <p class="note"><strong>The one chip an unbound pointer may carry.</strong> <em>The pointer is clean when nothing is bound</em> still holds for a relay with nothing to say; this row is something to say — <em>&quot;mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie&quot;</em>. It counts what <code>awaitingBind</code> holds, so a second sentence says <code>2</code>, and it goes the instant a bind delivers them. Built like <code>☠️ Kamikaze</code>: an emoji in the icon column, words beside it. It is announced once with a flash, <code>📨 held — bind a terminal to send it</code>.</p>
         <code class="slug">held-waiting</code>
@@ -564,9 +564,9 @@
       <section class="card" id="flash-held">
         <header>
           <h3>Flash — held for a bind</h3>
-          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">295×70 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">315×70 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-held.png" width="295" height="70" style="opacity:0.8" alt="Flash — held for a bind"></div>
+        <div class="shot"><img src="states/flash-held.png" width="315" height="70" style="opacity:0.8" alt="Flash — held for a bind"></div>
         <p class="when">Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The <code>📨 N waiting</code> row stays after it.</p>
         <p class="note">Said once, when it happens, under the <code>📨 N waiting</code> row — which is what stays when the flash has gone.</p>
         <code class="slug">flash-held</code>
@@ -631,6 +631,16 @@
         <p class="note">Victor: <em>&quot;se mai întâmplă uneori să vină prompt-ul în altă limbă&quot;</em>. Said on the chip because the words that landed are not the ones the engine sent, and <code>transcript-guard.jsonl</code> holds both.</p>
         <code class="slug">flash-foreign-words</code>
       </section>
+      <section class="card" id="flash-stock-cut">
+        <header>
+          <h3>Flash — a made-up sign-off cut</h3>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">267×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/flash-stock-cut.png" width="267" height="46" style="opacity:0.8" alt="Flash — a made-up sign-off cut"></div>
+        <p class="when">Three seconds, once a local-model sentence has landed with a sign-off cut off its end — <code>Thank you.</code>, <code>Să vă mulțumim pentru vizionare!</code> (2026-11-12, <code>TranscriptGuard.cutStockTail</code>). Said over the fallback&#x27;s own notice.</p>
+        <p class="note">Victor, 2026-11-12, removing the <code>👂</code> row he never looked at: <em>&quot;the purpose of that was literally to detect slop or hallucinations … perhaps we can do this another way&quot;</em>. The app catches the one invention that survives the LoRA instead of asking him to read: 75 of 3,119 local takes ended in a sign-off nobody said, Wispr 5 of 5,130. Only on a cut — a sign-off alone is no words at all, and goes to Recover.</p>
+        <code class="slug">flash-stock-cut</code>
+      </section>
       <section class="card" id="flash-model-failed">
         <header>
           <h3>Flash — the recogniser is not there</h3>
@@ -644,9 +654,9 @@
       <section class="card" id="paste-again">
         <header>
           <h3>Re-paste — ⌘V, after every sentence</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">218×46 pt</span></div>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">315×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/paste-again.png" width="218" height="46" style="opacity:0.8" alt="Re-paste — ⌘V, after every sentence"></div>
+        <div class="shot"><img src="states/paste-again.png" width="315" height="46" style="opacity:0.8" alt="Re-paste — ⌘V, after every sentence"></div>
         <p class="when">Five seconds after every delivered sentence (caret, bound terminal, new session, a held sentence&#x27;s release) and after a cancelled prompt. Never after a cancelled dictation.</p>
         <p class="note"><strong>Q17 (2026-09-28): the clipboard always holds the finished sentence</strong> — the envelope for a prompt, the clean words for a plain one — so the row says <code>Re-paste</code> and <code>⌘V</code>; ⌘⇧P is gone (it was <code>Re-paste ⌘⇧P</code> until 2026-09-28, <code>On the clipboard ⌘V</code> for a few hours, <code>Re-paste ⌘V</code> since). <strong>An ordinary row</strong>, built like <code>☠️ Kamikaze</code>: 📋, the words, then the keys in the chip&#x27;s own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip&#x27;s only row, which is what puts the chip beside the pointer.</p>
         <code class="slug">paste-again</code>
@@ -664,9 +674,9 @@
       <section class="card" id="flash-accessibility">
         <header>
           <h3>Flash — permissions missing</h3>
-          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">312×46 pt</span></div>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">315×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-accessibility.png" width="312" height="46" style="opacity:0.8" alt="Flash — permissions missing"></div>
+        <div class="shot"><img src="states/flash-accessibility.png" width="315" height="46" style="opacity:0.8" alt="Flash — permissions missing"></div>
         <p class="when">Fifteen seconds at launch, before anything is bound.</p>
         <p class="note">The state that proves flashes must survive the unbound case: there is no title row above it, because nothing is bound yet, and this is the whole window.</p>
         <code class="slug">flash-accessibility</code>
@@ -747,9 +757,9 @@
       <section class="card" id="prompt-inline">
         <header>
           <h3>The prompt, with its pictures where they were taken</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×642 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×626 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-inline.png" width="832" height="642" style="opacity:1" alt="The prompt, with its pictures where they were taken"></div>
+        <div class="shot"><img src="states/prompt-inline.png" width="749" height="626" style="opacity:1" alt="The prompt, with its pictures where they were taken"></div>
         <p class="when">Word timings placed the markers (ElevenLabs, local): every <code>[📸N…]</code> token in the words.</p>
         <p class="note">2026-10-07, Victor: the panel must show <em>where</em> each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. <strong>A frame&#x27;s caption no longer prints the pointer&#x27;s pixels</strong> (<code>[📸2]</code>, not <code>[📸2🖱️@1204:388]</code> — 2026-10-17): a yellow dot on the picture says where it was; the agent&#x27;s words keep the numbers.</p>
         <code class="slug">prompt-inline</code>
@@ -777,9 +787,9 @@
       <section class="card" id="prompt-copied">
         <header>
           <h3>The prompt, with what he copied where he copied it</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×485 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×469 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-copied.png" width="832" height="485" style="opacity:1" alt="The prompt, with what he copied where he copied it"></div>
+        <div class="shot"><img src="states/prompt-copied.png" width="749" height="469" style="opacity:1" alt="The prompt, with what he copied where he copied it"></div>
         <p class="when">Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.</p>
         <p class="note">2026-10-17, Victor: <em>&quot;also display the copied text or image from clipboard in the preview&quot;</em>. A copied image is a numbered picture like any other (<code>[📸N 📋 copied]</code>), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its <code>“</code> (the chip&#x27;s quote row does the same).</p>
         <code class="slug">prompt-copied</code>
@@ -847,9 +857,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×149 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×149 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="832" height="149" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="749" height="149" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -857,9 +867,9 @@
       <section class="card" id="prompt-scrolling">
         <header>
           <h3>A transcript taller than the screen</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×1002 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×1036 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-scrolling.png" width="832" height="1002" style="opacity:1" alt="A transcript taller than the screen"></div>
+        <div class="shot"><img src="states/prompt-scrolling.png" width="749" height="1036" style="opacity:1" alt="A transcript taller than the screen"></div>
         <p class="when">A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.</p>
         <p class="note">The words sit in a scroll view (2026-10-26, Victor: <em>&quot;dacă prompt preview panel devine prea înalt, să-i apară scrollbar&quot;</em>): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.</p>
         <code class="slug">prompt-scrolling</code>
@@ -896,7 +906,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 25027ae · 12 Nov 2026 · built 12 Nov 2026, 17:41
+  Generated from <code>OverlayStates.swift</code> · repo at feea65e · 12 Nov 2026 · built 12 Nov 2026, 19:33
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

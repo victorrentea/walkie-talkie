@@ -4602,6 +4602,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         var result = result
+        deliveryLock.lock()
+        pendingStockCut = result.stockCut
+        deliveryLock.unlock()
         // The sentence's outcome, for the `📊 fallback:` line (2026-09-29).
         if AutoLocal.Trace.outcome(via: result.via) == "engine" { noteEngineAnswered() }
         finishTrace(outcome: AutoLocal.Trace.outcome(via: result.via))
@@ -5796,8 +5799,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.error("↪️ the local model heard no words in it")
                 return done(nil)
             }
+            // **A sign-off alone is silence** (2026-11-12, `TranscriptGuard.stockPhrases`).
+            if TranscriptGuard.isOn, TranscriptGuard.stockOnly(r.text) {
+                Log.error("↪️ the local model said only \"\(r.text.prefix(60))\" — the sign-off it invents on silence; no words heard")
+                return done(nil)
+            }
             Log.info("↪️ transcribed on this Mac instead of \(failed)\(byClock ? " (the budget ran out)" : forced ? " (⌘⌃X)" : "")\(ahead.map { " — \($0)" } ?? "") — \(r.text.count) chars")
-            done(DictationResult(
+            var sentence = DictationResult(
                 text: r.text, language: r.language, audio: wav, duration: duration,
                 engine: "whisper-local",
                 warning: forced ? nil : "⚠️ \(failed) was unavailable — transcribed on this Mac",
@@ -5809,7 +5817,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 words: r.words,
                 // …and the markers it spoke into it, read back off these words.
                 said: said,
-                unsure: LocalWhisper.isUnsure(r)))
+                unsure: LocalWhisper.isUnsure(r))
+            if let cut = TranscriptGuard.cutStockTail(&sentence) {
+                Log.info("✂️ \"\(cut)\" cut off the end of the local words — the sign-off Whisper invents")
+            }
+            done(sentence)
         }
         if let sp = spec, !sp.consumed, sp.phase != .discarded,
            sp.wav.map({ $0.standardizedFileURL.path == wav.standardizedFileURL.path })
@@ -13408,6 +13420,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastDeliveryRecord: [String: Any]?
     /// The engine that wrote the last delivered sentence, for `StatusItem.lastEngineUsed`.
     private var lastEngineUsed: String?
+    /// The sentence being delivered had a sign-off cut (`DictationResult.stockCut`);
+    /// its landing says so. Under `deliveryLock`.
+    private var pendingStockCut: String?
 
     @discardableResult
     private func recordDelivery(via: String, engine: String = "", kind: DictationDelivery, to: String) -> [String: Any] {
@@ -13420,8 +13435,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // promptare"*) — the route the words came by, the panel's `Engine:` row,
         // so a fallback or ⌘⌃X says so where the Engine setting would not.
         lastEngineUsed = Self.engineName(via: via, engineLabel: engine)
+        let stockCut = to == "held" ? nil : pendingStockCut
+        if to != "held" { pendingStockCut = nil }
         deliveryLock.unlock()
         Log.info("📦 delivery: \(via) → \(to) (\(Self.deliveryName(kind)))")
+        // **A made-up sign-off was cut off the end** (2026-11-12) — said over the
+        // fallback's notice: it is the one that changed the words.
+        if let stockCut {
+            let notice = TranscriptGuard.stockCutNotice(stockCut)
+            DispatchQueue.main.async { [weak self] in self?.overlay.flash(notice, duration: 3) }
+            return obj
+        }
         // **The local model stood in — said once the words have landed**
         // (2026-10-16, Victor: *"the tooltip should display that thing for 2 or 3
         // seconds … If something else like Wispr was selected, fall back to local

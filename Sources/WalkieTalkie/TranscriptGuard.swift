@@ -162,6 +162,95 @@ enum TranscriptGuard {
         return (a, b)
     }
 
+    // MARK: - The sign-off Whisper invents (2026-11-12)
+
+    /// **Sign-offs Whisper learnt from subtitled video and says on silence**
+    /// (2026-11-12, Victor: *"the purpose of that was literally to detect slop or
+    /// hallucinations … perhaps we can do this another way"*). Measured over every
+    /// local take since August: 113 of 3,048 ended in one or were nothing else —
+    /// `Thank you.` above all, `Să vă mulțumim pentru vizionare!`, `Nu uitați să vă
+    /// abonați la canal!`, `Sous-titrage Société Radio-Canada`. Re-decoded, 22 of 28
+    /// `Thank you.` tails did not come back, and the 6 that did sat at exactly
+    /// 30.00 or 60.00 s over unvoiced audio. Wispr ends 1 English take in 1,060 with
+    /// it — so a sign-off at the end of a local take is cut, unconditionally, and
+    /// the chip says so (`stockCutNotice`). Folded: lower case, no diacritics.
+    static let stockPhrases: [[String]] = [
+        "thank you", "thank you very much", "thank you so much", "thanks for watching",
+        "thank you for watching", "multumim pentru vizionare", "va multumim pentru vizionare",
+        "sa va multumim pentru vizionare", "multumesc pentru vizionare",
+        "nu uitati sa va abonati la canal", "abonati va la canal", "va multumim",
+        "sous titrage societe radio canada",
+    ].map { $0.split(separator: " ").map(String.init) }
+
+    /// Tokens as the phrase list spells them.
+    static func folded(_ text: String) -> [String] {
+        tokens(text).map { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: nil) }
+    }
+
+    /// **Nothing but sign-offs** (`Thank you.`, `Thank you. Thank you.`).
+    static func stockOnly(_ text: String) -> Bool {
+        var rest = folded(withoutMarkers(text))[...]
+        guard !rest.isEmpty else { return false }
+        while !rest.isEmpty {
+            guard let p = stockPhrases.filter({ rest.starts(with: $0) }).max(by: { $0.count < $1.count })
+            else { return false }
+            rest = rest.dropFirst(p.count)
+        }
+        return true
+    }
+
+    /// **The text without the sign-offs it ends in, and what was cut** — only
+    /// whole sentences (after `.`, `!`, `?` or `…`, glued or not: `pornit.Thank
+    /// you.`), and only with words left in front. Nil when there is nothing to cut.
+    static func cutStockTail(_ text: String) -> (kept: String, cut: String)? {
+        var kept = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var cut = ""
+        while true {
+            let body = kept.trimmingCharacters(in: CharacterSet(charactersIn: ".!?… "))
+            guard let end = body.lastIndex(where: { ".!?…".contains($0) }) else { break }
+            let head = String(kept[...end]).trimmingCharacters(in: .whitespaces)
+            let tail = String(kept[kept.index(after: end)...]).trimmingCharacters(in: .whitespaces)
+            guard stockOnly(tail), !folded(head).isEmpty else { break }
+            cut = cut.isEmpty ? tail : tail + " " + cut
+            kept = head
+        }
+        return cut.isEmpty ? nil : (kept, cut)
+    }
+
+    /// The chip, after a sign-off was cut. English, no engine's name.
+    static func stockCutNotice(_ cut: String) -> String { "✂️ Cut a made-up \u{201C}\(cut)\u{201D}" }
+
+    /// **`cutStockTail` on a local sentence**, words and all — `ShotMarker.place`
+    /// rebuilds the text from the timed words, so a phrase left in them comes back.
+    /// Answers what was cut.
+    static func cutStockTail(_ r: inout DictationResult) -> String? {
+        guard isOn, let (kept, cut) = cutStockTail(r.text) else { return nil }
+        r.text = kept
+        if let u = r.unformatted { r.unformatted = cutStockTail(u)?.kept ?? u }
+        if let words = r.words { r.words = trimmed(words, by: folded(cut).count) }
+        r.stockCut = cut
+        return cut
+    }
+
+    /// The timed words without their last `n` tokens. A stretch with no timings
+    /// inside it (`untimed`, a whole chunk) has its own text cut instead.
+    static func trimmed(_ words: [TimedWord], by n: Int) -> [TimedWord] {
+        var out = words
+        var left = n
+        while left > 0, let last = out.last {
+            if last.isSpacing { out.removeLast(); continue }
+            let count = folded(last.text).count
+            if count == 0 { out.removeLast(); continue }
+            if count <= left { out.removeLast(); left -= count; continue }
+            let text = cutStockTail(last.text)?.kept ?? last.text
+            out[out.count - 1] = TimedWord(text: text, start: last.start, end: last.end,
+                                           isSpacing: false, untimed: last.untimed)
+            break
+        }
+        while out.last?.isSpacing == true { out.removeLast() }
+        return out
+    }
+
     // MARK: - The retry
 
     /// **Is the local answer a transcript of this take?** It passes the same

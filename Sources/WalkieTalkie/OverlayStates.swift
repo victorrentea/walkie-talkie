@@ -533,6 +533,14 @@ enum OverlayStates {
                 o.flash(TranscriptGuard.notice, duration: 60)
             },
 
+            Shot(slug: "flash-stock-cut", group: "Flashes", title: "Flash — a made-up sign-off cut",
+                 when: "Three seconds, once a local-model sentence has landed with a sign-off cut off its end — `Thank you.`, `Să vă mulțumim pentru vizionare!` (2026-11-12, `TranscriptGuard.cutStockTail`). Said over the fallback's own notice.",
+                 note: "Victor, 2026-11-12, removing the `👂` row he never looked at: *\"the purpose of that was literally to detect slop or hallucinations … perhaps we can do this another way\"*. The app catches the one invention that survives the LoRA instead of asking him to read: 75 of 3,119 local takes ended in a sign-off nobody said, Wispr 5 of 5,130. Only on a cut — a sign-off alone is no words at all, and goes to Recover.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.flash(TranscriptGuard.stockCutNotice("Thank you."), duration: 60)
+            },
+
             Shot(slug: "flash-model-failed", group: "Flashes", title: "Flash — the recogniser is not there",
                  when: "Twelve seconds, when Whisper fails to load — a missing `mlx_whisper`, most often.",
                  note: "The longest flash there is, because it is the only one that means the next thing he tries will not work at all. This is the only recogniser the relay has.",

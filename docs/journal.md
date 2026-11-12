@@ -16223,3 +16223,16 @@ is `[dictated 💻 · 🎤]` and the second is not written: rules v2 say that `�
 `<folder>/screenshot-n-800px.jpg` and the original sits beside it. The long envelope is untouched,
 so a destination without v2 loses nothing. `evals/agent-rules/` gained a case that can only be
 answered by opening 📸0 from the rule alone.
+
+## The made-up sign-off is cut by the app, not caught by his eye (2026-11-12)
+
+Same evening as *The 👂 heard row is gone*: Victor asked for a scan of past transcripts for local-model
+hallucinations, and, if enough, a way to address them. The audit (3,048 local takes since August, test
+rigs out; per-take flags joined from `relay.log`'s `local whisper:` line) found 5.6 % invented, falling
+8.4 % → 3.7 % → 1.3 % with each model change; Scribe ~0.6 %, Wispr 1.6 % (mostly third-language).
+What survives the LoRA is the subtitled-video sign-off, `Thank you.`, at the window edge or on silence,
+and a silent take decoded into one. Three cuts, approved by Victor (*"go"*): the sign-off at the end is
+cut with a `✂️` flash, a sign-off alone is `heardNothing`, and a take with no voiced audio is not decoded.
+Rules and numbers: `dictation-source.md`, *The sign-off Whisper invents, and the silent take*. Not done:
+`hallucination_silence_threshold` in `whisper_helper.py` (unverified that mlx_whisper takes it).
+

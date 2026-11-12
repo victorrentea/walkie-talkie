@@ -153,4 +153,49 @@ final class TranscriptGuardTests: XCTestCase {
         let r = TranscriptGuard.resolve(held(good + "кончено", duration: 12, words: timed), retry: local(good + "gata"))
         XCTAssertEqual(r.outcome, "replaced")
     }
+
+    // MARK: - The sign-off Whisper invents (2026-11-12)
+
+    func testASignOffAloneIsSilence() {
+        XCTAssertTrue(TranscriptGuard.stockOnly("Thank you."))
+        XCTAssertTrue(TranscriptGuard.stockOnly(" Thank you. Thank you."))
+        XCTAssertTrue(TranscriptGuard.stockOnly("Să vă mulțumim pentru vizionare!"))
+        XCTAssertTrue(TranscriptGuard.stockOnly("Sous-titrage Société Radio-Canada"))
+        XCTAssertFalse(TranscriptGuard.stockOnly("Thank you, that works."))
+        XCTAssertFalse(TranscriptGuard.stockOnly("Mulțumesc."))
+        XCTAssertFalse(TranscriptGuard.stockOnly(""))
+    }
+
+    func testASignOffAtTheEndIsCut() {
+        let c = TranscriptGuard.cutStockTail("Run the tests once the app is up. Thank you.")
+        XCTAssertEqual(c?.kept, "Run the tests once the app is up.")
+        XCTAssertEqual(c?.cut, "Thank you.")
+        // Glued to the sentence before it, as two windows join.
+        XCTAssertEqual(TranscriptGuard.cutStockTail("Sunt lipit îndrealtul.Să vă mulțumim pentru vizionare!")?.kept,
+                       "Sunt lipit îndrealtul.")
+        // Two of them.
+        XCTAssertEqual(TranscriptGuard.cutStockTail("Gata. Thank you. Thanks for watching!")?.kept, "Gata.")
+    }
+
+    func testWhatIsNotASignOffStays() {
+        XCTAssertNil(TranscriptGuard.cutStockTail("Thank you."))                      // nothing left in front
+        XCTAssertNil(TranscriptGuard.cutStockTail("Say thank you to the reviewer."))  // inside a sentence
+        XCTAssertNil(TranscriptGuard.cutStockTail("Fix it. Thank you, Claude."))      // more than the phrase
+        XCTAssertNil(TranscriptGuard.cutStockTail("Fix it thank you"))                // no sentence boundary
+    }
+
+    func testTheTimedWordsLoseTheSignOffToo() {
+        func w(_ t: String, _ s: Double) -> TimedWord { TimedWord(text: t, start: s, end: s + 0.3, isSpacing: false) }
+        var r = local("Push it. Thank you.")
+        r.words = [w("Push", 0), w(" it.", 0.4), w(" Thank", 29.6), w(" you.", 29.8)]
+        XCTAssertEqual(TranscriptGuard.cutStockTail(&r), "Thank you.")
+        XCTAssertEqual(r.text, "Push it.")
+        XCTAssertEqual(r.stockCut, "Thank you.")
+        XCTAssertEqual(r.words?.map(\.text).joined(), "Push it.")
+        // An untimed chunk keeps its timings and loses only the phrase.
+        var u = local("Push it. Thank you.")
+        u.words = [TimedWord(text: "Push it. Thank you.", start: 0, end: 30, isSpacing: false, untimed: true)]
+        _ = TranscriptGuard.cutStockTail(&u)
+        XCTAssertEqual(u.words?.map(\.text), ["Push it."])
+    }
 }

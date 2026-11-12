@@ -126,7 +126,7 @@
     "slug" : "held-waiting",
     "title" : "Unbound, with sentences waiting for a bind",
     "when" : "A sentence was spoken with nothing bound (Victor's Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.",
-    "width" : 239
+    "width" : 315
   },
   {
     "alpha" : 0.80000000000000004,
@@ -495,7 +495,7 @@
     "slug" : "flash-held",
     "title" : "Flash — held for a bind",
     "when" : "Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The `📨 N waiting` row stays after it.",
-    "width" : 295
+    "width" : 315
   },
   {
     "alpha" : 0.80000000000000004,
@@ -573,6 +573,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
     "height" : 46,
+    "image" : "flash-stock-cut.png",
+    "note" : "Victor, 2026-11-12, removing the `👂` row he never looked at: *\"the purpose of that was literally to detect slop or hallucinations … perhaps we can do this another way\"*. The app catches the one invention that survives the LoRA instead of asking him to read: 75 of 3,119 local takes ended in a sign-off nobody said, Wispr 5 of 5,130. Only on a cut — a sign-off alone is no words at all, and goes to Recover.",
+    "shape" : "flash",
+    "slug" : "flash-stock-cut",
+    "title" : "Flash — a made-up sign-off cut",
+    "when" : "Three seconds, once a local-model sentence has landed with a sign-off cut off its end — `Thank you.`, `Să vă mulțumim pentru vizionare!` (2026-11-12, `TranscriptGuard.cutStockTail`). Said over the fallback's own notice.",
+    "width" : 267
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
     "image" : "flash-model-failed.png",
     "note" : "The longest flash there is, because it is the only one that means the next thing he tries will not work at all. This is the only recogniser the relay has.",
     "shape" : "flash",
@@ -591,7 +603,7 @@
     "slug" : "paste-again",
     "title" : "Re-paste — ⌘V, after every sentence",
     "when" : "Five seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release) and after a cancelled prompt. Never after a cancelled dictation.",
-    "width" : 218
+    "width" : 315
   },
   {
     "alpha" : 0.80000000000000004,
@@ -615,7 +627,7 @@
     "slug" : "flash-accessibility",
     "title" : "Flash — permissions missing",
     "when" : "Fifteen seconds at launch, before anything is bound.",
-    "width" : 312
+    "width" : 315
   },
   {
     "alpha" : 0.80000000000000004,
@@ -704,14 +716,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 642,
+    "height" : 626,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -740,14 +752,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 485,
+    "height" : 469,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -831,19 +843,19 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 1002,
+    "height" : 1036,
     "image" : "prompt-scrolling.png",
     "note" : "The words sit in a scroll view (2026-10-26, Victor: *\"dacă prompt preview panel devine prea înalt, să-i apară scrollbar\"*): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.",
     "shape" : "panel",
     "slug" : "prompt-scrolling",
     "title" : "A transcript taller than the screen",
     "when" : "A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,

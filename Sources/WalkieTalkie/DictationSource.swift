@@ -375,6 +375,9 @@ struct DictationResult {
     /// termine orice dictare curată cu iconul unui microfon"*. Only the local
     /// model measures it; every other source leaves it false.
     var unsure: Bool = false
+    /// **A sign-off the local model invented, cut off the end** (2026-11-12,
+    /// `TranscriptGuard.cutStockTail`) — the chip says it when the words land.
+    var stockCut: String? = nil
 }
 
 /// **Who inserts the text.**

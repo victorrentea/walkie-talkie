@@ -527,6 +527,31 @@ in Wispr (`config.json` `prefs.user.selectedLanguages`), so **that setting is no
   Comparing the engine with the local model on every take finds those (agreement under 0.3 on 4 of 10
   suspects, 0.8+ on the 2 sound ones), parked until the log says this much was worth it.
 
+## The sign-off Whisper invents, and the silent take (2026-11-12)
+
+Victor, removing the `👂` heard row: *"the purpose of that was literally to detect slop or hallucinations
+… perhaps we can do this another way"*. An audit of every local take since August (3,048, test rigs
+out) found 5.6 % invented — 8.4 % on stock Turbo, 3.7 % on the LoRA's first weeks, 1.3 % since 22 Oct —
+and what survives is one shape: **a sign-off from subtitled video**, `Thank you.` above all, at the 30 s
+window edge or on silence. Re-decoded, 22 of 28 `Thank you.` tails did not come back; the 6 that did sat
+at exactly 30.00/60.00 s over 0 % voiced audio. Loops are gone since 5 Oct; chunk-join duplicates were
+20–21 Oct only.
+
+- **A sign-off at the end of a local sentence is cut, unconditionally** (`TranscriptGuard.cutStockTail`,
+  `stockPhrases`, folded): only whole sentences after `.!?…` (glued too), only with words in front, the
+  timed words trimmed with the text (`ShotMarker.place` rebuilds from them). Replayed on the corpus:
+  75 of 3,119 local takes, Wispr 5 of 5,130, Scribe 0. Both roads: `LocalWhisperSource.answered` and
+  `AppDelegate.transcribeLocally` (fallback, ⌘⌃X, the clock, the second listen). Chip: `✂️ Cut a
+  made-up “Thank you.”` (`stockCutNotice`, via `DictationResult.stockCut` → `recordDelivery`, over the
+  fallback's notice), Shot `flash-stock-cut`. The corpus gets the cut text.
+- **A sign-off alone is no words** (`stockOnly`): `heardNothing`, WAV to Recover — 48 of 3,119 local
+  takes. Before, the guard sent it to Scribe and, Scribe hearing nothing, delivered it `kept`.
+- **A local take with under `tailVoicedFloor` (0.1 s) voiced is not decoded**
+  (`LocalWhisperSource.finishRecording`): `heardNothing`, as the cloud engines' 1.5 s floor already did
+  for the fallback. 12 Nov 08:59: `Thank you.` on 29 s of digital zeros went out. Not with a marker
+  spliced into the WAV (the meter never heard it), not on a chunked take.
+- Off with the guard (`transcriptGuard`).
+
 ## ElevenLabs Scribe (2026-09-18)
 
 - **`LocalWhisperSource`'s shape with an HTTPS `POST`** to `api.elevenlabs.io/v1/speech-to-text`
