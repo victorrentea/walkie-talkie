@@ -99,35 +99,6 @@ final class PasteHint {
     /// Then half a second fading out (2026-09-25) — see `fadeOutPasteHint`.
     static let fade: TimeInterval = 0.5
 
-    /// **The `👂 “…”` row: the first words heard, for a glance** (2026-11-11,
-    /// `RelayWindow.heardRow`). Its own clock, shorter than the paste row's and
-    /// never extended by a key — Victor: *"să dispară repede înapoi, după câteva
-    /// secunde"*; 5 s since the same morning (*"lasă-l un timp mai mult pe ecran,
-    /// cinci secunde"*), 3 s for its first hour.
-    static let heardHold: TimeInterval = 5.0
-    /// How many words, and the most characters they may take on the chip.
-    static let heardWords = 6
-    static let heardChars = 48
-    private var heardGeneration = 0
-
-    /// **The first `heardWords` words of a sentence, as the row shows them** —
-    /// the envelope's brackets (`[📸1]`, `[selected: …]`, `[Transcribed …]`)
-    /// taken out, whitespace folded, `…` when anything was left behind. Nil when
-    /// no word is left.
-    static func excerpt(_ text: String) -> String? {
-        let plain = text.replacingOccurrences(of: #"\[[^\]]*\]"#, with: " ",
-                                              options: .regularExpression)
-        let words = plain.split(whereSeparator: { $0.isWhitespace })
-        guard !words.isEmpty else { return nil }
-        var shown = words.prefix(heardWords).joined(separator: " ")
-        var cut = words.count > heardWords
-        if shown.count > heardChars {
-            shown = String(shown.prefix(heardChars)).trimmingCharacters(in: .whitespaces)
-            cut = true
-        }
-        return "“" + shown + (cut ? "…”" : "”")
-    }
-
     /// A showing is in flight.
     private var pulsing = false
     /// Which showing the pending take-down belongs to. Bumped by every `pulse`
@@ -148,36 +119,18 @@ final class PasteHint {
     /// `GET /test/state.pasteHint`.
     var report: [String: Any] {
         ["visible": chip?.pasteHint ?? false,
-         "pulsing": pulsing, "hold": Self.hold, "row": "\(Self.label)  \(Self.keys)",
-         "heard": chip?.heardWords ?? NSNull()]
+         "pulsing": pulsing, "hold": Self.hold, "row": "\(Self.label)  \(Self.keys)"]
     }
 
     /// **Put the row up for `hold`, then take it down.** `reason` is for the log
     /// only: the callers are far apart and *why is this on screen* is not a
     /// question the picture can answer.
-    func pulse(reason: String, words: String? = nil) {
+    func pulse(reason: String) {
         Log.info("⌨️ paste hint — \(reason)")
         pulsing = true
-        showHeard(words.flatMap(Self.excerpt))
         chip?.setPasteHint(true)
         watchKeys()
         armTakeDown()
-    }
-
-    /// Put the `👂` row up for `heardHold`, then fade it; nil takes it down.
-    private func showHeard(_ excerpt: String?) {
-        heardGeneration += 1
-        chip?.setHeard(excerpt)
-        guard let excerpt else { return }
-        Log.info("👂 heard row — \(excerpt)")
-        let mine = heardGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.heardHold) { [weak self] in
-            guard let self, self.heardGeneration == mine else { return }
-            self.chip?.fadeOutHeard(seconds: Self.fade) { [weak self] in
-                guard let self, self.heardGeneration == mine else { return }
-                self.chip?.setHeard(nil)
-            }
-        }
     }
 
     /// (Re)start the `hold` clock; a take-down from an earlier arming finds
@@ -219,7 +172,6 @@ final class PasteHint {
         generation += 1
         pulsing = false
         stopWatchingKeys()
-        showHeard(nil)
         chip?.setPasteHint(false)
     }
 

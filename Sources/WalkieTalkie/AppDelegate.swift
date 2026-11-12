@@ -3218,7 +3218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.recordDelivery(via: "test", kind: .route, to: "caret")
                     self.pasteText(line)
                     // As the spoken caret path does, so the desk sees it too.
-                    self.pasteHint.pulse(reason: "a caret sentence has just landed (test)", words: line)
+                    self.pasteHint.pulse(reason: "a caret sentence has just landed (test)")
                 }
                 return
             }
@@ -3969,7 +3969,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let front = NSWorkspace.shared.frontmostApplication
             Log.info("📍 Wispr's own sentence (\(text.count) chars) arrived while the relay's was in flight — pasted at the caret (Q19); front: \(front?.bundleIdentifier ?? "?") pid \(front?.processIdentifier ?? 0)")
             self.pasteText(text, settles: false)
-            self.pasteHint.pulse(reason: "Wispr's own sentence, pasted by the relay (Q19)", words: text)
+            self.pasteHint.pulse(reason: "Wispr's own sentence, pasted by the relay (Q19)")
         }
         // **D2 (lab wave 3, 2026-09-28): the end goes through the order rule too.**
         // `didTranscribe` above waits its turn behind a parked sentence (Q12/Q15),
@@ -4731,7 +4731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             holdOnClipboard(result.text, why: "\(source.name) inserted it itself")
             // Landed all the same, and wherever the focus was — which is the
             // likeliest place of all to be the wrong one (2026-09-23).
-            pasteHint.pulse(reason: "\(source.name) inserted a sentence itself", words: result.text)
+            pasteHint.pulse(reason: "\(source.name) inserted a sentence itself")
             return
         }
         // **Inserted where the focus was, by a route the tap never saw**
@@ -4747,7 +4747,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 abandonDictation("the source delivered it itself")
                 if submitClean { submitAfterCleanWords() }
                 holdOnClipboard(result.text, why: "\(source.name) inserted it at the caret")
-                pasteHint.pulse(reason: "\(source.name) inserted a caret sentence itself", words: result.text)
+                pasteHint.pulse(reason: "\(source.name) inserted a caret sentence itself")
                 return
             }
             Log.info("⚠️ \(source.name) inserted the words at the focus on its own — routing them to the terminal as well; the copy at the focus stays")
@@ -4813,7 +4813,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pasteText(edited + mic, to: pid)
                     self.pinLanded(landing, "the edited words were pasted")
                     if submit { self.submitAfterCleanWords() }
-                    self.pasteHint.pulse(reason: "an edited plain sentence has just landed", words: edited)
+                    self.pasteHint.pulse(reason: "an edited plain sentence has just landed")
                 }
                 return
             } else {
@@ -4825,7 +4825,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Until 2026-09-23 this was the only delivery that got it, as the
             // one this app cannot check; now every delivery does (`commit` for
             // the terminal and the spawn) — see `PasteHint`.
-            pasteHint.pulse(reason: "a caret sentence has just landed", words: result.text)
+            pasteHint.pulse(reason: "a caret sentence has just landed")
             return
         }
         send(kind: "dictation", text: result.text, app: app, latched: latched)
@@ -13406,8 +13406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if pastable {
             DispatchQueue.main.async { [weak self] in
                 self?.pasteHint.pulse(reason: m.spawn ? "a sentence went to a new session"
-                                                      : "a sentence went to the bound terminal",
-                                      words: m.kind == "dictation" ? m.text : nil)
+                                                      : "a sentence went to the bound terminal")
             }
         }
     }

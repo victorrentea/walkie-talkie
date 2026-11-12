@@ -21,6 +21,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
 - *The order of the rows, and Chrome is last (2026-09-09)*'s destination-second — superseded 2026-10-26: the destination row (pin or terminal icon + `folder@branch`) is the chip's last row (*The destination row is the chip's foot, on black bands*)
 - *The heads converge on the caret, and its window wears an orange outline (2026-10-13)* — the outline is the map pin's `systemRed` since 2026-10-26 (*"aceeași culoare cu pin-ul roșu"*)
+- *👂 The first words heard ride the chip* (2026-11-11, `heardRow`, 3 s then 5 s) — removed 2026-11-12 (Victor: *"I never looked at it actually. The purpose of that was literally to detect slop or hallucinations in the voice to text. But perhaps we can do this another way"*); see *The 👂 heard row is gone* at the end
 - *The 🤖 on the other screens* (`MenuBarMirror`, 2026-08) — superseded 2026-10-26: an `NSStatusItem` shows in every display's menu bar, so the mirror was a second robot at the centre of every inactive bar; deleted (Victor: *"iconița … de două ori, fix pe centru menu barului sus … doar pe ecranurile care nu sunt selectate"*)
 - *F10 nu mai comută dictarea de două ori pe un singur gest* (2026-09-16) — the guard was right and both of its numbers were wrong; superseded 2026-09-18 by *One slow flick right is one gesture, and it cannot close what it just opened* (sliding window, 0.6 s, plus a 2 s dwell before the flick may stop)
 - *Q7 — F8 on a caret sentence: stays ignored* (2026-09-26) — reversed 2026-10-04: *🔼 ↑ turns a caret sentence into a spawn*, folder menu included
@@ -16176,3 +16177,13 @@ the moment it *starts* the caret route — before `submitPrompt` types into the 
 next sentence's start and the give-up clock all read it), the pin gets its own hold, `caretLanding`,
 released by each route at its own confirmation. Why the Terminal.app write takes ~5 s is not looked
 into here.
+
+## The 👂 heard row is gone (2026-11-12)
+
+Victor, a day after asking for it: *"Remove the preview of the dictation text that sticks on the
+tooltip after the dictation is transcribed. I never looked at it actually. The purpose of that was
+literally to detect slop or hallucinations in the voice to text. But perhaps we can do this another
+way."* The row (`RelayWindow.heardRow`, `PasteHint.excerpt`/`heardHold`, `pulse(reason:words:)`,
+`GET /test/state.pasteHint.heard`, shot `heard-words`) is taken out whole — commits `5fd39d5` and
+`8d8e42f` reversed in the sources. A glance the eye never makes catches nothing: a hallucination has
+to be caught by the app, not by reading.

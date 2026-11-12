@@ -101,7 +101,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 75 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 74 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -651,16 +651,6 @@
         <p class="note"><strong>Q17 (2026-09-28): the clipboard always holds the finished sentence</strong> — the envelope for a prompt, the clean words for a plain one — so the row says <code>Re-paste</code> and <code>⌘V</code>; ⌘⇧P is gone (it was <code>Re-paste ⌘⇧P</code> until 2026-09-28, <code>On the clipboard ⌘V</code> for a few hours, <code>Re-paste ⌘V</code> since). <strong>An ordinary row</strong>, built like <code>☠️ Kamikaze</code>: 📋, the words, then the keys in the chip&#x27;s own face. It was a keycap in a window of its own until 2026-09-23 — a white outline round the keys in another font — and Victor read the border and the font as wrong. Unbound, it is the chip&#x27;s only row, which is what puts the chip beside the pointer.</p>
         <code class="slug">paste-again</code>
       </section>
-      <section class="card" id="heard-words">
-        <header>
-          <h3>Heard — the first words, after every sentence</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">310×70 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/heard-words.png" width="310" height="70" style="opacity:0.8" alt="Heard — the first words, after every sentence"></div>
-        <p class="when">Five seconds after every delivered sentence (caret, bound terminal, new session, a held sentence&#x27;s release, the source&#x27;s own insert), then half a second fading. Not after a cancelled prompt.</p>
-        <p class="note"><strong>2026-11-11</strong>, Victor: <em>&quot;după ce s-a trimis dictarea … primele cuvinte din textul transcris … în tooltip, sub mouse, ca să văd ce efectiv s-a înțeles. Și să dispară repede&quot;</em>. The first six words (≤ 48 characters), the envelope&#x27;s brackets taken out, <code>…</code> when the sentence goes on — enough to catch a mis-hearing without reading the destination. Right above <code>📋 Re-paste</code>, on its own clock: a key keeps the paste row up, never this one.</p>
-        <code class="slug">heard-words</code>
-      </section>
       <section class="card" id="flash-nothing-to-paste">
         <header>
           <h3>Flash — nothing to paste yet</h3>
@@ -757,9 +747,9 @@
       <section class="card" id="prompt-inline">
         <header>
           <h3>The prompt, with its pictures where they were taken</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×626 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×642 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-inline.png" width="749" height="626" style="opacity:1" alt="The prompt, with its pictures where they were taken"></div>
+        <div class="shot"><img src="states/prompt-inline.png" width="832" height="642" style="opacity:1" alt="The prompt, with its pictures where they were taken"></div>
         <p class="when">Word timings placed the markers (ElevenLabs, local): every <code>[📸N…]</code> token in the words.</p>
         <p class="note">2026-10-07, Victor: the panel must show <em>where</em> each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. <strong>A frame&#x27;s caption no longer prints the pointer&#x27;s pixels</strong> (<code>[📸2]</code>, not <code>[📸2🖱️@1204:388]</code> — 2026-10-17): a yellow dot on the picture says where it was; the agent&#x27;s words keep the numbers.</p>
         <code class="slug">prompt-inline</code>
@@ -787,9 +777,9 @@
       <section class="card" id="prompt-copied">
         <header>
           <h3>The prompt, with what he copied where he copied it</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×469 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×485 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-copied.png" width="749" height="469" style="opacity:1" alt="The prompt, with what he copied where he copied it"></div>
+        <div class="shot"><img src="states/prompt-copied.png" width="832" height="485" style="opacity:1" alt="The prompt, with what he copied where he copied it"></div>
         <p class="when">Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.</p>
         <p class="note">2026-10-17, Victor: <em>&quot;also display the copied text or image from clipboard in the preview&quot;</em>. A copied image is a numbered picture like any other (<code>[📸N 📋 copied]</code>), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its <code>“</code> (the chip&#x27;s quote row does the same).</p>
         <code class="slug">prompt-copied</code>
@@ -857,9 +847,9 @@
       <section class="card" id="prompt-long">
         <header>
           <h3>A long transcript</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×149 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×149 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-long.png" width="749" height="149" style="opacity:1" alt="A long transcript"></div>
+        <div class="shot"><img src="states/prompt-long.png" width="832" height="149" style="opacity:1" alt="A long transcript"></div>
         <p class="when">A sentence that does not fit one line — the panel wraps and grows.</p>
         <p class="note">Width is capped at a third of the screen and the height at what is left of it; the transcript row is measured by asking the label, not by a parallel calculation, because any disagreement is a sentence that silently stops.</p>
         <code class="slug">prompt-long</code>
@@ -867,9 +857,9 @@
       <section class="card" id="prompt-scrolling">
         <header>
           <h3>A transcript taller than the screen</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">749×1036 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">832×1002 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-scrolling.png" width="749" height="1036" style="opacity:1" alt="A transcript taller than the screen"></div>
+        <div class="shot"><img src="states/prompt-scrolling.png" width="832" height="1002" style="opacity:1" alt="A transcript taller than the screen"></div>
         <p class="when">A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.</p>
         <p class="note">The words sit in a scroll view (2026-10-26, Victor: <em>&quot;dacă prompt preview panel devine prea înalt, să-i apară scrollbar&quot;</em>): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.</p>
         <code class="slug">prompt-scrolling</code>
@@ -906,7 +896,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 14f9696 · 11 Nov 2026 · built 11 Nov 2026, 19:51
+  Generated from <code>OverlayStates.swift</code> · repo at 25027ae · 12 Nov 2026 · built 12 Nov 2026, 17:41
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>
