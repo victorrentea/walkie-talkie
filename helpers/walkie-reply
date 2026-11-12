@@ -18,6 +18,14 @@ import subprocess
 import sys
 import urllib.request
 
+# **The eval switch** (2026-11-12, `evals/agent-rules`): with `WALKIE_EVAL_LOG` set the
+# call is written there and nothing is shown — an eval run must not open pop-ups.
+if os.environ.get("WALKIE_EVAL_LOG"):
+    with open(os.environ["WALKIE_EVAL_LOG"], "a") as f:
+        f.write(json.dumps({"cmd": "walkie-reply", "argv": sys.argv[1:]}, ensure_ascii=False) + "\n")
+    print("shown")
+    sys.exit(0)
+
 args, images = [], []
 argv = sys.argv[1:]
 while argv:

@@ -19,3 +19,4 @@ docs/projectm/captures/
 # Audio-affect eval: his voice and transcripts, and this repo is public.
 evals/audio-affect/out/
 evals/audio-affect/__pycache__/
+evals/agent-rules/out/

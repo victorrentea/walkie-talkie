@@ -220,6 +220,13 @@ def add(right, heard=None):
 
 
 def main(argv):
+    # **The eval switch** (2026-11-12, `evals/agent-rules`): with `WALKIE_EVAL_LOG` set the
+    # call is written there and neither dictionary is touched.
+    if os.environ.get("WALKIE_EVAL_LOG"):
+        with open(os.environ["WALKIE_EVAL_LOG"], "a") as f:
+            f.write(json.dumps({"cmd": "walkie-dict", "argv": argv}, ensure_ascii=False) + "\n")
+        print("✓ recorded")
+        return
     with open(LOCK, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if argv[:1] == ["sync"]:
