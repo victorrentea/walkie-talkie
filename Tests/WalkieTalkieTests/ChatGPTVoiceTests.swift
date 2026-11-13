@@ -33,3 +33,11 @@ extension ChatGPTVoiceTests {
         XCTAssertEqual(ChatGPTVoice.voiceThreads(in: file.appendingPathExtension("missing")), [])
     }
 }
+
+extension ChatGPTVoiceTests {
+    /// `VoiceDialog.tail` — what the panel shows of a reply longer than its lines.
+    func testThePanelShowsTheEndOfALongReplyFromAWordsStart() {
+        XCTAssertEqual(VoiceDialog.tail("short", 20), "short")
+        XCTAssertEqual(VoiceDialog.tail("one two three four five six", 12), "… five six")
+    }
+}

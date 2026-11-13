@@ -1022,6 +1022,22 @@ final class ElementPicker {
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             ChatGPTVoice.zoom(steps: body["steps"] as? Int ?? 1)
             respond(conn, 200, ["ok": true])
+        // `POST /test/voice-dialog {"action": "start"|"stop"|"toggle"|"say", "mic": bool,
+        // "silent": bool, "pcm": path}` — this app's own voice panel (`VoiceDialog`)
+        // from a desk: `mic: false, silent: true` opens no microphone and makes no
+        // sound, `say` speaks a 24 kHz mono PCM16 file into the session.
+        case ("POST", "/test/voice-dialog"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            var out: [String: Any] = ["ok": true]
+            DispatchQueue.main.sync {
+                switch body["action"] as? String ?? "toggle" {
+                case "start": VoiceDialog.shared.start(mic: body["mic"] as? Bool ?? true, silent: body["silent"] as? Bool ?? false)
+                case "stop": VoiceDialog.shared.stop(why: "the desk")
+                case "say": out["ok"] = VoiceDialog.shared.say(body["pcm"] as? String ?? "")
+                default: VoiceDialog.shared.toggle()
+                }
+            }
+            respond(conn, 200, out)
         case ("POST", "/test/chat-voice-mini"):
             ChatGPTVoice.pressVoiceInMini()
             respond(conn, 200, ["ok": true])

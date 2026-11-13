@@ -268,7 +268,7 @@ enum ChatGPTVoice {
         return out
     }()
 
-    private static func chime(on: Bool) {
+    static func chime(on: Bool) {
         guard let sound = sounds[on] else { Log.error("🗣️ ChatGPT voice — no chat-voice-\(on ? "on" : "off").wav, silent"); return }
         if sound.isPlaying { sound.stop() }
         sound.play()

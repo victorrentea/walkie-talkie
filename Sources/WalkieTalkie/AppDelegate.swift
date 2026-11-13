@@ -2687,12 +2687,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // 🔽 ← at rest (2026-11-13): ChatGPT's voice conversation, on / off.
+        // **This app's own voice panel since 2026-11-14** (`VoiceDialog`); the
+        // ChatGPT app's window only with `chatVoiceEngine app`.
         hotkeys.onChatVoice = { [weak self] in
+            if VoiceDialog.usesPanel { VoiceDialog.shared.toggle(); return }
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
         }
         // The DJI transmitter's Link button (2026-11-13, *"pentru moment"*):
         // the same conversation.
         hotkeys.onDjiButton = { [weak self] in
+            if VoiceDialog.usesPanel { VoiceDialog.shared.toggle(); return }
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
         }
         DjiButton.watch()
@@ -9500,6 +9504,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["autoAttach"] = AutoAttach.describe
         out["fxOnBattery"] = BatteryFx.describe
         out["chatVoice"] = ChatGPTVoice.describe
+        out["voiceDialog"] = VoiceDialog.shared.describe
         out["djiButton"] = DjiButton.describe
         out["wakeWord"] = ["enabled": WakeWord.enabled, "onBattery": BatteryFx.onBattery,
                            "listens": WakeWord.listens, "running": WakeWord.shared.isRunning]
@@ -13167,6 +13172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         terminating = true
         WakeWord.shared.stop()
+        VoiceDialog.shared.stop(why: "quitting")
         DjiButton.release()
         // Before either branch: a relay that quits mid-sentence must not leave
         // Chrome silent. The extension also resumes on a dead socket, but that is
