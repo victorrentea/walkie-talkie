@@ -47,6 +47,9 @@ OUT = os.path.join(WT, "dict-harvest")
 VOCAB = os.path.join(WT, "vocabulary.txt")
 WALKIE_DICT = os.path.join(HOME, ".local", "bin", "walkie-dict")
 TOKEN = re.compile(r"\[[^\]]{0,300}\]")   # [📸0 auto], [selected: …], footer rows
+# His correction convention (Victor, 2026-11-14): the next prompt, usually the very next one, carries
+# the right word followed by an asterisk — "claude-gpt*". Not markdown (**bold**, *em*), not a glob.
+STARRED = re.compile(r"(?<![\w*])([\w][\w.\-/'’ăâîșțşţ]*)\*(?![\w*])")   # the word just before the *; a multi-word fix is read from NEXT itself
 
 SYSTEM = """You find speech-recognition mistakes in dictated prompts. The speaker, Victor, is a Romanian \
 software trainer who dictates prompts to coding agents in Romanian and English, full of tool names, \
@@ -57,7 +60,9 @@ when known.
 Find terms the recogniser wrote wrong: a name, product, tool, command, file, or technical/English \
 word. NOT: Romanian grammar endings or diacritics, filler words, punctuation, style, a word that is \
 merely unusual. Each pair needs evidence from the context:
-- "user-corrected": NEXT corrects it ("nu, am zis X", "I meant X", or he retypes the term);
+- "user-corrected": NEXT corrects it. His usual way: NEXT (often his very next message) holds the \
+right word followed by an asterisk — "claude-gpt*" means "the word you got wrong is claude-gpt"; a \
+STARRED line lists those. Find the span of DICTATION it replaces. Also "nu, am zis X", "I meant X";
 - "agent-used": REPLY clearly refers to the same thing spelled right;
 - "well-known": an unmistakable known name (e.g. "Cloud Code" for "Claude Code") — high only if certain.
 
@@ -66,6 +71,16 @@ that is wrong, 1–4 words); "right" is the correct spelling. Reply with ONLY a 
 [{"item": 3, "heard": "...", "right": "...", "evidence": "user-corrected|agent-used|well-known", \
 "quote": "<≤15 words from REPLY/NEXT proving it>", "confidence": "high|medium"}]
 Return [] when there is nothing."""
+
+
+def starred(next_msg):
+    """His corrections in a next message: a short message ending in * is the corrected phrase whole
+    ("pe numele titlului sesiunii*", "un sunet*" — the 30 days before 2026-11-14); elsewhere, the
+    word right before a *."""
+    t = TOKEN.sub(" ", next_msg or "").strip()
+    if t.endswith("*") and not t.endswith("**") and len(t.split()) <= 8:
+        return [t.rstrip("*").strip()]
+    return [m.strip().rstrip(".,;:") for m in STARRED.findall(t)]
 
 
 def norm(s):
@@ -174,6 +189,9 @@ def ask(chunk, known, model):
             body.append(f"REPLY: {it['reply']}")
         if it["next"]:
             body.append(f"NEXT: {it['next']}")
+            fixes = starred(it["next"])
+            if fixes:
+                body.append("STARRED: " + "; ".join(fixes))
         body.append("")
     cmd = ["claude", "-p", "--model", model, "--tools", "", "--strict-mcp-config", "--setting-sources", "",
            "--no-session-persistence", "--system-prompt", SYSTEM]
