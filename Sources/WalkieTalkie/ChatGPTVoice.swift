@@ -128,7 +128,10 @@ enum ChatGPTVoice {
                         // Only the conversation: both side bars shut.
                         if let target { closeBars(window: target) }
                     }
-                    DispatchQueue.main.async { chime(on: !wasOn) }
+                    DispatchQueue.main.async {
+                        chime(on: !wasOn)
+                        if wasOn { hideCover() } else if let target { showCover(over: target, pid: pid) }
+                    }
                     pressToggle()
                     // **The microphone is the proof.** A start that left the
                     // app without it 4 s later reached nobody: once more.
@@ -344,9 +347,74 @@ enum ChatGPTVoice {
     /// How long after a conversation the next start still continues it.
     static let sameConversation: CFAbsoluteTime = 30 * 60
 
+    // MARK: - The text box, covered
+
+    /// **No text box while he talks** (2026-11-13, Victor: *"aș mai vrea să
+    /// nici nu văd căsuța de introdus text. Voi dicta doar"*). The app has no
+    /// setting for it and no Accessibility tree to press, and macOS will not
+    /// make a window taller than its screen (asked 1414 pt, got 1084) — so
+    /// the composer is *covered*: a panel of this app's, the conversation's
+    /// own shade, over the bottom `coverHeight` of the window, from where
+    /// the icon rail ends. Up only while the call is on and the app is in
+    /// front; clicks fall through it.
+    static var coverHeight: CGFloat {
+        get { CGFloat(UserDefaults.standard.object(forKey: "chatVoiceCover") as? Double ?? 340) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: "chatVoiceCover") }
+    }
+    private static var cover: NSPanel?
+    private static var coverTimer: Timer?
+    private static var coverSince: CFAbsoluteTime = 0
+
+    /// `window` in global top-left coordinates. Main thread.
+    private static func showCover(over window: CGRect, pid: pid_t) {
+        hideCover()
+        guard coverHeight > 0 else { return }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        let left = lastGroundStart
+        let frame = NSRect(x: window.minX + left, y: primaryHeight - window.maxY,
+                           width: window.width - left, height: coverHeight)
+        let panel = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = true
+        panel.hasShadow = false
+        panel.backgroundColor = lastGroundColor ?? NSColor(srgbRed: lastGroundShade / 255, green: lastGroundShade / 255, blue: lastGroundShade / 255, alpha: 1)
+        panel.level = .floating
+        panel.ignoresMouseEvents = true
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .ignoresCycle]
+        panel.sharingType = .readOnly
+        panel.orderFrontRegardless()
+        cover = panel
+        coverSince = CFAbsoluteTimeGetCurrent()
+        // Down when the call ends some other way, away while another app is
+        // in front, back with this one.
+        coverTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            guard let panel = cover else { return }
+            let front = NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+            if CFAbsoluteTimeGetCurrent() - coverSince > 15 {
+                DispatchQueue.global().async {
+                    let on = callIsOn()
+                    DispatchQueue.main.async { if !on { hideCover() } }
+                }
+            }
+            if front, !panel.isVisible { panel.orderFrontRegardless() }
+            if !front, panel.isVisible { panel.orderOut(nil) }
+        }
+    }
+
+    private static func hideCover() {
+        coverTimer?.invalidate()
+        coverTimer = nil
+        cover?.orderOut(nil)
+        cover = nil
+    }
+
     // MARK: - The side bars
 
     private static var lastBars = ""
+    /// From the last look at the window: its ground's shade (0…255) and how
+    /// far in from the left edge that ground begins.
+    private static var lastGroundShade = 24.0
+    private static var lastGroundStart: CGFloat = 0
+    private static var lastGroundColor: NSColor?
 
     /// **Nothing but the conversation** (*"fără lista de conversații din
     /// stânga, fără niciun panel pe dreapta, doar textul mare"*). The app
@@ -400,7 +468,19 @@ enum ChatGPTVoice {
             values.sort()
             return values.isEmpty ? 0 : values[values.count / 2]
         }
-        return (column(20), column(130), column(Double(band.width) * 0.5), column(Double(band.width) - 130))
+        let middle = column(Double(band.width) * 0.5)
+        // Where the conversation's ground begins: the first of ten columns in
+        // a row, 4 pt apart, that all wear the middle's shade.
+        var start = 0.0, run = 0
+        for pt in stride(from: 0.0, to: Double(band.width) * 0.4, by: 4) {
+            if abs(column(pt) - middle) < 1.5 { run += 1; if run == 10 { start = pt - 36; break } } else { run = 0 }
+        }
+        lastGroundShade = middle
+        // The pixel itself, in the picture's own colour space: a grey rebuilt
+        // from its brightness came out a shade lighter than the window.
+        lastGroundColor = bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)
+        lastGroundStart = CGFloat(start)
+        return (column(20), column(130), middle, column(Double(band.width) - 130))
     }
 
     /// **The new chat is opened in the window** (*"aș vrea să auto-deschidă
