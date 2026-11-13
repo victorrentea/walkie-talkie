@@ -26,7 +26,7 @@ Each returns pairs with a quote as evidence. **Pairs accumulate across weeks** i
 same days counts nothing twice); only high-confidence sightings count. A pair is promoted
 (`walkie-dict add <right> --heard <heard>`) at **2** sightings when one of them is his own
 correction (`word*`), at **3** when all are inferred — and never while another spelling for the
-same `heard` has as many. An unpromoted pair not seen again for 120 days fades out. A pair whose
+same `heard` has as many. An unpromoted pair not seen again for 60 days fades out (120 for one hour; Victor: "poate chiar de 60 zile"). A pair whose
 `heard` is not literally in the dictation is thrown away (the model invented it). Pairs already in
 `vocabulary.txt` are given to the workers as KNOWN and skipped.
 
@@ -50,7 +50,7 @@ OUT = os.path.join(WT, "dict-harvest")
 VOCAB = os.path.join(WT, "vocabulary.txt")
 LEDGER = os.path.join(OUT, "ledger.json")
 PROMOTE_CORRECTED, PROMOTE_DEDUCED = 2, 3   # sightings to enter the dictionary: with one of his * fixes / inferred only
-FORGET_DAYS = 120                            # an unpromoted pair not seen again for this long is dropped
+FORGET_DAYS = 60                             # an unpromoted pair not seen again for this long is dropped
 WALKIE_DICT = os.path.join(HOME, ".local", "bin", "walkie-dict")
 TOKEN = re.compile(r"\[[^\]]{0,300}\]")   # [📸0 auto], [selected: …], footer rows
 # His correction convention (Victor, 2026-11-14): the next prompt, usually the very next one, carries
