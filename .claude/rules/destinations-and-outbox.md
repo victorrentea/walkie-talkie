@@ -268,6 +268,8 @@ me to dismiss it explicitly"*.
   with an area or a film (`AgentRules.needed`), v2 otherwise. **The caret prompt gets it too**:
   `caretPromptLines` renders both, `deliverCaretPrompt` picks after finding the tty (Claude prompt in
   Terminal / VS Code, else `focusedTTY()` — a Codex/Copilot tab); log `📜 short envelope at the caret`.
+  **Copilot gets `AgentRules.replyNudge`** (`[a question → walkie-reply]`) as the last row under a `?`,
+  bound or at the caret (`nudgesReply(onTTY:)`): 29/30 with it, its picture questions 1/9 without.
 - **Every dictation also carries `AppDelegate.dictionaryHint`** (2026-11-09, Victor: *"când modelul
   este 100% sigur … că mesajul dictat conține un cuvânt greșit … Claude să poată adăuga în
   dicționarul folosit de Walkie Talkie … inclusiv în Wispr Flow Dictionary … să fie în sync"* —

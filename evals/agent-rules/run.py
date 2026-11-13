@@ -72,17 +72,23 @@ CASES = [
                     "📁/screenshot-1.jpg; full screen available at -800px and -original.jpg at 1920x1080px]"]),
     dict(id="move", words="Don't change anything, just tell me: this one [📸1✂️960,80→1070,180 moved to "
                           "1500,80→1610,180], should it go up, down, left or right?",
-         reply=True, dict=None, says="right", shots=SHOTS_V3,
+         reply=True, dict=None, says=("right", "dreapta"), shots=SHOTS_V3,
          long_rows=["[📸1✂️ = user-drawn MOVE: the box between corners (x,y) (960,80)→(1070,180) should move "
                     "to the box (1500,80)→(1610,180); the first box cut out at 📁/screenshot-1.jpg; full screen "
                     "available at -800px and -original.jpg at 1920x1080px]"]),
 ]
 
 
-def envelope(case, long):
+# `AgentRules.replyNudge`: the one reminder a short envelope still carries, to Copilot, on a `?`.
+NUDGE = "[a question → walkie-reply]"
+
+
+def envelope(case, long, harness=""):
     shots = case.get("shots", SHOTS)
     if not long:  # rules v2/v3: icons, the folder, and only what the rules cannot say
         lines = ["[dictated 💻 · 🎤]", f"[📁=$WALKIE_SHOTS/{shots}]", *case.get("short_rows", [])]
+        if harness.startswith("copilot") and "?" in case["words"]:
+            lines.append(NUDGE)
         return "[📸0 auto]\n" + case["words"] + "\n\n" + "\n".join(lines)
     lines = ["[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]"]
     if "?" in case["words"]:
@@ -117,7 +123,7 @@ def run(job):
     env = dict(os.environ, WALKIE_EVAL_LOG=log)
     started = time.time()
     try:
-        p = subprocess.run(command(harness, envelope(case, long)), cwd=cwd, env=env, capture_output=True,
+        p = subprocess.run(command(harness, envelope(case, long, harness)), cwd=cwd, env=env, capture_output=True,
                            text=True, timeout=420, stdin=subprocess.DEVNULL)
         stdout, err, code = p.stdout, p.stderr, p.returncode
     except subprocess.TimeoutExpired:
@@ -133,7 +139,8 @@ def run(job):
     else:
         checks["dict"] = not dicts
     if case.get("says"):
-        checks["says"] = any(case["says"] in " ".join(a).lower() for a in replies)
+        says = case["says"] if isinstance(case["says"], tuple) else (case["says"],)
+        checks["says"] = any(w in " ".join(a).lower() for a in replies for w in says)
     if case.get("file"):
         checks["file"] = os.path.exists(os.path.join(cwd, case["file"]))
     cost = None

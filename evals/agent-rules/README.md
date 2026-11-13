@@ -54,4 +54,20 @@ the v2 envelope (short footer + the old long area row) score **1/9** on Copilot 
 11/20 to 21/21. Claude's 30 runs reported $14.34 (first full run lost to a relative `--out`: the
 helpers could not write `WALKIE_EVAL_LOG` — `--out` is made absolute now).
 
+### Bringing Copilot up: `AgentRules.replyNudge` (same day)
+
+On the three picture cases Copilot reads the image and answers in text at once, never reaching
+`walkie-reply`. Measured on those 9 runs:
+
+| what | Copilot replies |
+|---|---|
+| v3 rules, reply rule after the legend | 1/9 |
+| v3 rules, reply rule first | 1/9 |
+| + reworded: *"always … as your last step — also when you found the answer in a screenshot"* | 2/9 |
+| + `[a question → walkie-reply]` under the words (27 chars, only with a `?`) | **9/9** |
+
+Shipped as `AgentRules.replyNudge`, for Copilot only (`nudgesReply(onTTY:)`). Full Copilot run with
+it: **29/30** (one `walkie-dict` skipped on the misheard case, 3/3 in the run before). The control
+without the rules still scores 2/10 with the nudge: it points at the rule, it does not replace it.
+
 Re-run after any change to `AgentRules.text` (and raise `AgentRules.version`).

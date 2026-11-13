@@ -93,6 +93,10 @@ menus, About, the Chrome extension. Logs, comments and commits are unaffected. S
   `[📸1✂️1085,85→1350,130]` (~30 chars against 170–230). **The version needed is per message**
   (`AgentRules.needed`): v3 only with an area or a film, else v2 — sessions started before an
   upgrade keep the short form for plain prompts.
+- **The one exception to *no per-message clause*: `AgentRules.replyNudge`** (`[a question →
+  walkie-reply]`, 27 chars) under a `?` to **Copilot only** (2026-11-13). Copilot holds the rules yet
+  skipped `walkie-reply` on 8/9 picture questions; no rewording fixed it (2/9), the nudge did (29/30).
+  Do not extend it to Claude/Codex (20/20 without) and do not grow it into the old clause.
 
 ## The overlay is photographed
 

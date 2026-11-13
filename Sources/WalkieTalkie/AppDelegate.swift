@@ -10485,7 +10485,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let rulesTTY = tty ?? vscodeClaude ?? (frontIsTarget ? TerminalBinding.focusedTTY() : nil)
             let rulesKnown = short != nil && short != long
                 && rulesTTY.map { AgentRules.known(onTTY: $0, minimum: needs) } == true
-            let line = rulesKnown ? short ?? long : long
+            var line = rulesKnown ? short ?? long : long
+            // The words are the first paragraph of the envelope.
+            if rulesKnown, let tty = rulesTTY, AgentRules.nudgesReply(onTTY: tty) {
+                line = AgentRules.nudged(line, words: line.components(separatedBy: "\n\n").first)
+            }
             if rulesKnown {
                 Log.info("📜 short envelope at the caret — \(rulesTTY ?? "?") holds agent rules v\(needs)+")
             }
@@ -13581,7 +13585,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard isBound || m.target != nil, let tty = (m.target ?? terminal.target)?.handle.tty else { return false }
             return AgentRules.known(onTTY: tty, minimum: needed)
         }()
-        let line = Self.terminalLine(m, rulesKnown: rulesKnown)
+        let nudge = rulesKnown && !m.spawn && (m.target ?? terminal.target)?.handle.tty
+            .map { AgentRules.nudgesReply(onTTY: $0) } == true
+        let line = nudge ? AgentRules.nudged(Self.terminalLine(m, rulesKnown: true), words: m.text)
+                         : Self.terminalLine(m, rulesKnown: rulesKnown)
         if rulesKnown { Log.info("📜 short envelope — the destination holds agent rules v\(needed)+") }
         // Also what decides the `⌘⇧P` hint below: a hint offered for a message
         // with no words would paste the sentence before it.

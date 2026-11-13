@@ -16312,4 +16312,10 @@ rules"*.
   misses are `walkie-reply` skipped on picture questions — 1/9 with the v2 envelope as well, so not this
   change. Putting the two action bullets above the legend mattered: with them last, Copilot fell to
   11/20 on cases it passed 21/21 the day before.
+- **Copilot brought up with one reminder** (Victor: *"can we bring copilot up?"*). Its misses were all
+  the same shape: the image read, the answer typed, the turn over — `walkie-reply` never reached.
+  Rewording the rule (*always … as your last step, also when the answer came from a screenshot*) got
+  2/9; the 27-char `[a question → walkie-reply]` under the words got 9/9, and 29/30 on the full set.
+  It is `AgentRules.replyNudge`, Copilot only, under a `?` only — the one sanctioned exception to *no
+  per-message clause*.
 

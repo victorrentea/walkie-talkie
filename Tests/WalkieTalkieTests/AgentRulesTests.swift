@@ -45,4 +45,11 @@ final class AgentRulesTests: XCTestCase {
         XCTAssertEqual(AgentRules.needed(areasOrFilms: false), 2)
         XCTAssertEqual(AgentRules.needed(areasOrFilms: true), AgentRules.version)
     }
+
+    func testTheReplyNudgeRidesOnlyUnderAQuestion() {
+        XCTAssertEqual(AgentRules.nudged("why?\n\n[dictated]", words: "why?"),
+                       "why?\n\n[dictated]\n" + AgentRules.replyNudge)
+        XCTAssertEqual(AgentRules.nudged("do it\n\n[dictated]", words: "do it"), "do it\n\n[dictated]")
+        XCTAssertLessThanOrEqual(AgentRules.replyNudge.count, 30)
+    }
 }

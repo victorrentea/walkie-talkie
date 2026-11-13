@@ -118,6 +118,25 @@ enum AgentRules {
         return (trimmed.isEmpty ? "" : trimmed + "\n\n") + block + "\n"
     }
 
+    /// **The one reminder that still rides a short envelope — to Copilot, on a
+    /// question** (2026-11-13, Victor: *"can we bring copilot up?"*). Copilot CLI
+    /// holds the rules yet skipped `walkie-reply` on 8 of 9 questions it answered
+    /// from a picture — it answers the moment the image is read and stops. No
+    /// rewording of the rules moved it (2/9); these 27 chars under the words did
+    /// (9/9, `evals/agent-rules/`). Claude and Codex answer 20/20 without it.
+    static let replyNudge = "[a question → walkie-reply]"
+
+    /// Whether the agent on `tty` gets `replyNudge` under a question.
+    static func nudgesReply(onTTY tty: String) -> Bool {
+        TerminalBinding.agentCLI(onTTY: (tty as NSString).lastPathComponent) == "copilot"
+    }
+
+    /// `line` with the nudge as its last row, when the words ask something.
+    static func nudged(_ line: String, words: String?) -> String {
+        guard let words, words.contains("?") else { return line }
+        return line + "\n" + replyNudge
+    }
+
     // MARK: is the destination holding them?
 
     /// **Does the agent on `tty` hold this version of the rules?** False when in
