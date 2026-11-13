@@ -21,10 +21,13 @@ term right in its reply. A dictation with no transcript match still goes in, wit
 
 **Who decides.** Parallel `claude -p` workers (Sonnet, on the subscription, lean flags — no tools,
 no settings, no MCP: `reference_lean_claude_p`), one per chunk of dictations — the "subagents".
-Each returns pairs with a quote as evidence. A pair is applied (`walkie-dict add <right> --heard
-<heard>`) only when it is high-confidence AND either he corrected it himself or it was found in at
-least two dictations; every other pair lands in the report under "to review". A pair whose `heard`
-is not literally in the dictation is thrown away (the model invented it). Pairs already in
+Each returns pairs with a quote as evidence. **Pairs accumulate across weeks** in
+`dict-harvest/ledger.json`, one sighting per dictation (keyed by its timestamp, so re-running the
+same days counts nothing twice); only high-confidence sightings count. A pair is promoted
+(`walkie-dict add <right> --heard <heard>`) at **2** sightings when one of them is his own
+correction (`word*`), at **3** when all are inferred — and never while another spelling for the
+same `heard` has as many. An unpromoted pair not seen again for 120 days fades out. A pair whose
+`heard` is not literally in the dictation is thrown away (the model invented it). Pairs already in
 `vocabulary.txt` are given to the workers as KNOWN and skipped.
 
 **Output.** `~/.walkie-talkie/dict-harvest/<date>.md` (+ `.json` with every proposal).
@@ -45,6 +48,9 @@ HOME = os.path.expanduser("~")
 WT = os.path.join(HOME, ".walkie-talkie")
 OUT = os.path.join(WT, "dict-harvest")
 VOCAB = os.path.join(WT, "vocabulary.txt")
+LEDGER = os.path.join(OUT, "ledger.json")
+PROMOTE_CORRECTED, PROMOTE_DEDUCED = 2, 3   # sightings to enter the dictionary: with one of his * fixes / inferred only
+FORGET_DAYS = 120                            # an unpromoted pair not seen again for this long is dropped
 WALKIE_DICT = os.path.join(HOME, ".local", "bin", "walkie-dict")
 TOKEN = re.compile(r"\[[^\]]{0,300}\]")   # [📸0 auto], [selected: …], footer rows
 # His correction convention (Victor, 2026-11-14): the next prompt, usually the very next one, carries
@@ -239,20 +245,51 @@ def main():
                 failed += 1
                 print("chunk failed:", str(e)[:200], file=sys.stderr)
 
-    groups = collections.defaultdict(list)
+    # The ledger: every sighting across weeks, keyed by the dictation's timestamp so a re-run of the
+    # same days counts nothing twice. Victor, 2026-11-14: *"corecțiile explicite sau deduse ar trebui
+    # să se acumuleze între săptămâni (eventual cu un counter) și la 2 (sau 3) apariții să fie
+    # promovate în dicționar"*. Only high-confidence sightings count.
+    ledger = json.load(open(LEDGER)) if os.path.exists(LEDGER) else {}
     for f in found:
-        groups[(f["heard"].lower(), f["right"])].append(f)
+        e = ledger.setdefault(f["heard"].lower() + " → " + f["right"],
+                              {"heard": f["heard"], "right": f["right"], "sightings": {}, "promoted": None})
+        e["sightings"][f["ts"]] = {k: f.get(k) for k in ("evidence", "confidence", "quote")} | {"dictation": f["dictation"][:160]}
+    horizon = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=FORGET_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
+    for e in ledger.values():   # an unpromoted pair not seen again in FORGET_DAYS fades out
+        if not e["promoted"]:
+            e["sightings"] = {ts: s for ts, s in e["sightings"].items() if ts >= horizon}
+    ledger = {k: e for k, e in ledger.items() if e["sightings"]}
+
+    def counted(e):
+        return [s for s in e["sightings"].values() if s.get("confidence") == "high"]
+
+    def needed(e):
+        return PROMOTE_CORRECTED if any(s.get("evidence") == "user-corrected" for s in counted(e)) else PROMOTE_DEDUCED
+
+    rivals = collections.defaultdict(list)
+    for e in ledger.values():
+        rivals[e["heard"].lower()].append(e)
     applied, review = [], []
-    for (heard, right), fs in sorted(groups.items(), key=lambda kv: -len(kv[1])):
-        high = [f for f in fs if f.get("confidence") == "high"]
-        sure = high and (any(f.get("evidence") == "user-corrected" for f in high) or len(high) >= 2)
-        entry = {"heard": fs[0]["heard"], "right": right, "times": len(fs),
-                 "evidence": sorted({f.get("evidence", "?") for f in fs}), "quote": fs[0].get("quote", ""),
-                 "dictation": fs[0]["dictation"][:160]}
-        if sure and not a.dry_run:
-            r = subprocess.run([WALKIE_DICT, "add", right, "--heard", entry["heard"]], capture_output=True, text=True)
-            entry["walkie_dict"] = (r.stdout + r.stderr).strip()[-200:]
-        (applied if sure else review).append(entry)
+    seen_now = {(f["heard"].lower(), f["right"]) for f in found}
+    for key, e in sorted(ledger.items(), key=lambda kv: -len(counted(kv[1]))):
+        n = len(counted(e))
+        contested = any(r is not e and len(counted(r)) >= n for r in rivals[e["heard"].lower()])
+        entry = {"heard": e["heard"], "right": e["right"], "count": n, "needed": needed(e),
+                 "evidence": sorted({s.get("evidence") or "?" for s in e["sightings"].values()}),
+                 "quote": next(iter(e["sightings"].values())).get("quote", ""), "contested": contested}
+        if e["promoted"]:
+            continue
+        if n >= needed(e) and not contested:
+            if not a.dry_run:
+                r = subprocess.run([WALKIE_DICT, "add", e["right"], "--heard", e["heard"]], capture_output=True, text=True)
+                entry["walkie_dict"] = (r.stdout + r.stderr).strip()[-200:]
+                e["promoted"] = dt.datetime.now().strftime("%Y-%m-%d")
+            applied.append(entry)
+        elif (e["heard"].lower(), e["right"]) in seen_now:
+            review.append(entry)
+    if not a.dry_run:
+        os.makedirs(OUT, exist_ok=True)
+        json.dump(ledger, open(LEDGER, "w"), ensure_ascii=False, indent=1)
 
     os.makedirs(OUT, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y-%m-%d")
@@ -262,10 +299,12 @@ def main():
     md = [f"# Dictionary harvest {stamp}" + (" (dry run)" if a.dry_run else ""), "",
           f"{len(items)} dictations over {a.days:g} days, {sum(bool(i.get('where')) for i in items)} matched to "
           f"their conversation, {len(chunks)} chunks ({failed} failed).", "",
-          f"## {'Would apply' if a.dry_run else 'Applied'} ({len(applied)})", ""]
-    md += [f"- `{e['heard']}` → **{e['right']}** ×{e['times']} ({', '.join(e['evidence'])}) — “{e['quote']}”" for e in applied]
-    md += ["", f"## To review ({len(review)})", ""]
-    md += [f"- `{e['heard']}` → **{e['right']}** ×{e['times']} ({', '.join(e['evidence'])}) — “{e['quote']}”" for e in review]
+          f"## {'Would promote' if a.dry_run else 'Promoted to the dictionary'} ({len(applied)})", ""]
+    row = lambda e: (f"- `{e['heard']}` → **{e['right']}** {e['count']}/{e['needed']} ({', '.join(e['evidence'])})"
+                     + (" — contested by another spelling" if e["contested"] else "") + f" — “{e['quote']}”")
+    md += [row(e) for e in applied]
+    md += ["", f"## Seen this run, still counting ({len(review)})", ""]
+    md += [row(e) for e in review]
     path = os.path.join(OUT, stamp + ".md")
     open(path, "w").write("\n".join(md) + "\n")
     print("\n".join(md))
