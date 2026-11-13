@@ -1551,7 +1551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 👂 "Hey Claude" (2026-11-12, `WakeWord`) — its own helper, its own venv.
         if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil {
             WakeWord.shared.onEvent = { [weak self] in self?.wakeEvent($0) }
-            if WakeWord.enabled { WakeWord.shared.start() }
+            if WakeWord.listens { WakeWord.shared.start() }
         }
         overlay = RelayWindow()
         overlay.cornerTunnel = cornerTunnel
@@ -1711,7 +1711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.onPickHaloEngine = { [weak self] engine in self?.caretHalo.setEngine(engine) }
         // Plugged in or out mid-sentence: the ring follows on the spot.
-        BatteryFx.watch { [weak self] in self?.syncBorrowedGestures() }
+        BatteryFx.watch { [weak self] in self?.syncBorrowedGestures(); self?.syncWakeWordToPower() }
         status.onPickHaloVoice = { voice in
             UserDefaults.standard.set(voice.rawValue, forKey: HaloVoice.defaultsKey)
             VoicePrep.shared.refresh()
@@ -7514,8 +7514,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func setWakeWord(_ on: Bool) {
         WakeWord.enabled = on
         Log.info("👂 wake word \(on ? "on" : "off") from the menu")
-        if on { WakeWord.shared.start() } else { WakeWord.shared.stop() }
+        if WakeWord.listens { WakeWord.shared.start() } else { WakeWord.shared.stop() }
     }
+
+    /// **The charger decides whether it listens** (2026-11-13, `WakeWord.listens`):
+    /// unplugged → the helper is stopped and the microphone let go; plugged in
+    /// → it is started again if the switch is on. Called on every power-source
+    /// flip. A sentence a wake already opened keeps the helper until it closes —
+    /// only the helper's silence ends it.
+    func syncWakeWordToPower() {
+        guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
+        let wants = WakeWord.listens
+        guard wants != wakeListening else { return }
+        if !wants, wakeTake, listening || source.isRecording {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in self?.syncWakeWordToPower() }
+            return
+        }
+        wakeListening = wants
+        if wants {
+            Log.info("🔌 on power — 👂 the wake word listens again")
+            WakeWord.shared.start()
+        } else if WakeWord.enabled {
+            Log.info("🔋 on battery — 👂 the wake word is off until the Mac is plugged in")
+            WakeWord.shared.stop()
+        }
+    }
+    /// What `syncWakeWordToPower` last left it at.
+    private lazy var wakeListening = WakeWord.listens
 
     /// **A wake opens a sentence for a new session; his silence ends it.**
     /// Refused — said in the log only, he may be across the room — whenever a
@@ -7525,7 +7550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .ready(let device):
             Log.info("👂 wake word listening on \(device)")
         case .wake(let score, let word, let id):
-            guard WakeWord.enabled else { return }
+            guard WakeWord.listens else { return }
             let busy = listening || source.isRecording || speculative || settling
                 || source.phase.isWaitingForWords || held != nil
             if busy || startBlocker() != nil {
@@ -9454,6 +9479,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["pasteboard"] = PasteboardTimeline.describe()
         out["autoAttach"] = AutoAttach.describe
         out["fxOnBattery"] = BatteryFx.describe
+        out["wakeWord"] = ["enabled": WakeWord.enabled, "onBattery": BatteryFx.onBattery,
+                           "listens": WakeWord.listens, "running": WakeWord.shared.isRunning]
         return out
     }
 

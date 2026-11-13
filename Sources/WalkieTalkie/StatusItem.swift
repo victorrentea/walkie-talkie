@@ -1349,8 +1349,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "before it is pasted, with what is on screen: the app, the text around the caret, the names in the window. "
             + "It fixes misheard words and names, drops fillers and keeps only a self-correction.\n"
             + "Wispr Flow's words are already edited by Wispr. Waits at most \(Int(DictationEditor.budget)) s, then pastes the raw words."
-        wakeRow.image = Self.tick(WakeWord.enabled)
-        wakeRow.toolTip = "Say \"Hey Claude\", then the task: it starts a new Claude Code session in ~/workspace with your words. "
+        // Grey and unticked on battery, whatever the switch says (`WakeWord.listens`).
+        wakeRow.isEnabled = !BatteryFx.onBattery
+        wakeRow.image = Self.tick(WakeWord.listens)
+        wakeRow.toolTip = (BatteryFx.onBattery ? "Off on battery — it listens again when the Mac is plugged in.\n" : "") + "Say \"Hey Claude\", then the task: it starts a new Claude Code session in ~/workspace with your words. "
             + "Open with \"I have a question\" and it is a ⚡ quick question instead, answered in the pop-up. "
             + "The sentence ends when you stop talking.\n"
             + "A small model listens all the time on this Mac (nothing leaves it); macOS shows the microphone as in use."
@@ -1375,6 +1377,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     var onToggleWakeWord: ((Bool) -> Void)?
 
     @objc private func wakeClicked() {
+        guard !BatteryFx.onBattery else { return }
         onToggleWakeWord?(!WakeWord.enabled)
     }
 

@@ -755,6 +755,12 @@ question, … să faci direct treaba într-un terminal nou"*.
   register none of the held-out sets has — a "0/h" on teaching + dictation does not see it.
 - Switch: `WT_WAKE_WORD` / the Engine submenu's `👂 Wake: "Hey Claude" / "Hey Santa"` (default on; named so since 2026-11-13). The
   orange microphone dot stays on while it listens.
+- **Never on battery (2026-11-13, *"nu e nevoie de wake word pe baterie … gri în meniu (ne-enablabil)"*):**
+  `WakeWord.listens` = the switch **and** AC. Unplugged → `AppDelegate.syncWakeWordToPower` (on
+  `BatteryFx.watch`'s flip) stops the helper and the microphone is let go; the row is grey and
+  unticked, its click does nothing, `WT_WAKE_WORD` does not override. Plugged in → it starts again
+  if the switch is on (the switch keeps its value). A sentence a wake already opened keeps the
+  helper until it closes. `GET /test/state.wakeWord {enabled, onBattery, listens, running}`.
 
 ## Do not
 

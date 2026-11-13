@@ -22,6 +22,14 @@ final class WakeWordTests: XCTestCase {
         XCTAssertNil(lines[1]["id"])
     }
 
+    /// 2026-11-13: never on battery, whatever the switch says.
+    func testItNeverListensOnBattery() {
+        XCTAssertTrue(WakeWord.listens(enabled: true, onBattery: false))
+        XCTAssertFalse(WakeWord.listens(enabled: true, onBattery: true))
+        XCTAssertFalse(WakeWord.listens(enabled: false, onBattery: false))
+        XCTAssertFalse(WakeWord.listens(enabled: false, onBattery: true))
+    }
+
     func testAQuestionOpeningIsTakenOff() {
         XCTAssertEqual(WakeWord.question(in: "I have a question. What port does Grafana use?"),
                        "What port does Grafana use?")

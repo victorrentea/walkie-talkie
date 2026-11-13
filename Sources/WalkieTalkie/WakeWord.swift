@@ -53,6 +53,16 @@ final class WakeWord {
         set { UserDefaults.standard.set(newValue, forKey: "wakeWord") }
     }
 
+    /// **Never on battery** (2026-11-13, Victor: *"nu e nevoie de wake word pe
+    /// baterie. Disabled by default și gri în meniu (ne-enablabil)"*): the
+    /// helper holds the microphone open and runs two models all the time.
+    /// The switch keeps its value; on battery it is simply not obeyed, the
+    /// menu row is grey, and the helper comes back with the charger
+    /// (`AppDelegate.syncWakeWordToPower`). No override — not the menu, not
+    /// `WT_WAKE_WORD`.
+    static var listens: Bool { listens(enabled: enabled, onBattery: BatteryFx.onBattery) }
+    static func listens(enabled: Bool, onBattery: Bool) -> Bool { enabled && !onBattery }
+
     static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\""
 
     /// `WT_WAKE_THRESHOLD`, 0…1. 0.5 is the model card's; fitted to his voice
