@@ -249,7 +249,7 @@ Logi Options+, and the app takes no mouse button at all.
 | ◀️ held, then 🔼 | bind the window in front |
 | 🔽 → | start / stop a plain dictation at the caret (the stop inserts the words, no Return) |
 | 🔽 | start / stop a plain dictation (ends in Return); the shutter while a prompt records |
-| 🔽 ← | Return, at any moment |
+| 🔽 ← | a microphone open: cancel; at rest: ChatGPT voice conversation, on / off |
 | 🔽 ↓ | during a plain dictation: stop it, no Return; otherwise unbind |
 
 **Wheel mode** needs no Logitech software: click the wheel to start and stop, hold 2 s to cancel,

@@ -2670,15 +2670,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         // 🔽 ← with a microphone open (2026-10-21): 🔼 ←'s cancel, never its
-        // ⚡ question — the tap only raises this mid-sentence, and a sentence
-        // that ended on the way here leaves the Return the flick means at rest.
+        // ⚡ question — the tap only raises this mid-sentence. A sentence that
+        // ended on the way here: nothing (2026-11-13 — the flick at rest is
+        // ChatGPT's voice now, and a cancel that came late must not open it).
         hotkeys.onBackCancel = { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if self.cancelSentenceOrPanel(reason: "⬅️ a cancel flick (🔽 ←)") { return }
-                Log.info("⏎ 🔽 ← — nothing left to cancel, a Return instead")
-                HotkeyTap.postReturn()
+                Log.info("🔽 ← — nothing left to cancel")
             }
+        }
+        // 🔽 ← at rest (2026-11-13): ChatGPT's voice conversation, on / off.
+        hotkeys.onChatVoice = { [weak self] in
+            ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
+        }
+        picker.onTestChatVoice = { [weak self] in
+            ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
+            return ["ok": true]
         }
         // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
         // source that decides what a gesture on the wire means, and it takes the
@@ -9479,6 +9487,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["pasteboard"] = PasteboardTimeline.describe()
         out["autoAttach"] = AutoAttach.describe
         out["fxOnBattery"] = BatteryFx.describe
+        out["chatVoice"] = ChatGPTVoice.describe
         out["wakeWord"] = ["enabled": WakeWord.enabled, "onBattery": BatteryFx.onBattery,
                            "listens": WakeWord.listens, "running": WakeWord.shared.isRunning]
         return out

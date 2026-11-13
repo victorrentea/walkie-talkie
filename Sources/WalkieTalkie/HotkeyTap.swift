@@ -121,6 +121,11 @@ final class HotkeyTap {
     /// always was. Raised on the tap thread, so the other end hops.
     var onBackCancel: (() -> Void)?
 
+    /// **🔽 ← at rest — a voice conversation with ChatGPT** (2026-11-13,
+    /// `ChatGPTVoice`); the Return it was from 2026-10-05 until then is gone.
+    /// Raised on the tap thread.
+    var onChatVoice: (() -> Void)?
+
     /// **🔽 → over a ⚡ question — Google it** (2026-10-25): the question ends as
     /// 🔼 would end it, and its words go to a Google search instead of the reply
     /// pop-up (`AppDelegate.quickGoogle`). Raised on the tap thread.
@@ -4129,8 +4134,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     DispatchQueue.global().async { [weak self] in self?.onBackCancel?() }
                     return swallow(gesture, type, event)
                 }
-                Log.info("⏎ 🔽 ← back button flicked left — Return")
-                Self.postReturn()
+                // At rest: ChatGPT's voice conversation (2026-11-13) — the
+                // Return of 2026-10-05 is gone; the bare 🔽 still ends a plain
+                // dictation in one.
+                Log.info("🗣️ 🔽 ← back button flicked left at rest — ChatGPT voice")
+                DispatchQueue.global().async { [weak self] in self?.onChatVoice?() }
                 return swallow(gesture, type, event)
 
             // ⬆️ — dictate at a session that does not exist yet: the spawn, which
@@ -5092,7 +5100,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
           "at rest: start a plain dictation — a picture while a prompt is dictating; during a plain dictation: stop it, insert the words, then Return"),
          ("back-down",     VK_F12, "⌃⌥⌘F12", "during a plain dictation: stop it, the words alone, no Return — otherwise unbind (the menu's Disconnect)"),
          ("back-right",    VK_F5,  "⌃⌥⌘F5",  "start or stop a plain dictation — clean words at the caret, heard by the Engine; the stop presses no Return"),
-         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "a microphone open: cancel it, as 🔼 ←; otherwise Return"),
+         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "a microphone open: cancel it, as 🔼 ←; at rest: ChatGPT voice on / off"),
          ("back-up",       VK_F4,  "⌃⌥⌘F4",  "start or stop a screen recording, while a dictation is open")]
     }
 
@@ -5593,7 +5601,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// wear off before it types. Measured 12–22 ms on this Mac; 45 ms is that
     /// with room over it, and far below what a finger notices between the click
     /// and the prompt going.
-    private static let settleForOptionsPlus: UInt32 = 45_000
+    static let settleForOptionsPlus: UInt32 = 45_000
 
     /// The three keys of Wispr Flow's hands-free chord, written in the same
     /// numbers Wispr's own config stores them in: `"49+59+63"`.

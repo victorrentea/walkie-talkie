@@ -456,20 +456,25 @@ def spec(src: dict):
             # 2026-10-21: "during a dictation or a prompt … either the Forward
             # button swipe left or the back button swipe left … should do cancel".
             "row": ("🔽 back", "drag left"),
-            "does": "a microphone open: CANCEL it, as 🔼 ← (never its ⚡ question); otherwise Return — this app's stamped key",
+            # 2026-11-13: "vreau back + swipe left … alternativa ChatGPT" — at
+            # rest it is ChatGPT's voice conversation; the Return is gone.
+            "does": "a microphone open: CANCEL it, as 🔼 ← (never its ⚡ question); at rest: ChatGPT voice on / off — never a Return",
             "checks": [
-                ("F3 posts the Return and is swallowed", "HotkeyTap `case VK_F3`",
-                 lambda: has(gesture_case(src, "VK_F3"), r"Self\.postReturn\(\)\s*return swallow\(gesture, type, event\)\s*$")),
+                ("F3 at rest raises ChatGPT voice and is swallowed", "HotkeyTap `case VK_F3`",
+                 lambda: has(gesture_case(src, "VK_F3"), r"onChatVoice\?\(\) \}\s*return swallow\(gesture, type, event\)\s*$")),
+                ("…and no longer presses Return", "HotkeyTap `case VK_F3`",
+                 lambda: not has(gesture_case(src, "VK_F3"), r"postReturn")),
                 ("…but with any microphone open it raises the cancel first", "HotkeyTap `case VK_F3`",
                  lambda: before(gesture_case(src, "VK_F3"),
                                 r"if relayPromptOpen \|\| relayPlainOpen \|\| ownMicOpen \|\| backStopsWispr\s*\|\| wisprMicIsOpen\?\(\) == true \{.*?onBackCancel\?\(\)",
-                                r"Self\.postReturn\(\)")),
+                                r"onChatVoice\?\(\)")),
                 ("…not 🔼 ←'s, which asks a ⚡ question at rest", "HotkeyTap `case VK_F3`",
                  lambda: not has(gesture_case(src, "VK_F3"), r"onLocalCancel")),
-                ("the back cancel cancels, else a Return — never a question", "AppDelegate `onBackCancel`",
-                 lambda: before(closure(src, "hotkeys.onBackCancel"),
-                                r"if self\.cancelSentenceOrPanel\(.*?\) \{ return \}", r"HotkeyTap\.postReturn\(\)")
-                         and not has(closure(src, "hotkeys.onBackCancel"), r"startDictation|quick")),
+                ("the back cancel cancels, else nothing — never a question, a Return or ChatGPT", "AppDelegate `onBackCancel`",
+                 lambda: has(closure(src, "hotkeys.onBackCancel"), r"if self\.cancelSentenceOrPanel\(.*?\) \{ return \}")
+                         and not has(closure(src, "hotkeys.onBackCancel"), r"startDictation|quick|postReturn|ChatGPTVoice")),
+                ("the flick at rest toggles ChatGPT's voice", "AppDelegate `onChatVoice`",
+                 lambda: has(closure(src, "hotkeys.onChatVoice"), r"ChatGPTVoice\.toggle")),
             ],
         },
         {

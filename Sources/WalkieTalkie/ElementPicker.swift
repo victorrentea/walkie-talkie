@@ -523,6 +523,10 @@ final class ElementPicker {
     /// `{"event": "wake"｜"silence"｜"timeout"}` as the helper would say it, or
     /// `{"text"}` — a finished wake sentence into the real `deliver`.
     var onTestWake: (([String: Any]) -> [String: Any])?
+    /// `POST /test/chat-voice` — 🔽 ← at rest without the mouse (2026-11-13,
+    /// `ChatGPTVoice`): brings ChatGPT forward and presses its voice toggle.
+    /// `GET /test/state.chatVoice` says what came of it.
+    var onTestChatVoice: (() -> [String: Any])?
 
     /// `POST /test/local-now` — ⌘⌃X's action (2026-09-28), for the harness.
     var onTestLocalNow: (() -> Void)?
@@ -1014,6 +1018,8 @@ final class ElementPicker {
             guard let wav = body?["wav"] as? String else { return respond(conn, 400, ["error": "wav"]) }
             respond(conn, 200, onTestTension?(wav) ?? [:])
 
+        case ("POST", "/test/chat-voice"):
+            respond(conn, 200, onTestChatVoice?() ?? [:])
         case ("POST", "/test/wake"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             respond(conn, 200, onTestWake?(body) ?? [:])
