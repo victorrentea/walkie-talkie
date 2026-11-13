@@ -5,6 +5,23 @@ import XCTest
 /// sentence becomes (2026-11-12).
 final class WakeWordTests: XCTestCase {
 
+    func testAnOutcomeIsOneLineBesideTheTriggersName() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("wake-\(UUID().uuidString)/outcomes.jsonl")
+        defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
+        WakeWord.note(id: "20261113-201522-santa-0.82", word: "hey santa", score: 0.82, outcome: "cancelled",
+                      after: 2.04, why: "a cancel flick", to: file)
+        WakeWord.note(id: nil, word: "hey claude", score: 0.97, outcome: "silent", to: file)
+        let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map {
+            try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any]
+        }
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertEqual(lines[0]["id"] as? String, "20261113-201522-santa-0.82")
+        XCTAssertEqual(lines[0]["outcome"] as? String, "cancelled")
+        XCTAssertEqual(lines[0]["after"] as? Double, 2.0)
+        XCTAssertEqual(lines[1]["outcome"] as? String, "silent")
+        XCTAssertNil(lines[1]["id"])
+    }
+
     func testAQuestionOpeningIsTakenOff() {
         XCTAssertEqual(WakeWord.question(in: "I have a question. What port does Grafana use?"),
                        "What port does Grafana use?")

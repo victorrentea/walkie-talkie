@@ -78,3 +78,17 @@ Peak score streaming over each take (1 s of silence either side):
 Held-out `say` voices + his 7: 93 % at 0.6 (was 87 %). The four takes the earlier models missed
 all fell in the training 23, so "30 of 30" is partly memory — the 7 held out were easy ones. The
 next real measure is a workshop day, and `santa/triggers/` once the helper change is installed.
+
+## 2026-11-13, later — the first hour of live triggers, with what he did next
+
+The app now writes each wake's outcome (`santa/outcomes.jsonl`: silent / cancelled / session /
+question / busy); `train_whisper_wake.py --triggers` lists them beside what Whisper heard.
+19:11–20:15, at home, the model with his 30 takes: **15 wakes, 3 said** (*"Hey Santa!"* ×2, both
+cancelled by hand — a cancel alone proves nothing — and the Aperol Spritz one), **12 false**
+(0.66–1.00; 2 of them *hey claude*): Romanian talk in the room, which Whisper forced to English
+writes as nonsense. 8 cancelled within 1–4 s, 4 silent, 1 became a session of gibberish.
+
+Retrained with them (`hey_santa_whisper.2026-11-13b.npz`, installed): held-out recall 93 % at 0.6
+(61 clips), 0 false wakes on teaching (99 min) and dictation (47 min) at every threshold — as the
+model before it also scored. Twelve windows will not teach it Romanian household talk; the measure
+is the next evenings' `--triggers` count.

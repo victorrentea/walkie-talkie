@@ -20,6 +20,9 @@ His data, not a household's:
   triggers   santa/triggers/*.wav — the audio around every live wake, kept by
              `helpers/wake_word.py`. The local Whisper says what was in it: "santa"
              → a real positive, anything else → a negative that already fooled it.
+             santa/outcomes.jsonl (the app) says what he did next: a wake left
+             silent or cancelled counts as said only on *hey santa* itself.
+             `--triggers` lists them all and trains nothing.
 
 Held out: two voices and his own `VictorEval-*` takes (positives), every corpus
 day ≥ --eval-from and the --teach-eval days (negatives),
@@ -33,6 +36,7 @@ import glob
 import os
 import json
 import random
+import re
 import subprocess
 import wave
 from pathlib import Path
@@ -154,22 +158,59 @@ for f in sys.argv[2:]:
 """
 
 
-def triggers(label_python, label_model):
+HEY_SANTA = re.compile(r"\b(hey|hei|hi|hay)\W+santa\b", re.I)
+
+
+def outcomes():
+    """id → what became of that wake, from the app's ledger (`WakeWord.note`)."""
+    out = {}
+    f = DATA / "outcomes.jsonl"
+    if f.exists():
+        for line in f.read_text().splitlines():
+            try:
+                o = json.loads(line)
+            except ValueError:
+                continue
+            if o.get("id"):
+                out[o["id"]] = o
+    return out
+
+
+def verdict(text, outcome):
+    """Did that wake hear the phrase? What the local Whisper wrote, then what he
+    did next: a wake he let die in silence or flicked away said the phrase only
+    if the words are *hey santa* — "Santa Claude" in a sentence about the Slack
+    bot is the confusable, and it used to count as a positive."""
+    if HEY_SANTA.search(text):
+        return True
+    if "santa" in text.lower():
+        return outcome not in ("silent", "cancelled")
+    return False
+
+
+def triggers(label_python, label_model, report=False):
     """The live wakes' audio → (real positive windows, negative windows).
     A `.txt` beside each says what the local Whisper heard in it."""
     wavs = sorted((DATA / "triggers").glob("*.wav"))
     todo = [str(w) for w in wavs if not w.with_suffix(".txt").exists()]
     if todo and os.path.exists(label_python):
-        subprocess.run([label_python, "-c", LABELLER, label_model] + todo, check=False)
+        subprocess.run([label_python, "-c", LABELLER, label_model] + todo, check=False,
+                       stdout=subprocess.DEVNULL if report else None)
+    done = outcomes()
     pos, neg = [], []
     for w in wavs:
         txt, meta = w.with_suffix(".txt"), w.with_suffix(".json")
         if not txt.exists():
             continue
+        o = done.get(w.stem, {})
+        said = verdict(txt.read_text(), o.get("outcome"))
+        if report:
+            print("%s  %-9s %4.1fs  %s  %s" % (w.stem, o.get("outcome", "?"), o.get("after", 0),
+                                               "SAID " if said else "false", txt.read_text().strip()[:90]))
         a = load(w)
         end = json.loads(meta.read_text()).get("window_end", len(a)) if meta.exists() else len(a)
         win = a[max(0, end - int(WIN * RATE)):end]
-        (pos if "santa" in txt.read_text().lower() else neg).append(win)
+        (pos if said else neg).append(win)
     return pos, neg
 
 
@@ -196,7 +237,13 @@ def main():
     p.add_argument("--label-model", default="mlx-community/whisper-large-v3-turbo")
     p.add_argument("--eval-minutes", type=float, default=45)
     p.add_argument("--out", default=str(HOME / "wake" / "hey_santa_whisper.npz"))
+    p.add_argument("--triggers", action="store_true",
+                   help="label the live wakes and list them (outcome, what was heard); train nothing")
     a = p.parse_args()
+    if a.triggers:
+        pos, neg = triggers(a.label_python, a.label_model, report=True)
+        print(f"{len(pos)} said it, {len(neg)} false")
+        return
     rng = np.random.default_rng(0)
     random.seed(0)
     enc = Encoder(a.model)

@@ -231,7 +231,7 @@ def main():
         import wave
         try:
             os.makedirs(a.triggers, exist_ok=True)
-            base = os.path.join(a.triggers, "%s-%s-%.2f" % (time.strftime("%Y%m%d-%H%M%S"), t["word"].split()[-1], t["score"]))
+            base = os.path.join(a.triggers, t["id"])
             with wave.open(base + ".wav", "wb") as w:
                 w.setnchannels(1)
                 w.setsampwidth(2)
@@ -292,10 +292,13 @@ def main():
                 if score is not None and score >= a.whisper_threshold and hit is None:
                     hit = ("hey santa", score)
             if hit and not paused.is_set() and clock >= cooldown_until and not held():
-                say(event="wake", score=round(hit[1], 3), word=hit[0])
+                # The wake's name: its audio's file here, its outcome's line in the
+                # app's `outcomes.jsonl` (silent / cancelled / session / question).
+                wake_id = "%s-%s-%.2f" % (time.strftime("%Y%m%d-%H%M%S"), hit[0].split()[-1], hit[1])
+                say(event="wake", score=round(hit[1], 3), word=hit[0], id=wake_id)
                 if a.triggers:
                     # The chunk that fired is the ring's last: the scored window ends here.
-                    trigger = dict(word=hit[0], score=round(hit[1], 3), pre=list(ring), post=[])
+                    trigger = dict(id=wake_id, word=hit[0], score=round(hit[1], 3), pre=list(ring), post=[])
                 mode, woke_at, voiced_at, heard, voiced_s, head = "command", clock, None, False, 0.0, []
                 if model:
                     model.reset()

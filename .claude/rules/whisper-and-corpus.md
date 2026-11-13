@@ -743,6 +743,16 @@ question, … să faci direct treaba într-un terminal nou"*.
   `.json` with `window_end`; newest 2,000) — the trainer labels each with the local Whisper and
   learns from it. `~/.walkie-talkie/wake/hold` touched in the last 5 s = no wake fires
   (`evals/wake-word/record_takes.py`, his own takes → `santa/real/`).
+- **Every wake's outcome is kept too** (2026-11-13, *"dacă se aude wake word și apoi nu mai se aude
+  nimic … sau să întrerupă repede acea sesiune"*): one line per wake in `santa/outcomes.jsonl`
+  (`WakeWord.note`, `id` = the trigger's file name, given by the helper in `wake {id}`) —
+  `silent` / `cancelled` (+ `after` s, `why`) / `session` / `question` (+ the words) / `busy` /
+  `refused` / `lost`. `train_whisper_wake.py --triggers` lists every wake with its outcome and what
+  Whisper heard. **A cancel is not proof of a false wake**: of the first 15, two cancelled ones were
+  a clear *"Hey Santa!"* — so the words decide, and the outcome only overrules a bare *santa*
+  (silent/cancelled + no *hey santa* → negative; *Santa Claude* in talk used to count as said).
+- **The false wakes at home are Romanian talk in the room** (12 of 15 that evening, 0.66–1.00), a
+  register none of the held-out sets has — a "0/h" on teaching + dictation does not see it.
 - Switch: `WT_WAKE_WORD` / the Engine submenu's `👂 Wake: "Hey Claude" / "Hey Santa"` (default on; named so since 2026-11-13). The
   orange microphone dot stays on while it listens.
 

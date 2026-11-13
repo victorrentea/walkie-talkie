@@ -1224,6 +1224,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// started as a spawn, turned into a ⚡ question at delivery when the words
     /// open with *I have a question*, and closed by the helper's silence.
     private var wakeTake = false
+    /// The wake whose sentence is still open — its outcome is not written yet
+    /// (`closeWake` → `WakeWord.note`).
+    private var wakeLive: (id: String?, word: String, score: Double, at: CFAbsoluteTime)?
     /// The helper's gapless head is being decoded (`wakeEvent(.silence)`); the
     /// sentence's delivery parks on it (`parkedWake`) for at most `wakeHeadWait`.
     private var wakeHeadPending = false
@@ -1870,7 +1873,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWake = { [weak self] body in
             guard let self else { return [:] }
             if let name = body["event"] as? String {
-                let event: WakeWord.Event? = ["wake": .wake(score: 1, word: body["word"] as? String ?? "hey claude"), "silence": .silence(head: body["head"] as? String, voiced: 1),
+                let event: WakeWord.Event? = ["wake": .wake(score: 1, word: body["word"] as? String ?? "hey claude", id: body["id"] as? String), "silence": .silence(head: body["head"] as? String, voiced: 1),
                                               "timeout": .timeout, "speech": .speech][name]
                 guard let event else { return ["ok": false, "error": "event"] }
                 DispatchQueue.main.async { self.wakeEvent(event) }
@@ -4634,6 +4637,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 result.text = WakeWord.withoutWakeWord(result.text)
             }
         }
+        if wake { closeWake(wakeQuestion != nil ? "question" : "session", text: [head, spokenText].compactMap { $0 }.joined(separator: " | ")) }
         let followUp = quickFollowUp
         let google = quick && quickGoogle
         let googleToo = quick && quickGoogleToo && !google
@@ -6577,6 +6581,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickGoogle = false
         quickGoogleToo = false
         wakeTake = wake
+        // A wake whose sentence ended with neither words nor a cancel.
+        if !wake { closeWake("lost") }
         hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
@@ -7412,6 +7418,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard listening || source.isRecording || speculative || settling else { return false }
         FaceRead.shared.discard()
         Log.info("🗑️ dictation cancelled via \(reason)")
+        if wakeTake { closeWake("cancelled", why: reason) }
         // **A recogniser with nothing to cancel leaves the relay's own state
         // standing, and until now nothing could take it down** (2026-09-14,
         // Victor, twice: *"the lightning circle keeps rotating around the mouse
@@ -7517,17 +7524,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch event {
         case .ready(let device):
             Log.info("👂 wake word listening on \(device)")
-        case .wake(let score, let word):
+        case .wake(let score, let word, let id):
             guard WakeWord.enabled else { return }
             let busy = listening || source.isRecording || speculative || settling
                 || source.phase.isWaitingForWords || held != nil
             if busy || startBlocker() != nil {
                 Log.info(String(format: "👂 \"%@\" (%.2f) while busy — ignored", word, score))
+                WakeWord.note(id: id, word: word, score: score, outcome: "busy")
                 return
             }
             Log.info(String(format: "👂 \"%@\" (%.2f) — a sentence for a new session", word, score))
             startDictation(spawn: true, wake: true)
-            if listening || source.isRecording { overlay.flash(word == "hey santa" ? "🎅 Hey Santa — listening" : "👂 Hey Claude — listening", duration: 2) }
+            if listening || source.isRecording {
+                wakeLive = (id, word, score, CFAbsoluteTimeGetCurrent())
+                overlay.flash(word == "hey santa" ? "🎅 Hey Santa — listening" : "👂 Hey Claude — listening", duration: 2)
+            } else {
+                WakeWord.note(id: id, word: word, score: score, outcome: "refused")
+            }
         case .speech:
             break
         case .silence(let head, let voiced):
@@ -7538,6 +7551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .timeout:
             guard wakeTake, listening || source.isRecording else { return }
             Log.info("👂 nothing (or under 0.6 s of voice) said after \"Hey Claude\" — cancelled")
+            closeWake("silent")
             _ = cancelDictationInFlight(reason: "👂 no words after the wake word", quiet: true)
             wakeTake = false
             clearSpawn()
@@ -7545,6 +7559,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .error(let why):
             Log.error("👂 wake word helper: \(why)")
         }
+    }
+
+    /// The open wake's outcome goes into the ledger, once.
+    private func closeWake(_ outcome: String, why: String? = nil, text: String? = nil) {
+        guard let w = wakeLive else { return }
+        wakeLive = nil
+        WakeWord.note(id: w.id, word: w.word, score: w.score, outcome: outcome,
+                      after: CFAbsoluteTimeGetCurrent() - w.at, why: why, text: text)
     }
 
     /// The head through the local model, beside the take's own decode. Its

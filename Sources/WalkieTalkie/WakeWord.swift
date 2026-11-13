@@ -26,7 +26,8 @@ final class WakeWord {
 
     enum Event {
         case ready(device: String)
-        case wake(score: Double, word: String)
+        /// `id`: the helper's name for this wake — its audio in `santa/triggers/`.
+        case wake(score: Double, word: String, id: String?)
         case speech
         /// `head`: the first seconds from the wake on, gapless — what decides
         /// question or task (the app's own take opens later). `voiced`: seconds.
@@ -238,13 +239,43 @@ final class WakeWord {
         case "ready":
             queue.async { self.restarts = 0 }
             event = .ready(device: obj["device"] as? String ?? "")
-        case "wake": event = .wake(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "hey claude")
+        case "wake": event = .wake(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "hey claude", id: obj["id"] as? String)
         case "speech": event = .speech
         case "silence": event = .silence(head: obj["head"] as? String, voiced: obj["voiced"] as? Double ?? 0)
         case "timeout": event = .timeout
         default: event = .error(obj["error"] as? String ?? name)
         }
         DispatchQueue.main.async { self.onEvent?(event) }
+    }
+
+    // MARK: - What became of each wake
+
+    /// **Every wake's outcome, kept beside its audio** (2026-11-13, Victor:
+    /// *"dacă se aude wake word și apoi nu mai se aude nimic … sau să întrerupă
+    /// repede acea sesiune … ăla e clar semnal că nu a fost wake word-ul"*).
+    /// One JSON line per wake in `santa/outcomes.jsonl`, `id` = the trigger's
+    /// file name in `santa/triggers/`: `silent` (nothing said after it),
+    /// `cancelled` (by hand, `after` seconds later), `session` / `question`
+    /// (the words went somewhere), `busy` / `refused` (never opened a sentence),
+    /// `lost` (the take ended some other way). The trainer reads it
+    /// (`evals/wake-word/train_whisper_wake.py`): silent and cancelled are the
+    /// false wakes.
+    static var outcomes: URL { home.appendingPathComponent("santa/outcomes.jsonl") }
+
+    static func note(id: String?, word: String, score: Double, outcome: String, after: Double = 0,
+                     why: String? = nil, text: String? = nil, to file: URL = outcomes) {
+        var line: [String: Any] = ["at": ISO8601DateFormatter().string(from: Date()), "word": word,
+                                   "score": score, "outcome": outcome, "after": (after * 10).rounded() / 10]
+        if let id { line["id"] = id }
+        if let why { line["why"] = why }
+        if let text { line["text"] = String(text.prefix(300)) }
+        guard let data = try? JSONSerialization.data(withJSONObject: line, options: [.sortedKeys]) else { return }
+        try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: file.path) { FileManager.default.createFile(atPath: file.path, contents: nil) }
+        guard let h = try? FileHandle(forWritingTo: file) else { return }
+        defer { try? h.close() }
+        _ = try? h.seekToEnd()
+        try? h.write(contentsOf: data + Data("\n".utf8))
     }
 
     // MARK: - What the words mean
