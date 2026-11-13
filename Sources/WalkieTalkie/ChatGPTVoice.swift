@@ -27,16 +27,15 @@ enum ChatGPTVoice {
 
     static let bundleID = "com.openai.codex"
 
-    /// What this app believes: its own ⌃⇧V started a conversation and has not
-    /// ended it. A call he ends by hand leaves it stale for one flick — that
-    /// flick then only skips the window move, the toggle is the app's own.
-    private(set) static var talking = false
+    /// **No memory of on or off** (2026-11-13, the first live run): a belief
+    /// kept here was wrong after one lost key — the app said *off* over a
+    /// conversation that was listening. ⌃⇧V is the app's own toggle; every
+    /// flick does the same three things and the window says which it was.
     private static var busy = false
     private static var last: [String: Any] = [:]
 
     static var describe: [String: Any] {
         var out = last
-        out["talking"] = talking
         out["running"] = !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
         return out
     }
@@ -60,14 +59,13 @@ enum ChatGPTVoice {
                 return
             }
             busy = true
-            let starting = !talking
             let cold = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
             let pointer = NSEvent.mouseLocation
             let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
             let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
             let target = screen.map { fill($0.visibleFrame, primaryHeight: primaryHeight) }
-            Log.info("🗣️ 🔽 ← at rest — ChatGPT voice \(starting ? "on" : "off")\(cold ? " (starting the app)" : "")")
-            say(starting ? (cold ? "🗣️ ChatGPT voice — starting the app" : "🗣️ ChatGPT voice") : "🗣️ ChatGPT voice — off")
+            Log.info("🗣️ ChatGPT voice toggle\(cold ? " (starting the app)" : "")")
+            say(cold ? "🗣️ ChatGPT voice — starting the app" : "🗣️ ChatGPT voice")
             let config = NSWorkspace.OpenConfiguration()
             config.activates = true
             NSWorkspace.shared.openApplication(at: url, configuration: config) { app, error in
@@ -82,10 +80,17 @@ enum ChatGPTVoice {
                     let pid = app.processIdentifier
                     let began = CFAbsoluteTimeGetCurrent()
                     var window: AXUIElement?
+                    var steady = 0
                     while CFAbsoluteTimeGetCurrent() - began < (cold ? 30 : 4) {
-                        if NSWorkspace.shared.frontmostApplication?.processIdentifier == pid, let w = mainWindow(pid) {
-                            window = w
-                            break
+                        // In front for 0.4 s on end: pressed 0.2 s after the
+                        // flick, the first live ⌃⇧V reached nobody
+                        // (2026-11-13) — an activation is not yet a focused
+                        // composer.
+                        if inFront(pid), let w = mainWindow(pid) {
+                            steady += 1
+                            if steady >= 4 { window = w; break }
+                        } else {
+                            steady = 0
                         }
                         usleep(100_000)
                     }
@@ -97,16 +102,17 @@ enum ChatGPTVoice {
                     }
                     // A window just created is not yet a composer that takes keys.
                     if cold { usleep(coldSettle) }
-                    if starting, let target { setFrame(window, target) }
+                    if let target { setFrame(window, target) }
                     pressToggle()
+                    let stillInFront = inFront(pid)
                     DispatchQueue.main.async {
-                        talking = starting
-                        var note: [String: Any] = ["ok": true, "started": starting, "cold": cold, "waited": (waited * 100).rounded() / 100]
-                        if starting, let target { note["frame"] = [target.minX, target.minY, target.width, target.height] }
+                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "waited": (waited * 100).rounded() / 100]
+                        if let target { note["frame"] = [target.minX, target.minY, target.width, target.height] }
+                        if !stillInFront { note["error"] = "lost the front before the key" }
                         last = note
                     }
-                    Log.info(String(format: "🗣️ ChatGPT voice — ⌃⇧V pressed %.1f s after the flick%@", CFAbsoluteTimeGetCurrent() - began,
-                                    starting && target != nil ? ", window filling the pointer's screen" : ""))
+                    Log.info(String(format: "🗣️ ChatGPT voice — ⌃⇧V pressed %.1f s after the flick, window filling the pointer's screen%@",
+                                    CFAbsoluteTimeGetCurrent() - began, stillInFront ? "" : " — but the app was no longer in front"))
                 }
             }
         }
@@ -114,6 +120,23 @@ enum ChatGPTVoice {
 
     /// After a cold start's first window: unmeasured, generous.
     static let coldSettle: UInt32 = 2_500_000
+
+    /// Either witness will do: the system-wide `kAXFocusedApplication` never
+    /// named ChatGPT in the second live run (4.1 s in front on the screen,
+    /// *not in front* here), `NSWorkspace` did in the first.
+    private static func inFront(_ pid: pid_t) -> Bool {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier == pid || focusedPid() == pid
+    }
+
+    /// The application holding the keyboard, as Accessibility sees it now.
+    private static func focusedPid() -> pid_t {
+        var raw: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(AXUIElementCreateSystemWide(), kAXFocusedApplicationAttribute as CFString, &raw) == .success,
+              let raw, CFGetTypeID(raw) == AXUIElementGetTypeID() else { return 0 }
+        var pid: pid_t = 0
+        AXUIElementGetPid(raw as! AXUIElement, &pid)
+        return pid
+    }
 
     private static func mainWindow(_ pid: pid_t) -> AXUIElement? {
         let app = AXUIElementCreateApplication(pid)
