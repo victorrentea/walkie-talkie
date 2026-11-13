@@ -433,7 +433,9 @@ enum SpawnFolderMenu {
     /// they land and again when a star moves the rows.
     private static func regroup() {
         guard let all = allSessions else { active = nil; children = [:]; return }
-        let split = ActiveTerminals.grouped(all, under: rendered.map(\.path))
+        // `~/workspace` itself claims the sessions started in no project — the
+        // lines under *✨ Workspace* (2026-11-13).
+        let split = ActiveTerminals.grouped(all, under: rendered.map(\.path), exactly: workspacePath)
         active = ActiveTerminals.items(split.rest, boundTTY: boundTTY).map(choice)
         children = split.byFolder.reduce(into: [:]) { out, group in
             out[group.key] = ActiveTerminals.folderItems(group.value, folder: group.key, boundTTY: boundTTY).map(choice)
@@ -618,7 +620,7 @@ enum SpawnFolderMenu {
 
     private static func measure() -> NSSize {
         let all = rendered
-        let sessions = all.flatMap { children[$0.path] ?? [] }
+        let sessions = (all.map(\.path) + [workspacePath]).flatMap { children[$0] ?? [] }
         // The ✨ in front of every folder name; a session line's indent, tick,
         // icon and name — measured in its own face, and without the star.
         let folderWidth = all
@@ -700,12 +702,16 @@ enum SpawnFolderMenu {
     /// The last folder row: *✨ Workspace ›*, drawn like *Active terminals* —
     /// dimmed `✨ Workspace — none` when the scan found nothing unpinned this
     /// month. A click opens a session in `~/workspace` (the ✨'s promise).
+    /// **Under it, the sessions working in `~/workspace` itself** (2026-11-13) —
+    /// started in no project, lines like a pinned folder's, so one can be
+    /// continued from here instead of from *Active terminals*.
     private static func addWorkspaceRow(at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
+        let y = addSessionLines(children[workspacePath] ?? [], at: y, size: size, to: root)
         let row = ActiveRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: rowHeight),
                             font: rowFont, label: workspaceLabel, emptyLabel: workspaceEmptyLabel)
         row.update(items: workspace.map { $0.flatMap(\.rows) })
         row.onEnter = { [weak row] in if let row { SpawnFolderMenu.openSubmenu(for: row) } }
-        let path = WorkspaceFolders.root.path
+        let path = workspacePath
         row.onClick = { take(Choice(name: (path as NSString).lastPathComponent, path: path)) }
         root.addSubview(row)
         workspaceRow = row
@@ -738,16 +744,7 @@ enum SpawnFolderMenu {
     /// A folder row, and under it — bottom-up, so added first — a line per
     /// session working in it.
     private static func add(_ choice: Choice, at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
-        var y = y
-        for session in (children[choice.path] ?? []).reversed() {
-            let line = FolderRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: sessionHeight),
-                                 choice: session, font: sessionFont)
-            line.indent = sessionIndent
-            line.onClick = { take($0) }
-            line.onEnter = { [weak line] in if let line { SpawnFolderMenu.entered(line) } }
-            root.addSubview(line)
-            y += sessionHeight
-        }
+        let y = addSessionLines(children[choice.path] ?? [], at: y, size: size, to: root)
         let row = FolderRow(frame: NSRect(x: pad, y: y,
                                           width: size.width - 2 * pad, height: rowHeight),
                             choice: choice, font: rowFont)
@@ -761,6 +758,27 @@ enum SpawnFolderMenu {
         root.addSubview(row)
         return y + rowHeight
     }
+
+    /// The session lines under a folder row — bottom-up, so added before it.
+    /// A click binds the session (`redirectSpawn`).
+    private static func addSessionLines(_ sessions: [Choice], at y: CGFloat, size: NSSize,
+                                        to root: NSView) -> CGFloat {
+        var y = y
+        for session in sessions.reversed() {
+            let line = FolderRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: sessionHeight),
+                                 choice: session, font: sessionFont)
+            line.indent = sessionIndent
+            line.onClick = { take($0) }
+            line.onEnter = { [weak line] in if let line { SpawnFolderMenu.entered(line) } }
+            root.addSubview(line)
+            y += sessionHeight
+        }
+        return y
+    }
+
+    /// `~/workspace` — the *✨ Workspace* row's folder, and the key its
+    /// session lines sit under in `children`.
+    private static var workspacePath: String { WorkspaceFolders.root.path }
 
     // MARK: - The submenu
 

@@ -252,6 +252,11 @@ star to get them onto the main list"*.
   align … the labels of the separators"*) — the small left-aligned grey title read as one more row.
   A click opens a session there; **its star pins it and the submenu stays open**.
 - `WT_SHOOT_WORKSPACE=1` with `WT_SHOOT_MENU` draws it open (the scan is waited for).
+- **`✨ Workspace` has session lines too: the sessions working in `~/workspace` itself** (2026-11-13,
+  Victor: *"the other sessions that I've started with no folder … so I can continue a session which
+  is not started in any folder of a project"*). `ActiveTerminals.grouped(…, exactly:)` — the root
+  claims only its own folder, never a subfolder: a session in an unpinned project stays under
+  *Active terminals*. Drawn by the same `addSessionLines` as a pinned folder's.
 
 ## The star
 

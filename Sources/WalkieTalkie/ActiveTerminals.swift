@@ -111,7 +111,15 @@ enum ActiveTerminals {
     /// folder or inside it (`petclinic/petclinic-backend` → `petclinic`, the
     /// rollup the old `recent_projects.py` made); with two rows nested, the deeper one
     /// wins. Keys are the rows' paths as given.
-    static func grouped(_ sessions: [Session], under folders: [String])
+    ///
+    /// **`exactly` is a row that claims only its own folder, never one inside
+    /// it** (2026-11-13, Victor: *"under workspace to have the other sessions
+    /// that I've started with no folder … so I can continue a session which is
+    /// not started in any folder of a project"*). `~/workspace` is that row: a
+    /// session working *in* it was started in no project; one in
+    /// `~/workspace/x` belongs to `x`, and stays under *Active terminals* when
+    /// `x` is not pinned. A pinned row still wins on its own folder.
+    static func grouped(_ sessions: [Session], under folders: [String], exactly: String? = nil)
         -> (byFolder: [String: [Session]], rest: [Session]) {
         var byFolder: [String: [Session]] = [:], rest: [Session] = []
         for s in sessions {
@@ -119,7 +127,9 @@ enum ActiveTerminals {
             let owner = folders
                 .filter { let f = trimmed($0); return dir == f || dir.hasPrefix(f + "/") }
                 .max { trimmed($0).count < trimmed($1).count }
-            if let owner { byFolder[owner, default: []].append(s) } else { rest.append(s) }
+            if let owner { byFolder[owner, default: []].append(s) }
+            else if let exactly, dir == trimmed(exactly) { byFolder[exactly, default: []].append(s) }
+            else { rest.append(s) }
         }
         return (byFolder, rest)
     }

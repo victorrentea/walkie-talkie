@@ -92,6 +92,21 @@ final class ActiveTerminalsTests: XCTestCase {
                        ["ttys003", "ttys004", "ttys005"])
     }
 
+    /// 2026-11-13: `~/workspace` claims the sessions started in it — and only those.
+    func testTheWorkspaceRowClaimsOnlySessionsInTheRootItself() {
+        let sessions = [
+            session("ttys001", "/w"),
+            session("ttys002", "/w/"),
+            session("ttys003", "/w/walkie-talkie"),           // a project, not pinned: stays
+            session("ttys004", "/w/petclinic"),               // pinned: its own row wins
+            session("ttys005", "/elsewhere"),
+        ]
+        let split = ActiveTerminals.grouped(sessions, under: ["/w/petclinic"], exactly: "/w")
+        XCTAssertEqual(split.byFolder["/w"]?.map(\.tty), ["ttys001", "ttys002"])
+        XCTAssertEqual(split.byFolder["/w/petclinic"]?.map(\.tty), ["ttys004"])
+        XCTAssertEqual(split.rest.map(\.tty), ["ttys003", "ttys005"])
+    }
+
     func testAFolderSubmenuNamesTheTaskThenTheSubfolderThenTheFolder() {
         var busy = session("ttys002", "/w/petclinic", "◑ Owners grid paging")
         busy.busy = true

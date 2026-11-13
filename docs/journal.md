@@ -16277,3 +16277,14 @@ level."*
   the deck's end, and always draws the thumb pair. The panel is `.normal` level, not floating
   (*"să nu mai stea on top"*, as transcribed: *"în port"*).
 
+
+## ✨ Workspace keeps its own sessions (2026-11-13)
+
+Victor: *"under workspace to have the other sessions that I've started with no folder listed. So I
+can continue a session which is not started in any folder of a project."* The sessions working in
+`~/workspace` itself used to fall under *Active terminals* with everything no pinned row claimed;
+they are now indented lines under `✨ Workspace`, exactly like a pinned folder's (a click binds).
+`ActiveTerminals.grouped(_:under:exactly:)`: `~/workspace` claims **only its own folder**, never
+one inside it — a session in an unpinned project (`~/workspace/oracle-forms-crud`) stays under
+*Active terminals*, a pinned row still wins on its own folder. First picture: nine sessions under
+Workspace, three left in *Active terminals*.
