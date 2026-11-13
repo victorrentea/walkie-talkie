@@ -1018,6 +1018,9 @@ final class ElementPicker {
             guard let wav = body?["wav"] as? String else { return respond(conn, 400, ["error": "wav"]) }
             respond(conn, 200, onTestTension?(wav) ?? [:])
 
+        case ("POST", "/test/chat-voice-ax"):
+            let labels = ChatGPTVoice.windowLabels()
+            respond(conn, 200, ["labels": labels, "note": ChatGPTVoice.lastTreeNote])
         case ("POST", "/test/chat-voice"):
             respond(conn, 200, onTestChatVoice?() ?? [:])
         case ("POST", "/test/wake"):

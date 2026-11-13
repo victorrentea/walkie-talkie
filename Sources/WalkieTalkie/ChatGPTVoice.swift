@@ -110,13 +110,23 @@ enum ChatGPTVoice {
                     // open — unless a conversation is on (its controls hang
                     // on the character): then the flick only ends it.
                     let wasOn = callIsOn()
-                    if !wasOn, let fresh = URL(string: "codex://threads/new") {
+                    // **The same conversation goes on** (*"dacă apăs din nou …
+                    // continuă în aceeași conversație"*): a start within
+                    // `sameConversation` of the last one's end reopens its
+                    // thread; later than that, or the first time, a new chat.
+                    var resumed: String?
+                    DispatchQueue.main.sync {
+                        if let t = lastThread, CFAbsoluteTimeGetCurrent() - t.at < sameConversation { resumed = t.id }
+                    }
+                    if !wasOn, let fresh = URL(string: "codex://threads/\(resumed ?? "new")") {
                         NSWorkspace.shared.open(fresh)
                         usleep(700_000)
                         // The link can take the front away for a beat (one
                         // live run in five lost the key there).
                         var tries = 0
                         while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
+                        // Only the conversation: both side bars shut.
+                        if let target { closeBars(window: target) }
                     }
                     DispatchQueue.main.async { chime(on: !wasOn) }
                     pressToggle()
@@ -130,10 +140,14 @@ enum ChatGPTVoice {
                             pressToggle()
                         }
                     }
-                    DispatchQueue.main.async { if wasOn { followGeneration += 1 } else { followNewThread(known: known) } }
+                    DispatchQueue.main.async {
+                        if wasOn { followGeneration += 1; lastThread?.at = CFAbsoluteTimeGetCurrent() }
+                        else if let resumed { followGeneration += 1; lastThread = (resumed, CFAbsoluteTimeGetCurrent()) }
+                        else { followNewThread(known: known) }
+                    }
                     let stillInFront = inFront(pid)
                     DispatchQueue.main.async {
-                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "waited": (waited * 100).rounded() / 100, "characterIsOut": characterIsOut, "callWasOn": wasOn]
+                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "waited": (waited * 100).rounded() / 100, "characterIsOut": characterIsOut, "callWasOn": wasOn, "resumed": resumed ?? "", "bars": lastBars]
                         if let target { note["frame"] = [target.minX, target.minY, target.width, target.height] }
                         if !stillInFront { note["error"] = "lost the front before the key" }
                         last = note
@@ -325,6 +339,69 @@ enum ChatGPTVoice {
     }
 
     private static var followGeneration = 0
+    /// The conversation the last start talked in, and when it was last on.
+    private static var lastThread: (id: String, at: CFAbsoluteTime)?
+    /// How long after a conversation the next start still continues it.
+    static let sameConversation: CFAbsoluteTime = 30 * 60
+
+    // MARK: - The side bars
+
+    private static var lastBars = ""
+
+    /// **Nothing but the conversation** (*"fără lista de conversații din
+    /// stânga, fără niciun panel pe dreapta, doar textul mare"*). The app
+    /// keeps neither bar's state anywhere readable and refuses an
+    /// Accessibility tree (`AXManualAccessibility` → −25205), so the window
+    /// is *looked at*: a strip a quarter of the way down, and three columns
+    /// of it. Each bar has a shade of its own (measured dark, 2026-11-13: the
+    /// list 30, the conversation's ground 24, the icon rail 41), so 130 pt
+    /// in from either edge a shade that is not the middle's is a bar: ⌘⇧S
+    /// (`toggleSidebar`) on the left, ⌘⌥B (`toggleSidePanel`) on the right —
+    /// the right one never seen open, so that half is a guess.
+    private static func closeBars(window: CGRect) {
+        usleep(500_000)
+        guard let shades = shades(of: window) else { lastBars = "no picture"; return }
+        var note = String(format: "rail %.0f left %.0f middle %.0f right %.0f", shades.rail, shades.left, shades.middle, shades.right)
+        if abs(shades.left - shades.middle) >= 3 {
+            press(1, under: [(55, .maskCommand), (56, .maskShift)])
+            note += " — left bar shut"
+            usleep(350_000)
+        }
+        if abs(shades.right - shades.middle) >= 3 {
+            press(11, under: [(55, .maskCommand), (58, .maskAlternate)])
+            note += " — right panel shut"
+            usleep(350_000)
+        }
+        lastBars = note
+        Log.info("🗣️ ChatGPT voice — bars: \(note)")
+    }
+
+    /// The median brightness (0…255) of four columns of the window: the icon
+    /// rail, where the left bar would be, the middle, where a right panel
+    /// would be. `window` in global top-left coordinates.
+    private static func shades(of window: CGRect) -> (rail: Double, left: Double, middle: Double, right: Double)? {
+        let band = CGRect(x: window.minX, y: window.minY + (window.height * 0.25).rounded(), width: window.width, height: 60)
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("chat-voice-bars-\(UUID().uuidString).png")
+        defer { try? FileManager.default.removeItem(at: file) }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        p.arguments = ["-x", "-R", "\(Int(band.minX)),\(Int(band.minY)),\(Int(band.width)),\(Int(band.height))", file.path]
+        do { try p.run() } catch { return nil }
+        p.waitUntilExit()
+        guard let data = try? Data(contentsOf: file), let bitmap = NSBitmapImageRep(data: data) else { return nil }
+        let scale = Double(bitmap.pixelsWide) / Double(band.width)
+        func column(_ pt: Double) -> Double {
+            let x = min(max(Int(pt * scale), 0), bitmap.pixelsWide - 1)
+            var values: [Double] = []
+            for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+                guard let c = bitmap.colorAt(x: x, y: y) else { continue }
+                values.append(Double(c.redComponent + c.greenComponent + c.blueComponent) / 3 * 255)
+            }
+            values.sort()
+            return values.isEmpty ? 0 : values[values.count / 2]
+        }
+        return (column(20), column(130), column(Double(band.width) * 0.5), column(Double(band.width) - 130))
+    }
 
     /// **The new chat is opened in the window** (*"aș vrea să auto-deschidă
     /// chatul nou"*): the app starts a voice conversation in a thread of its
@@ -345,9 +422,51 @@ enum ChatGPTVoice {
                 guard let id = voiceThreads().last(where: { !known.contains($0) }),
                       let url = URL(string: "codex://threads/\(id)") else { continue }
                 Log.info(String(format: "🗣️ ChatGPT voice — the new chat %@ opened in the window, %.1f s after the key", id, CFAbsoluteTimeGetCurrent() - began))
-                DispatchQueue.main.async { NSWorkspace.shared.open(url); last["thread"] = id }
+                DispatchQueue.main.async {
+                    NSWorkspace.shared.open(url)
+                    last["thread"] = id
+                    lastThread = (id, CFAbsoluteTimeGetCurrent())
+                }
                 return
             }
         }
+    }
+
+    // MARK: - Reading the window
+
+    /// Every labelled element of the app's front window — role, label, whether
+    /// it can be pressed — for the desk (`POST /test/chat-voice-ax`) and for
+    /// `panels`. An Electron app builds its tree only once asked
+    /// (`AXManualAccessibility`).
+    static var lastTreeNote = ""
+    static func windowLabels(limit: Int = 4000) -> [[String: String]] {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first else { return [] }
+        let pid = app.processIdentifier
+        let appElement = AXUIElementCreateApplication(pid)
+        let manual = AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        let enhanced = AXUIElementSetAttributeValue(appElement, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+        defer { lastTreeNote = "manual \(manual.rawValue) enhanced \(enhanced.rawValue)" }
+        guard let window = mainWindow(pid) else { return [] }
+        var out: [[String: String]] = []
+        var queue: [AXUIElement] = [window]
+        var seen = 0
+        while !queue.isEmpty, seen < limit {
+            let e = queue.removeFirst()
+            seen += 1
+            func text(_ attribute: String) -> String? {
+                var raw: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(e, attribute as CFString, &raw) == .success else { return nil }
+                return (raw as? String).flatMap { $0.isEmpty ? nil : $0 }
+            }
+            let label = text(kAXTitleAttribute) ?? text(kAXDescriptionAttribute) ?? text(kAXValueAttribute)
+            if let role = text(kAXRoleAttribute) {
+                out.append(["role": role, "label": String((label ?? "").prefix(80))])
+            }
+            var raw: CFTypeRef?
+            if AXUIElementCopyAttributeValue(e, kAXChildrenAttribute as CFString, &raw) == .success, let children = raw as? [AXUIElement] {
+                queue.append(contentsOf: children)
+            }
+        }
+        return out
     }
 }
