@@ -21,3 +21,15 @@ final class ChatGPTVoiceTests: XCTestCase {
         XCTAssertEqual(DjiButton.keyCode, 90)
     }
 }
+
+extension ChatGPTVoiceTests {
+    /// The newest conversation is the last key as the file has them.
+    func testTheVoiceThreadsInTheFilesOwnOrder() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("continuity-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: file) }
+        try #"{"version":1,"threads":{"zz-old":{"items":[]},"aa-new":{"items":[{"role":"user","text":"zz-old"}]}}}"#
+            .write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(ChatGPTVoice.voiceThreads(in: file), ["zz-old", "aa-new"])
+        XCTAssertEqual(ChatGPTVoice.voiceThreads(in: file.appendingPathExtension("missing")), [])
+    }
+}

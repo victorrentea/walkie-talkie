@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreAudio
 
 /// **🔽 ← at rest: talk to ChatGPT** (2026-11-13). Victor: *"să-mi deschidă
 /// fereastra aceea de ChatGPT undeva pe un sfert de ecran și să intrăm în modul
@@ -36,6 +37,7 @@ enum ChatGPTVoice {
 
     static var describe: [String: Any] {
         var out = last
+        out["callIsOn"] = callIsOn()
         out["running"] = !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty
         return out
     }
@@ -103,10 +105,34 @@ enum ChatGPTVoice {
                     // A window just created is not yet a composer that takes keys.
                     if cold { usleep(coldSettle) }
                     if let target { setFrame(window, target) }
+                    let known = Set(voiceThreads())
+                    // A fresh chat in the window, not whatever thread was
+                    // open — unless a conversation is on (its controls hang
+                    // on the character): then the flick only ends it.
+                    let wasOn = callIsOn()
+                    if !wasOn, let fresh = URL(string: "codex://threads/new") {
+                        NSWorkspace.shared.open(fresh)
+                        usleep(700_000)
+                        // The link can take the front away for a beat (one
+                        // live run in five lost the key there).
+                        var tries = 0
+                        while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
+                    }
                     pressToggle()
+                    // **The microphone is the proof.** A start that left the
+                    // app without it 4 s later reached nobody: once more.
+                    if !wasOn {
+                        var held = false
+                        for _ in 0..<40 where !held { usleep(100_000); held = callIsOn() }
+                        if !held, inFront(pid) {
+                            Log.info("🗣️ ChatGPT voice — no microphone 4 s after ⌃⇧V, pressed once more")
+                            pressToggle()
+                        }
+                    }
+                    DispatchQueue.main.async { if wasOn { followGeneration += 1 } else { followNewThread(known: known) } }
                     let stillInFront = inFront(pid)
                     DispatchQueue.main.async {
-                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "waited": (waited * 100).rounded() / 100]
+                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "waited": (waited * 100).rounded() / 100, "characterIsOut": characterIsOut, "callWasOn": wasOn]
                         if let target { note["frame"] = [target.minX, target.minY, target.width, target.height] }
                         if !stillInFront { note["error"] = "lost the front before the key" }
                         last = note
@@ -173,10 +199,10 @@ enum ChatGPTVoice {
         AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, sizeValue)
     }
 
-    /// ⌃⇧V, the modifiers as keys of their own (an Electron accelerator reads
-    /// the flags, a key listener the keys — both are satisfied), after the
-    /// flick's own ⌃⌥⌘ has left the wire, and the wire left bare.
-    private static func pressToggle() {
+    /// A chord, the modifiers as keys of their own (an Electron accelerator
+    /// reads the flags, a key listener the keys — both are satisfied), after
+    /// the flick's own ⌃⌥⌘ has left the wire, and the wire left bare.
+    private static func press(_ key: CGKeyCode, under modifiers: [(key: CGKeyCode, flag: CGEventFlags)]) {
         usleep(HotkeyTap.settleForOptionsPlus)
         let watched: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate, .maskShift]
         var waited = 0
@@ -185,18 +211,112 @@ enum ChatGPTVoice {
             waited += 1
         }
         let source = CGEventSource(stateID: .hidSystemState)
-        let control: CGKeyCode = 59, shift: CGKeyCode = 56, v: CGKeyCode = 9
         func post(_ key: CGKeyCode, down: Bool, flags: CGEventFlags, modifier: Bool) {
             guard let e = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down) else { return }
             if modifier { e.type = .flagsChanged }
             e.flags = flags
             e.post(tap: .cghidEventTap)
         }
-        post(control, down: true, flags: [.maskControl], modifier: true)
-        post(shift, down: true, flags: [.maskControl, .maskShift], modifier: true)
-        post(v, down: true, flags: [.maskControl, .maskShift], modifier: false)
-        post(v, down: false, flags: [.maskControl, .maskShift], modifier: false)
-        post(shift, down: false, flags: [.maskControl], modifier: true)
-        post(control, down: false, flags: [], modifier: true)
+        var held: CGEventFlags = []
+        for m in modifiers { held.insert(m.flag); post(m.key, down: true, flags: held, modifier: true) }
+        post(key, down: true, flags: held, modifier: false)
+        post(key, down: false, flags: held, modifier: false)
+        for m in modifiers.reversed() { held.remove(m.flag); post(m.key, down: false, flags: held, modifier: true) }
+    }
+
+    /// ⌃⇧V — `composer.startVoiceMode`, *Toggle voice chat*.
+    private static func pressToggle() {
+        press(9, under: [(59, .maskControl), (56, .maskShift)])
+    }
+
+    // MARK: - The little character, and the new chat
+
+    private static var codexHome: URL { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex") }
+
+    /// **The little character is put away first** (2026-11-13, Victor: *"can
+    /// you stop the little character? and instead show the window with the
+    /// new chat? full screen"*). It is the app's *Mini* (`openAvatarOverlay`,
+    /// *Toggle Mini*, global ⌥Space); while it is out, a conversation started
+    /// with ⌃⇧V hangs its controls on the character and the window stays on
+    /// *What should we build?*. The app says whether it is out in
+    /// `.codex-global-state.json` (`electron-avatar-overlay-open`).
+    static var characterIsOut: Bool {
+        guard let data = try? Data(contentsOf: codexHome.appendingPathComponent(".codex-global-state.json")),
+              let state = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        return state["electron-avatar-overlay-open"] as? Bool ?? false
+    }
+
+    /// **Not put away yet**: pressing ⌥Space from here left it standing in
+    /// the live run (2026-11-13, twice) — rebound, or taken by another app
+    /// before it reaches this one. Open.
+
+    /// **A conversation is on = the app holds the microphone.** Core Audio's
+    /// process objects (macOS 14.2+) say which process records; the app's
+    /// audio runs in a helper, so the match is on the bundle id's prefix.
+    /// The window list could not tell (the Mini's window is 1138×2137 with
+    /// or without a call — measured 2026-11-13).
+    static func callIsOn() -> Bool {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return false }
+        var objects = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &objects) == noErr else { return false }
+        for object in objects {
+            var running: UInt32 = 0
+            var runningSize = UInt32(MemoryLayout<UInt32>.size)
+            var runningAddress = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyIsRunningInput,
+                                                            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            guard AudioObjectGetPropertyData(object, &runningAddress, 0, nil, &runningSize, &running) == noErr, running != 0 else { continue }
+            var bundle: CFString = "" as CFString
+            var bundleSize = UInt32(MemoryLayout<CFString>.size)
+            var bundleAddress = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyBundleID,
+                                                           mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+            guard withUnsafeMutablePointer(to: &bundle, {
+                AudioObjectGetPropertyData(object, &bundleAddress, 0, nil, &bundleSize, $0)
+            }) == noErr else { continue }
+            if (bundle as String).hasPrefix(bundleID) { return true }
+        }
+        return false
+    }
+
+    /// The conversations the app has spoken in, oldest first — the keys of
+    /// `realtime-voice-continuity.json`, which it writes as words arrive.
+    static func voiceThreads(in file: URL? = nil) -> [String] {
+        let file = file ?? codexHome.appendingPathComponent("realtime-voice-continuity.json")
+        guard let data = try? Data(contentsOf: file),
+              let text = String(data: data, encoding: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let threads = json["threads"] as? [String: Any] else { return [] }
+        // In the file's own order: a dictionary loses it.
+        return threads.keys.sorted { (text.range(of: "\"\($0)\"")?.lowerBound ?? text.endIndex) < (text.range(of: "\"\($1)\"")?.lowerBound ?? text.endIndex) }
+    }
+
+    private static var followGeneration = 0
+
+    /// **The new chat is opened in the window** (*"aș vrea să auto-deschidă
+    /// chatul nou"*): the app starts a voice conversation in a thread of its
+    /// own and leaves the window where it was. The thread's id appears in the
+    /// continuity file with the first words; `codex://threads/<id>` shows it
+    /// (proven by hand the same evening). Watched for 2 min; the next flick
+    /// calls the watch off.
+    private static func followNewThread(known: Set<String>) {
+        followGeneration += 1
+        let mine = followGeneration
+        DispatchQueue.global().async {
+            let began = CFAbsoluteTimeGetCurrent()
+            while CFAbsoluteTimeGetCurrent() - began < 120 {
+                usleep(500_000)
+                var current = 0
+                DispatchQueue.main.sync { current = followGeneration }
+                guard current == mine else { return }
+                guard let id = voiceThreads().last(where: { !known.contains($0) }),
+                      let url = URL(string: "codex://threads/\(id)") else { continue }
+                Log.info(String(format: "🗣️ ChatGPT voice — the new chat %@ opened in the window, %.1f s after the key", id, CFAbsoluteTimeGetCurrent() - began))
+                DispatchQueue.main.async { NSWorkspace.shared.open(url); last["thread"] = id }
+                return
+            }
+        }
     }
 }
