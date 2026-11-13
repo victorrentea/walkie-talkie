@@ -400,6 +400,34 @@ enum InputDevice {
     /// Every device that can actually record. Outputs and the input-less halves
     /// of duplex devices are dropped here rather than at the match, so "first
     /// one that looks like a DJI" cannot land on a speaker.
+    // MARK: - The system's default input, set from here (`SystemMic`)
+
+    /// What the system's input should be: his pick when it is plugged in, else
+    /// the first rung of the ladder that is; nil with none of his own here —
+    /// `resolve` without its last line of defence.
+    static func followTarget() -> Device? {
+        let devices = inputs()
+        if chosenId != "auto", let want = known.first(where: { $0.id == chosenId }),
+           let device = devices.first(where: { matches($0, want) }) { return device }
+        for k in known {
+            if let device = devices.first(where: { matches($0, k) }) { return device }
+        }
+        return nil
+    }
+
+    static func systemDefaultId() -> AudioDeviceID? { systemDefault()?.id }
+
+    static func setSystemDefault(_ device: Device) -> Bool {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultInputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var id = device.id
+        let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil,
+                                                UInt32(MemoryLayout<AudioDeviceID>.size), &id)
+        if status != noErr { Log.error("input: could not make \(device.name) the default (OSStatus \(status))") }
+        return status == noErr
+    }
+
     // MARK: - The system's default input, for the harness
 
     /// **The name of the system's chosen input**, so a test can put it back.

@@ -1596,6 +1596,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MicChoice.watch { [weak self] in
             guard let self else { return }
             self.micAnnouncer.choiceChanged()
+            SystemMic.choiceChanged()
             let id = InputDevice.chosenId
             guard id != self.micId else { return }
             self.micId = id
@@ -2204,6 +2205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestInputDevice = { name in
             let was = InputDevice.systemDefaultName() ?? ""
             guard !name.isEmpty else { return ["input": was, "inputs": InputDevice.inputNames()] }
+            SystemMic.hold(600)   // the harness owns the default for its run
             guard let now = InputDevice.setSystemDefault(matching: name) else {
                 return ["input": was, "changed": false, "inputs": InputDevice.inputNames()]
             }
@@ -2690,6 +2692,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
         }
         DjiButton.watch()
+        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil { SystemMic.watch() }
         picker.onTestChatVoice = { [weak self] in
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
             return ["ok": true]
@@ -9494,6 +9497,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["autoAttach"] = AutoAttach.describe
         out["fxOnBattery"] = BatteryFx.describe
         out["chatVoice"] = ChatGPTVoice.describe
+        out["systemMic"] = SystemMic.describe
         out["djiButton"] = DjiButton.describe
         out["wakeWord"] = ["enabled": WakeWord.enabled, "onBattery": BatteryFx.onBattery,
                            "listens": WakeWord.listens, "running": WakeWord.shared.isRunning]
