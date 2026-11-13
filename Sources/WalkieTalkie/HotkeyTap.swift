@@ -126,6 +126,11 @@ final class HotkeyTap {
     /// Raised on the tap thread.
     var onChatVoice: (() -> Void)?
 
+    /// **The DJI transmitter's Link button** (2026-11-13, `DjiButton`): it
+    /// arrives as a bare F20. Raised on the tap thread, once per press.
+    var onDjiButton: (() -> Void)?
+    private var djiLastAt: CFTimeInterval = 0
+
     /// **🔽 → over a ⚡ question — Google it** (2026-10-25): the question ends as
     /// 🔼 would end it, and its words go to a Google search instead of the reply
     /// pop-up (`AppDelegate.quickGoogle`). Raised on the tap thread.
@@ -3808,6 +3813,24 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         if type == .keyUp, ctrlPTaken, CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == VK_P {
             ctrlPTaken = false
             return swallow("⌃P shutter (release)", type, event)
+        }
+        // The DJI Link button (`DjiButton`: Volume Up remapped to F20) — down
+        // and up both swallowed; presses under 0.4 s apart are one (others
+        // measured a bounce).
+        if type == .keyDown || type == .keyUp,
+           CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode)) == DjiButton.keyCode,
+           event.flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]).isEmpty {
+            if type == .keyDown, event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+                let now = CACurrentMediaTime()
+                if now - djiLastAt >= 0.4 {
+                    djiLastAt = now
+                    Log.info("🎙️ DJI Link button")
+                    DispatchQueue.global().async { [weak self] in self?.onDjiButton?() }
+                } else {
+                    Log.info("🎙️ DJI Link button — a second press within 0.4 s, dropped")
+                }
+            }
+            return swallow("DJI Link (F20)", type, event)
         }
         guard type == .keyDown else {
             if Self.keyTrace, type == .keyUp || type == .flagsChanged {

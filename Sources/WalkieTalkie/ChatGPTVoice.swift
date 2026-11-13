@@ -20,8 +20,9 @@ import ApplicationServices
 ///   it), and `notchVoice` ⌥V, which talks in the small Mini window.
 ///
 /// So: bring the app forward (`NSWorkspace.openApplication` — it starts it
-/// when it is not running, and never by its executable path), put its window
-/// on the pointer's quarter of the screen, press ⌃⇧V.
+/// when it is not running, and never by its executable path), fill the pointer's
+/// screen with its window (*"să o faci fullscreen"*, the same evening — the
+/// quarter he first asked for lasted an hour), press ⌃⇧V.
 enum ChatGPTVoice {
 
     static let bundleID = "com.openai.codex"
@@ -40,15 +41,12 @@ enum ChatGPTVoice {
         return out
     }
 
-    /// The quarter of `screen` (AppKit coordinates, the visible frame) that
-    /// holds `pointer`, as an Accessibility rect — origin top-left of the
-    /// primary screen, whose height is `primaryHeight`.
-    static func quarter(of visible: CGRect, holding pointer: CGPoint, primaryHeight: CGFloat) -> CGRect {
-        let w = (visible.width / 2).rounded(.down), h = (visible.height / 2).rounded(.down)
-        let right = pointer.x >= visible.midX, top = pointer.y >= visible.midY
-        let x = right ? visible.maxX - w : visible.minX
-        let yAppKit = top ? visible.maxY - h : visible.minY
-        return CGRect(x: x, y: primaryHeight - (yAppKit + h), width: w, height: h)
+    /// The whole visible frame of a screen (AppKit coordinates) as an
+    /// Accessibility rect — origin top-left of the primary screen, whose
+    /// height is `primaryHeight`. *"fullscreen"* is this, not a Space of its
+    /// own: no animation to wait out, and the flick can be undone by hand.
+    static func fill(_ visible: CGRect, primaryHeight: CGFloat) -> CGRect {
+        CGRect(x: visible.minX, y: primaryHeight - visible.maxY, width: visible.width, height: visible.height)
     }
 
     /// The flick. `say` flashes on the chip (main thread).
@@ -67,7 +65,7 @@ enum ChatGPTVoice {
             let pointer = NSEvent.mouseLocation
             let screen = NSScreen.screens.first { $0.frame.contains(pointer) } ?? NSScreen.main
             let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
-            let target = screen.map { quarter(of: $0.visibleFrame, holding: pointer, primaryHeight: primaryHeight) }
+            let target = screen.map { fill($0.visibleFrame, primaryHeight: primaryHeight) }
             Log.info("🗣️ 🔽 ← at rest — ChatGPT voice \(starting ? "on" : "off")\(cold ? " (starting the app)" : "")")
             say(starting ? (cold ? "🗣️ ChatGPT voice — starting the app" : "🗣️ ChatGPT voice") : "🗣️ ChatGPT voice — off")
             let config = NSWorkspace.OpenConfiguration()
@@ -108,7 +106,7 @@ enum ChatGPTVoice {
                         last = note
                     }
                     Log.info(String(format: "🗣️ ChatGPT voice — ⌃⇧V pressed %.1f s after the flick%@", CFAbsoluteTimeGetCurrent() - began,
-                                    starting && target != nil ? ", window on the pointer's quarter" : ""))
+                                    starting && target != nil ? ", window filling the pointer's screen" : ""))
                 }
             }
         }

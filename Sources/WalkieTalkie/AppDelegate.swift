@@ -2684,6 +2684,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onChatVoice = { [weak self] in
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
         }
+        // The DJI transmitter's Link button (2026-11-13, *"pentru moment"*):
+        // the same conversation.
+        hotkeys.onDjiButton = { [weak self] in
+            ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
+        }
+        DjiButton.watch()
         picker.onTestChatVoice = { [weak self] in
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
             return ["ok": true]
@@ -9488,6 +9494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["autoAttach"] = AutoAttach.describe
         out["fxOnBattery"] = BatteryFx.describe
         out["chatVoice"] = ChatGPTVoice.describe
+        out["djiButton"] = DjiButton.describe
         out["wakeWord"] = ["enabled": WakeWord.enabled, "onBattery": BatteryFx.onBattery,
                            "listens": WakeWord.listens, "running": WakeWord.shared.isRunning]
         return out
@@ -13154,6 +13161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         terminating = true
         WakeWord.shared.stop()
+        DjiButton.release()
         // Before either branch: a relay that quits mid-sentence must not leave
         // Chrome silent. The extension also resumes on a dead socket, but that is
         // the safety net for a crash, not the way an orderly quit should look.
