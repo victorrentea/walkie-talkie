@@ -52,6 +52,12 @@ final class ProjectMHalo: NSView, HaloWebHost {
     private var lastFrameAt = 0.0, gapMs = 0.0, insideMs = 0.0
     var onFailure: ((String) -> Void)?
     var onVisible: (() -> Void)?
+    /// Whether a pure fluid hands itself to `FluidTuner` (2026-11-13: not
+    /// `CornerTunnel`'s dust — the saved values still apply). Set before `start`.
+    var tunes = true
+    /// Knobs (`PMH_FLUID_*`) this host sets over the saved sliders — a canvas far
+    /// smaller than a screen needs its own size and brightness. Set before `start`.
+    var fluidOverrides: [Int32: Float] = [:]
 
     /// The microphone's rate, as `MicRecorder` and `DemoVoice` fill `samples`.
     static let sampleRate = 16000
@@ -336,6 +342,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
                 let mode = preset.smoke ? 6 : preset.ink ? 5 : preset.liquid ? 4 : 3
                 let defaults = FluidTuner.knobs.map { pmh_fluid_param(renderer, $0.id) }
                 for knob in FluidTuner.knobs { if let v = FluidTuner.saved(mode: mode, knob: knob) { pmh_set_fluid_param(renderer, knob.id, v) } }
+                for (which, value) in fluidOverrides { pmh_set_fluid_param(renderer, which, value) }
                 let title = mode == 6 ? "Smoke" : mode == 5 ? "Ink" : mode == 4 ? "Liquid cursor" : "Fluid cursor"
                 // Liquid cursor's voice dust and Smoke's puffs answer a threshold
                 // of their own (`pmh_set_voice_threshold`, the tuner's *Effect
@@ -348,6 +355,8 @@ final class ProjectMHalo: NSView, HaloWebHost {
                     let hook = voiceKey.map { key in
                         FluidTuner.VoiceHook(key: key) { [weak self] t in self?.setVoiceThreshold(t) }
                     }
+                    // A second fluid (the corner's dust) leaves the sliders to the pointer's.
+                    guard self.tunes else { return }
                     FluidTuner.shared.attach(self, mode: mode, title: title, defaults: defaults, voice: hook)
                 }
             }

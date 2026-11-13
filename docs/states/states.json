@@ -126,7 +126,7 @@
     "slug" : "held-waiting",
     "title" : "Unbound, with sentences waiting for a bind",
     "when" : "A sentence was spoken with nothing bound (Victor's Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.",
-    "width" : 315
+    "width" : 239
   },
   {
     "alpha" : 0.80000000000000004,
@@ -495,7 +495,7 @@
     "slug" : "flash-held",
     "title" : "Flash — held for a bind",
     "when" : "Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The `📨 N waiting` row stays after it.",
-    "width" : 315
+    "width" : 295
   },
   {
     "alpha" : 0.80000000000000004,
@@ -603,7 +603,7 @@
     "slug" : "paste-again",
     "title" : "Re-paste — ⌘V, after every sentence",
     "when" : "Five seconds after every delivered sentence (caret, bound terminal, new session, a held sentence's release) and after a cancelled prompt. Never after a cancelled dictation.",
-    "width" : 315
+    "width" : 218
   },
   {
     "alpha" : 0.80000000000000004,
@@ -627,7 +627,7 @@
     "slug" : "flash-accessibility",
     "title" : "Flash — permissions missing",
     "when" : "Fifteen seconds at launch, before anything is bound.",
-    "width" : 315
+    "width" : 312
   },
   {
     "alpha" : 0.80000000000000004,

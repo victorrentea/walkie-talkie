@@ -752,6 +752,22 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   quiet settle had turned the frame off, and `setActive(false)` answers `onCaret(nil)` — no `pinAt`,
   `armed` false, the pin gone with the wave though `setDelivering` was on. The frame now stays active
   through the settle with `outlines = false`: it reads the caret every 0.2 s and draws no red line.
+- **The corner has three dresses; Dust is the default** (2026-11-13, Victor: *"I wanted to go back
+  to the Atom. Or also maybe try the dust effect that moves like a loading icon, not perfectly
+  regular … moving on a circle … within the area of the current reverse tunnel effect"*).
+  `CornerTunnel.Dress` — `dust` / `tunnel` / `atom`, defaults key `cornerFx`, picked under
+  `𝓯𝔁 ▸ Transcribing: …` (`WT_CORNER_FX=…` for a run; `WT_CORNER_TUNNEL=0` = atom). **Dust** is his
+  caret Smoke (`pmh_set_canvas` mode 6) on a canvas of its own in the same 230 pt square, its stamp
+  driven round `dustPoint` at 60 Hz: clockwise, a lap every 1.6 s on average, the pace wandering
+  0.5–1.5× and the ring 0.15–0.25 of the side, fed the same take backwards. **Atom** draws nothing
+  here: the atom for the held prompt, an empty corner through the settle. Three numbers paid for on
+  desk shots: his saved Smoke `Size` (0.0012, set for a screen) is a wisp on 230 px, so the dust has
+  its own knobs (`dustKnobs`: radius 0.003, gain 0.35, fade 0.9; `cornerDust.radius|gain|fade|opacity`
+  in the defaults); the solver grid is ¼ of the canvas, 4 pt blocks at 230 px, so the canvas is 3×
+  the square (`dustGrain`, `cornerDust.grain`); and it does not take `FluidTuner` from the pointer's
+  halo (`ProjectMHalo.tunes = false`). The demo route rebuilds the engine, so a `defaults write` +
+  `POST /test/corner-tunnel` shows a new knob with no restart. **Photograph the screen the pointer
+  is on** — the answer's `frame` says where (the first shot of an empty main screen was that).
 - **📍 The pin stays until the delivery says the words are in** (2026-11-11, Victor: *"pinul acela
   roșu … să nu dispară decât după ce ai confirmarea că ai inserat textul … abia după o secundă, două,
   apare efectiv textul în terminalul Claude"*). The settle ends when `deliver` *starts* a caret

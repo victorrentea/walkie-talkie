@@ -605,6 +605,22 @@ final class StatusItem: NSObject, NSMenuDelegate {
             row.submenu = list
             haloSubmenu.addItem(row)
         }
+        // **`Transcribing: Dust`** (2026-11-13) — what stands in the prompt's
+        // corner while the words are transcribed (`CornerTunnel.Dress`).
+        let corner = CornerTunnel.dress
+        let cornerRow = NSMenuItem(title: "Transcribing: \(corner.title)", action: nil, keyEquivalent: "")
+        cornerRow.toolTip = "What plays in the top-left corner, where the prompt rests, while the words are transcribed."
+        let cornerList = NSMenu()
+        cornerList.autoenablesItems = false
+        for dress in CornerTunnel.Dress.allCases {
+            let pick = NSMenuItem(title: dress.title, action: #selector(cornerFxPicked(_:)), keyEquivalent: "")
+            pick.target = self
+            pick.representedObject = dress.rawValue
+            pick.image = dress == corner ? Self.symbolIcon("checkmark") : Self.blankIcon
+            cornerList.addItem(pick)
+        }
+        cornerRow.submenu = cornerList
+        haloSubmenu.addItem(cornerRow)
         // **`Fx engine`, last row of the same submenu** (Victor, 2026-09-21:
         // *"pune fx engine sub halo effects (în submeniu)"*) — one level down
         // from the styles, not a sibling row in the main menu.
@@ -707,6 +723,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
             row.image = voice == current ? Self.symbolIcon("checkmark") : Self.blankIcon
             haloVoiceSubmenu.addItem(row)
         }
+    }
+
+    @objc private func cornerFxPicked(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let dress = CornerTunnel.Dress(rawValue: raw) else { return }
+        CornerTunnel.setDress(dress)
+        applyHaloRow()
     }
 
     @objc private func batteryFxClicked() {

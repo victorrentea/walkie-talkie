@@ -1,4 +1,5 @@
 import AppKit
+import CProjectM
 
 /// **While the words are transcribed, the atom's corner plays Reverse tunnel on
 /// the take, backwards** (2026-11-10, Victor: *"în locul acelui atom din colțul
@@ -25,10 +26,44 @@ import AppKit
 /// - Click-through, `sharingType = .none` (`capturable` for a desk shot), one level
 ///   above the chip's panel — as the atom.
 ///
-/// `WT_CORNER_TUNNEL=0` turns it off: the atom is back for the held prompt and the
-/// settle shows nothing in the corner.
+/// **Three dresses for that corner since 2026-11-13** (Victor: *"I wanted to go back
+/// to the Atom. Or also maybe try the dust effect that moves like a loading icon,
+/// not perfectly regular … moving on a circle … within the area of the current
+/// reverse tunnel effect"*) — `Dress`, picked under `𝓯𝔁 ▸ Transcribing`:
+/// - **Dust** (the default, the one to try): his caret Smoke on a canvas of its own,
+///   `side` points square, its stamp driven round `dustPoint` — a loading icon whose
+///   pace and radius wander. Fed the same take, backwards.
+/// - **Reverse tunnel**: the 2026-11-10 picture, unchanged.
+/// - **Atom**: nothing of this class is drawn; the atom is back for the held prompt
+///   and the settle shows nothing in the corner (what `WT_CORNER_TUNNEL=0` did and
+///   still does).
 final class CornerTunnel {
-    static let off = ProcessInfo.processInfo.environment["WT_CORNER_TUNNEL"] == "0"
+    enum Dress: String, CaseIterable {
+        case dust, tunnel, atom
+        var title: String {
+            switch self {
+            case .dust:   return "Dust"
+            case .tunnel: return "Reverse tunnel"
+            case .atom:   return "Atom"
+            }
+        }
+    }
+    static let dressKey = "cornerFx"
+    /// `WT_CORNER_TUNNEL=0` (atom) and `WT_CORNER_FX=dust|tunnel|atom` win for a run.
+    static var dress: Dress {
+        let env = ProcessInfo.processInfo.environment
+        if env["WT_CORNER_TUNNEL"] == "0" { return .atom }
+        if let forced = env["WT_CORNER_FX"].flatMap(Dress.init(rawValue:)) { return forced }
+        return UserDefaults.standard.string(forKey: dressKey).flatMap(Dress.init(rawValue:)) ?? .dust
+    }
+    /// The menu's pick: written, and whatever stands in the corner rebuilt in it.
+    static func setDress(_ new: Dress) {
+        guard new != dress else { return }
+        UserDefaults.standard.set(new.rawValue, forKey: dressKey)
+        Log.info("🌀 the corner's dress: \(new.rawValue)")
+        current?.redress()
+    }
+    static var off: Bool { dress == .atom }
     /// The picture's square. The tunnel's ring is ~0.66 of it — the atom's rings are
     /// 0.88 of 170 pt, so 230 pt puts the two the same size.
     static let side: CGFloat = 230
@@ -41,7 +76,12 @@ final class CornerTunnel {
 
     private var panel: NSPanel?
     private var host: ProjectMHalo?
+    /// What `panel` was built to draw; another pick builds another.
+    private var built: Dress?
     private var feedTimer: Timer?
+    /// The dust's stamp, moved round `dustPoint` at the display's pace.
+    private var pathTimer: Timer?
+    private var pathFrom: CFAbsoluteTime = 0
     /// The engine's loop is on (`start`), until a fade-out completes.
     private var running = false
 
@@ -61,7 +101,7 @@ final class CornerTunnel {
 
     /// For `GET /test/state`.
     var report: [String: Any] {
-        ["up": up, "settling": settling, "holding": holding, "claimed": claimed,
+        ["up": up, "dress": Self.dress.rawValue, "settling": settling, "holding": holding, "claimed": claimed,
          "takeSeconds": Double(take.count) / 16000, "speed": speed,
          "frame": panel.map { NSStringFromRect($0.frame) } ?? NSNull()]
     }
@@ -91,6 +131,38 @@ final class CornerTunnel {
             out[i] = take[n - 1 - back]
         }
         return out
+    }
+
+    /// **The dust's own size and brightness.** His Smoke sliders are set for a
+    /// screen (`Size` 0.0012 of it): on a 230-point canvas that was a wisp a few
+    /// points across, seen on the first desk shot. `cornerDust.radius|gain|fade|opacity`
+    /// in the defaults try others; the demo route rebuilds, so no restart is needed.
+    /// **The canvas is `dustGrain` times the square, shown at the square's size.**
+    /// Smoke's solver grid is a quarter of its canvas: at 230 px that is 57 cells,
+    /// drawn as 4-point blocks (the second desk shot). `cornerDust.grain` tries another.
+    static var dustGrain: CGFloat {
+        (UserDefaults.standard.object(forKey: "cornerDust.grain") as? Double).map { CGFloat(max(1, min($0, 6))) } ?? 3
+    }
+    static var dustKnobs: [Int32: Float] {
+        let d = UserDefaults.standard
+        func knob(_ key: String, _ standard: Float) -> Float {
+            (d.object(forKey: "cornerDust.\(key)") as? Double).map(Float.init) ?? standard
+        }
+        return [Int32(PMH_FLUID_RADIUS): knob("radius", 0.003), Int32(PMH_FLUID_GAIN): knob("gain", 0.35),
+                Int32(PMH_FLUID_FADE): knob("fade", 0.9), Int32(PMH_FLUID_OPACITY): knob("opacity", 1)]
+    }
+    /// One lap of the dust's ring, on average.
+    static let dustLap: TimeInterval = 1.6
+    /// **Where the dust's stamp is `t` seconds in** — points in the square, y down.
+    /// Clockwise, a lap every `dustLap` on average, but *"not perfectly regular"*:
+    /// the pace wanders between half and one and a half times that (never back),
+    /// and the ring breathes between 0.15 and 0.25 of the side, so no two laps
+    /// draw the same circle. The periods share no small multiple.
+    static func dustPoint(at t: Double, side: CGFloat = side) -> CGPoint {
+        let lap = 2 * Double.pi * max(t, 0) / dustLap
+        let angle = lap + 0.45 * sin(lap * 0.37) + 0.25 * sin(lap * 1.31 + 1)
+        let r = Double(side) * 0.2 * (1 + 0.16 * sin(lap * 0.53 + 2) + 0.09 * sin(lap * 1.9))
+        return CGPoint(x: Double(side) / 2 + r * cos(angle), y: Double(side) / 2 + r * sin(angle))
     }
 
     // MARK: - The two reasons to be up
@@ -167,6 +239,7 @@ final class CornerTunnel {
         Self.capturable = capturable
         panel?.sharingType = capturable ? .readOnly : .none
         guard on else { settle(false, take: []); return }
+        teardown()      // a desk's run reads the knobs afresh
         let n = Int(seconds * 16000)
         let take: [Int16] = (0..<n).map { i in
             let t = Double(i) / 16000
@@ -180,8 +253,26 @@ final class CornerTunnel {
 
     // MARK: - Up and down
 
+    /// Another dress was picked: what is up goes at once, and comes back in it.
+    private func redress() {
+        teardown()
+        if Self.off { settling = false; holding = false; claimed = false; take = [] }
+        sync()
+    }
+
+    private func teardown() {
+        up = false
+        turn += 1
+        panel?.orderOut(nil)
+        feedTimer?.invalidate(); feedTimer = nil
+        pathTimer?.invalidate(); pathTimer = nil
+        host?.stop()
+        running = false
+        panel = nil; host = nil; built = nil
+    }
+
     private func sync() {
-        let wanted = (settling || holding) && !take.isEmpty && !held && home != nil
+        let wanted = (settling || holding) && !take.isEmpty && !held && home != nil && !Self.off
         if wanted { show() } else { hide() }
     }
 
@@ -192,6 +283,7 @@ final class CornerTunnel {
             if panel?.frame != target { panel?.setFrame(target, display: false) }
             return
         }
+        if panel != nil, built != Self.dress { teardown() }
         guard let p = panel ?? make() else { return }
         up = true
         turn += 1
@@ -204,10 +296,11 @@ final class CornerTunnel {
             ctx.duration = 0.15
             p.animator().alphaValue = 1
         }
+        if built == .dust, pathTimer == nil { startCircling() }
         if !running { host?.start(); running = true }
         if feedTimer == nil { startFeeding() }
         p.orderFrontRegardless()
-        Log.info(String(format: "🌀 the corner tunnel is up at (%.0f, %.0f)%@", target.midX, target.midY,
+        Log.info(String(format: "🌀 the corner \(built == .dust ? "dust" : "tunnel") is up at (%.0f, %.0f)%@", target.midX, target.midY,
                         holding ? " — in the atom's place" : " — the words are being transcribed"))
     }
 
@@ -224,6 +317,7 @@ final class CornerTunnel {
             guard let self, self.turn == hiding else { return }
             p.orderOut(nil)
             self.feedTimer?.invalidate(); self.feedTimer = nil
+            self.pathTimer?.invalidate(); self.pathTimer = nil
             self.host?.stop()
             self.running = false
         })
@@ -240,16 +334,48 @@ final class CornerTunnel {
         RunLoop.main.add(t, forMode: .common)
     }
 
-    /// Reverse tunnel's own preset, as a square: no trail canvas, so the engine
-    /// renders `side` points and nothing more.
+    /// The stamp goes round at 60 a second — the engine's own pace, so the fluid is
+    /// stirred every frame — from where the ring starts, each time it comes up.
+    private func startCircling() {
+        pathFrom = CFAbsoluteTimeGetCurrent()
+        host?.center(Self.dustPoint(at: 0, side: Self.side * Self.dustGrain))
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            guard let self, let host = self.host else { return }
+            host.center(Self.dustPoint(at: CFAbsoluteTimeGetCurrent() - self.pathFrom, side: Self.side * Self.dustGrain))
+        }
+        pathTimer = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    /// The engine for the picked dress. **Reverse tunnel**: its own preset as a
+    /// square, no trail canvas, so the engine renders `side` points and nothing
+    /// more. **Dust**: Smoke, whose canvas — the screen, at the pointer — is this
+    /// square, so the same solver draws a ring that fits the corner; his saved
+    /// Smoke sliders apply, the tuner panel is not taken from the pointer's halo.
+    private func engine(for dress: Dress, box: NSRect) -> ProjectMHalo? {
+        switch dress {
+        case .atom: return nil
+        case .tunnel:
+            guard var preset = HaloStyle.milkdrop7Reversed.preset else { return nil }
+            preset.trail = 0
+            preset.lag = 0
+            let screen = (NSScreen.main?.frame.size) ?? box.size
+            return ProjectMHalo(preset: preset, side: Self.side, screen: screen)
+        case .dust:
+            guard let preset = HaloStyle.smoke.preset else { return nil }
+            let canvas = CGSize(width: box.width * Self.dustGrain, height: box.height * Self.dustGrain)
+            let engine = ProjectMHalo(preset: preset, side: (Self.side * preset.scale).rounded(), screen: canvas)
+            engine?.tunes = false
+            engine?.fluidOverrides = Self.dustKnobs
+            return engine
+        }
+    }
+
     private func make() -> NSPanel? {
-        guard var preset = HaloStyle.milkdrop7Reversed.preset else { return nil }
-        preset.trail = 0
-        preset.lag = 0
+        let dress = Self.dress
         let box = NSRect(x: 0, y: 0, width: Self.side, height: Self.side)
-        let screen = (NSScreen.main?.frame.size) ?? box.size
-        guard let engine = ProjectMHalo(preset: preset, side: Self.side, screen: screen) else {
-            Log.error("🌀 no corner tunnel — the Reverse tunnel preset cannot be drawn")
+        guard let engine = engine(for: dress, box: box) else {
+            Log.error("🌀 nothing in the corner — \(dress.rawValue) cannot be drawn")
             return nil
         }
         engine.onFailure = { why in Log.error("🌀 the corner tunnel failed: \(why)") }
@@ -279,6 +405,7 @@ final class CornerTunnel {
         view.layer?.mask = round
         p.contentView = view
         panel = p
+        built = dress
         host = engine
         return p
     }

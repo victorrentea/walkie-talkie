@@ -421,6 +421,9 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   `New claude: Sparks`), each carrying the same list under its own arrow. `Fx engine` stays last.
   Victor: *"să nu apară niciunul selectat … dacă îl selectez precis, atunci toate trei sunt puse pe
   același … mi-ar plăcea să pot alege separat cele trei efecte"*.
+- **`Transcribing: Dust` under the destination rows** (2026-11-13): what stands in the prompt's
+  corner while the words are transcribed — `Dust` / `Reverse tunnel` / `Atom` (`CornerTunnel.Dress`,
+  `cornerFxPicked` → `CornerTunnel.setDress`, rebuilt on the spot). → `replace-wispr-and-halo.md`
 - **`onPickHalo` carries the destination** (`nil` = the top-level list = all three) →
   `CaretHalo.setStyle(_:for:)` / `setStyleEverywhere`, which write the preference and rebuild the
   ring on the spot if what changed is the dress being worn.

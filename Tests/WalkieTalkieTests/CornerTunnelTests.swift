@@ -25,4 +25,31 @@ final class CornerTunnelTests: XCTestCase {
         // Past the start it comes round again.
         XCTAssertEqual(CornerTunnel.window(of: take, elapsed: 1.25, speed: 1, count: 1).first, 11999)
     }
+
+    /// The dust goes round clockwise without ever turning back, inside the square's
+    /// middle, and its ring is not one circle.
+    func testTheDustCirclesIrregularlyInsideTheSquare() {
+        let side: CGFloat = 230
+        var last = -Double.infinity, turned = 0.0, radii: [Double] = []
+        var previous: Double?
+        for i in 0...2400 {
+            let p = CornerTunnel.dustPoint(at: Double(i) / 60, side: side)
+            let dx = Double(p.x - side / 2), dy = Double(p.y - side / 2)
+            let r = (dx * dx + dy * dy).squareRoot()
+            XCTAssertLessThanOrEqual(r, Double(side) * 0.26)
+            XCTAssertGreaterThanOrEqual(r, Double(side) * 0.14)
+            radii.append(r)
+            let a = atan2(dy, dx)
+            if let before = previous {
+                var step = a - before
+                if step < -Double.pi { step += 2 * Double.pi }
+                XCTAssertGreaterThan(step, 0)          // y down: a growing angle is clockwise
+                turned += step
+            }
+            previous = a
+            last = max(last, turned)
+        }
+        XCTAssertEqual(turned / (2 * Double.pi), 40 / CornerTunnel.dustLap, accuracy: 0.5)
+        XCTAssertGreaterThan(radii.max()! - radii.min()!, Double(side) * 0.05)
+    }
 }
