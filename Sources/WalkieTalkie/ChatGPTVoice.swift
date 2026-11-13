@@ -432,6 +432,30 @@ enum ChatGPTVoice {
         }
     }
 
+    /// **The page zoom, by hand from the desk** (`POST /test/chat-voice-zoom
+    /// {"steps": n}`, 2026-11-13: *"mai dai un pic zoom să vină chatboxul de
+    /// text cât toată lățimea"*): the app in front, then ⌘= (or ⌘− for a
+    /// negative n) that many times. The app keeps its zoom; the flick does
+    /// not touch it.
+    static func zoom(steps: Int) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { app, _ in
+            guard let app else { return }
+            DispatchQueue.global().async {
+                var tries = 0
+                while !inFront(app.processIdentifier), tries < 40 { usleep(100_000); tries += 1 }
+                usleep(500_000)
+                for _ in 0..<abs(steps) {
+                    press(steps > 0 ? 24 : 27, under: [(55, .maskCommand)])
+                    usleep(250_000)
+                }
+                Log.info("🗣️ ChatGPT — zoom \(steps > 0 ? "in" : "out") ×\(abs(steps))")
+            }
+        }
+    }
+
     // MARK: - Reading the window
 
     /// Every labelled element of the app's front window — role, label, whether

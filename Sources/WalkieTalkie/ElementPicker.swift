@@ -1018,6 +1018,10 @@ final class ElementPicker {
             guard let wav = body?["wav"] as? String else { return respond(conn, 400, ["error": "wav"]) }
             respond(conn, 200, onTestTension?(wav) ?? [:])
 
+        case ("POST", "/test/chat-voice-zoom"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            ChatGPTVoice.zoom(steps: body["steps"] as? Int ?? 1)
+            respond(conn, 200, ["ok": true])
         case ("POST", "/test/chat-voice-ax"):
             let labels = ChatGPTVoice.windowLabels()
             respond(conn, 200, ["labels": labels, "note": ChatGPTVoice.lastTreeNote])
