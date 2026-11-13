@@ -79,12 +79,20 @@ menus, About, the Chrome extension. Logs, comments and commits are unaffected. S
 - **Change the rules' text ⇒ raise `AgentRules.version`.** Every agent then gets the long envelope
   until it holds the new version (Claude: a new session; Codex/Copilot: the next Walkie launch).
 - **The short envelope goes only where the version is proven present** (`AgentRules.known(onTTY:)`:
-  the mod's `.alive` beat says `rules: N`; the harness file holds the marker). Caret, IDE chat,
-  unknown program, older mod → the long envelope. Never make the short form unconditional.
+  the mod's `.alive` beat says `rules: N`; the harness file holds the marker). IDE chat, unknown
+  program, older mod, a caret not in an agent's terminal → the long envelope. Never make the short
+  form unconditional. **The caret prompt too since 2026-11-13** (Victor: *"do it for caret dictation
+  too"*): `deliverCaretPrompt` builds both lengths and sends the short one when the tty under the
+  caret (Terminal's front tab, VS Code's focused terminal) passes `known(onTTY:minimum:)`.
 - **A new instruction for agents goes into `AgentRules.text`, never as a new per-message clause.**
 - **v2 (same day): `[dictated 💻 · 🎤]` replaces `[Transcribed in RO or EN by …]` and a plain frame
   gets no `[📸n = …]` row** — both only in the short envelope; the long one is unchanged. After any
   change, re-run `evals/agent-rules/run.py`.
+- **v3 (2026-11-13): an area is its token alone, a film one short row** — the rules say what
+  `📸n✂️x,y→x,y [moved to …]` and `🎦n` mean, so an inlined area gets no row and a footer area is
+  `[📸1✂️1085,85→1350,130]` (~30 chars against 170–230). **The version needed is per message**
+  (`AgentRules.needed`): v3 only with an area or a film, else v2 — sessions started before an
+  upgrade keep the short form for plain prompts.
 
 ## The overlay is photographed
 

@@ -16288,3 +16288,28 @@ they are now indented lines under `✨ Workspace`, exactly like a pinned folder'
 one inside it — a session in an unpinned project (`~/workspace/oracle-forms-crud`) stays under
 *Active terminals*, a pinned row still wins on its own folder. First picture: nine sessions under
 Workspace, three left in *Active terminals*.
+
+## 📜 Rules v3 and the caret prompt's short envelope (2026-11-13)
+
+Victor, looking at a caret prompt still carrying the long footer: *"I thought Walkie Talkie should have
+shortened the prompt suffix"* — then *"do it for caret dictation too … compress the suffix the same way
+we did for bound dictation"* and *"eval it trying to minimize its length after adding stuff to global
+rules"*.
+
+- **The caret prompt was long by design**: `caretLine(full:)` called `terminalLine(m)` with no
+  `rulesKnown`, since nothing at that point knew what held the caret. `deliverCaretPrompt` already found
+  out (`frontClaudePromptTTY`, `frontVSCodeClaudePromptTTY`) a hop later, so the envelope is now rendered
+  in both lengths and picked there, after `AgentRules.known(onTTY:minimum:)` on that tty, or on
+  `TerminalBinding.focusedTTY()` for a Codex/Copilot tab.
+- **What was still long in the short envelope** (46 short envelopes in the outbox): `[📸1✂️ = user-selected
+  area …]` at 165 chars, `[📸1✂️ = user-drawn MOVE …]` at 229, a film's two rows ~400. All three are
+  instructions, not data, so they moved into `AgentRules.text` (v3). An inlined area now costs 0 footer
+  chars, a footer area ~30, a film ~80.
+- **The needed version is per message.** Raising `version` alone would have sent every running session
+  (all on rules v2) back to the long envelope until restarted — 20+ terminals that evening. v3 only adds
+  areas and films, so `AgentRules.needed` asks for 3 only when the message has one.
+- **Measured** (`evals/agent-rules/README.md`): Claude 20/20, Codex 20/20, Copilot 22/30. Copilot's
+  misses are `walkie-reply` skipped on picture questions — 1/9 with the v2 envelope as well, so not this
+  change. Putting the two action bullets above the legend mattered: with them last, Copilot fell to
+  11/20 on cases it passed 21/21 the day before.
+

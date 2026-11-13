@@ -4849,8 +4849,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // `cleanSentence`: the forward click's is the terminal's whole
             // envelope, the back click's is the words alone, anything else keeps
             // the old caret envelope.
-            let line = clean ? cleanLine(words: result.text)
-                             : caretLine(words: result.text, full: prompt)
+            let lines = prompt && !clean ? caretPromptLines(words: result.text) : nil
+            let line = lines?.long ?? (clean ? cleanLine(words: result.text)
+                                             : caretLine(words: result.text, full: prompt))
             // **Addressed, when the source says so.** A recogniser that opens
             // windows of its own can be holding the keyboard at this instant —
             // see `DictationResult.focusPid` — and the pid it remembered is the
@@ -4870,7 +4871,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // dictation ends with it — `DictationResult.unsure`.
             let mic = clean && result.unsure ? " 🎤" : ""
             if prompt {
-                deliverCaretPrompt(line, to: result.focusPid, landing: landing)
+                deliverCaretPrompt(line, short: lines?.short, needs: lines?.needs ?? AgentRules.version,
+                                   to: result.focusPid, landing: landing)
             } else if clean, DictationEditor.applies(toEngine: result.engine) {
                 // **✍️ Edited against the screen first** (2026-10-22,
                 // `DictationEditor`): the paste waits for it, never past its budget.
@@ -10281,6 +10283,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// forward click's (the held right ⌘⌥, a hand-started Wispr sentence with
     /// nothing bound); the back click's plain one is `cleanLine`.
     private func caretLine(words: String, full: Bool = false) -> String {
+        caretEnvelope(words: words, full: full).line
+    }
+
+    /// **The forward click's caret prompt in both lengths** (2026-11-13): the
+    /// whole envelope, and the short one for an agent proven to hold
+    /// `AgentRules` — which one goes is only known once `deliverCaretPrompt` has
+    /// asked what holds the caret. Victor: *"do it for caret dictation too …
+    /// compress the suffix the same way we did for bound dictation."*
+    private func caretPromptLines(words: String) -> (long: String, short: String, needs: Int) {
+        let e = caretEnvelope(words: words, full: true)
+        return (e.line, e.short ?? e.line, e.needs)
+    }
+
+    private func caretEnvelope(words: String, full: Bool) -> (line: String, short: String?, needs: Int) {
         // Consumed whichever envelope this is — only the full one renders it.
         let affect = pendingAffect
         pendingAffect = nil
@@ -10378,7 +10394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             via: pendingVia ?? "test",
                             engine: pendingEngine ?? "", mic: Self.mic(inHeard: pendingHeard),
                             affect: affect)
-            return Self.terminalLine(m)
+            return (Self.terminalLine(m), Self.terminalLine(m, rulesKnown: true), Self.rulesNeeded(m))
         }
 
         var parts: [String] = [words]
@@ -10401,11 +10417,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                shotOffsets: offsets, mice: mice, areas: areas, sizes: sizes,
                                sources: sources, app: nil, elements: picks, startedAt: since)
         parts.append(contentsOf: Self.artifactsClause(envelope))
-        guard parts.count > 1 else { return words }
+        guard parts.count > 1 else { return (words, nil, AgentRules.version) }
         // The words, a blank line, then one clause per line — `terminalLine`'s
         // shape, for `terminalLine`'s reason: he reads this one too, and more
         // often than he reads that one, since it lands in a field in front of him.
-        return words + "\n\n" + parts.dropFirst().joined(separator: "\n")
+        return (words + "\n\n" + parts.dropFirst().joined(separator: "\n"), nil, AgentRules.version)
     }
 
     /// **The back click's plain dictation: the words, and nothing else**
@@ -10449,7 +10465,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Off the main thread for the `osascript` and the `ps`; a sentence whose
     /// source remembered a *different* app than the one in front (`focusPid`)
     /// is not second-guessed and is pasted to that app.
-    private func deliverCaretPrompt(_ line: String, to pid: pid_t?, landing: Int = 0) {
+    ///
+    /// **The short envelope when the agent under the caret holds the rules**
+    /// (2026-11-13): `short` goes instead of `long` only once the tty holding
+    /// the caret — the Claude prompt found above, else Terminal's or VS Code's
+    /// focused terminal (a Codex or Copilot there) — passes `AgentRules.known`.
+    /// A browser field, an editor, an unknown program keep the whole envelope.
+    private func deliverCaretPrompt(_ long: String, short: String? = nil, needs: Int = AgentRules.version,
+                                    to pid: pid_t?, landing: Int = 0) {
         let front = NSWorkspace.shared.frontmostApplication
         let frontIsTarget = pid == nil || pid == front?.processIdentifier
         let bundle = frontIsTarget ? front?.bundleIdentifier : nil
@@ -10457,9 +10480,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let serial = promptLeaves()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let tty = TerminalBinding.frontClaudePromptTTY(bundleID: bundle)
+            let vscodeClaude = tty == nil
+                ? TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: frontPid) : nil
+            let rulesTTY = tty ?? vscodeClaude ?? (frontIsTarget ? TerminalBinding.focusedTTY() : nil)
+            let rulesKnown = short != nil && short != long
+                && rulesTTY.map { AgentRules.known(onTTY: $0, minimum: needs) } == true
+            let line = rulesKnown ? short ?? long : long
+            if rulesKnown {
+                Log.info("📜 short envelope at the caret — \(rulesTTY ?? "?") holds agent rules v\(needs)+")
+            }
             let submitted = tty.map { TerminalBinding.submitPrompt(line, toTTY: $0) } ?? false
-            let vscodeTTY = submitted ? nil
-                : TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: frontPid)
+            let vscodeTTY = submitted ? nil : vscodeClaude
             DispatchQueue.main.async {
                 guard let self else { return }
                 let already = line.contains("\n\nkamikaze")
@@ -10777,6 +10808,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// The rules version this message's short envelope leans on — v3 once it
+    /// carries an area or a film (`AgentRules.needed`).
+    private static func rulesNeeded(_ m: Message) -> Int {
+        AgentRules.needed(areasOrFilms: !m.areas.isEmpty || m.films.contains { $0.sheet != nil })
+    }
+
     /// `rulesKnown`: the destination holds `AgentRules` at this version, so the
     /// two instruction clauses stay home (2026-11-12) — only the data rides.
     private static func terminalLine(_ m: Message, rulesKnown: Bool = false) -> String {
@@ -10812,7 +10849,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // talking. Collapsing them would have every dictation drag a megabyte of
         // desktop into a context window nobody asked to spend.
         parts.append(contentsOf: artifactsClause(m, short: rulesKnown))
-        if let clause = filmClause(m.films) { parts.append(clause) }
+        if !rulesKnown, let clause = filmClause(m.films) { parts.append(clause) }
         // **The words, a blank line, then one clause per line** (Victor,
         // 2026-09-07: *"vreau să-i dai două linii goale … după mesajul dictat, și
         // textele ajutătoare să fie fiecare începând pe rând nou"*).
@@ -11129,6 +11166,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         for (i, path) in frames.enumerated() {
             guard let n = ScreenCapture.number(of: path) else { continue }
+            // **v3, short: an area is its token and nothing more** (2026-11-13).
+            // The rules say `📸n✂️x,y→x,y [moved to x,y→x,y]` is a dragged box in
+            // `screenshot-n-original.jpg`'s pixels, cut out as `screenshot-n.jpg`
+            // — so a token in the words needs no row, and one the words could not
+            // carry (Wispr) gets the token alone, ~30 chars against ~170–230.
+            if short, let box = m.areas[path] ?? nil, ScreenCapture.zoom(for: path) != nil,
+               (path as NSString).lastPathComponent == "screenshot-\(n)-original.jpg" {
+                if !m.inlinedShots.contains(n) {
+                    rows.append(ShotMarker.Token.area(n, box, movedTo: ScreenCapture.moveTarget(for: path)))
+                }
+                continue
+            }
             if areaFoldable.contains(path) {
                 if path == inlinedAreas.first?.path {
                     rows.append("[📸n✂️ = user-selected area between corners (x,y) given in its token, "
@@ -11201,6 +11250,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for (i, film) in films.enumerated() {
             guard let sheet = film.sheet else { continue }
             let frames = shotsRootAbbreviated(film.dir.path)
+            if short {
+                // v3: the rules say what a sheet, its frames and the video are.
+                var row = String(format: "[%@ = %@/%@, %.0fs, %d frames",
+                                 ShotMarker.Token.key(film: i + 1), frames,
+                                 (sheet.path as NSString).lastPathComponent,
+                                 film.duration, film.frames.count)
+                if let video = film.video { row += ", video \(video.lastPathComponent)" }
+                rows.append(row + "]")
+                continue
+            }
             rows.append(String(format: "[%@ = %@, a contact sheet of the whole %.0fs at %.0f fps; "
                                + "its %d frames are %@/frame-NNNN.jpg, numbered as on the sheet]",
                                ShotMarker.Token.key(film: i + 1),
@@ -13515,14 +13574,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The short envelope only where the rules are proven present**
         // (`AgentRules`, 2026-11-12): the latched or bound terminal's agent, or
         // a spawn's `claude`. Held, caret, unknown → the whole envelope.
+        let needed = Self.rulesNeeded(m)
         let rulesKnown: Bool = {
             guard m.kind == "dictation" else { return false }
-            if m.spawn { return AgentRules.knownForSpawn() }
+            if m.spawn { return AgentRules.knownForSpawn(minimum: needed) }
             guard isBound || m.target != nil, let tty = (m.target ?? terminal.target)?.handle.tty else { return false }
-            return AgentRules.known(onTTY: tty)
+            return AgentRules.known(onTTY: tty, minimum: needed)
         }()
         let line = Self.terminalLine(m, rulesKnown: rulesKnown)
-        if rulesKnown { Log.info("📜 short envelope — the destination holds agent rules v\(AgentRules.version)") }
+        if rulesKnown { Log.info("📜 short envelope — the destination holds agent rules v\(needed)+") }
         // Also what decides the `⌘⇧P` hint below: a hint offered for a message
         // with no words would paste the sentence before it.
         var pastable = false

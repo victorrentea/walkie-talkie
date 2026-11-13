@@ -253,6 +253,15 @@ me to dismiss it explicitly"*.
   and `artifactsClause(short:)` writes no row for a plain frame under its standard name — the rules
   say `📸n` = `📁/screenshot-n-800px.jpg`. Caption rows (`[📸1 at 0:04]`), areas, picks, films: unchanged.
   The mod reads both rows (`WALKIE_CLAUSE`, `engineIcon`, `micIcon`). Eval: `evals/agent-rules/`.
+  **v3, 2026-11-13** (Victor: *"compress the suffix … eval it trying to minimize its length after adding
+  stuff to global rules"*): the rules explain `📸n✂️` (corners in `-original.jpg` pixels, cut-out
+  `screenshot-n.jpg`, `moved to`), `🎦n` (sheet, `frame-NNNN.jpg`, the video refusal) and the
+  selected/copied/typed rows; `artifactsClause(short:)` writes **no row** for an area whose token is in
+  the words and the **bare token** for one that is not, one `[🎦1 = <dir>/<sheet>, 12s, 60 frames, video
+  x.mov]` row per film, and `terminalLine` drops `filmClause`. `rulesNeeded(m)` asks v3 only of a message
+  with an area or a film (`AgentRules.needed`), v2 otherwise. **The caret prompt gets it too**:
+  `caretPromptLines` renders both, `deliverCaretPrompt` picks after finding the tty (Claude prompt in
+  Terminal / VS Code, else `focusedTTY()` — a Codex/Copilot tab); log `📜 short envelope at the caret`.
 - **Every dictation also carries `AppDelegate.dictionaryHint`** (2026-11-09, Victor: *"când modelul
   este 100% sigur … că mesajul dictat conține un cuvânt greșit … Claude să poată adăuga în
   dicționarul folosit de Walkie Talkie … inclusiv în Wispr Flow Dictionary … să fie în sync"* —

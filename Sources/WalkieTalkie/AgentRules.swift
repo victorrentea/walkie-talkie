@@ -24,7 +24,13 @@ import Foundation
 /// it has the new text.
 enum AgentRules {
     /// Raise with any change to `text`.
-    static let version = 2
+    static let version = 3
+
+    /// **The oldest rules a given envelope can lean on** (2026-11-13): v3 only
+    /// added what `📸n✂️` areas and `🎦` films mean, so a prompt with neither is
+    /// read the same by a v2 agent — the sessions already running keep the
+    /// short form after an upgrade instead of falling back for every sentence.
+    static func needed(areasOrFilms: Bool) -> Int { areasOrFilms ? 3 : 2 }
 
     static var beginMarker: String { "<!-- walkie-talkie rules v\(version) -->" }
     static let beginPrefix = "<!-- walkie-talkie rules v"
@@ -37,12 +43,6 @@ enum AgentRules {
     by …]`) was dictated by Victor through Walkie Talkie: speech recognised in Romanian or English, \
     so expect misheard words. The bracketed rows under the words are metadata.
 
-    - **Screenshots.** `[📁=<folder>]` is where this prompt's pictures are. `📸n` (in the words, or \
-    the leading `[📸0 auto]` — the screen as it was when he started talking) is the file \
-    `<folder>/screenshot-n-800px.jpg`: read that one. `screenshot-n-original.jpg` beside it is the \
-    full resolution, only when the small one is not enough. `[📸n at m:ss]` says when in the \
-    sentence a picture was taken. Rows about `✂️` areas, `🎦` recordings and `[selected: …]` text \
-    describe themselves.
     - **He asked you a question** → besides answering, also run \
     `walkie-reply "<the answer in ≤2 short sentences>"` (add `--image <path>` when a small \
     picture says it better). Only to answer him — never to ask him something, never to report \
@@ -50,6 +50,23 @@ enum AgentRules {
     - **You are 100% sure a term he said came out misheard** (a name, a tool, a technical \
     word — not a Romanian ending) → also run \
     `walkie-dict add "<right spelling>" --heard "<as transcribed>"`. Silently, no need to tell him.
+
+    What the rows under the words mean:
+
+    - **Screenshots.** `[📁=<folder>]` is where this prompt's pictures are. `📸n` (in the words, or \
+    the leading `[📸0 auto]` — the screen as it was when he started talking) is the file \
+    `<folder>/screenshot-n-800px.jpg`: read that one. `screenshot-n-original.jpg` beside it is the \
+    full resolution, only when the small one is not enough. `[📸n at m:ss]` says when in the \
+    sentence a picture was taken.
+    - **`📸n✂️x1,y1→x2,y2`** is a box he dragged on that screen, corners in the pixels of \
+    `screenshot-n-original.jpg`; the box alone is cut out as `<folder>/screenshot-n.jpg` — look \
+    at that first. `… moved to x1,y1→x2,y2`: what is in the first box should go to the second.
+    - **`🎦n`** (`⏺️`/`⏹️` in the words) is a screen recording. Its row names a contact sheet of \
+    every frame, labelled `#n  m:ss.t` — look at it; `frame-NNNN.jpg` beside it are the frames \
+    at full size, numbered as on the sheet. Do not open the video unless the frames cannot \
+    answer (something under 0.2 s); then cut only that moment with ffmpeg.
+    - `[selected: …]`, `[copied: …]`, `[typed: …]` are text he highlighted, copied or typed \
+    while speaking; `chrome-selection-n` rows are web page elements he picked.
     """
 
     /// What the mod reads at its `session.start`: the marker line, then `text`.
@@ -105,13 +122,13 @@ enum AgentRules {
 
     /// **Does the agent on `tty` hold this version of the rules?** False when in
     /// doubt — the long envelope is never wrong, only longer.
-    static func known(onTTY tty: String) -> Bool {
+    static func known(onTTY tty: String, minimum: Int = version) -> Bool {
         let device = (tty as NSString).lastPathComponent
         switch TerminalBinding.agentCLI(onTTY: device) {
         case "claude"?:
-            return claudeBeat(onTTY: device).map { $0 >= version } ?? false
+            return claudeBeat(onTTY: device).map { $0 >= minimum } ?? false
         case let cli?:
-            return harnessHolds(cli)
+            return harnessHolds(cli, minimum: minimum)
         case nil:
             return false
         }
@@ -119,17 +136,23 @@ enum AgentRules {
 
     /// A new `claude` session is the mod as it loads now: the version the last
     /// `session.start` stamped.
-    static func knownForSpawn() -> Bool {
+    static func knownForSpawn(minimum: Int = version) -> Bool {
         guard let s = try? String(contentsOf: claudeStamp, encoding: .utf8),
               let v = Int(s.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
-        return v >= version
+        return v >= minimum
     }
 
-    static func harnessHolds(_ cli: String) -> Bool {
+    static func harnessHolds(_ cli: String, minimum: Int = version) -> Bool {
         guard let raw = harnessFiles.first(where: { $0.name == cli })?.path,
               let file = try? String(contentsOfFile: (raw as NSString).expandingTildeInPath, encoding: .utf8)
         else { return false }
-        return file.contains(beginMarker)
+        return blockVersion(in: file).map { $0 >= minimum } ?? false
+    }
+
+    /// The `N` of the file's `<!-- walkie-talkie rules vN -->` line, if any.
+    static func blockVersion(in file: String) -> Int? {
+        guard let start = file.range(of: beginPrefix) else { return nil }
+        return Int(file[start.upperBound...].prefix { $0.isNumber })
     }
 
     /// The `rules` the mod's `.alive` beat reports, when the beat is fresh (the

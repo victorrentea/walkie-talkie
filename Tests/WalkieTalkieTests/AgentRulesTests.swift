@@ -34,4 +34,15 @@ final class AgentRulesTests: XCTestCase {
     func testTheTextNamesItsVersion() {
         XCTAssertTrue(AgentRules.text.contains("walkie-talkie rules v\(AgentRules.version)"))
     }
+
+    func testTheBlockSaysItsVersion() {
+        XCTAssertEqual(AgentRules.blockVersion(in: AgentRules.withBlock("# x\n")), AgentRules.version)
+        XCTAssertEqual(AgentRules.blockVersion(in: "<!-- walkie-talkie rules v12 -->\n"), 12)
+        XCTAssertNil(AgentRules.blockVersion(in: "# nothing here\n"))
+    }
+
+    func testOnlyAreasAndFilmsNeedTheNewestRules() {
+        XCTAssertEqual(AgentRules.needed(areasOrFilms: false), 2)
+        XCTAssertEqual(AgentRules.needed(areasOrFilms: true), AgentRules.version)
+    }
 }

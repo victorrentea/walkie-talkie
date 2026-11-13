@@ -31,6 +31,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SHOTS_ROOT = os.environ.get("WALKIE_SHOTS") or os.path.expanduser(
     "~/Library/Caches/ro.victorrentea.wispr-relay/shots")
 SHOTS = "2026-11-12-13-09-24"  # a real folder under $WALKIE_SHOTS, one frame in it
+# v3 (2026-11-13): a frame with a dragged box, its cut-out `screenshot-1.jpg` reading
+# "Claude Code v2.1.322" — copied from `fixture-v3/` into $WALKIE_SHOTS at start.
+SHOTS_V3 = "eval-agent-rules-v3"
+AREA = "1085,85→1350,130"
+AREA_LONG = ("[📸1✂️ = user-selected area between corners (x,y) given in its token, cut out at "
+             "📁/screenshot-1.jpg; full screen available at -800px and -original.jpg at 1920x1080px]")
 
 QUESTION = ('[If I asked you a question, also run: walkie-reply "<the answer in ≤2 short sentences>" '
             '[--image <path> when a small picture says it better]. Only to answer me — never to ask me '
@@ -56,18 +62,35 @@ CASES = [
          reply=True, dict=None, says="terminal"),
     dict(id="question-compare", words="Which country has the larger population, Romania or Hungary?",
          reply=True, dict=None),
+    # v3: an area is its token alone; only the rules say where its cut-out is.
+    dict(id="area-inline", words=f"What version number is written in this box [📸1✂️{AREA}]?",
+         reply=True, dict=None, says="2.1.322", shots=SHOTS_V3, long_rows=[AREA_LONG]),
+    # v3, Wispr: the token could not go in the words, so the footer carries it alone.
+    dict(id="area-footer", words="What version number is written in the box I selected on screen?",
+         reply=True, dict=None, says="2.1.322", shots=SHOTS_V3, short_rows=[f"[📸1✂️{AREA}]"],
+         long_rows=[f"[📸1✂️ = user-selected area between corners (x,y) ({AREA.replace('→', ')→(')}) at "
+                    "📁/screenshot-1.jpg; full screen available at -800px and -original.jpg at 1920x1080px]"]),
+    dict(id="move", words="Don't change anything, just tell me: this one [📸1✂️960,80→1070,180 moved to "
+                          "1500,80→1610,180], should it go up, down, left or right?",
+         reply=True, dict=None, says="right", shots=SHOTS_V3,
+         long_rows=["[📸1✂️ = user-drawn MOVE: the box between corners (x,y) (960,80)→(1070,180) should move "
+                    "to the box (1500,80)→(1610,180); the first box cut out at 📁/screenshot-1.jpg; full screen "
+                    "available at -800px and -original.jpg at 1920x1080px]"]),
 ]
 
 
 def envelope(case, long):
-    if not long:  # rules v2: icons, the folder, nothing else
-        lines = ["[dictated 💻 · 🎤]", f"[📁=$WALKIE_SHOTS/{SHOTS}]"]
+    shots = case.get("shots", SHOTS)
+    if not long:  # rules v2/v3: icons, the folder, and only what the rules cannot say
+        lines = ["[dictated 💻 · 🎤]", f"[📁=$WALKIE_SHOTS/{shots}]", *case.get("short_rows", [])]
         return "[📸0 auto]\n" + case["words"] + "\n\n" + "\n".join(lines)
     lines = ["[Transcribed in RO or EN by 💻 Local Whisper Turbo LoRA · 🎤]"]
     if "?" in case["words"]:
         lines.append(QUESTION)
     lines.append(DICT)
-    lines += [f"[📁=$WALKIE_SHOTS/{SHOTS}]", "[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]"]
+    frames = ("[📸n = 📁/screenshot-n-800px.jpg, or -original.jpg at 1920x1080px]" if "short_rows" in case
+              or "long_rows" in case else "[📸0 = 📁/screenshot-0-800px.jpg, or -original.jpg at 1920x1080px]")
+    lines += [f"[📁=$WALKIE_SHOTS/{shots}]", frames, *case.get("long_rows", [])]
     return "[📸0 auto]\n" + case["words"] + "\n\n" + "\n".join(lines)
 
 
@@ -133,6 +156,7 @@ def main():
     ap.add_argument("--out", default=os.path.join(HERE, "out"))
     ap.add_argument("--workers", type=int, default=5)
     args = ap.parse_args()
+    args.out = os.path.abspath(args.out)  # WALKIE_EVAL_LOG is read from inside each run's folder
     cases = [c for c in CASES if not args.cases or c["id"] in args.cases.split(",")]
     jobs = []
     for harness in args.only.split(","):
@@ -143,6 +167,9 @@ def main():
             jobs += [(harness, case, False, r, args.out) for r in range(args.reps)]
             jobs += [(harness, case, True, r, args.out) for r in range(args.long_reps)]
     os.makedirs(args.out, exist_ok=True)
+    fixture = os.path.join(SHOTS_ROOT, SHOTS_V3)
+    shutil.rmtree(fixture, ignore_errors=True)
+    shutil.copytree(os.path.join(HERE, "fixture-v3"), fixture)
     results = []
     with cf.ThreadPoolExecutor(args.workers) as pool:
         for r in pool.map(run, jobs):
