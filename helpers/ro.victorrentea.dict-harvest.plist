@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ro.victorrentea.dict-harvest</string>
+    <!-- Weekly: the week's dictations, matched to their conversations, read by parallel claude -p
+         workers; sure pairs go to walkie-dict, the rest to ~/.walkie-talkie/dict-harvest/<date>.md.
+         Install: cp helpers/ro.victorrentea.dict-harvest.plist ~/Library/LaunchAgents/ &&
+                  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ro.victorrentea.dict-harvest.plist -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-c</string>
+        <string>export PATH="$HOME/.local/bin:/opt/homebrew/bin:$PATH"; /usr/bin/python3 "$HOME/workspace/walkie-talkie/helpers/dict_harvest.py" --days 7</string>
+    </array>
+    <!-- Saturday 03:30; a Mac asleep then runs it at the next wake -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key><integer>6</integer>
+        <key>Hour</key><integer>3</integer>
+        <key>Minute</key><integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/victorrentea/.walkie-talkie/dict-harvest/launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/victorrentea/.walkie-talkie/dict-harvest/launchd.log</string>
+    <key>ProcessType</key>
+    <string>Background</string>
+</dict>
+</plist>
