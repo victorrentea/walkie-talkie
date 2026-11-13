@@ -191,6 +191,12 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   the pointer, size kept (shrunk to the pointer's screen), slid back inside its visible frame, raised
   at once, nothing bound. Not a Terminal.app tab (IDE, tmux) → `bringToFront` where it is.
   `ReplyPanel.onRaise` is gone. Log `🪟 ttysNNN centred on the pointer (x, y) on <screen> …`.
+- **That click drops the same terminal's waiting answers** (2026-11-13, Victor: *"the terminal did
+  come forward. The reply did remain on the screen. It should hide once the respective terminal pops
+  under the mouse"*). The pop-up had closed; the session's second answer, queued behind it, opened
+  over the terminal he had just brought up (log 18:26:13). `ReplyPanel.forget(tty)` before `close()`,
+  on the name and the walkie; other sessions' answers still come up. ✕, 📍, ☠️ and 🔼 → keep the
+  queue. Log `💬 N waiting answer(s) from ttysNNN dropped — its terminal is in front`.
 - **The name, the 📍 and the ☠️ say what they do, above them, on hover** (2026-11-03, Victor: *"la hover pe numele titlului sesiunii să-mi apară un tooltip mic: Bring forward"*, *"pe iconița roșie să zică tooltip Bind"*, *"tooltipurile să apară deasupra buton/titlu, ca altfel vin sub mouse"*, *"tooltip pe rip: kill session"*). `Bring forward`, `Bind`, `Kill session` (`The terminal died already` on a 🪦, drawn under it until this day). Drawn, because an `NSView.toolTip` never shows on a panel of an inactive app; in a child window of the pop-up (`ReplyPanel.hintWindow`, never hit), because the header sits at the top edge and a label inside the pop-up could only go under it, where the pointer's arrow covers it. Under the control only when the screen ends above it. The walkie and the ✕ have none. Desk: `POST /test/quick {"hint": {"on": "name" | "pin" | "skull", "hold": true}}` runs the control's own `mouseEntered` (and `mouseExited` without `hold`); the real mouse is not moved.
 - **🔼 → over the pop-up answers its sender** (2026-10-09, Victor: *"If I do the gesture for … bound
   prompting while my mouse is over the tooltip with the reply … close the bubble … first rebind me to

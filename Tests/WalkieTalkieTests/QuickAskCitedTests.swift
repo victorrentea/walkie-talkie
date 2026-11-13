@@ -44,4 +44,13 @@ final class QuickAskCitedTests: XCTestCase {
         XCTAssertEqual(ReplyPanel.plain(ReplyPanel.signed + " Opus 5.5 + 🌐 Internet + " + ReplyPanel.adversary + " adversarial reviewing" + ReplyPanel.dots),
                        "🤖 Opus 5.5 + 🌐 Internet + 😠 adversarial reviewing…")
     }
+
+    /// 2026-11-13: the name's click drops that terminal's queued answers.
+    func testSameTerminalIgnoresTheDevPrefix() {
+        XCTAssertTrue(ReplyPanel.sameTerminal("/dev/ttys023", "ttys023"))
+        XCTAssertTrue(ReplyPanel.sameTerminal("ttys023", "ttys023"))
+        XCTAssertFalse(ReplyPanel.sameTerminal("ttys021", "ttys023"))
+        XCTAssertFalse(ReplyPanel.sameTerminal(nil, "ttys023"))
+        XCTAssertFalse(ReplyPanel.sameTerminal("", ""))
+    }
 }

@@ -883,6 +883,7 @@ enum ReplyPanel {
         if let tty = tty {
             header.onClick = {
                 Log.info("💬 the reply pop-up's name clicked — \(tty) to the front at the pointer, pop-up closed")
+                forget(tty)
                 close()
                 onPresent?(tty)
             }
@@ -1011,6 +1012,7 @@ enum ReplyPanel {
         if let tty = tty {
             icon.onClick = {
                 Log.info("💬 the reply pop-up's walkie clicked — \(tty) to the front at the pointer, pop-up closed")
+                forget(tty)
                 close()
                 onPresent?(tty)
             }
@@ -1192,6 +1194,26 @@ enum ReplyPanel {
         ctx.scaleBy(x: scale, y: scale)
         layer.render(in: ctx)
         return ctx.makeImage().map { ($0, scale) }
+    }
+
+    /// **A click that brings a terminal forward takes that terminal's waiting
+    /// answers with it** (2026-11-13, Victor: *"the terminal did come forward.
+    /// The reply did remain on the screen. It should hide once the respective
+    /// terminal pops under the mouse"*). The pop-up had closed — and the same
+    /// session's next answer, queued behind it, opened on top of the terminal
+    /// he had just asked for. He reads them there now. Other sessions' answers
+    /// still come up. Called before `close()`, which presents the queue's head.
+    static func forget(_ tty: String) {
+        let kept = queue.filter { !sameTerminal($0.tty, tty) }
+        guard kept.count != queue.count else { return }
+        Log.info("💬 \(queue.count - kept.count) waiting answer(s) from \(tty) dropped — its terminal is in front")
+        queue = kept
+    }
+
+    /// `/dev/ttys023` and `ttys023` are one terminal; an answer with no tty is nobody's.
+    static func sameTerminal(_ a: String?, _ b: String) -> Bool {
+        guard let a, !a.isEmpty, !b.isEmpty else { return false }
+        return (a as NSString).lastPathComponent == (b as NSString).lastPathComponent
     }
 
     static func close() {
