@@ -64,3 +64,17 @@ Still synthetic positives only. Two sources of his own voice from here on:
 - `santa/triggers/` — the helper keeps 3 s before + 1 s after every live wake; the trainer has the
   local Whisper (`mlx-community/whisper-large-v3-turbo`) write what was said beside each: "santa" →
   a real positive, anything else → a negative that already fooled it.
+
+### Same evening — his own takes (30, Elgato Wave XLR; 23 train, 7 `VictorEval` held out)
+
+Peak score streaming over each take (1 s of silence either side):
+
+| model | his 30 takes ≥ 0.6 | the 7 held out | teaching, 99 min held out @ 0.6 |
+|---|---|---|---|
+| 2026-11-12 | 26 (87 %) — four at 0.01–0.41 | — | 7 (4.3/h) |
+| teaching negatives only | 26 (87 %) — four at 0.02–0.47 | 0.91–1.00 | 1 (0.6/h) |
+| + his 23 takes (installed) | 30, lowest 0.68 | all 1.00 | **0 at every threshold ≥ 0.5** |
+
+Held-out `say` voices + his 7: 93 % at 0.6 (was 87 %). The four takes the earlier models missed
+all fell in the training 23, so "30 of 30" is partly memory — the 7 held out were easy ones. The
+next real measure is a workshop day, and `santa/triggers/` once the helper change is installed.
