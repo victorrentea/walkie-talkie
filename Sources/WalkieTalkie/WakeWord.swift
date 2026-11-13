@@ -52,7 +52,7 @@ final class WakeWord {
         set { UserDefaults.standard.set(newValue, forKey: "wakeWord") }
     }
 
-    static let menuTitle = "👂 \"Hey Claude\" / \"Hey Santa\" starts a session"
+    static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\""
 
     /// `WT_WAKE_THRESHOLD`, 0…1. 0.5 is the model card's; fitted to his voice
     /// in `evals/wake-word/`.

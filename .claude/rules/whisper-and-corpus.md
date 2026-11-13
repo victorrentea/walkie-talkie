@@ -743,7 +743,7 @@ question, … să faci direct treaba într-un terminal nou"*.
   `.json` with `window_end`; newest 2,000) — the trainer labels each with the local Whisper and
   learns from it. `~/.walkie-talkie/wake/hold` touched in the last 5 s = no wake fires
   (`evals/wake-word/record_takes.py`, his own takes → `santa/real/`).
-- Switch: `WT_WAKE_WORD` / the Engine submenu's `👂 "Hey Claude" starts a session` (default on). The
+- Switch: `WT_WAKE_WORD` / the Engine submenu's `👂 Wake: "Hey Claude" / "Hey Santa"` (default on; named so since 2026-11-13). The
   orange microphone dot stays on while it listens.
 
 ## Do not
