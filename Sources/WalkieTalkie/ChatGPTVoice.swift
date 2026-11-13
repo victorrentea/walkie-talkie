@@ -118,6 +118,7 @@ enum ChatGPTVoice {
                         var tries = 0
                         while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
                     }
+                    DispatchQueue.main.async { chime(on: !wasOn) }
                     pressToggle()
                     // **The microphone is the proof.** A start that left the
                     // app without it 4 s later reached nobody: once more.
@@ -227,6 +228,36 @@ enum ChatGPTVoice {
     /// ⌃⇧V — `composer.startVoiceMode`, *Toggle voice chat*.
     private static func pressToggle() {
         press(9, under: [(59, .maskControl), (56, .maskShift)])
+    }
+
+    // MARK: - Its own radio sound
+
+    /// **A second radio, so the ear knows which one opened** (2026-11-13,
+    /// Victor: *"tot ceva ca walkie să sune, dar un alt sunet … tot ca stație
+    /// de emisie-recepție. Eventual poți modifica sunetul walkie un pic"*).
+    /// Both are `assets/start-squelch.wav` reworked with ffmpeg, the same
+    /// −20 dBFS peak and 150 ms of leading silence: **on** = the squelch
+    /// 22 % higher, then a rising roger beep (1250 → 1700 Hz); **off** = the
+    /// beep falling, then the squelch 15 % lower. Played whatever the
+    /// `Radio Squelch` tick says — that one is the dictation's.
+    private static let sounds: [Bool: NSSound] = {
+        var out: [Bool: NSSound] = [:]
+        for (on, name) in [(true, "chat-voice-on.wav"), (false, "chat-voice-off.wav")] {
+            var candidates: [URL] = []
+            if let res = Bundle.main.resourcePath { candidates.append(URL(fileURLWithPath: res).appendingPathComponent(name)) }
+            var dir = URL(fileURLWithPath: CommandLine.arguments[0], relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+                .standardizedFileURL.resolvingSymlinksInPath().deletingLastPathComponent()
+            for _ in 0..<4 { candidates.append(dir.appendingPathComponent("assets/\(name)")); dir = dir.deletingLastPathComponent() }
+            if let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+               let sound = NSSound(contentsOf: url, byReference: false) { out[on] = sound }
+        }
+        return out
+    }()
+
+    private static func chime(on: Bool) {
+        guard let sound = sounds[on] else { Log.error("🗣️ ChatGPT voice — no chat-voice-\(on ? "on" : "off").wav, silent"); return }
+        if sound.isPlaying { sound.stop() }
+        sound.play()
     }
 
     // MARK: - The little character, and the new chat

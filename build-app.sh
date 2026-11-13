@@ -193,6 +193,8 @@ cp "$DIR/assets/question-mark-icon-8x6.png" "$CONTENTS/Resources/question-mark-i
 cp "$DIR/assets/halo-voice.wav" "$CONTENTS/Resources/halo-voice.wav"
 # The Radio Squelch row's sound, cut from a YouTube walkie-talkie SFX (see `StartChime`).
 cp "$DIR/assets/start-squelch.wav" "$CONTENTS/Resources/start-squelch.wav"
+cp "$DIR/assets/chat-voice-on.wav" "$CONTENTS/Resources/chat-voice-on.wav"
+cp "$DIR/assets/chat-voice-off.wav" "$CONTENTS/Resources/chat-voice-off.wav"
 # The voice-halo page, which the halo runs whole in a web view (`HaloPage`):
 # vendored from a pinned tag of the sibling repo by `tools/vendor-voice-halo.sh`
 # (a no-op without the sibling — the committed copy is what ships), then copied
