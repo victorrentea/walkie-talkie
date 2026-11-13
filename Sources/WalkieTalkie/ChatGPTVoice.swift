@@ -457,6 +457,13 @@ enum ChatGPTVoice {
         }
     }
 
+    /// Desk: `POST /test/chat-voice-mini` — ⌥V, the app's global *Voice in
+    /// Mini* (`notchVoice`: *Start voice in Mini or show the ongoing call*),
+    /// pressed wherever the keyboard is. Nothing else.
+    static func pressVoiceInMini() {
+        DispatchQueue.global().async { press(9, under: [(58, .maskAlternate)]) }
+    }
+
     // MARK: - Reading the window
 
     /// Every labelled element of the app's front window — role, label, whether

@@ -1022,6 +1022,9 @@ final class ElementPicker {
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             ChatGPTVoice.zoom(steps: body["steps"] as? Int ?? 1)
             respond(conn, 200, ["ok": true])
+        case ("POST", "/test/chat-voice-mini"):
+            ChatGPTVoice.pressVoiceInMini()
+            respond(conn, 200, ["ok": true])
         case ("POST", "/test/chat-voice-ax"):
             let labels = ChatGPTVoice.windowLabels()
             respond(conn, 200, ["labels": labels, "note": ChatGPTVoice.lastTreeNote])
