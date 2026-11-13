@@ -35,3 +35,32 @@ corpus speech (1,800 windows), his room (800), 280 confusables (*Santa Claude*, 
 46 min resolves "< 1.3 an hour" at best. Shipped at **0.6** (`WT_SANTA_THRESHOLD`). Live in the
 helper: ~1.5 s to run a 6.5 s file, ~450 MB resident with both detectors. Not yet scored on his
 own *Hey Santa* — drop takes in `~/.walkie-talkie/wake/santa/real/*.wav` and retrain.
+
+## 2026-11-13 — "hey santa" woke 38 times in one workshop day; retrained on him teaching
+
+One day live (07:18–18:23, `relay.log`): 41 *hey santa* wakes, 3 of them said; 35 cancelled by hand,
+4 became sessions. The false ones scored 0.60–1.00 and his one deliberate take 0.93 — no threshold
+separates them. The 46 min that said "0 false wakes" were dictations; the day was him teaching.
+
+`voice-corpus/mic/` is him teaching (2026-09-14…18, 443 min). Days 09-14/16/17 held out (99 min),
+09-18 (344 min) trains: every 0.4 s window encoded once (`santa/cache/`), 4,000 at random as
+negatives, the rest mined (round 1: 208 hard ones, round 2: none left over 0.05).
+
+| | false wakes, teaching (99 min held out) | recall (held-out `say` voices, 54) |
+|---|---|---|
+| 2026-11-12 model @ 0.6 | 7 (4.3/h) — the day's own rate | 91 % @ 0.5, 80 % @ 0.7 |
+| retrained @ 0.5 / 0.6 | 1 (0.6/h) | 89 % / 87 % |
+| retrained @ 0.7 | 0 | 83 % |
+
+Dictation false wakes stay 0 in 45 min. Installed at 0.6; the old model is
+`~/.walkie-talkie/wake/hey_santa_whisper.2026-11-12.npz`. `--score-only <npz>` scores any model on
+the held-out teaching days without training.
+
+Still synthetic positives only. Two sources of his own voice from here on:
+
+- `record_takes.py` — beep, 2.5 s, thirty times → `santa/real/Victor-*.wav`, every fourth
+  `VictorEval-*` (held out, so recall is measured on him). It touches `~/.walkie-talkie/wake/hold`,
+  which keeps the live wake word quiet while he repeats the phrase.
+- `santa/triggers/` — the helper keeps 3 s before + 1 s after every live wake; the trainer has the
+  local Whisper (`mlx-community/whisper-large-v3-turbo`) write what was said beside each: "santa" →
+  a real positive, anything else → a negative that already fooled it.

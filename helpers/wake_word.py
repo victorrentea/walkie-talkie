@@ -3,8 +3,8 @@
 
 A listen-only helper the app spawns (`WakeWord.swift`): it holds its own input
 stream on the microphone the app resolved, runs openWakeWord on 80 ms chunks,
-and says what it heard as one JSON object per line on stdout. It never records
-to disk and never decides what a wake *means* — the app does (a spawn, or a ⚡
+and says what it heard as one JSON object per line on stdout. It keeps only the
+few seconds around a wake (below) and never decides what a wake *means* — the app does (a spawn, or a ⚡
 question when the words open with "I have a question").
 
     {"event": "ready", "device": "...", "rate": 16000}
@@ -23,6 +23,16 @@ After a wake it watches for the end of the command on the same stream (an
 adaptive RMS floor, the app's own meter shape: 9 dB over the floor is voice),
 then goes back to listening for the wake word after `--cooldown-s`.
 
+**Every wake leaves its audio** (2026-11-13, after 38 false "hey santa" in one
+workshop day): `--triggers`/<stamp>-<word>-<score>.wav = the 3 s before the wake
+plus 1 s after, with a `.json` beside it (`window_end` = the sample the scored
+2 s window ended on). `evals/wake-word/train_whisper_wake.py` has the local
+Whisper label each one — said it, or fooled the detector — and retrains on
+them. The newest `--triggers-keep` are kept.
+
+**`--hold`** (a file touched in the last 5 s) = no wake fires: the take
+recorder (`evals/wake-word/record_takes.py`) says the phrase thirty times.
+
 stdin takes one word per line: `pause` (the app is dictating — no wake fires,
 the end-of-speech watch keeps running), `resume`, `quit`.
 
@@ -34,6 +44,7 @@ app's own. Its venv is separate (`~/.walkie-talkie/wake/venv`), so nothing here
 can move the whisper helper's numpy.
 """
 import argparse
+import collections
 import json
 import math
 import os
@@ -100,6 +111,10 @@ def main():
     p.add_argument("--ignore-s", type=float, default=0.25, help="the wake word's own tail, not speech")
     p.add_argument("--head-s", type=float, default=4.0)
     p.add_argument("--head", default=os.path.expanduser("~/.walkie-talkie/wake/head.wav"))
+    p.add_argument("--triggers", default=os.path.expanduser("~/.walkie-talkie/wake/santa/triggers"),
+                   help="keep each wake's audio here; empty = keep nothing")
+    p.add_argument("--triggers-keep", type=int, default=2000)
+    p.add_argument("--hold", default=os.path.expanduser("~/.walkie-talkie/wake/hold"))
     p.add_argument("--wav", default="", help="read this 16 kHz file instead of a microphone (tests)")
     a = p.parse_args()
 
@@ -203,6 +218,37 @@ def main():
             say(event="error", error=f"head: {e}")
             return None
 
+    ring: "collections.deque" = collections.deque(maxlen=38)   # 3.04 s of 80 ms chunks
+    trigger = None            # the wake whose second after it is still arriving
+
+    def held():
+        try:
+            return time.time() - os.stat(a.hold).st_mtime < 5
+        except OSError:
+            return False
+
+    def write_trigger(t):
+        import wave
+        try:
+            os.makedirs(a.triggers, exist_ok=True)
+            base = os.path.join(a.triggers, "%s-%s-%.2f" % (time.strftime("%Y%m%d-%H%M%S"), t["word"].split()[-1], t["score"]))
+            with wave.open(base + ".wav", "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(16000)
+                w.writeframes(np.concatenate(t["pre"] + t["post"]).tobytes())
+            with open(base + ".json", "w") as f:
+                json.dump(dict(word=t["word"], score=t["score"], window_end=sum(len(c) for c in t["pre"])), f)
+            old = sorted(n for n in os.listdir(a.triggers) if n.endswith(".wav"))[:-a.triggers_keep]
+            for n in old:
+                for ext in (".wav", ".json", ".txt"):
+                    try:
+                        os.remove(os.path.join(a.triggers, n[:-4] + ext))
+                    except OSError:
+                        pass
+        except Exception as e:
+            say(event="error", error=f"trigger: {e}")
+
     def end(after, capped=False):
         nonlocal mode, cooldown_until
         mode, cooldown_until = "wake", clock + a.cooldown_s
@@ -228,6 +274,12 @@ def main():
             floor = max(rms, 1.0)
         floor = rms if rms < floor else floor * 1.02
         voiced = rms > max(180.0, floor * 10 ** (9 / 20))
+        ring.append(chunk)
+        if trigger is not None:
+            trigger["post"].append(chunk)
+            if len(trigger["post"]) >= 13:   # ~1 s after the wake
+                write_trigger(trigger)
+                trigger = None
 
         if mode == "wake":
             hit = None
@@ -239,8 +291,11 @@ def main():
                 score = whisper.feed(chunk)
                 if score is not None and score >= a.whisper_threshold and hit is None:
                     hit = ("hey santa", score)
-            if hit and not paused.is_set() and clock >= cooldown_until:
+            if hit and not paused.is_set() and clock >= cooldown_until and not held():
                 say(event="wake", score=round(hit[1], 3), word=hit[0])
+                if a.triggers:
+                    # The chunk that fired is the ring's last: the scored window ends here.
+                    trigger = dict(word=hit[0], score=round(hit[1], 3), pre=list(ring), post=[])
                 mode, woke_at, voiced_at, heard, voiced_s, head = "command", clock, None, False, 0.0, []
                 if model:
                     model.reset()

@@ -734,6 +734,15 @@ question, … să faci direct treaba într-un terminal nou"*.
 - **Measured** (2026-11-12, `evals/wake-word/`): 1 false wake (0.87) in 116 min of his corpus (300
   clips); his two mid-sentence *hey Claude* scored 0.001 / 0.014 — the threshold waits for deliberate
   takes of the phrase.
+- **A 0/h measured on dictations says nothing about a workshop** (2026-11-13): one teaching day gave
+  38 false *hey santa* (0.60–1.00; his real one 0.93 — no threshold separates them). Retrained with
+  `voice-corpus/mic/` (him teaching) as mined negatives: 4.3/h → 0.6/h at 0.6 on 99 held-out minutes,
+  recall 91 → 87 % on held-out `say` voices. **Any retrain is judged on the teaching days**
+  (`train_whisper_wake.py --score-only`), never on dictations alone.
+- **Every wake leaves its audio** in `~/.walkie-talkie/wake/santa/triggers/` (3 s before + 1 s after,
+  `.json` with `window_end`; newest 2,000) — the trainer labels each with the local Whisper and
+  learns from it. `~/.walkie-talkie/wake/hold` touched in the last 5 s = no wake fires
+  (`evals/wake-word/record_takes.py`, his own takes → `santa/real/`).
 - Switch: `WT_WAKE_WORD` / the Engine submenu's `👂 "Hey Claude" starts a session` (default on). The
   orange microphone dot stays on while it listens.
 
