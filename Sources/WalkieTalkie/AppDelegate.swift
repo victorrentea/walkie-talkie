@@ -7575,6 +7575,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.info("👂 wake word listening on \(device)")
         case .wake(let score, let word, let id):
             guard WakeWord.listens else { return }
+            // "Hey Gepetto" opens the voice panel, not a sentence (2026-11-14).
+            if word == WakeWord.gepetto {
+                let open = !VoiceDialog.shared.isOn
+                Log.info(String(format: "👂 \"%@\" (%.2f) — %@", word, score, open ? "the voice panel" : "ignored, the panel is already open"))
+                WakeWord.note(id: id, word: word, score: score, outcome: open ? "dialog" : "busy")
+                if open { VoiceDialog.shared.start() }
+                return
+            }
             let busy = listening || source.isRecording || speculative || settling
                 || source.phase.isWaitingForWords || held != nil
             if busy || startBlocker() != nil {

@@ -72,6 +72,10 @@ class WhisperWake:
         self.np = np
         self.mean, self.scale, self.coef = z["mean"], z["scale"], z["coef"]
         self.intercept = float(z["intercept"])
+        # More phrases on the same encoder pass (2026-11-14, "hey gepetto"): each is
+        # one more logistic regression over the window's features — `also()`.
+        self.heads = []
+        self.last = {}
         self.win = int(float(z["window_seconds"]) * 16000)
         self.keep = int(z["keep_frames"])
         self.m = WhisperModel(str(z["whisper_model"]), device="cpu", compute_type="int8", cpu_threads=2)
@@ -93,7 +97,16 @@ class WhisperWake:
         out = np.array(self.m.encode(mel))[0][: self.keep]
         v = np.concatenate([out.mean(0), out.max(0)])
         z = float(((v - self.mean) / self.scale) @ self.coef + self.intercept)
+        self.last = {}
+        for word, h in self.heads:
+            zh = float(((v - h["mean"]) / h["scale"]) @ h["coef"] + float(h["intercept"]))
+            self.last[word] = 1 / (1 + math.exp(-zh))
         return 1 / (1 + math.exp(-z))
+
+    def also(self, word, path):
+        """Another phrase scored on every window this one scores (same Whisper size)."""
+        z = self.np.load(path)
+        self.heads.append((word, {k: z[k] for k in ("mean", "scale", "coef", "intercept")}))
 
 
 def main():
@@ -102,6 +115,9 @@ def main():
     p.add_argument("--threshold", type=float, default=0.5)
     p.add_argument("--whisper-wake", default="", help="a Whisper-encoder wake word .npz (\"hey santa\")")
     p.add_argument("--whisper-threshold", type=float, default=0.6)
+    p.add_argument("--also", action="append", default=[], metavar="WORD=NPZ[@THRESHOLD]",
+                   help="another Whisper-encoder phrase on the same windows, e.g. "
+                        "'hey gepetto=~/.walkie-talkie/wake/hey_gepetto_whisper.npz@0.7' (needs --whisper-wake)")
     p.add_argument("--device", default="", help="a substring of the input's name; empty = system default")
     p.add_argument("--silence-s", type=float, default=1.2)
     p.add_argument("--no-speech-s", type=float, default=6.0)
@@ -124,6 +140,13 @@ def main():
     model = Model(wakeword_models=[a.model], inference_framework="onnx") if a.model else None
     key = list(model.models.keys())[0] if model else None
     whisper = WhisperWake(a.whisper_wake) if a.whisper_wake else None
+    also = {}
+    for spec in a.also:
+        word, _, rest = spec.partition("=")
+        path, _, th = rest.partition("@")
+        if whisper and os.path.exists(os.path.expanduser(path)):
+            whisper.also(word, os.path.expanduser(path))
+            also[word] = float(th or 0.6)
     if not model and not whisper:
         say(event="error", error="no wake word model given")
         return 2
@@ -291,6 +314,11 @@ def main():
                 score = whisper.feed(chunk)
                 if score is not None and score >= a.whisper_threshold and hit is None:
                     hit = ("hey santa", score)
+                if score is not None and hit is None:
+                    for word, th in also.items():
+                        if whisper.last.get(word, 0) >= th:
+                            hit = (word, whisper.last[word])
+                            break
             if hit and not paused.is_set() and clock >= cooldown_until and not held():
                 # The wake's name: its audio's file here, its outcome's line in the
                 # app's `outcomes.jsonl` (silent / cancelled / session / question).

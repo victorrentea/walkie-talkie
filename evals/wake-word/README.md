@@ -92,3 +92,26 @@ Retrained with them (`hey_santa_whisper.2026-11-13b.npz`, installed): held-out r
 (61 clips), 0 false wakes on teaching (99 min) and dictation (47 min) at every threshold — as the
 model before it also scored. Twelve windows will not teach it Romanian household talk; the measure
 is the next evenings' `--triggers` count.
+
+## 2026-11-14 — "hey gepetto", a second head on the same encoder
+
+*"mai vreau un wake word: hey gepetto — să pornească modul dialog"* (`VoiceDialog`). Same recipe,
+another phrase: `make_phrase_clips.py gepetto` says it with 17 `say` voices × 3 rates × 3 spellings ×
+3 pitches (459 clips; Ioana says *Hei Gepeto*, Alice *Ehi Geppetto*, the Spanish voices *Jei Yepeto*)
+plus 416 confusables (*hey spaghetti*, *hey ghetto*, *hey Claude*, *Pinocchio*, bare *Geppetto*…);
+`train_whisper_wake.py --data gepetto --word gepetto,geppetto,pinocchio --holdout
+Daniel,Karen,VictorEval` trains on them against the same negatives (his corpus, his room, the
+teaching days — the cache of encoded teaching windows is shared, `santa/cache/`).
+
+| threshold | recall (Daniel + Karen, 54) | false wakes: dictation 45 min | teaching 99 min held out |
+|---|---|---|---|
+| 0.60 | 96 % | 2 (2.7/h) | 5 (3.0/h) |
+| 0.70 | 94 % | 0 | 4 (2.4/h) |
+| 0.80 | 87 % | 0 | 3 (1.8/h) |
+| **0.90** | 81 % | 0 | **0** |
+
+Installed at **0.9** (`WT_GEPETTO_THRESHOLD`): a false wake here opens a microphone and a voice, in
+front of a room. In the helper it is `--also 'hey gepetto=<npz>@0.9'` — one more logistic regression
+on the window the Santa detector already encoded, so it costs nothing and exists only where the
+Santa model does. **Synthetic positives only; not one take of his** — `record_takes.py` does not know
+the phrase yet, and `gepetto/real/` is empty. His own recall is unknown.

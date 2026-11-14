@@ -35,6 +35,14 @@ final class VoiceDialog {
     static var usesPanel: Bool { UserDefaults.standard.string(forKey: "chatVoiceEngine") != "app" }
 
     private static let rate = 24_000.0
+    /// **A man's voice** (2026-11-14, Victor: *"trebuie o voce de bărbat"* — the
+    /// session's default, `marin`, is a woman's). Nothing published says which of
+    /// the ten v2 voices are which, so each was asked the same question and its
+    /// pitch measured: echo 109 Hz, ash 119, verse 132, **cedar 136**, alloy 140,
+    /// shimmer 154, ballad 156 — marin 188, coral 222, sage 247. `cedar` is one
+    /// of the two OpenAI recommends for quality; `defaults write … voiceDialogVoice
+    /// echo` for a deeper one.
+    static var voice: String { UserDefaults.standard.string(forKey: "voiceDialogVoice") ?? "cedar" }
     private static var codex: String? {
         ["/opt/homebrew/bin/codex", "/usr/local/bin/codex"].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
@@ -139,7 +147,8 @@ final class VoiceDialog {
                 }
                 self.threadId = id
                 self.rpc("thread/realtime/start", ["threadId": id, "outputModality": "audio",
-                                                   "includeStartupContext": false, "version": "v2"]) { started in
+                                                   "includeStartupContext": false, "version": "v2",
+                                                   "voice": Self.voice]) { started in
                     if let error = started["error"] {
                         DispatchQueue.main.async { self.fail("no voice session: \(Self.short(error))") }
                     }

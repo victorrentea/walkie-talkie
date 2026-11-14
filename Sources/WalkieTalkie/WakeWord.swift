@@ -63,7 +63,7 @@ final class WakeWord {
     static var listens: Bool { listens(enabled: enabled, onBattery: BatteryFx.onBattery) }
     static func listens(enabled: Bool, onBattery: Bool) -> Bool { enabled && !onBattery }
 
-    static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\""
+    static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\" / \"Hey Gepetto\""
 
     /// `WT_WAKE_THRESHOLD`, 0…1. 0.5 is the model card's; fitted to his voice
     /// in `evals/wake-word/`.
@@ -79,6 +79,16 @@ final class WakeWord {
     /// hear"*) — a Whisper-encoder detector trained on his corpus
     /// (`evals/wake-word/train_whisper_wake.py`), beside the openWakeWord one.
     static var santaModel: String { ProcessInfo.processInfo.environment["WT_SANTA_MODEL"] ?? home.appendingPathComponent("hey_santa_whisper.npz").path }
+    /// **"Hey Gepetto"** (2026-11-14, Victor: *"mai vreau un wake word: hey
+    /// gepetto — să pornească modul dialog"*) — a second head on the Santa
+    /// detector's windows (`--also`), so it listens only where the Santa model
+    /// is installed; it opens `VoiceDialog`, not a dictation.
+    static let gepetto = "hey gepetto"
+    static var gepettoModel: String { ProcessInfo.processInfo.environment["WT_GEPETTO_MODEL"] ?? home.appendingPathComponent("hey_gepetto_whisper.npz").path }
+    static var gepettoThreshold: Double {
+        let raw = ProcessInfo.processInfo.environment["WT_GEPETTO_THRESHOLD"] ?? ElevenLabsSource.fileValue("WT_GEPETTO_THRESHOLD")
+        return raw.flatMap(Double.init).map { min(max($0, 0.05), 0.999) } ?? 0.9
+    }
     /// `WT_SANTA_THRESHOLD` — fitted in `evals/wake-word/README.md`.
     static var santaThreshold: Double {
         let raw = ProcessInfo.processInfo.environment["WT_SANTA_THRESHOLD"] ?? ElevenLabsSource.fileValue("WT_SANTA_THRESHOLD")
@@ -163,6 +173,8 @@ final class WakeWord {
         var args = ["-I", script, "--device", device]
         if claude { args += ["--model", Self.model, "--threshold", String(Self.threshold)] }
         if santa { args += ["--whisper-wake", Self.santaModel, "--whisper-threshold", String(Self.santaThreshold)] }
+        let gepetto = santa && fm.fileExists(atPath: Self.gepettoModel)
+        if gepetto { args += ["--also", "\(Self.gepetto)=\(Self.gepettoModel)@\(Self.gepettoThreshold)"] }
         p.arguments = args
         let input = Pipe(), output = Pipe(), errors = Pipe()
         p.standardInput = input
@@ -209,7 +221,8 @@ final class WakeWord {
         process = p
         stdin = input.fileHandleForWriting
         Log.info("👂 wake word helper up (pid \(p.processIdentifier)) on \(device.isEmpty ? "the default input" : device)"
-                 + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa ? " — hey santa ≥ \(Self.santaThreshold)" : ""))
+                 + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa ? " — hey santa ≥ \(Self.santaThreshold)" : "")
+                 + (gepetto ? " — hey gepetto ≥ \(Self.gepettoThreshold)" : ""))
     }
 
     private func terminate() {

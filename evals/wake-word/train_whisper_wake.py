@@ -48,6 +48,10 @@ WIN = 2.0
 KEEP = int(WIN * 50)
 HOME = Path.home() / ".walkie-talkie"
 DATA = HOME / "wake" / "santa"
+# The encoded teaching windows are the same audio whatever the phrase: one cache.
+CACHE = HOME / "wake" / "santa" / "cache"
+# What a transcript must not contain to be a negative (`--word`, comma-separated).
+WORDS = ["santa"]
 CORPUS = HOME / "voice-corpus"
 
 
@@ -105,7 +109,7 @@ def corpus_files(days_from=None, days_to=None):
             continue
         for wav in sorted((CORPUS / day).glob("*.wav")):
             txt = wav.with_suffix(".txt")
-            if txt.exists() and "santa" in txt.read_text(errors="ignore").lower():
+            if txt.exists() and any(w in txt.read_text(errors="ignore").lower() for w in WORDS):
                 continue  # never a negative that might say it
             out.append(wav)
     return out
@@ -131,7 +135,7 @@ def teach_days():
 
 def featurize(enc, name, files, model):
     """Every 0.4 s window of `files`, encoded once: (features, clip index, seconds)."""
-    cache = DATA / "cache" / f"{name}-{model}-{len(files)}.npz"
+    cache = CACHE / f"{name}-{model}-{len(files)}.npz"
     if cache.exists():
         z = np.load(cache)
         return z["X"], z["clip"], float(z["secs"])
@@ -237,9 +241,16 @@ def main():
     p.add_argument("--label-model", default="mlx-community/whisper-large-v3-turbo")
     p.add_argument("--eval-minutes", type=float, default=45)
     p.add_argument("--out", default=str(HOME / "wake" / "hey_santa_whisper.npz"))
+    p.add_argument("--data", default="santa",
+                   help="the phrase's folder under ~/.walkie-talkie/wake/ (pos/, adv/, real/, triggers/) — "
+                        "`gepetto` since 2026-11-14 (`make_phrase_clips.py` fills it)")
+    p.add_argument("--word", default="santa", help="words (comma-separated) a corpus transcript must not contain to be a negative")
     p.add_argument("--triggers", action="store_true",
                    help="label the live wakes and list them (outcome, what was heard); train nothing")
     a = p.parse_args()
+    global DATA, WORDS
+    DATA = HOME / "wake" / a.data
+    WORDS = [w.strip().lower() for w in a.word.split(",") if w.strip()]
     if a.triggers:
         pos, neg = triggers(a.label_python, a.label_model, report=True)
         print(f"{len(pos)} said it, {len(neg)} false")
