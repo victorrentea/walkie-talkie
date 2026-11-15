@@ -92,6 +92,8 @@ final class VoiceDialog: NSObject {
          "replySeconds": (replySeconds * 10).rounded() / 10, "turns": turns, "error": lastError,
          "paused": isPaused, "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false,
          "byWake": wakeOpened, "idle": isOn ? Int(CFAbsoluteTimeGetCurrent() - lastHeard) : 0,
+         "brain": brain != nil, "brainStep": brainStep, "brainTold": brainTold, "brainModel": brain?.servedModel ?? "",
+         "script": script.count,
          "shots": shots, "looking": looking, "told": told, "lastLook": lastLook, "lookError": lookError]
     }
 
@@ -105,8 +107,17 @@ final class VoiceDialog: NSObject {
 
     /// `mic: false` opens no microphone and `silent: true` plays at volume 0 —
     /// the desk's way to hold a conversation with `say(_:)` and no sound.
-    func start(mic: Bool = true, silent: Bool = false, look: Bool = true, byWake: Bool = false) {
+    func start(mic: Bool = true, silent: Bool = false, look: Bool = true, byWake: Bool = false, evenLocked: Bool = false) {
         guard !isOn else { return }
+        // **Only on an unlocked screen** (2026-11-15, Victor: *"o să facem modul
+        // dialog să poată porni doar când ecranul e deblocat … trebuie cineva să
+        // stea lângă laptopul meu neblocat ca să poată să facă o măgărie"*) —
+        // what lets the Claude behind it keep every tool. `evenLocked` is the desk's.
+        guard evenLocked || !Self.screenLocked else {
+            Log.info("🗣️ voice dialog — not started: the screen is locked")
+            return
+        }
+        watchTheLock()
         guard let codex = Self.codex else {
             lastError = "codex is not installed"
             Log.error("🗣️ voice dialog — no codex binary in /opt/homebrew/bin or /usr/local/bin")
@@ -119,6 +130,28 @@ final class VoiceDialog: NSObject {
         isPaused = false; dropReply = false
         userLine = ""; reply = ""; replySeconds = 0; replyBegan = nil; replyClosed = true; shown = 0; turns = 0; lastError = ""
         shots = 0; looking = 0; told = 0; lastLook = ""; lookError = ""; sessionUp = false; untold.removeAll()
+        script.removeAll(); readingSince = nil; brainStep = ""; brainShots.removeAll(); brainTold = 0
+        if Self.usesBrain {
+            do {
+                let b = try VoiceBrain()
+                b.onText = { [weak self, weak b] text in if let self, self.brain === b { self.brainSaid(text) } }
+                b.onStep = { [weak self, weak b] step in
+                    guard let self, self.brain === b else { return }
+                    self.brainStep = step ?? ""
+                    self.render()
+                }
+                b.onExit = { [weak self, weak b] why in
+                    guard let self, self.brain === b, self.isOn else { return }
+                    self.brain = nil
+                    self.brainStep = ""
+                    Log.error("🗣️ 🧠 \(why) — the voice goes on alone")
+                    self.render()
+                }
+                brain = b
+            } catch {
+                Log.error("🗣️ 🧠 Claude did not start (\(error.localizedDescription)) — the voice answers alone")
+            }
+        }
         setStatus("Connecting…")
         wakeOpened = byWake
         lastHeard = CFAbsoluteTimeGetCurrent()
@@ -160,8 +193,16 @@ final class VoiceDialog: NSObject {
                            "capabilities": ["experimentalApi": true]]) { [weak self] _ in
             guard let self else { return }
             self.send(["method": "initialized"])
-            self.rpc("thread/start", ["cwd": NSHomeDirectory() + "/workspace", "sandbox": "read-only",
-                                      "approvalPolicy": "never", "skipGitRepoCheck": true, "ephemeral": true]) { answer in
+            var thread: [String: Any] = ["cwd": NSHomeDirectory() + "/workspace", "sandbox": "read-only",
+                                         "approvalPolicy": "never", "skipGitRepoCheck": true, "ephemeral": true]
+            if self.brain != nil {
+                // The thread's agent is a relay and nothing else (`VoiceBrain`).
+                thread["developerInstructions"] = Self.relayInstructions
+                thread["dynamicTools"] = [Self.tellClaude]
+                thread["config"] = ["model_reasoning_effort": "low"]
+                if let model = Self.relayModel { thread["model"] = model }
+            }
+            self.rpc("thread/start", thread) { answer in
                 guard let thread = (answer["result"] as? [String: Any])?["thread"] as? [String: Any],
                       let id = thread["id"] as? String else {
                     DispatchQueue.main.async { self.fail("no thread: \(Self.short(answer["error"]))") }
@@ -188,6 +229,8 @@ final class VoiceDialog: NSObject {
         generation += 1
         sessionUp = false
         idleWatch?.invalidate(); idleWatch = nil
+        brain?.stop(); brain = nil
+        script.removeAll(); readingSince = nil
         eyes?.stop(); eyes = nil
         onChange?(false)
         Log.info("🗣️ voice dialog — off (\(why)); \(turns) repl\(turns == 1 ? "y" : "ies")")
@@ -229,7 +272,9 @@ final class VoiceDialog: NSObject {
 
     private func closeIfIdle() {
         guard isOn, wakeOpened else { return }
-        if isPaused || status == "Speaking" || !replyClosed { lastHeard = CFAbsoluteTimeGetCurrent(); return }
+        if isPaused || status == "Speaking" || !replyClosed || brain?.busy == true || !script.isEmpty {
+            lastHeard = CFAbsoluteTimeGetCurrent(); return
+        }
         if CFAbsoluteTimeGetCurrent() - lastHeard >= Self.idleClose {
             stop(why: "\(Int(Self.idleClose)) s with nobody talking to it, after a wake word")
         }
@@ -309,8 +354,19 @@ final class VoiceDialog: NSObject {
             buffer.removeSubrange(buffer.startIndex...nl)
             guard let message = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { continue }
             if let method = message["method"] as? String {
-                if let id = message["id"] {   // a request of the server's: nothing here needs approving
-                    send(["id": id, "result": ["decision": "approved"]])
+                if let id = message["id"] {   // a request of the server's
+                    if method == "item/tool/call" {
+                        let params = message["params"] as? [String: Any] ?? [:]
+                        DispatchQueue.main.async {
+                            let said = self.generation == mine
+                                ? self.toolCall(params["tool"] as? String ?? "", params["arguments"] as? [String: Any] ?? [:])
+                                : "the conversation has ended"
+                            self.send(["id": id, "result": ["success": true, "contentItems": [["type": "inputText", "text": said]]]])
+                        }
+                    } else {
+                        // Nothing else here needs approving.
+                        send(["id": id, "result": ["decision": "approved"]])
+                    }
                 } else {
                     let params = message["params"] as? [String: Any] ?? [:]
                     if method == "thread/realtime/outputAudio/delta" {
@@ -338,6 +394,7 @@ final class VoiceDialog: NSObject {
             sessionUp = true
             untold.forEach(tell)
             untold.removeAll()
+            readNext()
             if wantsMic { startMicrophone() } else { startPlaybackOnly() }
             setStatus("Listening")
         case "thread/realtime/itemAdded":
@@ -345,6 +402,7 @@ final class VoiceDialog: NSObject {
             // its words are all shown — a barge-in.
             if !isPaused, ((params["item"] as? [String: Any])?["type"] as? String) == "input_audio_buffer.speech_started" {
                 if replyBegan != nil, shown < reply.count { cutPlayback() }
+                readingSince = nil
                 setStatus("Listening")
             }
         case "thread/realtime/transcript/delta":
@@ -375,6 +433,8 @@ final class VoiceDialog: NSObject {
                 if !text.isEmpty { reply = text }
                 replyClosed = true
                 turns += 1
+                readingSince = nil
+                readNext()
             }
         case "thread/realtime/error":
             fail("the voice session failed: \(Self.short(params))")
@@ -385,6 +445,92 @@ final class VoiceDialog: NSObject {
         }
     }
     private var userClosed = false
+
+    // MARK: - The Claude behind it (`VoiceBrain`)
+
+    /// On unless `defaults write … voiceDialogBrain off` — then the voice
+    /// answers alone, as before 2026-11-15.
+    static var usesBrain: Bool { UserDefaults.standard.string(forKey: "voiceDialogBrain") != "off" }
+    /// The relay agent's model — Codex's own default unless `WT_VOICE_RELAY_MODEL`.
+    static var relayModel: String? {
+        let v = ProcessInfo.processInfo.environment["WT_VOICE_RELAY_MODEL"] ?? ElevenLabsSource.fileValue("WT_VOICE_RELAY_MODEL")
+        return v?.isEmpty == false ? v : nil
+    }
+    /// `fable_voice.py`'s, word for word but the name: a custom prompt on the
+    /// voice itself broke delegation there, the agent as a pure relay held 6/6.
+    static let relayInstructions = """
+        You are a relay. All real work belongs to Claude, never to you: reading code or files, \
+        searching the web, answering questions, research, decisions, changing anything on this Mac. \
+        For every delegated request, call tell_claude exactly once with the user's words verbatim, \
+        then end your turn with exactly this line: "Claude has only just received this and has no \
+        result yet. Say only: I've passed it to Claude." Use no other tool and never answer \
+        yourself; Claude replies to the user directly. Set interrupt=true when the user wants Claude \
+        to stop or change what it is doing now.
+        """
+    static let tellClaude: [String: Any] = [
+        "type": "function", "name": "tell_claude",
+        "description": "Hand the user's words to Claude. Returns at once; Claude answers the user by voice on its own.",
+        "inputSchema": ["type": "object",
+                        "properties": ["message": ["type": "string", "description": "The user's words, verbatim."],
+                                       "interrupt": ["type": "boolean", "description": "Stop what Claude is doing first."]],
+                        "required": ["message", "interrupt"], "additionalProperties": false] as [String: Any],
+    ]
+    static let readAloud = "Claude says the following. Read it to Victor in full, word for word, in its own language, without summarizing: "
+    /// A lost "finished speaking" must not freeze the queue.
+    static let readTimeout: TimeInterval = 120
+
+    private var brain: VoiceBrain?
+    private var brainStep = ""
+    private var brainTold = 0
+    /// The pictures taken since his last words to Claude (800 px copies).
+    private var brainShots: [String] = []
+    /// Claude's texts waiting for the voice, read one at a time.
+    private var script: [String] = []
+    private var readingSince: CFAbsoluteTime?
+
+    private func toolCall(_ tool: String, _ arguments: [String: Any]) -> String {
+        guard tool == "tell_claude" else { return "Unknown tool \(tool)" }
+        guard let brain else { return "Claude is not running; answer the user yourself and say so." }
+        let message = arguments["message"] as? String ?? ""
+        let interrupt = arguments["interrupt"] as? Bool ?? false
+        let pictures = Array(brainShots.suffix(4))
+        brainShots.removeAll()
+        brainTold += 1
+        Log.info("🗣️ 🧠 tell_claude\(interrupt ? " (interrupt)" : "") with \(pictures.count) picture(s): \(message.prefix(120))")
+        if interrupt { script.removeAll() }
+        brain.tell(message, images: pictures, interrupt: interrupt)
+        brainStep = "thinking"
+        render()
+        return "sent"
+    }
+
+    private func brainSaid(_ text: String) {
+        guard isOn else { return }
+        Log.info("🗣️ 🧠 Claude: \(text.prefix(160))")
+        script.append(text)
+        readNext()
+    }
+
+    private func readNext() {
+        guard isOn, sessionUp, !script.isEmpty, let id = threadId else { return }
+        if let since = readingSince, CFAbsoluteTimeGetCurrent() - since < Self.readTimeout { return }
+        let text = script.removeFirst()
+        readingSince = CFAbsoluteTimeGetCurrent()
+        rpc("thread/realtime/appendSpeech", ["threadId": id, "text": Self.readAloud + text]) { answer in
+            if let error = answer["error"] { Log.error("🗣️ 🧠 the voice refused Claude's words: \(Self.short(error))") }
+        }
+    }
+
+    /// The screen locking ends it: the panel exists only in front of him.
+    private var watchingLock = false
+    private func watchTheLock() {
+        guard !watchingLock else { return }
+        watchingLock = true
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"),
+                                                            object: nil, queue: .main) { [weak self] _ in
+            self?.stop(why: "the screen locked")
+        }
+    }
 
     // MARK: - Its eyes
 
@@ -462,6 +608,9 @@ final class VoiceDialog: NSObject {
             let frame = ScreenCapture.grab(cursor: point, into: dir)
             DispatchQueue.main.sync { self.panel?.sharingType = .readOnly }
             guard let frame else { return done(nil, "the screen could not be photographed") }
+            // Claude gets the pixels, with his next words; the voice only the description.
+            let small = ScreenCapture.handover(for: frame.path)
+            DispatchQueue.main.async { if self.generation == mine, self.brain != nil { self.brainShots.append(small) } }
             guard let w = worker ?? (try? QuickAsk.Worker(model: Self.eyesModel, effort: "low", prompt: Self.eyesPrompt)) else {
                 return done(nil, "claude is not installed")
             }
@@ -784,7 +933,8 @@ final class VoiceDialog: NSObject {
     private func render() {
         let dot = status == "Speaking" ? "🔊" : status == "Listening" ? "🎙️" : status == "Paused" ? "⏸" : "•"
         let eyes = shots == 0 ? "" : "   ·   📸 ×\(shots)\(looking > 0 ? " reading the screen…" : lookError.isEmpty || told == shots ? "" : " ⚠️")"
-        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")\(eyes)   ·   \"Gepetto, over\" ends it"
+        let mind = brain == nil ? "" : brainStep.isEmpty ? "   ·   🧠 Claude" : "   ·   🧠 Claude: \(brainStep)…"
+        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")\(mind)\(eyes)   ·   \"Gepetto, over\" ends it"
         pauseButton.title = isPaused ? "▶ Resume" : "⏸ Pause"
         pauseButton.isHidden = !isOn
         userField.stringValue = Self.tail(userLine, 150)
