@@ -25,6 +25,21 @@ import IOKit.hid
 /// launch, at every arrival of a device of that vendor (an IOKit matching
 /// notification — nothing polls), and on wake; and taken off at quit.
 /// **Never press Link twice and hold: that is the transmitter's re-pairing.**
+/// **One press or two** (2026-11-15): a second press inside `doubleWindow` of
+/// one still waiting is the double; one inside `bounce` is the switch bouncing
+/// (others measured it; his unit is unmeasured). Pure — `DjiClicksTests`.
+enum DjiClicks {
+    static let bounce: CFTimeInterval = 0.06
+    static let doubleWindow: CFTimeInterval = 0.45
+    enum Verdict { case first, second, bounce }
+    /// `gap`: seconds since the last press; `waiting`: a first press has not
+    /// been acted on yet.
+    static func verdict(gap: CFTimeInterval, waiting: Bool) -> Verdict {
+        if gap < bounce { return .bounce }
+        return waiting && gap <= doubleWindow ? .second : .first
+    }
+}
+
 enum DjiButton {
 
     static let vendor = 0x2CA3

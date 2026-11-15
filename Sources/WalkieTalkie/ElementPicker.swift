@@ -1031,7 +1031,9 @@ final class ElementPicker {
             var out: [String: Any] = ["ok": true]
             DispatchQueue.main.sync {
                 switch body["action"] as? String ?? "toggle" {
-                case "start": VoiceDialog.shared.start(mic: body["mic"] as? Bool ?? true, silent: body["silent"] as? Bool ?? false)
+                case "start": VoiceDialog.shared.start(mic: body["mic"] as? Bool ?? true, silent: body["silent"] as? Bool ?? false,
+                                                         look: body["look"] as? Bool ?? false)
+                case "look": VoiceDialog.shared.look(why: "the desk")
                 case "stop": VoiceDialog.shared.stop(why: "the desk")
                 case "pause": VoiceDialog.shared.setPaused(true)
                 case "resume": VoiceDialog.shared.setPaused(false)
@@ -1039,6 +1041,14 @@ final class ElementPicker {
                 default: VoiceDialog.shared.toggle()
                 }
             }
+            respond(conn, 200, out)
+        // `POST /test/mic-mute {"on": bool?}` — DJI Link ×2's action (`MicMute`):
+        // toggles without `on`; `{"read": true}` only answers.
+        case ("POST", "/test/mic-mute"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            var out: [String: Any] = ["ok": true]
+            if body["read"] as? Bool != true { out["said"] = MicMute.toggle(to: body["on"] as? Bool) }
+            out.merge(MicMute.describe) { a, _ in a }
             respond(conn, 200, out)
         case ("POST", "/test/chat-voice-mini"):
             ChatGPTVoice.pressVoiceInMini()

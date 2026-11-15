@@ -129,7 +129,16 @@ final class HotkeyTap {
     /// **The DJI transmitter's Link button** (2026-11-13, `DjiButton`): it
     /// arrives as a bare F20. Raised on the tap thread, once per press.
     var onDjiButton: (() -> Void)?
+    /// **Link pressed twice** (2026-11-15, Victor: *"două click-uri, click,
+    /// click, să pună pe mute microfonul … independent de modul de dialog"*).
+    /// One press now waits `DjiClicks.doubleWindow` to learn it is alone.
+    var onDjiDouble: (() -> Void)?
     private var djiLastAt: CFTimeInterval = 0
+    private var djiPending: DispatchWorkItem?
+    private let djiLock = NSLock()
+    /// The voice panel is up (`VoiceDialog.onChange`): the bare 🔽 is its shutter.
+    var voiceDialogOn = false
+    var onVoiceShot: ((NSPoint) -> Void)?
 
     /// **🔽 → over a ⚡ question — Google it** (2026-10-25): the question ends as
     /// 🔼 would end it, and its words go to a Google search instead of the reply
@@ -3822,13 +3831,33 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
            event.flags.intersection([.maskCommand, .maskControl, .maskAlternate, .maskShift]).isEmpty {
             if type == .keyDown, event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
                 let now = CACurrentMediaTime()
-                if now - djiLastAt >= 0.4 {
-                    djiLastAt = now
-                    Log.info("🎙️ DJI Link button")
-                    DispatchQueue.global().async { [weak self] in self?.onDjiButton?() }
-                } else {
-                    Log.info("🎙️ DJI Link button — a second press within 0.4 s, dropped")
+                djiLock.lock()
+                let gap = now - djiLastAt
+                let waiting = djiPending != nil
+                djiLastAt = now
+                switch DjiClicks.verdict(gap: gap, waiting: waiting) {
+                case .bounce:
+                    Log.info(String(format: "🎙️ DJI Link button — again %.0f ms later, a bounce, dropped", gap * 1000))
+                case .second:
+                    djiPending?.cancel()
+                    djiPending = nil
+                    Log.info(String(format: "🎙️ DJI Link button ×2 (%.0f ms apart)", gap * 1000))
+                    DispatchQueue.global().async { [weak self] in self?.onDjiDouble?() }
+                case .first:
+                    let item = DispatchWorkItem { [weak self] in
+                        guard let self else { return }
+                        self.djiLock.lock()
+                        let mine = self.djiPending != nil
+                        self.djiPending = nil
+                        self.djiLock.unlock()
+                        guard mine else { return }
+                        Log.info("🎙️ DJI Link button")
+                        self.onDjiButton?()
+                    }
+                    djiPending = item
+                    DispatchQueue.global().asyncAfter(deadline: .now() + DjiClicks.doubleWindow, execute: item)
                 }
+                djiLock.unlock()
             }
             return swallow("DJI Link (F20)", type, event)
         }
@@ -4360,6 +4389,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // `dictating` is true under it and the click meant to end it would
             // otherwise be a picture.
             case VK_F6:
+                // **The voice panel is up and no sentence is: its shutter**
+                // (2026-11-15, `VoiceDialog.look`) — not a plain dictation's
+                // start, whose microphone the panel already holds.
+                if voiceDialogOn, !ownDictation, wisprMicIsOpen?() != true {
+                    let cursor = NSEvent.mouseLocation
+                    Log.info("📸 🔽 with the voice panel up — a picture for the voice")
+                    DispatchQueue.global().async { [weak self] in self?.onVoiceShot?(cursor) }
+                    return swallow(gesture, type, event)
+                }
                 let f6Now = CACurrentMediaTime()
                 // **A plain sentence turned into a prompt (🔼 →, 🔼 ↑) is a
                 // prompt from then on** (2026-10-08): this button is its shutter,

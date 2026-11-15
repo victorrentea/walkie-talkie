@@ -90,8 +90,13 @@ final class VoiceDialog: NSObject {
     var describe: [String: Any] {
         ["on": isOn, "status": status, "user": userLine, "reply": reply, "shown": shown,
          "replySeconds": (replySeconds * 10).rounded() / 10, "turns": turns, "error": lastError,
-         "paused": isPaused, "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false]
+         "paused": isPaused, "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false,
+         "shots": shots, "looking": looking, "told": told, "lastLook": lastLook, "lookError": lookError]
     }
+
+    /// The panel went up or down — on main (`AppDelegate` tells the tap, whose
+    /// 🔽 click is this panel's shutter while it is up).
+    var onChange: ((Bool) -> Void)?
 
     // MARK: - On and off
 
@@ -99,7 +104,7 @@ final class VoiceDialog: NSObject {
 
     /// `mic: false` opens no microphone and `silent: true` plays at volume 0 —
     /// the desk's way to hold a conversation with `say(_:)` and no sound.
-    func start(mic: Bool = true, silent: Bool = false) {
+    func start(mic: Bool = true, silent: Bool = false, look: Bool = true) {
         guard !isOn else { return }
         guard let codex = Self.codex else {
             lastError = "codex is not installed"
@@ -112,8 +117,12 @@ final class VoiceDialog: NSObject {
         self.silent = silent
         isPaused = false; dropReply = false
         userLine = ""; reply = ""; replySeconds = 0; replyBegan = nil; replyClosed = true; shown = 0; turns = 0; lastError = ""
+        shots = 0; looking = 0; told = 0; lastLook = ""; lookError = ""; sessionUp = false; untold.removeAll()
         setStatus("Connecting…")
+        // The screen as it is at the gesture, before the panel is on it.
+        if look, !Self.screenLocked { self.look(why: "the start") }
         showPanel()
+        onChange?(true)
         WakeWord.shared.pause()
         Log.info("🗣️ voice dialog — starting (codex app-server, realtime v2)\(mic ? "" : ", no microphone")\(silent ? ", silent" : "")")
 
@@ -172,6 +181,9 @@ final class VoiceDialog: NSObject {
         guard isOn else { return }
         isOn = false
         generation += 1
+        sessionUp = false
+        eyes?.stop(); eyes = nil
+        onChange?(false)
         Log.info("🗣️ voice dialog — off (\(why)); \(turns) repl\(turns == 1 ? "y" : "ies")")
         pacer?.invalidate(); pacer = nil
         stopAudio()
@@ -276,6 +288,9 @@ final class VoiceDialog: NSObject {
         case "thread/realtime/started":
             Log.info("🗣️ voice dialog — session up (\(params["version"] as? String ?? "?"))")
             ChatGPTVoice.chime(on: true)
+            sessionUp = true
+            untold.forEach(tell)
+            untold.removeAll()
             if wantsMic { startMicrophone() } else { startPlaybackOnly() }
             setStatus("Listening")
         case "thread/realtime/itemAdded":
@@ -320,6 +335,128 @@ final class VoiceDialog: NSObject {
         }
     }
     private var userClosed = false
+
+    // MARK: - Its eyes
+
+    /// **The voice gets the screen, in words** (2026-11-15, Victor: *"când pun o
+    /// întrebare cu butonul de forward și swipe left, el ia și o poză a
+    /// ecranului … mi-ar plăcea așa, la fel. Plus, eventual, poze adiționale cu
+    /// butonul de back"*). The realtime session takes sound and text, no
+    /// picture (`thread/realtime/appendAudio` / `appendText`; a `developer`
+    /// text is refused — *"Developer messages are not supported for realtime
+    /// sessions"*). So the screen under the pointer is photographed as a
+    /// prompt's 📸0 is, its 800 px copy is described by a `claude -p` of this
+    /// app's (`QuickAsk.Worker`, Sonnet at low effort: 5.6 s measured, process
+    /// start included), and the words go in as a `user` text the voice does not
+    /// answer but has when he asks. Proven with a probe: *"error code
+    /// ZEBRA-7391"* in such a text, the spoken question *"what is the error
+    /// code on my screen"* → *"The error code is ZEBRA-7391."*
+    ///
+    /// One at the start (never of a locked screen), and one per 🔽 click while
+    /// the panel is up (`HotkeyTap.onVoiceShot`).
+    private(set) var shots = 0
+    private var looking = 0
+    private var told = 0
+    private var lastLook = ""
+    private var lookError = ""
+    private var sessionUp = false
+    /// Described before the session was up: said once it is.
+    private var untold: [String] = []
+    /// The next describer, started ahead (a `claude -p` takes ~2 s to come up).
+    private var eyes: QuickAsk.Worker?
+
+    static var eyesModel: String {
+        let v = ProcessInfo.processInfo.environment["WT_VOICE_EYES_MODEL"] ?? ElevenLabsSource.fileValue("WT_VOICE_EYES_MODEL")
+        return v?.isEmpty == false ? v! : "sonnet"
+    }
+    static let eyesPrompt = """
+        You are the eyes of a voice assistant that cannot see. You get a screenshot of the user's \
+        screen. Describe it for the assistant: which app and window is in front, then the content \
+        that matters — quote exactly what is short (titles, error messages, code lines, numbers, \
+        names, the sentence around the pointer if one is marked), summarise what is long. Keep the \
+        language of the text on screen for quotes. Plain text, no markdown, at most 200 words. Do \
+        not address the user and do not offer help.
+        """
+    static let lookTimeout: TimeInterval = 40
+
+    static var screenLocked: Bool {
+        (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool ?? false
+    }
+
+    private func warmEyes() {
+        guard isOn, eyes == nil else { return }
+        eyes = try? QuickAsk.Worker(model: Self.eyesModel, effort: "low", prompt: Self.eyesPrompt)
+    }
+
+    /// On main. The frame is taken now; its description reaches the session
+    /// some seconds later.
+    func look(at cursor: NSPoint? = nil, why: String) {
+        guard isOn else { return }
+        shots += 1
+        looking += 1
+        let n = shots, mine = generation
+        let point = cursor ?? NSEvent.mouseLocation
+        let worker = eyes
+        eyes = nil
+        render()
+        Log.info("🗣️ 📸\(n) for the voice panel (\(why))")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let done: (String?, String?) -> Void = { text, error in
+                DispatchQueue.main.async { self.looked(n, text, error, generation: mine) }
+            }
+            let dir = Outbox.shotsDir.appendingPathComponent("voice")
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            // This panel is not what he is asking about.
+            DispatchQueue.main.sync { self.panel?.sharingType = .none }
+            let frame = ScreenCapture.grab(cursor: point, into: dir)
+            DispatchQueue.main.sync { self.panel?.sharingType = .readOnly }
+            guard let frame else { return done(nil, "the screen could not be photographed") }
+            guard let w = worker ?? (try? QuickAsk.Worker(model: Self.eyesModel, effort: "low", prompt: Self.eyesPrompt)) else {
+                return done(nil, "claude is not installed")
+            }
+            var finished = false
+            let lock = NSLock()
+            let finish: (String?, String?) -> Void = { text, error in
+                lock.lock(); let first = !finished; finished = true; lock.unlock()
+                guard first else { return }
+                w.stop()
+                done(text, error)
+            }
+            w.onResult = { text, error in finish(text, error) }
+            w.onExit = { w in finish(nil, "the describing model exited — \(w.stderrTail)") }
+            w.send(QuickAsk.content("The screen right now.", pictures: [(label: "📸", path: ScreenCapture.handover(for: frame.path))]))
+            DispatchQueue.global().asyncAfter(deadline: .now() + Self.lookTimeout) { finish(nil, "nothing in \(Int(Self.lookTimeout)) s") }
+            DispatchQueue.main.async { self.warmEyes() }
+        }
+    }
+
+    private func looked(_ n: Int, _ text: String?, _ error: String?, generation mine: Int) {
+        guard generation == mine, isOn else { return }
+        looking = max(0, looking - 1)
+        defer { render() }
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            lookError = error ?? "no description"
+            Log.error("🗣️ 📸\(n) was not described — \(lookError)")
+            return
+        }
+        lastLook = text
+        told += 1
+        Log.info("🗣️ 📸\(n) described (\(text.count) chars) — told to the voice")
+        let note = "[Picture \(n) of my screen, taken a moment ago and described in words by another model because you "
+            + "cannot see. I did not say this and it needs no answer. When I talk about what is on my screen, answer "
+            + "from it as if you saw the screen yourself, without mentioning a description; a later picture "
+            + "replaces an earlier one where they differ.]\n" + text
+        if sessionUp { tell(note) } else { untold.append(note) }
+    }
+
+    /// A `user` text: in the conversation, not answered until he speaks.
+    private func tell(_ text: String) {
+        guard let id = threadId else { return }
+        rpc("thread/realtime/appendText", ["threadId": id, "role": "user", "text": text]) { answer in
+            if let error = answer["error"] { Log.error("🗣️ the picture's words were refused: \(Self.short(error))") }
+        }
+    }
 
     // MARK: - Sound
 
@@ -596,7 +733,8 @@ final class VoiceDialog: NSObject {
 
     private func render() {
         let dot = status == "Speaking" ? "🔊" : status == "Listening" ? "🎙️" : status == "Paused" ? "⏸" : "•"
-        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")   ·   again to end"
+        let eyes = shots == 0 ? "" : "   ·   📸 ×\(shots)\(looking > 0 ? " reading the screen…" : lookError.isEmpty || told == shots ? "" : " ⚠️")"
+        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")\(eyes)   ·   again to end"
         pauseButton.title = isPaused ? "▶ Resume" : "⏸ Pause"
         pauseButton.isHidden = !isOn
         userField.stringValue = Self.tail(userLine, 150)

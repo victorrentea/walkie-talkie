@@ -2700,6 +2700,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if VoiceDialog.usesPanel { VoiceDialog.shared.toggle(); return }
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
         }
+        // Link ×2 (2026-11-15): the microphone muted / live again, whatever
+        // is or is not open.
+        hotkeys.onDjiDouble = { [weak self] in
+            let words = MicMute.toggle()
+            DispatchQueue.main.async { self?.overlay.flash(words, duration: 4) }
+        }
+        // The bare 🔽 while the voice panel is up: a picture for the voice.
+        hotkeys.onVoiceShot = { cursor in
+            DispatchQueue.main.async { VoiceDialog.shared.look(at: cursor, why: "🔽") }
+        }
+        VoiceDialog.shared.onChange = { [weak self] on in self?.hotkeys.voiceDialogOn = on }
         DjiButton.watch()
         picker.onTestChatVoice = { [weak self] in
             ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }

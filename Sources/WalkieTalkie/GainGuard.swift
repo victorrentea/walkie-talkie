@@ -65,6 +65,8 @@ enum GainGuard {
             if abs(defaults.float(forKey: key(name)) - volume) > 0.005 { defaults.set(volume, forKey: key(name)) }
             return
         }
+        // Turned down on purpose (`MicMute`, a device with no mute switch).
+        if MicMute.holdsDown(name) { return }
         let was = Int((volume * 100).rounded())
         let level = defaults.float(forKey: key(name))
         guard level >= floor else {
