@@ -115,3 +115,26 @@ front of a room. In the helper it is `--also 'hey gepetto=<npz>@0.9'` — one mo
 on the window the Santa detector already encoded, so it costs nothing and exists only where the
 Santa model does. **Synthetic positives only; not one take of his** — `record_takes.py` does not know
 the phrase yet, and `gepetto/real/` is empty. His own recall is unknown.
+
+## 2026-11-15 — most false wakes were on silence; a wake now needs a voice
+
+*"s-a activat singur Gepetto … wake word e prea sensibil"*: two false *hey gepetto* in a day (0.93,
+0.99 — over any threshold), both on the MacBook microphone's room tone: rms 20, loudest 80 ms chunk
+30 / 38, Whisper large hears nothing in them. Over the 33 wakes kept in `santa/triggers/`, counting
+80 ms chunks over rms 180 in the scored 2 s:
+
+| | wakes | chunks over 180 |
+|---|---|---|
+| said (*Hey Santa!* ×3, the Phantom one) | 4 | 9–14 |
+| his 30 takes (`santa/real/`) | 30 | ≥ 4 |
+| false, somebody talking | 9 | 5–25 |
+| **false, nobody talking** (claude 9, santa 9, gepetto 2) | **20** | **0–1** |
+
+`helpers/wake_word.py --wake-voiced-s 0.24` (default): a hit counts only with three voiced chunks
+(the end-of-command meter's `voiced`) in the 2 s before it. Replayed through the helper (`--wav`),
+gate off → on: both gepetto triggers and `203014-claude-0.99` 1 → 0 wakes; two said *hey santa*, four
+of his takes and five `say` *hey gepetto* stay 1. The detectors themselves are unchanged — talk in
+the room still fools them at the rates above.
+
+Open: the Gepetto triggers land in `santa/triggers/`, where `--data gepetto` does not look; and the
+first false wake kept the voice panel open 26 min with the screen locked (6 replies to the room).

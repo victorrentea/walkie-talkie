@@ -33,6 +33,12 @@ them. The newest `--triggers-keep` are kept.
 **`--hold`** (a file touched in the last 5 s) = no wake fires: the take
 recorder (`evals/wake-word/record_takes.py`) says the phrase thirty times.
 
+**No wake without a voice** (2026-11-15, Victor: *"s-a activat singur Gepetto …
+wake word e prea sensibil"*): a hit counts only with `--wake-voiced-s` (0.24 s) of
+voiced chunks in the 2 s before it. Of the 33 wakes kept in `triggers/`, 20 fired
+on room tone (loudest 80 ms chunk under 160 — both false *hey gepetto*, 0.93 and
+0.99, at rms 20); every one he said had ≥ 0.7 s voiced, his 30 takes ≥ 0.3 s.
+
 stdin takes one word per line: `pause` (the app is dictating — no wake fires,
 the end-of-speech watch keeps running), `resume`, `quit`.
 
@@ -124,6 +130,8 @@ def main():
     p.add_argument("--max-command-s", type=float, default=60.0)
     p.add_argument("--cooldown-s", type=float, default=1.5)
     p.add_argument("--min-voiced-s", type=float, default=0.6)
+    p.add_argument("--wake-voiced-s", type=float, default=0.24,
+                   help="voice needed in the 2 s before a hit for it to be a wake; 0 = any hit")
     p.add_argument("--ignore-s", type=float, default=0.25, help="the wake word's own tail, not speech")
     p.add_argument("--head-s", type=float, default=4.0)
     p.add_argument("--head", default=os.path.expanduser("~/.walkie-talkie/wake/head.wav"))
@@ -243,6 +251,7 @@ def main():
 
     ring: "collections.deque" = collections.deque(maxlen=38)   # 3.04 s of 80 ms chunks
     trigger = None            # the wake whose second after it is still arriving
+    spoken: "collections.deque" = collections.deque(maxlen=25)   # voiced or not, the last 2 s
 
     def held():
         try:
@@ -298,6 +307,7 @@ def main():
         floor = rms if rms < floor else floor * 1.02
         voiced = rms > max(180.0, floor * 10 ** (9 / 20))
         ring.append(chunk)
+        spoken.append(voiced)
         if trigger is not None:
             trigger["post"].append(chunk)
             if len(trigger["post"]) >= 13:   # ~1 s after the wake
@@ -319,6 +329,9 @@ def main():
                         if whisper.last.get(word, 0) >= th:
                             hit = (word, whisper.last[word])
                             break
+            # A detector that likes the room's hum is not a wake: somebody has to have spoken.
+            if hit and sum(spoken) * 0.08 < a.wake_voiced_s:
+                hit = None
             if hit and not paused.is_set() and clock >= cooldown_until and not held():
                 # The wake's name: its audio's file here, its outcome's line in the
                 # app's `outcomes.jsonl` (silent / cancelled / session / question).
