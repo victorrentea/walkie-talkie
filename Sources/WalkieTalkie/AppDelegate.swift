@@ -7606,7 +7606,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let open = !VoiceDialog.shared.isOn
                 Log.info(String(format: "👂 \"%@\" (%.2f) — %@", word, score, open ? "the voice panel" : "ignored, the panel is already open"))
                 WakeWord.note(id: id, word: word, score: score, outcome: open ? "dialog" : "busy")
-                if open { VoiceDialog.shared.start() }
+                if open { VoiceDialog.shared.start(byWake: true) }
                 return
             }
             guard WakeWord.enabled else { return }

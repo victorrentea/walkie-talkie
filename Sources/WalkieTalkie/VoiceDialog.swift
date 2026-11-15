@@ -91,6 +91,7 @@ final class VoiceDialog: NSObject {
         ["on": isOn, "status": status, "user": userLine, "reply": reply, "shown": shown,
          "replySeconds": (replySeconds * 10).rounded() / 10, "turns": turns, "error": lastError,
          "paused": isPaused, "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false,
+         "byWake": wakeOpened, "idle": isOn ? Int(CFAbsoluteTimeGetCurrent() - lastHeard) : 0,
          "shots": shots, "looking": looking, "told": told, "lastLook": lastLook, "lookError": lookError]
     }
 
@@ -104,7 +105,7 @@ final class VoiceDialog: NSObject {
 
     /// `mic: false` opens no microphone and `silent: true` plays at volume 0 —
     /// the desk's way to hold a conversation with `say(_:)` and no sound.
-    func start(mic: Bool = true, silent: Bool = false, look: Bool = true) {
+    func start(mic: Bool = true, silent: Bool = false, look: Bool = true, byWake: Bool = false) {
         guard !isOn else { return }
         guard let codex = Self.codex else {
             lastError = "codex is not installed"
@@ -119,6 +120,10 @@ final class VoiceDialog: NSObject {
         userLine = ""; reply = ""; replySeconds = 0; replyBegan = nil; replyClosed = true; shown = 0; turns = 0; lastError = ""
         shots = 0; looking = 0; told = 0; lastLook = ""; lookError = ""; sessionUp = false; untold.removeAll()
         setStatus("Connecting…")
+        wakeOpened = byWake
+        lastHeard = CFAbsoluteTimeGetCurrent()
+        idleWatch?.invalidate()
+        idleWatch = byWake ? Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.closeIfIdle() } : nil
         // The screen as it is at the gesture, before the panel is on it.
         if look, !Self.screenLocked { self.look(why: "the start") }
         showPanel()
@@ -182,6 +187,7 @@ final class VoiceDialog: NSObject {
         isOn = false
         generation += 1
         sessionUp = false
+        idleWatch?.invalidate(); idleWatch = nil
         eyes?.stop(); eyes = nil
         onChange?(false)
         Log.info("🗣️ voice dialog — off (\(why)); \(turns) repl\(turns == 1 ? "y" : "ies")")
@@ -205,6 +211,27 @@ final class VoiceDialog: NSObject {
             guard let self, !self.isOn, self.panel === closing else { return }
             closing?.orderOut(nil)
             self.panel = nil
+        }
+    }
+
+    // MARK: - A panel the wake word opened closes itself
+
+    /// **Sixty seconds with nobody talking to it and it is gone** (2026-11-15,
+    /// Victor: *"după 60s să se închidă, da"*) — only a panel "Hey Gepetto"
+    /// opened: a false wake that morning kept one up 26 min behind a locked
+    /// screen, answering the room six times. The clock restarts at every word
+    /// of his it hears and while it speaks; a pause (⏸) holds it. One opened
+    /// by hand (🔽 ←, Link) stays until he ends it.
+    static let idleClose: TimeInterval = 60
+    private var wakeOpened = false
+    private var lastHeard: CFAbsoluteTime = 0
+    private var idleWatch: Timer?
+
+    private func closeIfIdle() {
+        guard isOn, wakeOpened else { return }
+        if isPaused || status == "Speaking" || !replyClosed { lastHeard = CFAbsoluteTimeGetCurrent(); return }
+        if CFAbsoluteTimeGetCurrent() - lastHeard >= Self.idleClose {
+            stop(why: "\(Int(Self.idleClose)) s with nobody talking to it, after a wake word")
         }
     }
 
@@ -303,6 +330,7 @@ final class VoiceDialog: NSObject {
         case "thread/realtime/transcript/delta":
             let delta = params["delta"] as? String ?? ""
             if params["role"] as? String == "user" {
+                lastHeard = CFAbsoluteTimeGetCurrent()
                 if replyClosed == false || userClosed { userLine = ""; userClosed = false }
                 userLine += delta
                 render()

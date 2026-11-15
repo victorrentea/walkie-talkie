@@ -1032,7 +1032,7 @@ final class ElementPicker {
             DispatchQueue.main.sync {
                 switch body["action"] as? String ?? "toggle" {
                 case "start": VoiceDialog.shared.start(mic: body["mic"] as? Bool ?? true, silent: body["silent"] as? Bool ?? false,
-                                                         look: body["look"] as? Bool ?? false)
+                                                         look: body["look"] as? Bool ?? false, byWake: body["byWake"] as? Bool ?? false)
                 case "look": VoiceDialog.shared.look(why: "the desk")
                 case "stop": VoiceDialog.shared.stop(why: "the desk")
                 case "pause": VoiceDialog.shared.setPaused(true)
