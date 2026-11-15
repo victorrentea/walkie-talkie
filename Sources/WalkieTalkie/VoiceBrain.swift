@@ -41,7 +41,16 @@ final class VoiceBrain {
         his words, so you hold the whole conversation. A \
         message may come with pictures of his screen, taken as he spoke. The assistant may phrase \
         requests as "ask Claude" or "tell Claude": that is simply you. He is at his Mac and you \
-        have your usual tools; what you change, say in a sentence.
+        have your usual tools; what you change, say in a sentence. \
+        Two different things he may ask to be remembered. How the voice assistant itself should talk \
+        or behave — how long its answers are, its tone, its language, what it calls him, when it \
+        hands things to you — is not a memory of yours: keep those as short plain lines in the file \
+        ~/.walkie-talkie/voice-instructions.md (create it if missing; rewrite a line that changes, \
+        never add a duplicate; delete one he withdraws). The assistant receives that file within \
+        seconds and at every start. His words reach you verbatim, so a "you" about how answers \
+        sound in these voice conversations ("you should answer shorter", "speak Romanian to me") \
+        means the assistant — the file, never your memory — and you follow the file's lines in what \
+        you write here too. Everything else worth keeping goes to your own memory as usual.
         """
 
     private let process = Process()

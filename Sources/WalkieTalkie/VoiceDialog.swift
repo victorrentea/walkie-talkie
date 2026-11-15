@@ -93,7 +93,7 @@ final class VoiceDialog: NSObject {
          "paused": isPaused, "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false,
          "byWake": wakeOpened, "idle": isOn ? Int(CFAbsoluteTimeGetCurrent() - lastHeard) : 0,
          "brain": brain != nil, "brainStep": brainStep, "brainTold": brainTold, "brainModel": brain?.servedModel ?? "",
-         "script": script.count,
+         "script": script.count, "instructionsTold": instructionsTold,
          "shots": shots, "looking": looking, "told": told, "lastLook": lastLook, "lookError": lookError]
     }
 
@@ -129,6 +129,7 @@ final class VoiceDialog: NSObject {
         self.silent = silent
         isPaused = false; dropReply = false
         userLine = ""; reply = ""; replySeconds = 0; replyBegan = nil; replyClosed = true; shown = 0; turns = 0; lastError = ""
+        instructionsTold = 0; instructionsSeen = nil
         shots = 0; looking = 0; told = 0; lastLook = ""; lookError = ""; sessionUp = false; untold.removeAll()
         script.removeAll(); readingSince = nil; brainStep = ""; brainShots.removeAll(); brainTold = 0; aside.removeAll()
         if Self.usesBrain {
@@ -229,6 +230,7 @@ final class VoiceDialog: NSObject {
         generation += 1
         sessionUp = false
         idleWatch?.invalidate(); idleWatch = nil
+        instructionsWatch?.invalidate(); instructionsWatch = nil
         brain?.stop(); brain = nil
         script.removeAll(); readingSince = nil
         eyes?.stop(); eyes = nil
@@ -392,6 +394,7 @@ final class VoiceDialog: NSObject {
             Log.info("🗣️ voice dialog — session up (\(params["version"] as? String ?? "?"))")
             ChatGPTVoice.chime(on: true)
             sessionUp = true
+            tellInstructions(first: true)
             untold.forEach(tell)
             untold.removeAll()
             readNext()
@@ -437,8 +440,16 @@ final class VoiceDialog: NSObject {
                 // What the voice said of its own (not Claude's words read out) is
                 // part of the conversation Claude must hold.
                 if readingSince == nil, !reply.isEmpty { aside.append("Assistant: " + reply) }
-                readingSince = nil
-                readNext()
+                // The words are all here well before their sound has played: the
+                // next of Claude's texts waits for the sound, or the panel shows
+                // sentence two while sentence one is still being said.
+                let left = replyBegan.map { max(0, replySeconds - (CFAbsoluteTimeGetCurrent() - $0)) } ?? 0
+                let mine = generation
+                DispatchQueue.main.asyncAfter(deadline: .now() + left + 0.25) { [weak self] in
+                    guard let self, self.generation == mine else { return }
+                    self.readingSince = nil
+                    self.readNext()
+                }
             }
         case "thread/realtime/error":
             fail("the voice session failed: \(Self.short(params))")
@@ -520,6 +531,13 @@ final class VoiceDialog: NSObject {
 
     private func brainSaid(_ text: String) {
         guard isOn else { return }
+        // A web search makes Claude end on a `Sources:` list of links whatever
+        // the voice prompt says; read aloud it is noise (heard 2026-11-15).
+        var text = text
+        if let cut = text.range(of: #"(^|\n)\s*Sources:\s*(\n|$)"#, options: .regularExpression) {
+            text = String(text[..<cut.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard !text.isEmpty else { return }
         Log.info("🗣️ 🧠 Claude: \(text.prefix(160))")
         script.append(text)
         readNext()
@@ -544,6 +562,48 @@ final class VoiceDialog: NSObject {
                                                             object: nil, queue: .main) { [weak self] _ in
             self?.stop(why: "the screen locked")
         }
+    }
+
+    // MARK: - How the voice should behave: a file he can change by voice
+
+    /// **`~/.walkie-talkie/voice-instructions.md`** (2026-11-15, Victor: *"există
+    /// vreun mod de a-i strecura instrucțiuni modelului de voice-to-voice: cum să
+    /// se poarte, să răspundă succint? … vreau să pot ajusta din voce
+    /// comportamentul nedorit … cum aș face să disting între memoria persistentă
+    /// a lui Claude și instrucțiuni pentru modelul voice-to-voice?"*).
+    ///
+    /// Two stores, told apart by what they are about: **how the voice talks**
+    /// (length, tone, language, when to hand work over) is this file; everything
+    /// else is Claude's own memory. The file's text goes to the voice as a `user`
+    /// text when the session comes up, and again within 2 s of any change — so
+    /// Claude, asked by voice to change the voice's manner, edits the file
+    /// (`VoiceBrain.voicePrompt` tells it to) and the voice has it mid-conversation.
+    /// A text in the conversation, not the session's `prompt`: a custom prompt
+    /// stopped the voice delegating (`fable_voice.py`, 2026-11-05).
+    static var instructionsFile: URL { Outbox.home.appendingPathComponent("voice-instructions.md") }
+    private var instructionsSeen: Date?
+    private var instructionsWatch: Timer?
+    private(set) var instructionsTold = 0
+
+    private func tellInstructions(first: Bool) {
+        let file = Self.instructionsFile
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: file.path))?[.modificationDate] as? Date
+        if first {
+            instructionsWatch?.invalidate()
+            instructionsWatch = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.tellInstructions(first: false) }
+        } else if stamp == instructionsSeen { return }
+        instructionsSeen = stamp
+        let text = ((try? String(contentsOf: file, encoding: .utf8)) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard isOn, sessionUp else { return }
+        instructionsTold += 1
+        Log.info("🗣️ 📜 voice instructions \(first ? "told" : "changed — told again") (\(text.count) chars)")
+        tell((first ? "[Standing instructions from me, Victor, for how you speak and behave in this conversation. "
+                    : "[My instructions for how you speak and behave have just changed; these replace the earlier ones. ")
+             + "This needs no answer and is not a request. Follow them from now on. They change nothing about handing "
+             + "work to your background agent. One more rule, always: when I ask you to change how you yourself speak or "
+             + "behave for the future (\"from now on\", \"always\", \"never\", \"remember\"), do it at once and also "
+             + "hand my words to your background agent, so that it is saved — you forget everything when this "
+             + "conversation ends.]\n" + (text.isEmpty ? "(no standing instructions yet)" : String(text.prefix(4000))))
     }
 
     // MARK: - Its eyes
