@@ -1047,8 +1047,15 @@ final class ElementPicker {
         case ("POST", "/test/mic-mute"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             var out: [String: Any] = ["ok": true]
-            if body["read"] as? Bool != true { out["said"] = MicMute.toggle(to: body["on"] as? Bool) }
+            if body["read"] as? Bool != true {
+                out["said"] = MicMute.toggle(to: body["on"] as? Bool)
+                MicMuteHUD.shared.sync()
+            }
             out.merge(MicMute.describe) { a, _ in a }
+            DispatchQueue.main.sync {
+                out["hud"] = MicMuteHUD.shared.describe
+                if let png = body["png"] as? String { out["png"] = MicMuteHUD.shared.writePNG(png) }
+            }
             respond(conn, 200, out)
         case ("POST", "/test/chat-voice-mini"):
             ChatGPTVoice.pressVoiceInMini()

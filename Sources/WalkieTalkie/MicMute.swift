@@ -73,7 +73,7 @@ enum MicMute {
             return "⚠️ \(name) cannot be muted from here"
         }
         Log.info("🔇 mic mute: \(name) \(on ? "muted" : "live again") (\(how.isEmpty ? "it was live" : how))")
-        return on ? "🔇 Microphone muted — \(name)" : "🎙️ Microphone live — \(name)"
+        return on ? "Microphone muted — \(name)" : "Microphone live — \(name)"
     }
 
     private static func settable(_ id: AudioDeviceID, _ selector: AudioObjectPropertySelector) -> Bool {

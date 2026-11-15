@@ -2703,9 +2703,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Link ×2 (2026-11-15): the microphone muted / live again, whatever
         // is or is not open.
         hotkeys.onDjiDouble = { [weak self] in
+            // What it did is the HUD's to say (`MicMuteHUD`); a failure is the chip's.
             let words = MicMute.toggle()
-            DispatchQueue.main.async { self?.overlay.flash(words, duration: 4) }
+            MicMuteHUD.shared.sync()
+            if words.hasPrefix("⚠️") { DispatchQueue.main.async { self?.overlay.flash(words, duration: 4) } }
         }
+        MicMuteHUD.shared.start()
         // The bare 🔽 while the voice panel is up: a picture for the voice.
         hotkeys.onVoiceShot = { cursor in
             DispatchQueue.main.async { VoiceDialog.shared.look(at: cursor, why: "🔽") }
