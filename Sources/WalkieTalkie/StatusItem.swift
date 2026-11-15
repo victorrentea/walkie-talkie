@@ -852,6 +852,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let liveRow = NSMenuItem(title: LocalLive.menuTitle, action: nil, keyEquivalent: "")
     private let editorRow = NSMenuItem(title: "✍️ Edit plain dictation (Haiku)", action: nil, keyEquivalent: "")
     private let wakeRow = NSMenuItem(title: WakeWord.menuTitle, action: nil, keyEquivalent: "")
+    private let gepettoRow = NSMenuItem(title: WakeWord.gepettoMenuTitle, action: nil, keyEquivalent: "")
     private let faceRow = NSMenuItem(title: FaceRead.menuTitle, action: nil, keyEquivalent: "")
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
@@ -1054,7 +1055,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // top level"*). The Engine list is the engines and the quota again;
         // these are ticks like Autosend, drawn the same way, re-read at every
         // open (`applySwitchRows`).
-        for row in [autoLocalRow, liveRow, editorRow, wakeRow, faceRow] {
+        for row in [autoLocalRow, liveRow, editorRow, wakeRow, gepettoRow, faceRow] {
             row.target = self
             menu.addItem(row)
         }
@@ -1062,6 +1063,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         liveRow.action = #selector(localLiveClicked)
         editorRow.action = #selector(editorClicked)
         wakeRow.action = #selector(wakeClicked)
+        gepettoRow.action = #selector(gepettoClicked)
         faceRow.action = #selector(faceClicked)
         applySwitchRows()
 
@@ -1351,7 +1353,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "Wispr Flow's words are already edited by Wispr. Waits at most \(Int(DictationEditor.budget)) s, then pastes the raw words."
         // Grey and unticked on battery, whatever the switch says (`WakeWord.listens`).
         wakeRow.isEnabled = !BatteryFx.onBattery
-        wakeRow.image = Self.tick(WakeWord.listens)
+        wakeRow.image = Self.tick(WakeWord.enabled && !BatteryFx.onBattery)
+        gepettoRow.isEnabled = !BatteryFx.onBattery
+        gepettoRow.image = Self.tick(WakeWord.gepettoEnabled && !BatteryFx.onBattery)
+        gepettoRow.toolTip = (BatteryFx.onBattery ? "Off on battery — it listens again when the Mac is plugged in.\n" : "")
+            + "Say \"Hey Gepetto\" and the voice dialog opens: a spoken conversation in a floating panel. "
+            + "⏸ on the panel stops it listening while you talk to someone else.\n"
+            + "Its own tick: it listens with or without \"Hey Claude\" / \"Hey Santa\"."
         wakeRow.toolTip = (BatteryFx.onBattery ? "Off on battery — it listens again when the Mac is plugged in.\n" : "") + "Say \"Hey Claude\", then the task: it starts a new Claude Code session in ~/workspace with your words. "
             + "Open with \"I have a question\" and it is a ⚡ quick question instead, answered in the pop-up. "
             + "The sentence ends when you stop talking.\n"
@@ -1379,6 +1387,14 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func wakeClicked() {
         guard !BatteryFx.onBattery else { return }
         onToggleWakeWord?(!WakeWord.enabled)
+    }
+
+    /// The `Hey Gepetto` row's new value.
+    var onToggleGepetto: ((Bool) -> Void)?
+
+    @objc private func gepettoClicked() {
+        guard !BatteryFx.onBattery else { return }
+        onToggleGepetto?(!WakeWord.gepettoEnabled)
     }
 
     @objc private func faceClicked() {

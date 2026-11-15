@@ -26,7 +26,7 @@ import AVFoundation
 ///
 /// The voice model here is realtime v2 as Plus gets it — it answers on its
 /// own and does not look things up, where the app's voice can delegate.
-final class VoiceDialog {
+final class VoiceDialog: NSObject {
 
     static let shared = VoiceDialog()
 
@@ -50,6 +50,13 @@ final class VoiceDialog {
     // MARK: - State (main thread unless said otherwise)
 
     private(set) var isOn = false
+    /// **⏸ on the panel** (2026-11-15, Victor: *"un buton de pauză/play pe
+    /// dialog dacă vreau să vorbesc cu alții în timpul ăla"*): the session
+    /// stays up and keeps its context, but it hears silence instead of the
+    /// microphone and what it was saying is cut. Read on the audio thread.
+    private(set) var isPaused = false
+    /// A reply cut by the pause is still arriving: dropped until its `done`.
+    private var dropReply = false
     private var status = ""
     private var userLine = ""
     /// The reply being spoken: every word received, the seconds of sound
@@ -83,7 +90,7 @@ final class VoiceDialog {
     var describe: [String: Any] {
         ["on": isOn, "status": status, "user": userLine, "reply": reply, "shown": shown,
          "replySeconds": (replySeconds * 10).rounded() / 10, "turns": turns, "error": lastError,
-         "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false]
+         "paused": isPaused, "panel": panel?.isVisible ?? false, "engine": engine?.isRunning ?? false]
     }
 
     // MARK: - On and off
@@ -103,6 +110,7 @@ final class VoiceDialog {
         generation += 1
         let mine = generation
         self.silent = silent
+        isPaused = false; dropReply = false
         userLine = ""; reply = ""; replySeconds = 0; replyBegan = nil; replyClosed = true; shown = 0; turns = 0; lastError = ""
         setStatus("Connecting…")
         showPanel()
@@ -188,6 +196,19 @@ final class VoiceDialog {
         }
     }
 
+    func setPaused(_ on: Bool) {
+        guard isOn, on != isPaused else { return }
+        isPaused = on
+        Log.info("🗣️ voice dialog — \(on ? "paused: it hears silence" : "listening again")")
+        if on {
+            if !replyClosed { dropReply = true }
+            cutPlayback()
+        }
+        setStatus(on ? "Paused" : "Listening")
+    }
+
+    @objc private func pauseClicked() { setPaused(!isPaused) }
+
     private func fail(_ why: String) {
         lastError = why
         Log.error("🗣️ voice dialog — \(why)")
@@ -236,7 +257,7 @@ final class VoiceDialog {
                     if method == "thread/realtime/outputAudio/delta" {
                         if let audio = params["audio"] as? [String: Any], let b64 = audio["data"] as? String,
                            let pcm = Data(base64Encoded: b64) {
-                            DispatchQueue.main.async { if self.generation == mine { self.play(pcm) } }
+                            DispatchQueue.main.async { if self.generation == mine, !self.isPaused, !self.dropReply { self.play(pcm) } }
                         }
                     } else {
                         DispatchQueue.main.async { if self.generation == mine { self.event(method, params) } }
@@ -260,7 +281,7 @@ final class VoiceDialog {
         case "thread/realtime/itemAdded":
             // He started talking: whatever is still being said is cut, and
             // its words are all shown — a barge-in.
-            if ((params["item"] as? [String: Any])?["type"] as? String) == "input_audio_buffer.speech_started" {
+            if !isPaused, ((params["item"] as? [String: Any])?["type"] as? String) == "input_audio_buffer.speech_started" {
                 if replyBegan != nil, shown < reply.count { cutPlayback() }
                 setStatus("Listening")
             }
@@ -271,6 +292,8 @@ final class VoiceDialog {
                 userLine += delta
                 render()
             } else {
+                if isPaused { dropReply = true }
+                if dropReply { break }
                 if replyClosed { reply = ""; replySeconds = 0; replyBegan = nil; shown = 0; replyClosed = false }
                 reply += delta
             }
@@ -280,6 +303,8 @@ final class VoiceDialog {
                 userLine = text
                 userClosed = true
                 render()
+            } else if dropReply {
+                dropReply = false
             } else {
                 if replyClosed { reply = ""; replySeconds = 0; replyBegan = nil; shown = 0 }
                 if !text.isEmpty { reply = text }
@@ -378,7 +403,9 @@ final class VoiceDialog {
             return one
         }
         guard error == nil, out.frameLength > 0, let samples = out.int16ChannelData else { return }
-        append(Data(bytes: samples[0], count: Int(out.frameLength) * 2))
+        // Paused: the same length of silence, so the session's clock and its
+        // end-of-turn detection keep running.
+        append(isPaused ? Data(count: Int(out.frameLength) * 2) : Data(bytes: samples[0], count: Int(out.frameLength) * 2))
     }
 
     private func append(_ pcm: Data) {
@@ -494,6 +521,7 @@ final class VoiceDialog {
     private let statusField = NSTextField(labelWithString: "")
     private let userField = NSTextField(wrappingLabelWithString: "")
     private let replyField = NSTextField(wrappingLabelWithString: "")
+    private let pauseButton = NSButton(title: "⏸ Pause", target: nil, action: nil)
 
     private static let size = NSSize(width: 640, height: 230)
 
@@ -530,6 +558,13 @@ final class VoiceDialog {
             replyField.textColor = .labelColor
             replyField.maximumNumberOfLines = 5
             replyField.lineBreakMode = .byWordWrapping
+            pauseButton.bezelStyle = .recessed
+            pauseButton.controlSize = .small
+            pauseButton.target = self
+            pauseButton.action = #selector(pauseClicked)
+            pauseButton.toolTip = "Pause: it stops listening and stops talking, so you can speak to someone else. The conversation is kept."
+            pauseButton.translatesAutoresizingMaskIntoConstraints = false
+            glass.addSubview(pauseButton)
             for field in [statusField, userField, replyField] {
                 field.translatesAutoresizingMaskIntoConstraints = false
                 glass.addSubview(field)
@@ -537,13 +572,15 @@ final class VoiceDialog {
             NSLayoutConstraint.activate([
                 statusField.topAnchor.constraint(equalTo: glass.topAnchor, constant: 14),
                 statusField.leadingAnchor.constraint(equalTo: glass.leadingAnchor, constant: 22),
-                statusField.trailingAnchor.constraint(equalTo: glass.trailingAnchor, constant: -22),
+                statusField.trailingAnchor.constraint(lessThanOrEqualTo: pauseButton.leadingAnchor, constant: -12),
+                pauseButton.trailingAnchor.constraint(equalTo: glass.trailingAnchor, constant: -16),
+                pauseButton.centerYAnchor.constraint(equalTo: statusField.centerYAnchor),
                 userField.topAnchor.constraint(equalTo: statusField.bottomAnchor, constant: 8),
                 userField.leadingAnchor.constraint(equalTo: statusField.leadingAnchor),
-                userField.trailingAnchor.constraint(equalTo: statusField.trailingAnchor),
+                userField.trailingAnchor.constraint(equalTo: glass.trailingAnchor, constant: -22),
                 replyField.topAnchor.constraint(equalTo: userField.bottomAnchor, constant: 10),
                 replyField.leadingAnchor.constraint(equalTo: statusField.leadingAnchor),
-                replyField.trailingAnchor.constraint(equalTo: statusField.trailingAnchor),
+                replyField.trailingAnchor.constraint(equalTo: glass.trailingAnchor, constant: -22),
                 replyField.bottomAnchor.constraint(lessThanOrEqualTo: glass.bottomAnchor, constant: -16),
             ])
             panel = p
@@ -558,8 +595,10 @@ final class VoiceDialog {
     }
 
     private func render() {
-        let dot = status == "Speaking" ? "🔊" : status == "Listening" ? "🎙️" : "•"
-        statusField.stringValue = "\(dot)  \(status)   ·   again to end"
+        let dot = status == "Speaking" ? "🔊" : status == "Listening" ? "🎙️" : status == "Paused" ? "⏸" : "•"
+        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")   ·   again to end"
+        pauseButton.title = isPaused ? "▶ Resume" : "⏸ Pause"
+        pauseButton.isHidden = !isOn
         userField.stringValue = Self.tail(userLine, 150)
         replyField.stringValue = Self.tail(String(reply.prefix(shown)), 270)
     }

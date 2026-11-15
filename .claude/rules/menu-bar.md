@@ -23,7 +23,7 @@ that are right now in engine top level."*
   Prompt History ▸ / Recover Dictation / Replay Last Dictation · End Dictation / Cancel Dictation ·
   Mic ▸ / Engine ▸ / Last used / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
   **the five engine switches** (Backup Local Pre-Transcribe, Live captions (local), ✍️ Edit plain
-  dictation, 👂 Hey Claude, 🙂 Read my face) · **Gesture Guide** · `Built …` · Quit.
+  dictation, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face) · **Gesture Guide** · `Built …` · Quit.
 - **Gone:** the legend rows (`Prompt at caret`, `Prompt to bound`, `Prompt to new`, `Dictate (no
   Enter)`, `Transcribe Locally Now`, `Record Screen`, `Take Screenshot`, `Select Screen Area`,
   `Pick from Chrome`), their callbacks (`onStartDictation`, `onNewSession`, `onShot`,

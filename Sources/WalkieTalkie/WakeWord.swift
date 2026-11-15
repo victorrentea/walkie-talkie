@@ -60,10 +60,22 @@ final class WakeWord {
     /// menu row is grey, and the helper comes back with the charger
     /// (`AppDelegate.syncWakeWordToPower`). No override — not the menu, not
     /// `WT_WAKE_WORD`.
-    static var listens: Bool { listens(enabled: enabled, onBattery: BatteryFx.onBattery) }
+    /// The helper runs for either switch: this one, or `gepettoEnabled`.
+    static var listens: Bool { listens(enabled: enabled || gepettoEnabled, onBattery: BatteryFx.onBattery) }
     static func listens(enabled: Bool, onBattery: Bool) -> Bool { enabled && !onBattery }
 
-    static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\" / \"Hey Gepetto\""
+    static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\""
+
+    /// **"Hey Gepetto" has a tick of its own** (2026-11-15, Victor: *"hey
+    /// gepetto să fie bifă separată în meniu"*): the `wakeGepetto` default, on
+    /// unless unticked. Either tick keeps the helper up; with only this one the
+    /// Santa detector still runs (the Gepetto head reads its windows) but at a
+    /// threshold it cannot reach, and no openWakeWord model is loaded.
+    static var gepettoEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: "wakeGepetto") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "wakeGepetto") }
+    }
+    static let gepettoMenuTitle = "🗣️ Wake: \"Hey Gepetto\" (voice dialog)"
 
     /// `WT_WAKE_THRESHOLD`, 0…1. 0.5 is the model card's; fitted to his voice
     /// in `evals/wake-word/`.
@@ -116,6 +128,16 @@ final class WakeWord {
         }
     }
 
+    /// A tick changed: the helper's arguments are decided at launch.
+    func restart() {
+        queue.async { [self] in
+            wanted = true
+            terminate()
+            queue.asyncAfter(deadline: .now() + 1.2) { self.launch() }
+            watchDevice()
+        }
+    }
+
     func stop() {
         queue.async { [self] in
             wanted = false
@@ -162,9 +184,11 @@ final class WakeWord {
             Log.info("👂 wake word off — no venv at \(Self.python) (see WakeWord.swift for the setup)")
             return
         }
-        let claude = fm.fileExists(atPath: Self.model), santa = fm.fileExists(atPath: Self.santaModel)
-        guard claude || santa else {
-            Log.info("👂 wake word off — no model at \(Self.model) nor \(Self.santaModel)")
+        let sentences = Self.enabled
+        let claude = sentences && fm.fileExists(atPath: Self.model), santa = fm.fileExists(atPath: Self.santaModel)
+        let gepetto = Self.gepettoEnabled && santa && fm.fileExists(atPath: Self.gepettoModel)
+        guard claude || (santa && (sentences || gepetto)) else {
+            Log.info("👂 wake word off — no model for what is ticked (\(Self.model), \(Self.santaModel), \(Self.gepettoModel))")
             return
         }
         device = Self.resolvedDevice()
@@ -172,8 +196,9 @@ final class WakeWord {
         p.executableURL = URL(fileURLWithPath: Self.python)
         var args = ["-I", script, "--device", device]
         if claude { args += ["--model", Self.model, "--threshold", String(Self.threshold)] }
-        if santa { args += ["--whisper-wake", Self.santaModel, "--whisper-threshold", String(Self.santaThreshold)] }
-        let gepetto = santa && fm.fileExists(atPath: Self.gepettoModel)
+        // Unticked, "Hey Santa" gets a threshold no score reaches: its windows
+        // are still what the Gepetto head reads.
+        if santa { args += ["--whisper-wake", Self.santaModel, "--whisper-threshold", sentences ? String(Self.santaThreshold) : "2"] }
         if gepetto { args += ["--also", "\(Self.gepetto)=\(Self.gepettoModel)@\(Self.gepettoThreshold)"] }
         p.arguments = args
         let input = Pipe(), output = Pipe(), errors = Pipe()
@@ -221,7 +246,7 @@ final class WakeWord {
         process = p
         stdin = input.fileHandleForWriting
         Log.info("👂 wake word helper up (pid \(p.processIdentifier)) on \(device.isEmpty ? "the default input" : device)"
-                 + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa ? " — hey santa ≥ \(Self.santaThreshold)" : "")
+                 + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa && sentences ? " — hey santa ≥ \(Self.santaThreshold)" : "")
                  + (gepetto ? " — hey gepetto ≥ \(Self.gepettoThreshold)" : ""))
     }
 

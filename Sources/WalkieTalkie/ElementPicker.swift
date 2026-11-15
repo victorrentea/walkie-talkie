@@ -1022,7 +1022,7 @@ final class ElementPicker {
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             ChatGPTVoice.zoom(steps: body["steps"] as? Int ?? 1)
             respond(conn, 200, ["ok": true])
-        // `POST /test/voice-dialog {"action": "start"|"stop"|"toggle"|"say", "mic": bool,
+        // `POST /test/voice-dialog {"action": "start"|"stop"|"toggle"|"pause"|"resume"|"say", "mic": bool,
         // "silent": bool, "pcm": path}` — this app's own voice panel (`VoiceDialog`)
         // from a desk: `mic: false, silent: true` opens no microphone and makes no
         // sound, `say` speaks a 24 kHz mono PCM16 file into the session.
@@ -1033,6 +1033,8 @@ final class ElementPicker {
                 switch body["action"] as? String ?? "toggle" {
                 case "start": VoiceDialog.shared.start(mic: body["mic"] as? Bool ?? true, silent: body["silent"] as? Bool ?? false)
                 case "stop": VoiceDialog.shared.stop(why: "the desk")
+                case "pause": VoiceDialog.shared.setPaused(true)
+                case "resume": VoiceDialog.shared.setPaused(false)
                 case "say": out["ok"] = VoiceDialog.shared.say(body["pcm"] as? String ?? "")
                 default: VoiceDialog.shared.toggle()
                 }

@@ -30,6 +30,20 @@ final class WakeWordTests: XCTestCase {
         XCTAssertFalse(WakeWord.listens(enabled: false, onBattery: true))
     }
 
+    /// 2026-11-15: "Hey Gepetto" is a tick of its own — on by default, and
+    /// either tick keeps the helper listening.
+    func testGepettoHasItsOwnTick() {
+        let d = UserDefaults.standard, was = d.object(forKey: "wakeGepetto")
+        defer { d.set(was, forKey: "wakeGepetto") }
+        d.removeObject(forKey: "wakeGepetto")
+        XCTAssertTrue(WakeWord.gepettoEnabled)
+        WakeWord.gepettoEnabled = false
+        XCTAssertFalse(WakeWord.gepettoEnabled)
+        XCTAssertFalse(WakeWord.menuTitle.contains("Gepetto"))
+        XCTAssertTrue(WakeWord.gepettoMenuTitle.contains("Hey Gepetto"))
+        XCTAssertTrue(WakeWord.listens(enabled: false || true, onBattery: false))
+    }
+
     func testAQuestionOpeningIsTakenOff() {
         XCTAssertEqual(WakeWord.question(in: "I have a question. What port does Grafana use?"),
                        "What port does Grafana use?")

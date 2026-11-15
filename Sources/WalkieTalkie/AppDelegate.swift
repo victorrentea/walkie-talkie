@@ -1772,6 +1772,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.onToggleAutoLocal = { [weak self] on in self?.setAutoLocal(on, from: "the Engine menu") }
         status.onToggleWakeWord = { [weak self] on in self?.setWakeWord(on) }
+        status.onToggleGepetto = { [weak self] on in self?.setGepetto(on) }
         status.onToggleLocalLive = { [weak self] on in
             LocalLive.isOn = on
             Log.info("💬 live captions (local) \(on ? "on" : "off") — from the menu")
@@ -7538,7 +7539,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func setWakeWord(_ on: Bool) {
         WakeWord.enabled = on
         Log.info("👂 wake word \(on ? "on" : "off") from the menu")
-        if WakeWord.listens { WakeWord.shared.start() } else { WakeWord.shared.stop() }
+        applyWakeTicks()
+    }
+
+    /// "Hey Gepetto"'s own tick (2026-11-15).
+    func setGepetto(_ on: Bool) {
+        WakeWord.gepettoEnabled = on
+        Log.info("🗣️ \"Hey Gepetto\" \(on ? "on" : "off") from the menu")
+        applyWakeTicks()
+    }
+
+    /// Which words the helper listens for is decided when it starts.
+    private func applyWakeTicks() {
+        wakeListening = WakeWord.listens
+        if WakeWord.listens { WakeWord.shared.restart() } else { WakeWord.shared.stop() }
     }
 
     /// **The charger decides whether it listens** (2026-11-13, `WakeWord.listens`):
@@ -7558,7 +7572,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if wants {
             Log.info("🔌 on power — 👂 the wake word listens again")
             WakeWord.shared.start()
-        } else if WakeWord.enabled {
+        } else if WakeWord.enabled || WakeWord.gepettoEnabled {
             Log.info("🔋 on battery — 👂 the wake word is off until the Mac is plugged in")
             WakeWord.shared.stop()
         }
@@ -7577,12 +7591,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard WakeWord.listens else { return }
             // "Hey Gepetto" opens the voice panel, not a sentence (2026-11-14).
             if word == WakeWord.gepetto {
+                guard WakeWord.gepettoEnabled else { return }
                 let open = !VoiceDialog.shared.isOn
                 Log.info(String(format: "👂 \"%@\" (%.2f) — %@", word, score, open ? "the voice panel" : "ignored, the panel is already open"))
                 WakeWord.note(id: id, word: word, score: score, outcome: open ? "dialog" : "busy")
                 if open { VoiceDialog.shared.start() }
                 return
             }
+            guard WakeWord.enabled else { return }
             let busy = listening || source.isRecording || speculative || settling
                 || source.phase.isWaitingForWords || held != nil
             if busy || startBlocker() != nil {
@@ -9514,7 +9530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["chatVoice"] = ChatGPTVoice.describe
         out["voiceDialog"] = VoiceDialog.shared.describe
         out["djiButton"] = DjiButton.describe
-        out["wakeWord"] = ["enabled": WakeWord.enabled, "onBattery": BatteryFx.onBattery,
+        out["wakeWord"] = ["enabled": WakeWord.enabled, "gepetto": WakeWord.gepettoEnabled, "onBattery": BatteryFx.onBattery,
                            "listens": WakeWord.listens, "running": WakeWord.shared.isRunning]
         return out
     }
