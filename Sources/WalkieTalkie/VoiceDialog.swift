@@ -130,7 +130,7 @@ final class VoiceDialog: NSObject {
         isPaused = false; dropReply = false
         userLine = ""; reply = ""; replySeconds = 0; replyBegan = nil; replyClosed = true; shown = 0; turns = 0; lastError = ""
         shots = 0; looking = 0; told = 0; lastLook = ""; lookError = ""; sessionUp = false; untold.removeAll()
-        script.removeAll(); readingSince = nil; brainStep = ""; brainShots.removeAll(); brainTold = 0
+        script.removeAll(); readingSince = nil; brainStep = ""; brainShots.removeAll(); brainTold = 0; aside.removeAll()
         if Self.usesBrain {
             do {
                 let b = try VoiceBrain()
@@ -424,6 +424,7 @@ final class VoiceDialog: NSObject {
             if params["role"] as? String == "user" {
                 userLine = text
                 userClosed = true
+                if !text.isEmpty { aside.append("Victor: " + text) }
                 render()
                 if let said = Self.stopPhrase(in: text) { stop(why: "he said \"\(said)\"") }
             } else if dropReply {
@@ -433,6 +434,9 @@ final class VoiceDialog: NSObject {
                 if !text.isEmpty { reply = text }
                 replyClosed = true
                 turns += 1
+                // What the voice said of its own (not Claude's words read out) is
+                // part of the conversation Claude must hold.
+                if readingSince == nil, !reply.isEmpty { aside.append("Assistant: " + reply) }
                 readingSince = nil
                 readNext()
             }
@@ -480,6 +484,8 @@ final class VoiceDialog: NSObject {
     static let readTimeout: TimeInterval = 120
 
     private var brain: VoiceBrain?
+    /// The turns Claude was not part of, since its last message.
+    private var aside: [String] = []
     private var brainStep = ""
     private var brainTold = 0
     /// The pictures taken since his last words to Claude (800 px copies).
@@ -496,9 +502,17 @@ final class VoiceDialog: NSObject {
         let pictures = Array(brainShots.suffix(4))
         brainShots.removeAll()
         brainTold += 1
+        // **Claude holds the whole conversation** (*"se păstrează conversația
+        // cap-coadă"*): what was said since its last message — his words the
+        // voice answered itself, and those answers — goes ahead of these.
+        var before = aside
+        if before.last?.hasPrefix("Victor: ") == true { before.removeLast() }   // these very words
+        aside.removeAll()
+        let heard = before.isEmpty ? message
+            : "[Said since your last message, without you:\n" + before.suffix(40).joined(separator: "\n") + "]\n\n" + message
         Log.info("🗣️ 🧠 tell_claude\(interrupt ? " (interrupt)" : "") with \(pictures.count) picture(s): \(message.prefix(120))")
         if interrupt { script.removeAll() }
-        brain.tell(message, images: pictures, interrupt: interrupt)
+        brain.tell(heard, images: pictures, interrupt: interrupt)
         brainStep = "thinking"
         render()
         return "sent"

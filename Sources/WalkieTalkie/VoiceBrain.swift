@@ -19,8 +19,11 @@ import Foundation
 /// boundary; `interrupt` stops the turn first (a `control_request`).
 /// Subscription only: `ANTHROPIC_API_KEY` is taken out of its environment.
 final class VoiceBrain {
-    static var model: String { setting("WT_VOICE_BRAIN_MODEL") ?? "claude-fable-5-2" }
-    static var effort: String { setting("WT_VOICE_BRAIN_EFFORT") ?? "medium" }
+    /// **Opus at high effort** (2026-11-15, Victor: *"ar trebui să fie acolo un
+    /// Opus Hi prepornit la momentul pornirii dialogului, care să rămână activ"*)
+    /// — Fable at medium for the first hour.
+    static var model: String { setting("WT_VOICE_BRAIN_MODEL") ?? "opus" }
+    static var effort: String { setting("WT_VOICE_BRAIN_EFFORT") ?? "high" }
     private static func setting(_ key: String) -> String? {
         let v = ProcessInfo.processInfo.environment[key] ?? ElevenLabsSource.fileValue(key)
         return v?.isEmpty == false ? v : nil
@@ -33,7 +36,9 @@ final class VoiceBrain {
         lists, no code, no URLs, no file paths spelled out unless he asks. Lead with the conclusion \
         and stay short unless asked to go deep. On long work, say one short sentence whenever you \
         have something worth hearing instead of saving it all for the end, and say when you are \
-        done. New messages can reach you while you work: take them into account straight away. A \
+        done. New messages can reach you while you work: take them into account straight away. The \
+        assistant answers small talk itself; what was said without you comes in brackets ahead of \
+        his words, so you hold the whole conversation. A \
         message may come with pictures of his screen, taken as he spoke. The assistant may phrase \
         requests as "ask Claude" or "tell Claude": that is simply you. He is at his Mac and you \
         have your usual tools; what you change, say in a sentence.
