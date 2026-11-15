@@ -235,6 +235,26 @@ final class VoiceDialog: NSObject {
         }
     }
 
+    // MARK: - Said, and it ends
+
+    /// **"Gepetto, over" · "over and out" · "Pinocchio"** (2026-11-15, Victor:
+    /// *"gepetto over, over and out și pinocchio ca fraze de stop din
+    /// transcriere"*): what the session writes of his words **ends** with one
+    /// of them — said mid-sentence it is talk. No detector: the transcript is
+    /// already here. Spellings the recogniser may choose are allowed for
+    /// (*Geppetto*, *Jepeto*, *Pinokio*). Pure — `VoiceStopPhraseTests`.
+    static func stopPhrase(in text: String) -> String? {
+        let folded = text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil).lowercased()
+        let words = String(folded.map { $0.isLetter ? $0 : " " }).split(separator: " ").joined(separator: " ")
+        let phrases: [(String, String)] = [
+            ("Gepetto, over", #"(^| )(g|j|dj|dz)h?[eai]p+[eai]t+[oa] over$"#),
+            ("over and out", #"(^| )over (and|an|end|n) out$"#),
+            ("Pinocchio", #"(^| )pin+o(cch|ch|cc|c|kk|k)i?o$"#),
+        ]
+        for (name, pattern) in phrases where words.range(of: pattern, options: .regularExpression) != nil { return name }
+        return nil
+    }
+
     func setPaused(_ on: Bool) {
         guard isOn, on != isPaused else { return }
         isPaused = on
@@ -334,6 +354,7 @@ final class VoiceDialog: NSObject {
                 if replyClosed == false || userClosed { userLine = ""; userClosed = false }
                 userLine += delta
                 render()
+                if let said = Self.stopPhrase(in: userLine) { stop(why: "he said \"\(said)\"") }
             } else {
                 if isPaused { dropReply = true }
                 if dropReply { break }
@@ -346,6 +367,7 @@ final class VoiceDialog: NSObject {
                 userLine = text
                 userClosed = true
                 render()
+                if let said = Self.stopPhrase(in: text) { stop(why: "he said \"\(said)\"") }
             } else if dropReply {
                 dropReply = false
             } else {
@@ -762,7 +784,7 @@ final class VoiceDialog: NSObject {
     private func render() {
         let dot = status == "Speaking" ? "🔊" : status == "Listening" ? "🎙️" : status == "Paused" ? "⏸" : "•"
         let eyes = shots == 0 ? "" : "   ·   📸 ×\(shots)\(looking > 0 ? " reading the screen…" : lookError.isEmpty || told == shots ? "" : " ⚠️")"
-        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")\(eyes)   ·   again to end"
+        statusField.stringValue = "\(dot)  \(status)\(isPaused ? " — not listening" : "")\(eyes)   ·   \"Gepetto, over\" ends it"
         pauseButton.title = isPaused ? "▶ Resume" : "⏸ Pause"
         pauseButton.isHidden = !isOn
         userField.stringValue = Self.tail(userLine, 150)
