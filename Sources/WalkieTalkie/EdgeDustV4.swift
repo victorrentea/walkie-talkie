@@ -16,7 +16,7 @@ struct CurlDustSim {
     static let decay: Float = 0.97
     /// Emitters standing per 100 pt of edge, and how likely each throws a splat a frame at rest.
     static let emittersPer100: Float = 3.2
-    static let splatChance: Float = 0.42
+    static let splatChance: Float = 0.55
     /// The stream function's octaves: lattice spacing (pt), peak speed (pt/s).
     static let octaves: [(spacing: Float, speed: Float)] = [(36, 18), (15, 15)]
 
@@ -204,7 +204,7 @@ struct CurlDustSim {
             while owed > 0 {
                 if rnd() < owed {
                     let env = sinf(.pi * Float(e.age) / Float(e.life))
-                    let k = (0.14 + 0.30 * rnd()) * (0.35 + 0.65 * env)
+                    let k = (0.22 + 0.48 * rnd()) * (0.35 + 0.65 * env)
                     splat(s: e.s + (rnd() - 0.5) * 22, d: max(1.5, e.d + (rnd() - 0.5) * 12),
                           sigma: e.sigma * (0.7 + 0.6 * rnd()), e.cr * k, e.cg * k, e.cb * k)
                     // and a few motes in it: grains a cell wide, carried and blurred with the wisp

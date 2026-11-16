@@ -245,7 +245,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float3 sum = float3(0.0);
     const float cell[3]  = { 2.6, 3.6, 5.0 };
     const float speed[3] = { 40.0, 29.0, 19.0 };
-    const float gain[3]  = { 0.85, 1.0, 0.8 };
+    const float gain[3]  = { 1.02, 1.2, 0.96 };
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
         float2 q = float2(a, d - speed[i] * t) / cell[i] + fi * 31.7;

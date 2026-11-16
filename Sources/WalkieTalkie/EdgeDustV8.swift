@@ -379,7 +379,7 @@ fileprivate final class EmberSim {
             let g = abs(pgain[i])
             // Bright at birth, gone at the end; an ember holds its glow longer.
             var w = ember ? (1 - a * a * a) : (1 - a * a) * (1 - a * 0.3)
-            w *= min(age * 40, 1) * g * 0.36
+            w *= min(age * 40, 1) * g * 0.47
             // Young: paler. Cooling: its own colour, deeper.
             let pale = max(0, 0.42 - a * 1.5)
             let deep = 1 - 0.22 * a
