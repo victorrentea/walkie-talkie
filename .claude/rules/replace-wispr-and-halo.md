@@ -788,8 +788,8 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   viewings: Real smoke, Emitter smoke, Field dust, Dust flames, Ember dust refused and deleted
   (commit `279a3867` has them), Shader smoke (`EdgeDustV3`) and Curl dust (`EdgeDustV4`) the other
   finalists, still in the build and commented out of `EdgeDustPictures.all` (*"7 rămâne. comentează pe
-  celelalte 2. șterge pe cele precedent refuzate"*). Numbers he set on 7 by eye: grains ×1.5,
-  brightness ×1.2, reach ×0.7. Top for a spawn, right for a bound sentence, none at the caret; from
+  celelalte 2. șterge pe cele precedent refuzate"*). Numbers he set on 7 by eye, in four asks: grains ×1.5
+  then ×1.15, brightness ×1.2 then ×1.5, reach ×0.7 then ×1.15. Top for a spawn, right for a bound sentence, none at the caret; from
   `syncBorrowedGestures`. **It outlives the microphone**: `waiting` while `stillPending` (settling, a
   panel coming or held, keystrokes or a spawn in flight), then `sent()` from `deliverToTerminal`'s
   `.delivered` / `spawnClaude`'s bound window — *"it doubles its size and opacity and then fades out,
@@ -807,7 +807,10 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   care vine de la mouse trebuie să devină mai mic și mai intens pentru a da senzația că chiar el
   începe să se învârtă. ideal chiar acel smoke să se învârtă pe bune … ca o animație continuă"*).
   Supersedes the hand-over in the bullet above: arrived, `CaretHalo.aim` goes on along
-  `CornerTunnel.dustPoint` round the atom's centre, on the same engine and panel. During the flight
+  `CornerTunnel.dustPoint` round the atom's centre, on the same engine and panel. **It joins the ring on
+  the tangent** (`entryAngle`, `wheelPoint`): the flight used to end at 3 o'clock whatever the
+  direction, and the clockwise ring then ran back at the pointer — *"să nu se «întoarcă» … a pornit
+  cw, «împotriva» direcției pe care a venit"*. During the flight
   its knobs run (cubic, so the streak keeps his look) from his sliders to `cornerKnobs(canvas:)` —
   the corner dust's radius, gain and fade re-expressed for a screen-sized canvas, plus force and
   **`PMH_FLUID_KNEE`** (new knob, `look.motionKnee`): at the standard 0.5 canvas-widths/s a 46 pt

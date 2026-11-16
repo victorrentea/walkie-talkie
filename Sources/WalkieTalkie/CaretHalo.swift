@@ -1544,8 +1544,7 @@ final class CaretHalo {
             let now = CFAbsoluteTimeGetCurrent(), since = now - f.at - Self.cornerFlightTime
             guard since > 0, let centre = cornerWheelCentre else { return Self.cornerFlightPoint(f, at: now) }
             // There: the same dust goes round, on the wheel's own path.
-            let p = CornerTunnel.dustPoint(at: since)
-            return NSPoint(x: centre.x - CornerTunnel.side / 2 + p.x, y: centre.y + CornerTunnel.side / 2 - p.y)
+            return Self.wheelPoint(at: since, centre: centre, entry: cornerEntryAngle)
         }
         return (rewinding || orbitFading ? rewindPoint : fadeAim) ?? pointerAim
     }
@@ -1581,6 +1580,40 @@ final class CaretHalo {
     /// (`standIn` → `endCornerOrbit`); the sliders come back when this panel is out.
     private var cornerFlight: (from: NSPoint, to: NSPoint, at: CFAbsoluteTime)?
     private var cornerWheelCentre: NSPoint?
+    /// Where on the ring the dust comes in (radians, clockwise from 3 o'clock).
+    private var cornerEntryAngle: Double = 0
+
+    /// **The dust joins the ring the way it was going** (2026-11-16, Victor: *"când
+    /// fumul din mouse ajunge în spin wheel, să nu se «întoarcă». de ex acum a ajuns
+    /// la ora 2-3 pe cerc și a pornit cw, «împotriva» direcției pe care a venit"*).
+    /// The flight always ended at 3 o'clock, and from most of the screen that is
+    /// the side where the clockwise ring runs back at the pointer. Now it ends on
+    /// the tangent: of the two points where a line from `from` touches the ring,
+    /// the one where the ring's clockwise direction is the flight's own.
+    /// Clockwise from 3 o'clock, as `CornerTunnel.dustPoint` turns.
+    static func entryAngle(from: NSPoint, centre: NSPoint, radius: CGFloat) -> Double {
+        let dx = Double(from.x - centre.x), dy = Double(centre.y - from.y)      // y down, as the ring is drawn
+        let distance = (dx * dx + dy * dy).squareRoot()
+        guard distance > Double(radius) * 1.05 else { return atan2(dy, dx) }   // on the ring already
+        let towards = atan2(dy, dx), spread = acos(Double(radius) / distance)
+        func gain(_ a: Double) -> Double {
+            // the flight's direction (from → that point) along the ring's clockwise tangent there
+            let px = Double(radius) * cos(a) - dx, py = Double(radius) * sin(a) - dy
+            return px * -sin(a) + py * cos(a)
+        }
+        return gain(towards + spread) >= gain(towards - spread) ? towards + spread : towards - spread
+    }
+
+    /// The wheel's path (`CornerTunnel.dustPoint`), turned so it starts at `entry`, on screen.
+    static func wheelPoint(at t: Double, centre: NSPoint, entry: Double) -> NSPoint {
+        let p = CornerTunnel.dustPoint(at: t), half = Double(CornerTunnel.side) / 2
+        let qx = Double(p.x) - half, qy = Double(p.y) - half
+        // The path does not start at 3 o'clock exactly (its pace wanders from the first frame).
+        let first = CornerTunnel.dustPoint(at: 0)
+        let turn = entry - atan2(Double(first.y) - half, Double(first.x) - half)
+        let rx = qx * cos(turn) - qy * sin(turn), ry = qx * sin(turn) + qy * cos(turn)
+        return NSPoint(x: Double(centre.x) + rx, y: Double(centre.y) - ry)
+    }
     /// His sliders as they were when the flight began, to put back.
     private var cornerKnobsBefore: [Int32: Float] = [:]
     private var cornerKnobsTarget: [Int32: Float] = [:]
@@ -1674,14 +1707,6 @@ final class CaretHalo {
         return NSPoint(x: f.from.x + (f.to.x - f.from.x) * p, y: f.from.y + (f.to.y - f.from.y) * p)
     }
 
-    /// Where the corner's dust starts circling, on the screen holding `point`.
-    static func cornerWheelStart(for point: NSPoint) -> NSPoint? {
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) ?? NSScreen.main else { return nil }
-        let square = CornerTunnel.frame(onAtom: PromptAtom.home(in: screen.visibleFrame))
-        let start = CornerTunnel.dustPoint(at: 0)      // y down, in the square
-        return NSPoint(x: square.minX + start.x, y: square.maxY - start.y)
-    }
-
     private var fliesToCorner: Bool {
         Self.quietSettle && HaloStyle.promptsWearDust && web != nil && !quick && !frozeThisRing && !cancelled
             && drawn == .smoke && destination.isPrompt && CornerTunnel.dress == .dust && dock == nil
@@ -1706,12 +1731,18 @@ final class CaretHalo {
         if cornerFlight != nil { return true }
         guard fliesToCorner, panel != nil else { return false }
         let from = aim
-        guard let to = Self.cornerWheelStart(for: from) else { return false }
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(from, $0.frame, false) }) ?? NSScreen.main else { return false }
+        let square = CornerTunnel.frame(onAtom: PromptAtom.home(in: screen.visibleFrame))
+        let centre = NSPoint(x: square.midX, y: square.midY)
+        let start = CornerTunnel.dustPoint(at: 0), half = CornerTunnel.side / 2
+        let radius = hypot(start.x - half, start.y - half)
+        let entry = Self.entryAngle(from: from, centre: centre, radius: radius)
+        let to = Self.wheelPoint(at: 0, centre: centre, entry: entry)
         let now = CFAbsoluteTimeGetCurrent()
         cornerFlight = (from, to, now)
         cornerOrbitAdopted = false
-        let start = CornerTunnel.dustPoint(at: 0)
-        cornerWheelCentre = NSPoint(x: to.x - start.x + CornerTunnel.side / 2, y: to.y + start.y - CornerTunnel.side / 2)
+        cornerWheelCentre = centre
+        cornerEntryAngle = entry
         if let engine = web as? ProjectMHalo, let panel {
             cornerKnobsTarget = Self.cornerKnobs(canvas: panel.frame.size)
             cornerKnobsBefore = [:]

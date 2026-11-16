@@ -225,7 +225,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float n = v7_n(float2(as / 36.0, t * 0.42 + 7.0));
     float n2 = v7_n(float2(as / 13.0, t * 1.1 + 3.0));
     float tongue = smoothstep(0.18, 0.86, n);
-    float h = (14.0 + 62.0 * tongue * tongue + 9.0 * n2) * grow * 0.7;   // −30 % (Victor, 2026-11-16)
+    float h = (14.0 + 62.0 * tongue * tongue + 9.0 * n2) * grow * 0.8;   // −30 %, then +15 % with everything else (Victor, 2026-11-16)
 
     // The fire field, carried away from the edge.
     float f = v7_fbm(float2(as / 17.0, (d - 52.0 * t) / 34.0));
@@ -243,9 +243,9 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float heat = exp(-d / (0.30 * h + 4.0));
 
     float3 sum = float3(0.0);
-    const float cell[3]  = { 3.9, 5.4, 7.5 };
+    const float cell[3]  = { 4.5, 6.2, 8.6 };
     const float speed[3] = { 40.0, 29.0, 19.0 };
-    const float gain[3]  = { 1.02, 1.2, 0.96 };
+    const float gain[3]  = { 1.53, 1.8, 1.44 };
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
         float2 q = float2(a, d - speed[i] * t) / cell[i] + fi * 31.7;

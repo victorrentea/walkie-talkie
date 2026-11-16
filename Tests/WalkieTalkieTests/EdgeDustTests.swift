@@ -23,6 +23,23 @@ final class EdgeDustTests: XCTestCase {
         XCTAssertEqual(CaretHalo.cornerFlightPoint(f, at: 200), f.to)
     }
 
+    /// Wherever it comes from, the dust meets the ring going the ring's way (clockwise).
+    func testTheDustJoinsTheRingOnItsTangent() {
+        let centre = NSPoint(x: 140, y: 950), r: CGFloat = 46
+        for from in [NSPoint(x: 900, y: 300), NSPoint(x: 1600, y: 1000), NSPoint(x: 150, y: 100), NSPoint(x: 20, y: 500), NSPoint(x: 800, y: 1100)] {
+            let a = CaretHalo.entryAngle(from: from, centre: centre, radius: r)
+            // the entry point, and the ring's point a moment later (clockwise = the angle grows, y down)
+            let p = NSPoint(x: centre.x + r * CGFloat(cos(a)), y: centre.y - r * CGFloat(sin(a)))
+            let next = NSPoint(x: centre.x + r * CGFloat(cos(a + 0.05)), y: centre.y - r * CGFloat(sin(a + 0.05)))
+            let fx = p.x - from.x, fy = p.y - from.y, tx = next.x - p.x, ty = next.y - p.y
+            let cosine = (fx * tx + fy * ty) / (hypot(fx, fy) * hypot(tx, ty))
+            XCTAssertGreaterThan(cosine, 0.99, "from \(from): the ring turns away from the flight")
+        }
+        // The turned path starts at the entry point.
+        let start = CaretHalo.wheelPoint(at: 0, centre: centre, entry: 1.2)
+        XCTAssertEqual(atan2(Double(centre.y - start.y), Double(start.x - centre.x)), 1.2, accuracy: 0.001)
+    }
+
     func testOnlyTheThreePromptsAreDressedAlike() {
         XCTAssertEqual(HaloDestination.allCases.filter(\.isPrompt), [.caret, .bound, .spawn])
     }
