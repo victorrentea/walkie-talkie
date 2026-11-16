@@ -768,6 +768,44 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   halo (`ProjectMHalo.tunes = false`). The demo route rebuilds the engine, so a `defaults write` +
   `POST /test/corner-tunnel` shows a new knob with no restart. **Photograph the screen the pointer
   is on** — the answer's `frame` says where (the first shot of an empty main screen was that).
+- **Every prompt wears the dust, and an edge of the screen says which prompt** (2026-11-16, Victor:
+  *"besides the clean dictation, all the prompting should use the same dust effect … to distinguish
+  the 3 from each other, during the dictation into a new terminal, there should be an effect similar
+  to dust, but spread over the entire top edge … The same dust effect, spread over the entire right
+  edge, should happen for the prompting bound to the terminal behind. The effect should be delicate
+  on the edge, barely visible"*). `HaloStyle.promptsWearDust` (on; `WT_PROMPT_DUST=0` for a run):
+  `current(for:)` answers Smoke for caret / bound / spawn (`HaloDestination.isPrompt`), their saved
+  picks are kept and not read, their three rows are off the 𝓯𝔁 menu — *"momentarily remove the other
+  2 … comment them out for a second"*, so do not delete the styles. Plain dictation (`wispr`) and the
+  ⚡ question keep their own. **`EdgeDust`**: his Smoke on a strip of its own (edge length × 110 pt,
+  a second `ProjectMHalo`, `tunes = false`), the stamp sweeping the edge back and forth
+  (`stamp(at:)`, a pass every 1.3 s on average, pace and depth wandering), fed the microphone while
+  it is open, masked to nothing away from the edge, the panel at alpha 0.3 — top for a spawn, right
+  for a bound sentence, none at the caret; from `syncBorrowedGestures`, where the destination is
+  known. **It outlives the microphone**: `waiting` while `stillPending` (settling, a panel coming or
+  held, keystrokes or a spawn in flight), then `sent()` from `deliverToTerminal`'s `.delivered` /
+  `spawnClaude`'s bound window — *"it doubles its size and opacity and then fades out, suggesting
+  the message was sent"*: strip ×2 deep about the edge (`sublayerTransform`), alpha ×2, the stamp
+  twice as fast, 0.35 s, held 0.45 s, out in 0.8 s. Nothing pending for 1.2 s (a cancel, a refusal),
+  a flip to the caret mid-sentence, or 90 s: out in 0.4 s with no swell. The splat radius is derived
+  per canvas (`radius(puff:canvasHeight:)` — the engine's Gaussian is in canvas heights, so the wide
+  strip and the tall one need different numbers for the same 22 pt puff) and the force is set per
+  long side. Knobs `edgeDust.alpha|thickness|sweep|puff|gain|fade|force` in the defaults, read when
+  the strip is built. Desk: `POST /test/edge-dust {"edge": "top"|"right", "seconds", "sent",
+  "capturable"}`. Log `🌫️ …`. The engine takes ~1.7 s to warm up before its first picture.
+  **Not yet seen on a screen**: written and deployed with the Mac locked (a screenshot is black
+  there) — the numbers above are first guesses, tune them from a desk shot.
+- **At the stop the dust flies to the corner's wheel** (same day: *"when the dictation finishes, the
+  dust, wherever it is at that point, should head towards the spinning wheel … and then starts
+  spinning while the transcription is performed"*). `CaretHalo.flyToCorner` — from `endDictation` in
+  place of `wipeWithTheWave` (the wave itself still leaves), and from `syncBorrowedGestures` for a
+  settle no press began; never on a cancel. For a prompt in Smoke with the corner in its Dust dress:
+  nothing freezes, `aim` runs from where it was to `CornerTunnel.dustPoint(at: 0)` on that screen
+  over `cornerFlightTime` 0.7 s (smoothstep, driven by the render timer through `follow`), the
+  engine drawing the trail a fast hand would; `onCornerFlight` sets `CornerTunnel.notBefore`, so the
+  wheel comes up as the dust arrives; `hide` keeps the panel drawn until then and fades it over
+  `cornerFlightFade` 0.4 s. It sets `frozeThisRing`, so no wipe, no second freeze and no dock on the
+  prompt panel follow. Log `💨 …`. Supersedes, for these three, *the wave wipes every dress*.
 - **📍 The pin stays until the delivery says the words are in** (2026-11-11, Victor: *"pinul acela
   roșu … să nu dispară decât după ce ai confirmarea că ai inserat textul … abia după o secundă, două,
   apare efectiv textul în terminalul Claude"*). The settle ends when `deliver` *starts* a caret

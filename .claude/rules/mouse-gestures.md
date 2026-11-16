@@ -314,3 +314,25 @@ to its handler per stage and `GestureHintBar.crosses` now says what the code doe
   pop-up under the pointer or an unbound terminal (`Stage` has none of them), so ☝️ ← `⚡ ask`,
   ☝️ → `💻 terminal`, ✌️ ↓ `🔌 unbind` are wrong in those moments; ✌️ ← posts its Return while
   left ⌃⌥⌘ is still held — suspected ⌃⌥⌘⏎ (⌥⏎ = newline in Claude Code), not tested by hand.
+
+## 🔽 ← at rest asks this app first, then opens ChatGPT's voice (2026-11-16)
+
+Victor: *"I find it a bit annoying to wait for the beep from ChatGPT to open its microphone … I
+would prefer the walkie-talkie to transcribe the first question I have, turn it to text, pass it as
+text to ChatGPT new chat, and then open the dialog mode."*
+
+- `onChatVoice` at rest with no call on: `startDictation(paste: true, quick: true, chat: true)` — a
+  ⚡ question in every respect while it is said (`Asking…`, the ❓, typed nowhere, **🔼 ends it**,
+  🔼 ← / 🔽 ← cancel it), with `chatAsk` carried like `quickFollowUp`. The radio squelch is the
+  dictation's own start sound.
+- `deliver`: `ChatGPTVoice.toggle(fresh: true, question:)` — the new chat is opened by
+  `codex://threads/new?prompt=<words>` (read in the app's `app.asar`: `threads/new` with a `prompt`
+  navigates home with `prefillPrompt` + `focusComposerNonce`), Return sends it, then the voice button
+  as before (asked for up to 6 s: the thread's page replaces the new chat's). The app's connect chime
+  stays muted (`AppMute`) and **this app plays no start sound** at the hand-over.
+- A call that is on, the voice panel up, or a transcription in flight: the flick is the old toggle.
+  `WT_CHAT_QUESTION=0` brings the old flick back for a run.
+- **Not yet run against the live app** (deployed with the Mac locked): whether Return lands in the
+  prefilled composer, and whether the voice button is there while the text answer streams, are
+  both unproven — `GET /test/state.chatVoice` (`question`, `how`) and the `🗣️` log lines say.
+

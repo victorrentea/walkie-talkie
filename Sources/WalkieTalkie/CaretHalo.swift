@@ -1539,7 +1539,68 @@ final class CaretHalo {
     private var fadeAim: NSPoint?
     /// Where the effect is centred: the pointer, or the rewind's path.
     private var aim: NSPoint {
-        (rewinding || orbitFading ? rewindPoint : fadeAim) ?? pointerAim
+        if let f = cornerFlight { return Self.cornerFlightPoint(f, at: CFAbsoluteTimeGetCurrent()) }
+        return (rewinding || orbitFading ? rewindPoint : fadeAim) ?? pointerAim
+    }
+
+    // MARK: - The dust flies to the corner's wheel (2026-11-16)
+
+    /// **At the stop the dust leaves the pointer for the wheel in the corner**
+    /// (2026-11-16, Victor: *"when the dictation finishes, the dust, wherever it is
+    /// at that point, should head towards the spinning wheel, which stays in the
+    /// top-left corner of the screen … The feeling should be that the dust around
+    /// the mouse moves in that direction and then starts spinning while the
+    /// transcription is performed"*). For the three prompts (`HaloDestination.isPrompt`)
+    /// in the dust's dress, in place of the wave's wipe: nothing is frozen — the
+    /// stamp is driven from where it was to the point `CornerTunnel`'s dust starts
+    /// its ring on (`dustPoint(at: 0)`), over `cornerFlightTime`, smoothstep, the
+    /// engine drawing the trail a fast hand would. `CornerTunnel` comes up as it
+    /// arrives (`onCornerFlight` → `notBefore`) and this panel fades under it over
+    /// `cornerFlightFade`. The quiet settle's rule otherwise stands: nothing else
+    /// moves until the words land.
+    private var cornerFlight: (from: NSPoint, to: NSPoint, at: CFAbsoluteTime)?
+    static let cornerFlightTime: TimeInterval = 0.7
+    static let cornerFlightFade: TimeInterval = 0.4
+    /// The flight has begun; the argument is when the dust is there.
+    var onCornerFlight: ((CFAbsoluteTime) -> Void)?
+
+    static func cornerFlightPoint(_ f: (from: NSPoint, to: NSPoint, at: CFAbsoluteTime), at now: CFAbsoluteTime) -> NSPoint {
+        let t = CGFloat(min(max((now - f.at) / cornerFlightTime, 0), 1))
+        let p = t * t * (3 - 2 * t)
+        return NSPoint(x: f.from.x + (f.to.x - f.from.x) * p, y: f.from.y + (f.to.y - f.from.y) * p)
+    }
+
+    /// Where the corner's dust starts circling, on the screen holding `point`.
+    static func cornerWheelStart(for point: NSPoint) -> NSPoint? {
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) ?? NSScreen.main else { return nil }
+        let square = CornerTunnel.frame(onAtom: PromptAtom.home(in: screen.visibleFrame))
+        let start = CornerTunnel.dustPoint(at: 0)      // y down, in the square
+        return NSPoint(x: square.minX + start.x, y: square.maxY - start.y)
+    }
+
+    private var fliesToCorner: Bool {
+        Self.quietSettle && HaloStyle.promptsWearDust && web != nil && !quick && !frozeThisRing
+            && drawn == .smoke && destination.isPrompt && CornerTunnel.dress == .dust && dock == nil
+    }
+
+    /// The stop's press (`AppDelegate.endDictation`), or the settle of a sentence no
+    /// press ended (`syncBorrowedGestures`) — never a cancel. Answers whether the
+    /// dust flies; then nothing is wiped.
+    @discardableResult
+    func flyToCorner() -> Bool {
+        if cornerFlight != nil { return true }
+        guard fliesToCorner, panel != nil else { return false }
+        let from = aim
+        guard let to = Self.cornerWheelStart(for: from) else { return false }
+        let now = CFAbsoluteTimeGetCurrent()
+        cornerFlight = (from, to, now)
+        // No wipe, no freeze, no dock on the prompt panel after this.
+        frozeThisRing = true
+        if !atCaret { arrow.hide() }
+        Log.info(String(format: "💨 the dust leaves the pointer (%.0f, %.0f) for the corner's wheel (%.0f, %.0f)", from.x, from.y, to.x, to.y))
+        onCornerFlight?(now + Self.cornerFlightTime)
+        follow()
+        return true
     }
     /// The point the effect rides while he talks: the pointer, or half way to it.
     private var pointerAim: NSPoint {
@@ -1970,6 +2031,8 @@ final class CaretHalo {
             if self.rewinding && self.rewindApproaches && self.rewindAim != nil { self.aimEffectAtPointer() }
             // A bound sentence's effect flies to the terminal on its own clock too.
             if (self.rewinding || self.orbitFading) && self.flies { self.follow() }
+            // …and the dust to the corner's wheel (2026-11-16).
+            if self.cornerFlight != nil { self.follow() }
             // The puzzle and the stars slide onto the caret / the pointer (2026-10-10).
             if self.rewinding && self.anchorStart != nil && self.dock == nil { self.flyAnchor() }
             self.under?.feed(samples)
@@ -1991,6 +2054,7 @@ final class CaretHalo {
         settleDock()
         settleLanding()
         orbitFading = false
+        cornerFlight = nil
         frozenAt = nil
         stillGeneration &+= 1
         let panel = self.panel ?? makePanel()
@@ -2124,6 +2188,38 @@ final class CaretHalo {
             return
         }
         hiddenAt = CFAbsoluteTimeGetCurrent()
+        // **The dust is on its way to the corner's wheel** (2026-11-16): it keeps
+        // being drawn until it is there, then fades under the wheel.
+        if let flight = cornerFlight, let web, let panel {
+            growGraceTimer?.invalidate()
+            growGraceTimer = nil
+            growOnShow = false
+            small = false
+            if !delivering { arrow.hide() }
+            closing = true
+            closingGeneration &+= 1
+            let generation = closingGeneration
+            let left = max(0, flight.at + Self.cornerFlightTime - CFAbsoluteTimeGetCurrent())
+            DispatchQueue.main.asyncAfter(deadline: .now() + left) { [weak self] in
+                guard let self, self.closingGeneration == generation, !self.live else { return }
+                NSAnimationContext.runAnimationGroup { ctx in
+                    ctx.duration = Self.cornerFlightFade
+                    panel.animator().alphaValue = 0
+                } completionHandler: { [weak self] in
+                    guard let self, self.closingGeneration == generation, !self.live else { return }
+                    self.cornerFlight = nil
+                    self.closing = false
+                    self.renderTimer?.invalidate()
+                    self.renderTimer = nil
+                    web.stop(); self.under?.stop()
+                    self.pageRunning = false
+                    self.releaseMonitorsIfIdle()
+                    panel.orderOut(nil)
+                    Log.info("💨 the dust is at the corner's wheel — the pointer's panel is out")
+                }
+            }
+            return
+        }
         // The effect's last frame is what collapses into the pointer, the
         // same way the film's last frame does. **Not the circling dust's**: it
         // keeps moving while it fades (`orbitFading`).

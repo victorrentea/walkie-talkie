@@ -73,4 +73,18 @@ extension ChatGPTVoiceTests {
                        "the connect waits for its chime however late")
         XCTAssertTrue(ChatGPTVoice.connectPatience.isInfinite)
     }
+
+    /// 🔽 ← (2026-11-16): the first question rides the new chat's link, prefilled.
+    func testTheQuestionRidesTheNewChatLink() {
+        XCTAssertEqual(ChatGPTVoice.newChatLink(resumed: nil, question: nil)?.absoluteString, "codex://threads/new")
+        XCTAssertEqual(ChatGPTVoice.newChatLink(resumed: "abc", question: nil)?.absoluteString, "codex://threads/abc")
+        XCTAssertEqual(ChatGPTVoice.newChatLink(resumed: nil, question: "")?.absoluteString, "codex://threads/new")
+        let link = ChatGPTVoice.newChatLink(resumed: "abc", question: "Cât face 2 + 2 & de ce?")
+        XCTAssertEqual(link?.scheme, "codex"); XCTAssertEqual(link?.host, "threads"); XCTAssertEqual(link?.path, "/new")
+        let text = link?.absoluteString ?? ""
+        XCTAssertFalse(text.contains("+"), text)
+        XCTAssertFalse(text.contains(" & "), text)
+        let back = URLComponents(string: text)?.queryItems?.first { $0.name == "prompt" }?.value
+        XCTAssertEqual(back, "Cât face 2 + 2 & de ce?")
+    }
 }

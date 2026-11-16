@@ -1099,6 +1099,20 @@ final class ElementPicker {
             }
             respond(conn, 200, ["ok": true].merging(report) { _, new in new })
 
+        // The prompt's edge with no sentence behind it (2026-11-16, `EdgeDust.demo`).
+        case ("POST", "/test/edge-dust"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let edge = (body?["edge"] as? String).flatMap(EdgeDust.Edge.init(rawValue:)) ?? .top
+            let seconds = body?["seconds"] as? Double ?? 4
+            let sent = body?["sent"] as? Bool ?? true
+            let capturable = body?["capturable"] as? Bool ?? false
+            var report: [String: Any] = [:]
+            DispatchQueue.main.sync {
+                EdgeDust.current?.demo(edge, seconds: seconds, sent: sent, capturable: capturable)
+                report = EdgeDust.current?.report ?? [:]
+            }
+            respond(conn, 200, ["ok": true].merging(report) { _, new in new })
+
         // ⌘⌃X — the local model, now (2026-09-28): the key's action, not the key.
         case ("POST", "/test/local-now"):
             onTestLocalNow?()

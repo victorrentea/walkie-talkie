@@ -762,10 +762,21 @@ enum HaloStyle: String, CaseIterable {
     static func current(for destination: HaloDestination) -> HaloStyle {
         if let name = ProcessInfo.processInfo.environment["WT_HALO_STYLE"],
            let forced = HaloStyle(rawValue: name) { return forced }
+        if promptsWearDust, destination.isPrompt, HaloStyle.smoke.isAvailable { return .smoke }
         guard let name = UserDefaults.standard.string(forKey: destination.defaultsKey),
               let saved = HaloStyle(rawValue: name), saved.isOffered else { return destination.fallback }
         return saved
     }
+
+    /// **Every prompt wears the dust** (2026-11-16, Victor: *"besides the clean
+    /// dictation, all the prompting should use the same dust effect … momentarily
+    /// remove the other 2. I think tendrils and cauldron … the other effects:
+    /// comment them out for a second"*). The dust is his caret Smoke; the three
+    /// prompts — at the caret, bound, to a new session — are told apart by the
+    /// screen's edge instead (`EdgeDust`: none, the right one, the top one). Their
+    /// saved picks are kept and not read, and their rows are off the 𝓯𝔁 menu,
+    /// while this is on; `WT_PROMPT_DUST=0` brings both back for a run.
+    static let promptsWearDust = ProcessInfo.processInfo.environment["WT_PROMPT_DUST"] != "0"
 
     /// What is drawn before the first dictation of the session says where it is
     /// going — the caret's, because an unbound sentence is the common case.
@@ -886,6 +897,9 @@ enum HaloDestination: String, CaseIterable {
     }
 
     var defaultsKey: String { "haloStyle.\(rawValue)" }
+
+    /// A prompt to an agent, as against plain words (`wispr`) or a ⚡ question.
+    var isPrompt: Bool { self == .caret || self == .bound || self == .spawn }
 }
 
 /// **The frame cap for every web view** (Victor, 2026-09-20: *"30 is more

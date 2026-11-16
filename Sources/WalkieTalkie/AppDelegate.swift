@@ -81,6 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let focusFrame = FocusFrame()
     /// Reverse tunnel in the atom's corner while the words are transcribed (2026-11-10).
     private let cornerTunnel = CornerTunnel()
+    /// Which prompt it is, on an edge of the screen (2026-11-16, `EdgeDust`).
+    private let edgeDust = EdgeDust()
 
     /// **`⌘⇧P`, shown for five seconds after every delivered sentence** — see
     /// `PasteHint`. Until 2026-09-23 it was faint and said only after a caret
@@ -1237,6 +1239,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **A follow-up to the ⚡ answer on screen** (2026-10-15): 🔼 → over its
     /// pop-up opens it (`askFollowUp`), and `askQuick` sends `quickThread` with it.
     private var quickFollowUp = false
+    /// **🔽 ← at rest: the first question for ChatGPT, said to this app**
+    /// (2026-11-16, `ChatGPTVoice.toggle(question:)`). A ⚡ question in every
+    /// respect while it is said — one effect, typed nowhere, 🔼 ends it — whose
+    /// words open a new chat in the ChatGPT app, and its voice after them.
+    private var chatAsk = false
     /// **🔽 → over a ⚡ question: Google it instead** (2026-10-25, Victor: *"dacă
     /// în timpul întrebării fac … butonul back și swipe la dreapta, se deschidă în
     /// loc de dialogul mic inline … Google Search cu … un query extras din ce am
@@ -2698,7 +2705,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.onChatVoice = { [weak self] in
             DispatchQueue.main.async {
                 if VoiceDialog.shared.isOn { VoiceDialog.shared.stop(why: "the flick"); return }
-                ChatGPTVoice.toggle(fresh: true) { [weak self] words in self?.overlay.flash(words, duration: 2) }
+                // **He asks this app first** (2026-11-16, *"transcribe the first
+                // question I have … pass it as text to ChatGPT new chat, and then
+                // open the dialog mode"*): no waiting for the app's microphone. A
+                // call that is on is ended by the flick as before; so is anything
+                // that keeps a sentence from opening (a transcription in flight).
+                guard let self, !ChatGPTVoice.callIsOn(), !self.listening, !self.source.phase.isWaitingForWords,
+                      ProcessInfo.processInfo.environment["WT_CHAT_QUESTION"] != "0" else {
+                    ChatGPTVoice.toggle(fresh: true) { [weak self] words in self?.overlay.flash(words, duration: 2) }
+                    return
+                }
+                Log.info("🗣️ 🔽 ← at rest — a first question for ChatGPT, said here")
+                self.startDictation(paste: true, quick: true, chat: true)
             }
         }
         // The DJI transmitter's Link button (2026-11-13, *"pentru moment"*):
@@ -3622,6 +3640,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `/test/dictation/start` opens no microphone — so the effect idles on
         // its own wave rather than on a stale buffer.
         caretHalo.samples = { [weak self] in self?.liveMeter?.recentSamples }
+        // The corner's wheel starts as the pointer's dust arrives (2026-11-16).
+        caretHalo.onCornerFlight = { [weak self] arrives in self?.cornerTunnel.notBefore = arrives }
+        edgeDust.samples = { [weak self] in self?.liveMeter?.recentSamples }
+        // The edge stays while anything of the sentence is on its way: its words,
+        // its held panel, its keystrokes, its new window.
+        edgeDust.stillPending = { [weak self] in
+            guard let self else { return false }
+            return self.settling || self.panelsComing > 0 || self.deliveriesInFlight > 0 || self.spawnsInFlight > 0
+                || self.spawnPending || self.overlay.sentPromptFrame != nil
+        }
         // The F7/F9 preview listens to the room rather than to a clip — a meter
         // of its own, so it never touches a dictation's recorder.
         caretHalo.previewMic = MicRecorder()
@@ -4685,12 +4713,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if wake { closeWake(wakeQuestion != nil ? "question" : "session", text: [head, spokenText].compactMap { $0 }.joined(separator: " | ")) }
         let followUp = quickFollowUp
+        let chat = quick && chatAsk
         let google = quick && quickGoogle
         let googleToo = quick && quickGoogleToo && !google
         quickAsk = false
         quickFollowUp = false
         quickGoogle = false
         quickGoogleToo = false
+        chatAsk = false
         cleanSentence = false
         caretPrompt = false
         submitAfterClean = false
@@ -4826,6 +4856,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             holdOnClipboard(line, why: "a ⚡ quick question")
             let asked = wakeQuestion ?? spokenText
+            // 🔽 ← (2026-11-16): the words open a new ChatGPT chat, then its voice.
+            if chat {
+                holdOnClipboard(asked, why: "a question for ChatGPT")
+                Log.info("🗣️ the question goes to ChatGPT: \"\(asked.prefix(80))\"")
+                ChatGPTVoice.toggle(fresh: true, question: asked) { [weak self] words in self?.overlay.flash(words, duration: 2) }
+                return
+            }
             if google { googleQuestion(asked, prompt: line, images: pictures) }
             else { askQuick(asked, prompt: line, images: pictures, followUp: followUp, google: googleToo) }
             return
@@ -5954,6 +5991,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickFollowUp = false
             quickGoogle = false
             quickGoogleToo = false
+            chatAsk = false
             submitAfterClean = false
         }
         if !bg { hotkeys.ownCleanSentence = false }
@@ -6502,6 +6540,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickFollowUp = false
         quickGoogle = false
         quickGoogleToo = false
+        chatAsk = false
         Log.info("⚡ the question goes to \(label) as a prompt — no quick answer")
     }
 
@@ -6526,7 +6565,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// press, so the picture is of the screen his finger left.
     private func startDictation(spawn: Bool = false, paste: Bool = false,
                                 deferContext: Bool = false, clean: Bool = false, quick: Bool = false,
-                                followUp: Bool = false, wake: Bool = false) {
+                                followUp: Bool = false, wake: Bool = false, chat: Bool = false) {
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -6626,6 +6665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickFollowUp = quick && followUp
         quickGoogle = false
         quickGoogleToo = false
+        chatAsk = quick && chat
         wakeTake = wake
         // A wake whose sentence ended with neither words nor a cancel.
         if !wake { closeWake("lost") }
@@ -6697,6 +6737,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickFollowUp = false
             quickGoogle = false
             quickGoogleToo = false
+            chatAsk = false
             wakeTake = false
             hotkeys.ownCleanSentence = false
             // W19: none of this gesture's flags outlive its refusal.
@@ -6744,7 +6785,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // **And so does the whole screen, once a sentence** (2026-11-05):
                 // a second press during the bridge's drain is not a second stop.
                 StopWave.fire(at: NSEvent.mouseLocation)
-                caretHalo.wipeWithTheWave()
+                // A prompt's dust is not wiped: it flies to the corner's wheel (2026-11-16).
+                if !caretHalo.flyToCorner() { caretHalo.wipeWithTheWave() }
             }
             overlay.setListening(false)
             overlay.setTranscribing(true, audio: spokenSoFar)
@@ -8796,6 +8838,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The one picture of a quiet settle is in the prompt's corner** (2026-11-10,
         // `CornerTunnel`): Reverse tunnel on the take backwards, where the atom stands.
         cornerTunnel.held = fxHeld || quickAsk
+        // A sentence no press of his ended: its dust leaves for the corner here.
+        if quiet, settling, !listening, !speculative, !quickAsk, !fxHeld { caretHalo.flyToCorner() }
         if quiet { cornerTunnel.settle(settling && !listening && !speculative && !quickAsk, take: settleTake) }
         let coasting = settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet
         caretHalo.setCoasting(coasting, estimate: settleEstimate)
@@ -8837,6 +8881,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : spawnPending ? .spawn
                 : isBound ? .bound : .caret
             if ringUp { caretHalo.setDestination(destination) }
+            // **The prompt's edge** (2026-11-16, `EdgeDust`): the top one for a new
+            // session, the right one for the bound terminal, none at the caret —
+            // from the first word; it outlives the microphone by itself.
+            edgeDust.listen(ringUp && listening && HaloStyle.promptsWearDust
+                                ? (destination == .spawn ? .top : destination == .bound ? .right : nil) : nil,
+                            micOpen: listening)
             // **A plain sentence 🔼 → / 🔼 ↑ made a prompt is a prompt on the
             // corner hints** (2026-10-25, the hint audit): the halo keeps the clean
             // dress, but the tap already reads it as a prompt (`relayPromptOpen`) —
@@ -8844,6 +8894,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let plainWords = destination == .wispr && !(cleanSentence && cleanRedirected && !cleanAutoBound)
             overlay.prompting = !plainWords && destination != .quick
             overlay.asking = quickAsk
+        } else {
+            edgeDust.listen(nil, micOpen: listening)
         }
         caretHalo.setActive(ringUp,
                             atCaret: atCaret && !quickAsk,
@@ -9641,6 +9693,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             : nil
                         self.writeOutbox(m, line: line, delivery: delivery)
                         self.spawnsInFlight -= 1
+                        // The top edge swells and goes: the new session has it (2026-11-16).
+                        if m.kind == "dictation" { self.edgeDust.sent() }
                     }
                 case .failed(let why):
                     self.spawnsInFlight -= 1
@@ -10131,6 +10185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let delivery = m.kind == "dictation"
                         ? self.recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: to) : nil
                     self.writeOutbox(m, line: line, delivery: delivery)
+                    // The right edge swells and goes: the message is in (2026-11-16).
+                    if m.kind == "dictation" { self.edgeDust.sent() }
                     if let serial {
                         self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: to, serial: serial) { [weak self] in
                             self?.sendKamikaze(to: target)
@@ -14224,6 +14280,7 @@ extension AppDelegate {
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
         var quickAsk = false, quickFollowUp = false, quickGoogle = false, quickGoogleToo = false
+        var chatAsk = false
         var latchedAtCaret = false, cleanRedirected = false
         var latch: Latch?
         var latchedMouse: CGPoint?
@@ -14265,7 +14322,7 @@ extension AppDelegate {
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
-        e.quickGoogle = quickGoogle; e.quickGoogleToo = quickGoogleToo
+        e.quickGoogle = quickGoogle; e.quickGoogleToo = quickGoogleToo; e.chatAsk = chatAsk
         e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
@@ -14281,6 +14338,7 @@ extension AppDelegate {
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
         quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false
+        chatAsk = false
         latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
         pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
         pendingAffect = nil
@@ -14324,7 +14382,7 @@ extension AppDelegate {
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp
-        quickGoogle = e.quickGoogle; quickGoogleToo = e.quickGoogleToo
+        quickGoogle = e.quickGoogle; quickGoogleToo = e.quickGoogleToo; chatAsk = e.chatAsk
         latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning

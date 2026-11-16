@@ -53,7 +53,20 @@ enum ChatGPTVoice {
     /// The flick. `say` flashes on the chip (main thread). `fresh`: a start
     /// is always a new chat, never the last conversation going on (🔽 ←,
     /// 2026-11-16 — *"să pornească codex curat"*).
-    static func toggle(fresh: Bool = false, say: @escaping (String) -> Void) {
+    ///
+    /// **`question`: his first words, already transcribed, typed into the new chat
+    /// before the voice opens** (2026-11-16, Victor: *"I find it a bit annoying to
+    /// wait for the beep from ChatGPT to open its microphone … I would prefer the
+    /// walkie-talkie to transcribe the first question I have, turn it to text, pass
+    /// it as text to ChatGPT new chat, and then open the dialog mode"*). The new
+    /// chat is opened by `codex://threads/new?prompt=…` — read from the app's
+    /// `app.asar` the same day: the `threads/new` route with a `prompt` navigates
+    /// home with `prefillPrompt` and `focusComposerNonce`, so the words are in the
+    /// composer with the caret after them — then Return sends them, and the voice
+    /// button is pressed as before. **No sound of ours at the hand-over** (*"when
+    /// you hand it over to ChatGPT, there should be no sound"*): the squelch he
+    /// heard was the dictation's own, when this app's microphone opened.
+    static func toggle(fresh: Bool = false, question: String? = nil, say: @escaping (String) -> Void) {
         DispatchQueue.main.async {
             guard !busy else { Log.info("🗣️ ChatGPT voice — a flick while the last one is still opening, dropped"); return }
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
@@ -120,7 +133,9 @@ enum ChatGPTVoice {
                     DispatchQueue.main.sync {
                         if !fresh, let t = lastThread, CFAbsoluteTimeGetCurrent() - t.at < sameConversation { resumed = t.id }
                     }
-                    if !wasOn, let fresh = URL(string: "codex://threads/\(resumed ?? "new")") {
+                    // With a question and a call already on, the flick only ends the call.
+                    let question = wasOn ? nil : question
+                    if !wasOn, let fresh = newChatLink(resumed: resumed, question: question) {
                         NSWorkspace.shared.open(fresh)
                         usleep(700_000)
                         // The link can take the front away for a beat (one
@@ -129,6 +144,16 @@ enum ChatGPTVoice {
                         while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
                         // Only the conversation: both side bars shut.
                         if let target { closeBars(window: target) }
+                        if question != nil {
+                            // The prefill lands with the page; then Return sends it.
+                            usleep(300_000)
+                            var tries = 0
+                            while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
+                            press(36, under: [])
+                            Log.info("🗣️ ChatGPT voice — the question is in the new chat, Return pressed")
+                            // The page becomes the thread's before it has a voice button.
+                            usleep(600_000)
+                        }
                     }
                     // **The start's sound waits for the microphone** (2026-11-16,
                     // Victor: *"ăla este momentul când el începe să asculte pe
@@ -138,7 +163,7 @@ enum ChatGPTVoice {
                     // **The app's own chime is swallowed** (`AppMute`): only this
                     // app is silent, from the press until its chime has played out.
                     var hush = hushApp(wasOn ? "the hang-up" : "the connect")
-                    let how = startOrStop(pid: pid, stop: wasOn)
+                    let how = startOrStop(pid: pid, stop: wasOn, patience: question != nil ? 30 : 10)
                     if wasOn, let hush { hush.endAfterItsSound(hangUpPatience) }
                     // **The microphone is the proof.** A start that left the
                     // app without it 4 s later reached nobody: once more.
@@ -156,8 +181,10 @@ enum ChatGPTVoice {
                         if let hush {
                             if held { hush.endAfterItsSound(connectPatience) } else { hush.end() }
                         }
-                        if held { DispatchQueue.main.async { chime(on: true) } }
-                        Log.info(String(format: "🗣️ ChatGPT voice — %@", held ? "the app holds the microphone, start sound played" : "the app never took the microphone, no start sound"))
+                        // After a question the hand-over is silent: his radio sound was the dictation's.
+                        if held, question == nil { DispatchQueue.main.async { chime(on: true) } }
+                        Log.info(String(format: "🗣️ ChatGPT voice — %@", !held ? "the app never took the microphone, no start sound"
+                                        : question == nil ? "the app holds the microphone, start sound played" : "the app holds the microphone — silent, after his question"))
                     }
                     DispatchQueue.main.async {
                         if wasOn { followGeneration += 1; lastThread?.at = CFAbsoluteTimeGetCurrent() }
@@ -166,7 +193,7 @@ enum ChatGPTVoice {
                     }
                     let stillInFront = inFront(pid)
                     DispatchQueue.main.async {
-                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "waited": (waited * 100).rounded() / 100, "characterIsOut": characterIsOut, "callWasOn": wasOn, "resumed": resumed ?? "", "bars": lastBars]
+                        var note: [String: Any] = ["ok": stillInFront, "cold": cold, "question": question != nil, "how": how, "waited": (waited * 100).rounded() / 100, "characterIsOut": characterIsOut, "callWasOn": wasOn, "resumed": resumed ?? "", "bars": lastBars]
                         if let target { note["frame"] = [target.minX, target.minY, target.width, target.height] }
                         if !stillInFront { note["error"] = "lost the front before the key" }
                         last = note
@@ -176,6 +203,23 @@ enum ChatGPTVoice {
                 }
             }
         }
+    }
+
+    /// The link that opens the chat: the thread to resume, or a new one — with the
+    /// question prefilled in its composer when there is one. Pure, for the tests.
+    static func newChatLink(resumed: String?, question: String?) -> URL? {
+        if let question, !question.isEmpty {
+            var parts = URLComponents()
+            parts.scheme = "codex"
+            parts.host = "threads"
+            parts.path = "/new"
+            parts.queryItems = [URLQueryItem(name: "prompt", value: question)]
+            // `URLComponents` leaves `+` and `&`-safe characters as they are; a `+`
+            // would be read back as a space by `URLSearchParams`.
+            parts.percentEncodedQuery = parts.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+            return parts.url
+        }
+        return URL(string: "codex://threads/\(resumed ?? "new")")
     }
 
     /// The app muted until the returned closure is called; nil when it cannot be.
@@ -289,9 +333,10 @@ enum ChatGPTVoice {
     /// *Stop voice chat*. So the buttons are pressed through Accessibility, by
     /// label; ⌃⇧V stays as the fallback when the label is not found (another
     /// build of the app, a call that hangs on the Mini). Returns what was pressed.
-    private static func startOrStop(pid: pid_t, stop: Bool) -> String {
-        // A page just opened builds its tree late: ask for 2 s.
-        for attempt in 0..<(stop ? 2 : 10) {
+    private static func startOrStop(pid: pid_t, stop: Bool, patience: Int = 10) -> String {
+        // A page just opened builds its tree late: ask for 2 s (6 s after a
+        // question was sent — the thread's page replaces the new chat's).
+        for attempt in 0..<(stop ? 2 : patience) {
             if attempt > 0 { usleep(200_000) }
             if let label = pressVoiceButton(pid: pid, stop: stop) { return "“\(label)”" }
         }

@@ -223,6 +223,17 @@ final class CornerTunnel {
         sync()
     }
 
+    /// **Not up before the pointer's dust has flown here** (2026-11-16,
+    /// `CaretHalo.flyToCorner`): the wheel starts turning as that dust arrives.
+    var notBefore: CFAbsoluteTime = 0 {
+        didSet {
+            guard notBefore != oldValue else { return }
+            sync()
+            let wait = notBefore - CFAbsoluteTimeGetCurrent()
+            if wait > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + wait + 0.01) { [weak self] in self?.sync() } }
+        }
+    }
+
     /// Battery, a ⚡ question: down now, whatever the reasons.
     var held = false { didSet { if held != oldValue { sync() } } }
 
@@ -273,6 +284,7 @@ final class CornerTunnel {
 
     private func sync() {
         let wanted = (settling || holding) && !take.isEmpty && !held && home != nil && !Self.off
+            && CFAbsoluteTimeGetCurrent() >= notBefore
         if wanted { show() } else { hide() }
     }
 
