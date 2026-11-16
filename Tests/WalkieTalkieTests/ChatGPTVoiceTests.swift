@@ -52,4 +52,22 @@ extension ChatGPTVoiceTests {
         XCTAssertFalse(ChatGPTVoice.isVoiceButton("New voice chat", stop: false))
         XCTAssertFalse(ChatGPTVoice.isVoiceButton("Mute microphone", stop: true))
     }
+
+    @available(macOS 14.2, *)
+    func testTheMuteLogSaysWhatItSwallowed() {
+        XCTAssertEqual(AppMute.heard(first: nil, last: nil), "the app played nothing meanwhile")
+        XCTAssertEqual(AppMute.heard(first: 0.42, last: 1.9), "swallowed its sound from 0.4 s to 1.9 s")
+    }
+
+    @available(macOS 14.2, *)
+    func testTheMuteEndsWhenTheChimeHasPlayedOut() {
+        func over(_ armed: Double, _ first: Double?, _ last: Double?) -> Bool {
+            AppMute.isOver(sinceArmed: armed, sinceFirst: first, sinceLast: last, patience: 4, quiet: 0.4, cap: 4)
+        }
+        XCTAssertFalse(over(1.0, nil, nil), "nothing played yet: wait")
+        XCTAssertTrue(over(4.0, nil, nil), "nothing played at all: give up")
+        XCTAssertFalse(over(2.0, 0.6, 0.05), "the chime is playing")
+        XCTAssertTrue(over(3.4, 2.0, 0.45), "played, then quiet")
+        XCTAssertTrue(over(6.0, 4.1, 0.0), "still playing after the cap: that is speech, let it through")
+    }
 }

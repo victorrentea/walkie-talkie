@@ -264,6 +264,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <string>Walkie Talkie needs Accessibility to read the selected text and to listen for its global shortcuts.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Walkie Talkie records your dictation so it can transcribe it locally and relay it to your coding agent.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Walkie Talkie silences the ChatGPT app's own chime for a second or two when it starts or ends a voice chat there. Nothing is recorded or kept.</string>
     <key>NSCameraUsageDescription</key>
     <string>While a prompt records, Walkie Talkie reads two frames a second on this Mac to tag what the words lose: a smile, tiredness, or that you were away from the screen. No picture is kept.</string>
 </dict>
