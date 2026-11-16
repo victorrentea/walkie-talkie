@@ -69,5 +69,8 @@ extension ChatGPTVoiceTests {
         XCTAssertFalse(over(2.0, 0.6, 0.05), "the chime is playing")
         XCTAssertTrue(over(3.4, 2.0, 0.45), "played, then quiet")
         XCTAssertTrue(over(6.0, 4.1, 0.0), "still playing after the cap: that is speech, let it through")
+        XCTAssertFalse(AppMute.isOver(sinceArmed: 60, sinceFirst: nil, sinceLast: nil, patience: .infinity, quiet: 0.4, cap: 4),
+                       "the connect waits for its chime however late")
+        XCTAssertTrue(ChatGPTVoice.connectPatience.isInfinite)
     }
 }

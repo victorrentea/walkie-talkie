@@ -181,15 +181,22 @@ enum ChatGPTVoice {
     /// The app muted until the returned closure is called; nil when it cannot be.
     private static func hushApp(_ what: String) -> Hush? {
         guard #available(macOS 14.2, *), let mute = AppMute.begin(bundlePrefix: bundleID, what: what) else { return nil }
-        return Hush(end: { mute.end() }, endAfterItsSound: { mute.endAfterItsSound(patience: $0) })
+        return Hush(end: { mute.end() }, endAfterItsSound: { patience in
+            // A connect waits as long as the call lasts; a hang-up has no call to watch.
+            mute.endAfterItsSound(patience: patience, whileTrue: patience.isInfinite ? { callIsOn() } : nil)
+        })
     }
 
     private struct Hush { let end: () -> Void; let endAfterItsSound: (TimeInterval) -> Void }
 
-    /// How long the mute waits for the app's chime before giving up: measured
-    /// once, the connect's began 1.4 s after the microphone was taken, the
-    /// hang-up's 0.5 s after the press.
-    static let connectPatience: TimeInterval = 4
+    /// How long the mute waits for the app's chime before giving up. **The
+    /// connect waits for it however late it comes** (2026-11-16, Victor: *"putem
+    /// evita acest ghicit?"*; measured 1.4 s and 2.4 s after the microphone was
+    /// taken, a slow network would stretch it) — the first sound the app makes
+    /// in a call is its chime; only the call ending stops the wait. The hang-up
+    /// keeps a limit (its chime began 0.5 s after the press): nothing follows it
+    /// that a longer mute could protect.
+    static let connectPatience: TimeInterval = .infinity
     static let hangUpPatience: TimeInterval = 2.5
 
     /// After a cold start's first window: unmeasured, generous.

@@ -126,11 +126,20 @@ final class AppMute {
     /// mute ends once the app has played something and then been quiet for `quiet`;
     /// if it plays nothing within `patience`, or keeps playing past `cap` (somebody is
     /// talking), it ends anyway.
-    func endAfterItsSound(patience: TimeInterval, quiet: TimeInterval = 0.4, cap: TimeInterval = 4) {
+    ///
+    /// `patience: .infinity` waits for the sound however late it comes (2026-11-16,
+    /// Victor: *"putem evita acest ghicit?"* — the connect chime on a slow network);
+    /// `whileTrue`, asked twice a second, then ends the wait when its reason is gone
+    /// (the call was hung up before the app ever played anything).
+    func endAfterItsSound(patience: TimeInterval, quiet: TimeInterval = 0.4, cap: TimeInterval = 4,
+                          whileTrue: (() -> Bool)? = nil) {
         let from = CFAbsoluteTimeGetCurrent() - began
         DispatchQueue.global().async { [self] in
+            var ticks = 0
             while true {
                 usleep(50_000)
+                ticks += 1
+                if ticks % 10 == 0, let whileTrue, !whileTrue() { break }
                 let now = CFAbsoluteTimeGetCurrent() - began
                 lock.lock()
                 let first = firstHeard, last = lastHeard, done = ended
