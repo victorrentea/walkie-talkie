@@ -243,7 +243,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float heat = exp(-d / (0.30 * h + 4.0));
 
     float3 sum = float3(0.0);
-    const float cell[3]  = { 2.6, 3.6, 5.0 };
+    const float cell[3]  = { 3.9, 5.4, 7.5 };
     const float speed[3] = { 40.0, 29.0, 19.0 };
     const float gain[3]  = { 1.02, 1.2, 0.96 };
     for (int i = 0; i < 3; i++) {

@@ -204,7 +204,7 @@ struct CurlDustSim {
             while owed > 0 {
                 if rnd() < owed {
                     let env = sinf(.pi * Float(e.age) / Float(e.life))
-                    let k = (0.22 + 0.48 * rnd()) * (0.35 + 0.65 * env)
+                    let k = (0.33 + 0.72 * rnd()) * (0.35 + 0.65 * env)
                     splat(s: e.s + (rnd() - 0.5) * 22, d: max(1.5, e.d + (rnd() - 0.5) * 12),
                           sigma: e.sigma * (0.7 + 0.6 * rnd()), e.cr * k, e.cg * k, e.cb * k)
                     // and a few motes in it: grains a cell wide, carried and blurred with the wisp
