@@ -40,4 +40,16 @@ extension ChatGPTVoiceTests {
         XCTAssertEqual(VoiceDialog.tail("short", 20), "short")
         XCTAssertEqual(VoiceDialog.tail("one two three four five six", 12), "… five six")
     }
+
+    /// The labels read from the app on 2026-11-16: the composer's button on a
+    /// new chat, and what stands in its place during a call.
+    func testTheWindowsOwnVoiceButtonsAreKnownByLabel() {
+        XCTAssertTrue(ChatGPTVoice.isVoiceButton("Start new voice chat", stop: false))
+        XCTAssertTrue(ChatGPTVoice.isVoiceButton("Start voice chat", stop: false))
+        XCTAssertTrue(ChatGPTVoice.isVoiceButton("Stop voice chat", stop: true))
+        XCTAssertFalse(ChatGPTVoice.isVoiceButton("Stop voice chat", stop: false))
+        XCTAssertFalse(ChatGPTVoice.isVoiceButton("Start new voice chat", stop: true))
+        XCTAssertFalse(ChatGPTVoice.isVoiceButton("New voice chat", stop: false))
+        XCTAssertFalse(ChatGPTVoice.isVoiceButton("Mute microphone", stop: true))
+    }
 }

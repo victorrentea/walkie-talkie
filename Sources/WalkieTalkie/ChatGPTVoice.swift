@@ -130,17 +130,24 @@ enum ChatGPTVoice {
                         // Only the conversation: both side bars shut.
                         if let target { closeBars(window: target) }
                     }
-                    DispatchQueue.main.async { chime(on: !wasOn) }
-                    pressToggle()
+                    // **The start's sound waits for the microphone** (2026-11-16,
+                    // Victor: *"ăla este momentul când el începe să asculte pe
+                    // bune"*): played at the press it came a second or two
+                    // before the app listened. The end's sound stays at the press.
+                    if wasOn { DispatchQueue.main.async { chime(on: false) } }
+                    let how = startOrStop(pid: pid, stop: wasOn)
                     // **The microphone is the proof.** A start that left the
                     // app without it 4 s later reached nobody: once more.
                     if !wasOn {
                         var held = false
-                        for _ in 0..<40 where !held { usleep(100_000); held = callIsOn() }
+                        for _ in 0..<80 where !held { usleep(50_000); held = callIsOn() }
                         if !held, inFront(pid) {
-                            Log.info("🗣️ ChatGPT voice — no microphone 4 s after ⌃⇧V, pressed once more")
-                            pressToggle()
+                            Log.info("🗣️ ChatGPT voice — no microphone 4 s after \(how), once more")
+                            _ = startOrStop(pid: pid, stop: false)
+                            for _ in 0..<80 where !held { usleep(50_000); held = callIsOn() }
                         }
+                        if held { DispatchQueue.main.async { chime(on: true) } }
+                        Log.info(String(format: "🗣️ ChatGPT voice — %@", held ? "the app holds the microphone, start sound played" : "the app never took the microphone, no start sound"))
                     }
                     DispatchQueue.main.async {
                         if wasOn { followGeneration += 1; lastThread?.at = CFAbsoluteTimeGetCurrent() }
@@ -154,8 +161,8 @@ enum ChatGPTVoice {
                         if !stillInFront { note["error"] = "lost the front before the key" }
                         last = note
                     }
-                    Log.info(String(format: "🗣️ ChatGPT voice — ⌃⇧V pressed %.1f s after the flick, window filling the pointer's screen%@",
-                                    CFAbsoluteTimeGetCurrent() - began, stillInFront ? "" : " — but the app was no longer in front"))
+                    Log.info(String(format: "🗣️ ChatGPT voice — %@ pressed %.1f s after the flick, window filling the pointer's screen%@",
+                                    how, CFAbsoluteTimeGetCurrent() - began, stillInFront ? "" : " — but the app was no longer in front"))
                 }
             }
         }
@@ -241,7 +248,62 @@ enum ChatGPTVoice {
         for m in modifiers.reversed() { held.remove(m.flag); post(m.key, down: false, flags: held, modifier: true) }
     }
 
-    /// ⌃⇧V — `composer.startVoiceMode`, *Toggle voice chat*.
+    /// **The window's own button, not ⌃⇧V** (2026-11-16, Victor: *"mi-a pornit iar
+    /// omulețul … vreau modul full, nu omulețul"*). Measured that evening on a
+    /// settled new chat with the Mini hidden: ⌃⇧V starts the call **on the Mini**
+    /// — its pill and the character come out over the window, which stays on
+    /// *What should we build?* — while the composer's *Start new voice chat*
+    /// button starts it **in the window** (title *New voice chat*, the orb above
+    /// the composer, no character). During such a call the same place holds
+    /// *Stop voice chat*. So the buttons are pressed through Accessibility, by
+    /// label; ⌃⇧V stays as the fallback when the label is not found (another
+    /// build of the app, a call that hangs on the Mini). Returns what was pressed.
+    private static func startOrStop(pid: pid_t, stop: Bool) -> String {
+        // A page just opened builds its tree late: ask for 2 s.
+        for attempt in 0..<(stop ? 2 : 10) {
+            if attempt > 0 { usleep(200_000) }
+            if let label = pressVoiceButton(pid: pid, stop: stop) { return "“\(label)”" }
+        }
+        pressToggle()
+        return "⌃⇧V (no \(stop ? "stop" : "start") button in the window)"
+    }
+
+    /// The label of a voice button: *Start new voice chat* / *Start voice chat*
+    /// to start, *Stop voice chat* to stop. Pure, for the tests.
+    static func isVoiceButton(_ label: String, stop: Bool) -> Bool {
+        let l = label.lowercased()
+        guard l.hasSuffix("voice chat") else { return false }
+        return l.hasPrefix(stop ? "stop" : "start")
+    }
+
+    private static func pressVoiceButton(pid: pid_t, stop: Bool) -> String? {
+        let appElement = AXUIElementCreateApplication(pid)
+        AXUIElementSetAttributeValue(appElement, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+        guard let window = mainWindow(pid) else { return nil }
+        var queue: [AXUIElement] = [window]
+        var seen = 0
+        while !queue.isEmpty, seen < 4000 {
+            let e = queue.removeFirst()
+            seen += 1
+            func text(_ attribute: String) -> String? {
+                var raw: CFTypeRef?
+                guard AXUIElementCopyAttributeValue(e, attribute as CFString, &raw) == .success else { return nil }
+                return (raw as? String).flatMap { $0.isEmpty ? nil : $0 }
+            }
+            if text(kAXRoleAttribute) == (kAXButtonRole as String),
+               let label = text(kAXTitleAttribute) ?? text(kAXDescriptionAttribute), isVoiceButton(label, stop: stop) {
+                return AXUIElementPerformAction(e, kAXPressAction as CFString) == .success ? label : nil
+            }
+            var raw: CFTypeRef?
+            if AXUIElementCopyAttributeValue(e, kAXChildrenAttribute as CFString, &raw) == .success, let children = raw as? [AXUIElement] {
+                queue.append(contentsOf: children)
+            }
+        }
+        return nil
+    }
+
+    /// ⌃⇧V — `composer.startVoiceMode`, *Toggle voice chat*. The fallback only:
+    /// on the new-chat page it starts the call on the Mini (see `startOrStop`).
     private static func pressToggle() {
         press(9, under: [(59, .maskControl), (56, .maskShift)])
     }
