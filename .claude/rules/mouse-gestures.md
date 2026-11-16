@@ -332,7 +332,12 @@ text to ChatGPT new chat, and then open the dialog mode."*
   stays muted (`AppMute`) and **this app plays no start sound** at the hand-over.
 - A call that is on, the voice panel up, or a transcription in flight: the flick is the old toggle.
   `WT_CHAT_QUESTION=0` brings the old flick back for a run.
-- **Not yet run against the live app** (deployed with the Mac locked): whether Return lands in the
-  prefilled composer, and whether the voice button is there while the text answer streams, are
-  both unproven — `GET /test/state.chatVoice` (`question`, `how`) and the `🗣️` log lines say.
-
+- **His silence ends it** (same evening: *"să nu fie nevoie să dau de mouse semn că am terminat …
+  ca la wakeword"*): `watchChatSilence` reads the sentence's meter 5×/s — once voice was heard,
+  `chatPause` 1.6 s of quiet is `endDictation()`; nothing said in `chatNoWords` 8 s cancels. 🔼
+  still ends it sooner.
+- **First live run, 20:24: the call was hung up by our own retry** (*"nu rămâne dialog pornit"*).
+  The voice button appeared ~6 s after the Return, the microphone was not held 4 s later, the
+  *once more* found no start button (the call was connecting), fell back to ⌃⇧V — the toggle — and
+  ended it. After a question the microphone now gets 12 s, and the retry presses a start button or
+  nothing. Still unproven: whether a call started while the text answer streams stays up.

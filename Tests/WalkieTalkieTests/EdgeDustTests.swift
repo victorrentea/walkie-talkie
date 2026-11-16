@@ -13,25 +13,10 @@ final class EdgeDustTests: XCTestCase {
         XCTAssertEqual(right.minY, screen.minY); XCTAssertEqual(right.height, screen.height)
     }
 
-    /// The stamp covers the whole edge, stays in the strip near the edge, and never jumps.
-    func testTheStampSweepsTheWholeEdgeNearIt() {
-        var low = 1.0, high = 0.0, last = EdgeDust.stamp(at: 0, sweep: 1.3).along
-        for i in 0...(60 * 30) {
-            let s = EdgeDust.stamp(at: Double(i) / 60, sweep: 1.3)
-            low = min(low, s.along); high = max(high, s.along)
-            XCTAssertTrue((0...1).contains(s.along))
-            XCTAssertTrue((0.03...0.3).contains(s.depth), "depth \(s.depth)")
-            XCTAssertLessThan(abs(s.along - last), 0.05, "a jump at frame \(i)")
-            last = s.along
-        }
-        XCTAssertLessThan(low, 0.05)
-        XCTAssertGreaterThan(high, 0.95)
-    }
-
-    /// A puff is as many points across on the wide strip as on the tall one.
-    func testThePuffKeepsItsSizeOnEitherCanvas() {
-        let wide = EdgeDust.radius(puff: 22, canvasHeight: 110), tall = EdgeDust.radius(puff: 22, canvasHeight: 1117)
-        XCTAssertEqual(Double(wide.squareRoot()) * 110, Double(tall.squareRoot()) * 1117, accuracy: 0.01)
+    /// As dense on a short edge as on a long one.
+    func testTheGrainsAreAsDenseOnEitherEdge() {
+        XCTAssertEqual(EdgeDust.birthRate(edgeLength: 1728, per100: 5), 86.4, accuracy: 0.01)
+        XCTAssertEqual(EdgeDust.birthRate(edgeLength: 1117, per100: 5) / 1117, EdgeDust.birthRate(edgeLength: 1728, per100: 5) / 1728, accuracy: 0.0001)
     }
 
     func testTheDustFliesFromThePointerToTheWheelAndStaysThere() {

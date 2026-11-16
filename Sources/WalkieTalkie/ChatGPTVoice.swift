@@ -169,10 +169,22 @@ enum ChatGPTVoice {
                     // app without it 4 s later reached nobody: once more.
                     if !wasOn {
                         var held = false
-                        for _ in 0..<80 where !held { usleep(50_000); held = callIsOn() }
+                        // **After a question the call connects slowly, and a second
+                        // press must never be the toggle** (2026-11-16, the first live
+                        // run: the button came 6 s after the Return, no microphone 4 s
+                        // later, *once more* found no start button — the call was
+                        // connecting — fell back to ⌃⇧V and hung up the call it had
+                        // just started; *"nu rămâne dialog pornit"*). So: 12 s for the
+                        // microphone, and the retry presses a start button or nothing.
+                        for _ in 0..<(question != nil ? 240 : 80) where !held { usleep(50_000); held = callIsOn() }
                         if !held, inFront(pid) {
-                            Log.info("🗣️ ChatGPT voice — no microphone 4 s after \(how), once more")
-                            _ = startOrStop(pid: pid, stop: false)
+                            if question != nil {
+                                let again = pressVoiceButton(pid: pid, stop: false)
+                                Log.info("🗣️ ChatGPT voice — no microphone 12 s after \(how); \(again.map { "“\($0)” pressed once more" } ?? "no start button to press again")")
+                            } else {
+                                Log.info("🗣️ ChatGPT voice — no microphone 4 s after \(how), once more")
+                                _ = startOrStop(pid: pid, stop: false)
+                            }
                             for _ in 0..<80 where !held { usleep(50_000); held = callIsOn() }
                         }
                         // A cold start has no audio process to mute at the press;

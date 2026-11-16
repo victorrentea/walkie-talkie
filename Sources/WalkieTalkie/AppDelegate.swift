@@ -2717,6 +2717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 Log.info("🗣️ 🔽 ← at rest — a first question for ChatGPT, said here")
                 self.startDictation(paste: true, quick: true, chat: true)
+                self.watchChatSilence()
             }
         }
         // The DJI transmitter's Link button (2026-11-13, *"pentru moment"*):
@@ -3642,7 +3643,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.samples = { [weak self] in self?.liveMeter?.recentSamples }
         // The corner's wheel starts as the pointer's dust arrives (2026-11-16).
         caretHalo.onCornerFlight = { [weak self] arrives in self?.cornerTunnel.notBefore = arrives }
-        edgeDust.samples = { [weak self] in self?.liveMeter?.recentSamples }
         // The edge stays while anything of the sentence is on its way: its words,
         // its held panel, its keystrokes, its new window.
         edgeDust.stillPending = { [weak self] in
@@ -7696,6 +7696,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.error("👂 wake word helper: \(why)")
         }
     }
+
+    /// **The ChatGPT question ends itself when he stops talking** (2026-11-16,
+    /// Victor: *"ar trebui să nu fie nevoie să dau de mouse semn că am terminat, ci
+    /// cumva ca la wakeword să trimiți singur la ChatGPT dictarea când m-am oprit
+    /// din vorbit"*). Read off the sentence's own meter, five times a second:
+    /// once he has been heard, `chatPause` of quiet is the stop — 🔼's, wave and
+    /// all. Nothing said in `chatNoWords`: cancelled. 🔼 still ends it sooner.
+    private func watchChatSilence() {
+        chatSilenceTimer?.invalidate()
+        guard chatAsk, listening || source.isRecording else { return }
+        let began = CFAbsoluteTimeGetCurrent()
+        var heard = false
+        let t = Timer(timeInterval: 0.2, repeats: true) { [weak self] timer in
+            guard let self, self.chatAsk, self.listening, self.chipStoppedAt == nil else { timer.invalidate(); return }
+            guard let quiet = self.liveMeter?.quietSeconds else { return }
+            let age = CFAbsoluteTimeGetCurrent() - began
+            // Voice since the microphone opened: its quiet is shorter than the sentence's age.
+            if !heard, age > 0.4, quiet < min(age - 0.3, 0.4) { heard = true }
+            if heard, quiet >= Self.chatPause {
+                timer.invalidate()
+                Log.info(String(format: "🗣️ the ChatGPT question ended in silence (%.1f s quiet, %.1f s in) — stopping", quiet, age))
+                self.endDictation()
+            } else if !heard, age >= Self.chatNoWords {
+                timer.invalidate()
+                Log.info("🗣️ nothing said for ChatGPT — cancelled")
+                _ = self.cancelSentenceOrPanel(reason: "🗣️ no words for ChatGPT")
+            }
+        }
+        chatSilenceTimer = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+    private var chatSilenceTimer: Timer?
+    static let chatPause: TimeInterval = 1.6
+    static let chatNoWords: TimeInterval = 8
 
     /// The open wake's outcome goes into the ledger, once.
     private func closeWake(_ outcome: String, why: String? = nil, text: String? = nil) {

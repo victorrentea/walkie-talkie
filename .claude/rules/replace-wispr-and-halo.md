@@ -777,24 +777,24 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `current(for:)` answers Smoke for caret / bound / spawn (`HaloDestination.isPrompt`), their saved
   picks are kept and not read, their three rows are off the 𝓯𝔁 menu — *"momentarily remove the other
   2 … comment them out for a second"*, so do not delete the styles. Plain dictation (`wispr`) and the
-  ⚡ question keep their own. **`EdgeDust`**: his Smoke on a strip of its own (edge length × 110 pt,
-  a second `ProjectMHalo`, `tunes = false`), the stamp sweeping the edge back and forth
-  (`stamp(at:)`, a pass every 1.3 s on average, pace and depth wandering), fed the microphone while
-  it is open, masked to nothing away from the edge, the panel at alpha 0.3 — top for a spawn, right
-  for a bound sentence, none at the caret; from `syncBorrowedGestures`, where the destination is
-  known. **It outlives the microphone**: `waiting` while `stillPending` (settling, a panel coming or
-  held, keystrokes or a spawn in flight), then `sent()` from `deliverToTerminal`'s `.delivered` /
-  `spawnClaude`'s bound window — *"it doubles its size and opacity and then fades out, suggesting
-  the message was sent"*: strip ×2 deep about the edge (`sublayerTransform`), alpha ×2, the stamp
-  twice as fast, 0.35 s, held 0.45 s, out in 0.8 s. Nothing pending for 1.2 s (a cancel, a refusal),
-  a flip to the caret mid-sentence, or 90 s: out in 0.4 s with no swell. The splat radius is derived
-  per canvas (`radius(puff:canvasHeight:)` — the engine's Gaussian is in canvas heights, so the wide
-  strip and the tall one need different numbers for the same 22 pt puff) and the force is set per
-  long side. Knobs `edgeDust.alpha|thickness|sweep|puff|gain|fade|force` in the defaults, read when
-  the strip is built. Desk: `POST /test/edge-dust {"edge": "top"|"right", "seconds", "sent",
-  "capturable"}`. Log `🌫️ …`. The engine takes ~1.7 s to warm up before its first picture.
-  **Not yet seen on a screen**: written and deployed with the Mac locked (a screenshot is black
-  there) — the numbers above are first guesses, tune them from a desk shot.
+  ⚡ question keep their own. **`EdgeDust`**: **nothing travels along the edge** — the first version
+  (Smoke on a strip, its stamp sweeping back and forth) lasted an hour: *"să nu se miște pe edge
+  nimic. doar să strălucească un fel de dust, static sau ff ușor în mișcare, multicolor"*. It is a
+  `CAEmitterLayer`: soft grains of every colour (three sizes, ~5 pt, additive) born all along the
+  edge within 34 pt of it, drifting ≤ 2 pt/s in no direction, each glowing ~3 s and fading as others
+  appear; a gradient takes the 110 pt strip to nothing away from the edge, the panel at alpha 0.5 —
+  top for a spawn, right for a bound sentence, none at the caret; from `syncBorrowedGestures`, where
+  the destination is known. No engine, no warm-up, no microphone. **It outlives the microphone**:
+  `waiting` while `stillPending` (settling, a panel coming or held, keystrokes or a spawn in flight),
+  then `sent()` from `deliverToTerminal`'s `.delivered` / `spawnClaude`'s bound window — *"it
+  doubles its size and opacity and then fades out, suggesting the message was sent"*: strip ×2 deep
+  about the edge (`sublayerTransform`), alpha ×2, twice the grains, 0.35 s, held 0.45 s, out in
+  0.8 s. Nothing pending for 1.2 s (a cancel, a refusal), a flip to the caret mid-sentence, or 90 s:
+  out in 0.4 s with no swell. Knobs `edgeDust.alpha|thickness|depth|grains|grain|life|drift` in the
+  defaults, read when the strip is built. Desk: `POST /test/edge-dust {"edge": "top"|"right",
+  "seconds", "sent", "capturable"}`. Log `🌫️ …`.
+  **Not yet seen on a screen** when written (the Mac was locked, a screenshot is black there) — the
+  numbers are first guesses, tune them from a desk shot.
 - **At the stop the dust flies to the corner's wheel** (same day: *"when the dictation finishes, the
   dust, wherever it is at that point, should head towards the spinning wheel … and then starts
   spinning while the transcription is performed"*). `CaretHalo.flyToCorner` — from `endDictation` in
