@@ -130,7 +130,7 @@ final class EdgeDustV3: EdgeDustPicture {
         // how far in the smoke gets here: uneven along the edge, breathing slowly
         float lick = gnoise(float3(along / 56.0 + u.seed, 3.7, t * 0.35))
                    + 0.5 * gnoise(float3(along / 22.0 + u.seed, 9.2, t * 0.5));
-        float reach = (96.0 + 34.0 * lick) * (1.0 + 0.18 * u.level);
+        float reach = (96.0 + 34.0 * lick) * (1.0 + 0.18 * u.level) * 0.7;   // −30 % (Victor, 2026-11-16)
         float f = saturate(1.0 - away / max(reach, 1.0));
         float fall = f * f * (3.0 - 2.0 * f);
         fall *= 0.62 + 0.38 * exp(-away / 30.0);
@@ -178,7 +178,7 @@ final class EdgeDustV3: EdgeDustPicture {
 
     static let fps: Double = 30
     /// Noise-seconds per second at rest: a wisp reshapes over several seconds.
-    static let restSpeed: Float = 0.11
+    static let restSpeed: Float = 0.33
 
     init?(strip: NSView, edge: EdgeDust.Edge) {
         guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
