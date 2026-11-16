@@ -9,6 +9,8 @@ question when the words open with "I have a question").
 
     {"event": "ready", "device": "...", "rate": 16000}
     {"event": "wake", "score": 0.93, "word": "hey claude"}
+    {"event": "rejected", "score": 0.89, "word": "hey santa", "heard": "What role…"}
+                                             the detector fired, the decode disagreed
     {"event": "speech"}                      the first voiced hop after a wake
     {"event": "silence", "after": 1.2, "voiced": 2.3, "head": "/…/head.wav"}
                                              that much quiet after speech: the end;
@@ -39,6 +41,18 @@ voiced chunks in the 2 s before it. Of the 33 wakes kept in `triggers/`, 20 fire
 on room tone (loudest 80 ms chunk under 160 — both false *hey gepetto*, 0.93 and
 0.99, at rms 20); every one he said had ≥ 0.7 s voiced, his 30 takes ≥ 0.3 s.
 
+**A wake is a transcript, not a score** (2026-11-16, Victor: *"s-a mai activat astăzi
+aiurea wake word"* — 8 wakes that day, none said; 37 of the 41 kept in `triggers/`
+were talk, 0.60–1.00, after two retrains). `--confirm base`: a detector's hit is only
+a candidate; 0.4 s later the last 3 s are *decoded* (faster-whisper `base`, English,
+the three phrases as its prompt) and the wake stands only if the text **ends** in
+*hey <word>* (`CONFIRM`). Otherwise `{"event": "rejected", "heard": …}` and back to
+listening; the trigger's audio is kept either way, its `.json` says `confirmed`.
+Measured (`evals/wake-word/verify_check.py`): false triggers 0 of 37 pass, his takes
+29 of 30, `say` *hey gepetto* 60 of 60, ~0.3 s a decode; 2 of 300 windows of him
+teaching decode to a wake phrase by themselves. The words after the phrase are not
+lost: the command's clock and head start at the hit, not at the verdict.
+
 stdin takes one word per line: `pause` (the app is dictating — no wake fires,
 the end-of-speech watch keeps running), `resume`, `quit`.
 
@@ -57,7 +71,19 @@ import os
 import queue
 import sys
 import threading
+import re
 import time
+
+# What a decode of the wake's audio must END in for the wake to stand (`--confirm`).
+_HEY = r"\b(hey|hei|hay|hi|ok|okay)\W+"
+CONFIRM = {
+    "hey santa": re.compile(_HEY + r"santas?\W*$", re.I),
+    "hey gepetto": re.compile(_HEY + r"[gj]h?[eia]p+[eia]t+[oa]s?\W*$", re.I),
+    "hey claude": re.compile(_HEY + r"(claude|claud|clod|cloud|clawed|klaus|claus)\W*$", re.I),
+}
+# The decoder is told the three phrases: without it "Gepetto" comes back as "Japitong",
+# "the peto", "Chipotle" (7 of 60 `say` takes heard; 60 of 60 with it).
+HINT = "Hey Santa. Hey Gepetto. Hey Claude."
 
 
 def say(**event):
@@ -132,6 +158,9 @@ def main():
     p.add_argument("--min-voiced-s", type=float, default=0.6)
     p.add_argument("--wake-voiced-s", type=float, default=0.24,
                    help="voice needed in the 2 s before a hit for it to be a wake; 0 = any hit")
+    p.add_argument("--confirm", default="",
+                   help="a faster-whisper size (base): decode the hit's audio, wake only on 'hey <word>'; empty = any hit")
+    p.add_argument("--confirm-after-s", type=float, default=0.4, help="audio awaited after the hit before the decode")
     p.add_argument("--ignore-s", type=float, default=0.25, help="the wake word's own tail, not speech")
     p.add_argument("--head-s", type=float, default=4.0)
     p.add_argument("--head", default=os.path.expanduser("~/.walkie-talkie/wake/head.wav"))
@@ -158,6 +187,20 @@ def main():
     if not model and not whisper:
         say(event="error", error="no wake word model given")
         return 2
+    confirmer = None
+    if a.confirm:
+        try:
+            from faster_whisper import WhisperModel
+            confirmer = WhisperModel(a.confirm, device="cpu", compute_type="int8", cpu_threads=4)
+        except Exception as e:   # no model on disk and no network: the detectors alone, as before
+            say(event="error", error=f"confirm model {a.confirm}: {e} — wakes are not confirmed")
+
+    def heard_in(chunks_):
+        """What the decoder hears in those chunks — the detector's hit, as words."""
+        audio = np.concatenate(chunks_).astype(np.float32) / 32768.0
+        segs, _ = confirmer.transcribe(audio, language="en", beam_size=1, temperature=0.0, initial_prompt=HINT,
+                                       condition_on_previous_text=False, without_timestamps=True)
+        return " ".join(s_.text for s_ in segs).strip()
     chunks: "queue.Queue[np.ndarray]" = queue.Queue(maxsize=200)
     paused = threading.Event()
     stop = threading.Event()
@@ -270,7 +313,11 @@ def main():
                 w.setframerate(16000)
                 w.writeframes(np.concatenate(t["pre"] + t["post"]).tobytes())
             with open(base + ".json", "w") as f:
-                json.dump(dict(word=t["word"], score=t["score"], window_end=sum(len(c) for c in t["pre"])), f)
+                meta = dict(word=t["word"], score=t["score"], window_end=sum(len(c) for c in t["pre"]))
+                for k in ("confirmed", "heard"):
+                    if k in t:
+                        meta[k] = t[k]
+                json.dump(meta, f)
             old = sorted(n for n in os.listdir(a.triggers) if n.endswith(".wav"))[:-a.triggers_keep]
             for n in old:
                 for ext in (".wav", ".json", ".txt"):
@@ -291,6 +338,35 @@ def main():
         if capped:
             ev["capped"] = True
         say(**ev)
+
+    def command(chunk, voiced, now):
+        """One chunk of the sentence after a wake: its head, its voice, its end."""
+        nonlocal voiced_at, heard, voiced_s
+        if mode != "command":
+            return
+        if now - woke_at <= a.head_s:
+            head.append(chunk)
+        if voiced and now - woke_at > a.ignore_s:
+            voiced_s += len(chunk) / 16000
+            if not heard:
+                say(event="speech")
+            heard, voiced_at = True, now
+        if heard and voiced_at is not None and now - voiced_at >= a.silence_s:
+            end(now - voiced_at)
+        elif not heard and now - woke_at >= a.no_speech_s:
+            end(0)
+        elif now - woke_at >= a.max_command_s:
+            end(0, capped=True)
+
+    def woke(c, **more):
+        """The wake stands. Its sentence began at the hit: what came since is replayed."""
+        nonlocal mode, woke_at, voiced_at, heard, voiced_s, head
+        say(event="wake", score=c["score"], word=c["word"], id=c["id"], **more)
+        mode, woke_at, voiced_at, heard, voiced_s, head = "command", c["at"], None, False, 0.0, []
+        for chunk_, voiced_, at_ in c["after"]:
+            command(chunk_, voiced_, at_)
+
+    candidate = None          # a detector's hit awaiting the decoder's verdict
     clock = 0.0               # seconds of audio seen — the wav and the mic alike
 
     while not stop.is_set() or not chunks.empty():
@@ -336,29 +412,40 @@ def main():
                 # The wake's name: its audio's file here, its outcome's line in the
                 # app's `outcomes.jsonl` (silent / cancelled / session / question).
                 wake_id = "%s-%s-%.2f" % (time.strftime("%Y%m%d-%H%M%S"), hit[0].split()[-1], hit[1])
-                say(event="wake", score=round(hit[1], 3), word=hit[0], id=wake_id)
                 if a.triggers:
                     # The chunk that fired is the ring's last: the scored window ends here.
                     trigger = dict(id=wake_id, word=hit[0], score=round(hit[1], 3), pre=list(ring), post=[])
-                mode, woke_at, voiced_at, heard, voiced_s, head = "command", clock, None, False, 0.0, []
+                candidate = dict(id=wake_id, word=hit[0], score=round(hit[1], 3), at=clock, after=[], trigger=trigger)
                 if model:
                     model.reset()
                 if whisper:
                     whisper.reset()
+                if confirmer and hit[0] in CONFIRM:
+                    mode = "confirm"
+                else:
+                    woke(candidate)
+        elif mode == "confirm":
+            # The hit is a candidate until the decoder has heard the phrase in it. What he
+            # says meanwhile is kept and replayed into the command, so nothing is lost.
+            candidate["after"].append((chunk, voiced, clock))
+            if clock - candidate["at"] >= a.confirm_after_s:
+                t0 = time.time()
+                try:
+                    heard_text = heard_in(list(ring))
+                    ok = bool(CONFIRM[candidate["word"]].search(heard_text))
+                except Exception as e:
+                    heard_text, ok = f"(decode failed: {e})", True
+                took = round(time.time() - t0, 2)
+                if candidate["trigger"] is not None:
+                    candidate["trigger"].update(confirmed=ok, heard=heard_text)
+                if ok and not paused.is_set():
+                    woke(candidate, heard=heard_text, took=took)
+                else:
+                    say(event="rejected", score=candidate["score"], word=candidate["word"], id=candidate["id"],
+                        heard=heard_text[:200], took=took)
+                    mode, cooldown_until = "wake", clock + a.cooldown_s
         elif mode == "command":
-            if clock - woke_at <= a.head_s:
-                head.append(chunk)
-            if voiced and clock - woke_at > a.ignore_s:
-                voiced_s += len(chunk) / 16000
-                if not heard:
-                    say(event="speech")
-                heard, voiced_at = True, clock
-            if heard and voiced_at is not None and clock - voiced_at >= a.silence_s:
-                end(clock - voiced_at)
-            elif not heard and clock - woke_at >= a.no_speech_s:
-                end(0)
-            elif clock - woke_at >= a.max_command_s:
-                end(0, capped=True)
+            command(chunk, voiced, clock)
 
     if stream is not None:
         stream.stop()

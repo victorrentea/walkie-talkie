@@ -5,6 +5,16 @@ import XCTest
 /// sentence becomes (2026-11-12).
 final class WakeWordTests: XCTestCase {
 
+    /// `WT_WAKE_CONFIRM`: on (`base`) unless it says off; a size is passed through.
+    func testConfirmIsOnByDefault() {
+        XCTAssertEqual(WakeWord.confirm(raw: nil), "base")
+        XCTAssertEqual(WakeWord.confirm(raw: " "), "base")
+        XCTAssertEqual(WakeWord.confirm(raw: "small"), "small")
+        XCTAssertNil(WakeWord.confirm(raw: "off"))
+        XCTAssertNil(WakeWord.confirm(raw: "0"))
+    }
+
+
     func testAnOutcomeIsOneLineBesideTheTriggersName() throws {
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("wake-\(UUID().uuidString)/outcomes.jsonl")
         defer { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }

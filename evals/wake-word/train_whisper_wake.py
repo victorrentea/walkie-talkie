@@ -188,7 +188,7 @@ def verdict(text, outcome):
     if HEY_SANTA.search(text):
         return True
     if "santa" in text.lower():
-        return outcome not in ("silent", "cancelled")
+        return outcome not in ("silent", "cancelled", "rejected")
     return False
 
 

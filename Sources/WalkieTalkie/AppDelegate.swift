@@ -7692,6 +7692,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 WakeWord.note(id: id, word: word, score: score, outcome: "refused")
             }
+        case .rejected(let score, let word, let id, let heard):
+            // The detector fired on talk; the decode of that audio says so. Nothing opens.
+            Log.info(String(format: "👂 \"%@\" (%.2f) rejected — the decode heard \"%@\"", word, score, heard))
+            WakeWord.note(id: id, word: word, score: score, outcome: "rejected", text: heard)
         case .speech:
             break
         case .silence(let head, let voiced):

@@ -28,6 +28,9 @@ final class WakeWord {
         case ready(device: String)
         /// `id`: the helper's name for this wake — its audio in `santa/triggers/`.
         case wake(score: Double, word: String, id: String?)
+        /// A detector fired and the decode of its audio did not end in the
+        /// phrase (`confirm`): no wake. `heard` = what the decoder wrote.
+        case rejected(score: Double, word: String, id: String?, heard: String)
         case speech
         /// `head`: the first seconds from the wake on, gapless — what decides
         /// question or task (the app's own take opens later). `voiced`: seconds.
@@ -105,6 +108,22 @@ final class WakeWord {
     static var santaThreshold: Double {
         let raw = ProcessInfo.processInfo.environment["WT_SANTA_THRESHOLD"] ?? ElevenLabsSource.fileValue("WT_SANTA_THRESHOLD")
         return raw.flatMap(Double.init).map { min(max($0, 0.05), 0.999) } ?? 0.6
+    }
+
+    /// **A wake is a transcript, not a score** (2026-11-16, Victor: *"s-a mai
+    /// activat astăzi aiurea wake word"* — eight wakes that day, none said; 37
+    /// of the 41 kept were talk scoring 0.60–1.00, after two retrains). The
+    /// helper decodes the 3 s around a detector's hit with this faster-whisper
+    /// size and wakes only when the text ends in *hey <word>*
+    /// (`helpers/wake_word.py --confirm`; numbers in `evals/wake-word/README.md`).
+    /// `WT_WAKE_CONFIRM`: a size (`base`, the default), or `off` for the
+    /// detectors alone.
+    static var confirm: String? {
+        confirm(raw: ProcessInfo.processInfo.environment["WT_WAKE_CONFIRM"] ?? ElevenLabsSource.fileValue("WT_WAKE_CONFIRM"))
+    }
+    static func confirm(raw: String?) -> String? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespaces).lowercased(), !raw.isEmpty else { return "base" }
+        return ["0", "false", "off", "no"].contains(raw) ? nil : raw
     }
 
     // MARK: - The helper
@@ -200,6 +219,8 @@ final class WakeWord {
         // are still what the Gepetto head reads.
         if santa { args += ["--whisper-wake", Self.santaModel, "--whisper-threshold", sentences ? String(Self.santaThreshold) : "2"] }
         if gepetto { args += ["--also", "\(Self.gepetto)=\(Self.gepettoModel)@\(Self.gepettoThreshold)"] }
+        let confirm = Self.confirm
+        if let confirm { args += ["--confirm", confirm] }
         p.arguments = args
         let input = Pipe(), output = Pipe(), errors = Pipe()
         p.standardInput = input
@@ -247,7 +268,8 @@ final class WakeWord {
         stdin = input.fileHandleForWriting
         Log.info("👂 wake word helper up (pid \(p.processIdentifier)) on \(device.isEmpty ? "the default input" : device)"
                  + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa && sentences ? " — hey santa ≥ \(Self.santaThreshold)" : "")
-                 + (gepetto ? " — hey gepetto ≥ \(Self.gepettoThreshold)" : ""))
+                 + (gepetto ? " — hey gepetto ≥ \(Self.gepettoThreshold)" : "")
+                 + (confirm.map { " — each confirmed by a \($0) decode" } ?? " — unconfirmed"))
     }
 
     private func terminate() {
@@ -287,7 +309,14 @@ final class WakeWord {
         case "ready":
             queue.async { self.restarts = 0 }
             event = .ready(device: obj["device"] as? String ?? "")
-        case "wake": event = .wake(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "hey claude", id: obj["id"] as? String)
+        case "wake":
+            if let heard = obj["heard"] as? String {
+                Log.info(String(format: "👂 the decode confirms it — heard \"%@\" (%.2f s)", heard, obj["took"] as? Double ?? 0))
+            }
+            event = .wake(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "hey claude", id: obj["id"] as? String)
+        case "rejected":
+            event = .rejected(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "", id: obj["id"] as? String,
+                              heard: obj["heard"] as? String ?? "")
         case "speech": event = .speech
         case "silence": event = .silence(head: obj["head"] as? String, voiced: obj["voiced"] as? Double ?? 0)
         case "timeout": event = .timeout
@@ -305,6 +334,7 @@ final class WakeWord {
     /// file name in `santa/triggers/`: `silent` (nothing said after it),
     /// `cancelled` (by hand, `after` seconds later), `session` / `question`
     /// (the words went somewhere), `busy` / `refused` (never opened a sentence),
+    /// `rejected` (the decode did not hear the phrase — no wake, `text` = what it heard),
     /// `lost` (the take ended some other way). The trainer reads it
     /// (`evals/wake-word/train_whisper_wake.py`): silent and cancelled are the
     /// false wakes.

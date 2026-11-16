@@ -138,3 +138,48 @@ the room still fools them at the rates above.
 
 Open: the Gepetto triggers land in `santa/triggers/`, where `--data gepetto` does not look; and the
 first false wake kept the voice panel open 26 min with the screen locked (6 replies to the room).
+
+## 2026-11-16 — a wake is a transcript, not a score: the hit's audio is decoded
+
+*"s-a mai activat astăzi aiurea wake word"*: eight wakes that day (two *hey gepetto*, six *hey
+santa* while he was teaching, 0.65–1.00), **none said** — the large model heard *"What role do you
+see in this team?"*, *"interesting problem"*. Over everything kept in `santa/triggers/`: 41 wakes,
+4 said, 37 false, after two retrains and the voice gate. No threshold separates them, so the
+detectors stop deciding: `helpers/wake_word.py --confirm base` waits 0.4 s after a hit, decodes the
+last 3 s (faster-whisper `base`, int8, 4 threads, English, prompt `Hey Santa. Hey Gepetto. Hey
+Claude.`) and wakes only if the text **ends** in *hey <word>* (`CONFIRM`); otherwise `rejected`
+with what it heard. The command's clock and gapless head still start at the hit.
+
+`verify_check.py` — the decode alone, on the 3 s before each hit + `POST` s after (`POST=0.4
+ONLY=prompt`); *teaching* = 300 random voiced 3 s windows of the held-out days, any of the three
+phrases counted (how often the decoder invents one, with no detector in front):
+
+| model, prompt, rule | his 30 takes | `say` gepetto (60) | `say` santa (60) | false triggers (37) | said triggers (4) | teaching (300) | a decode |
+|---|---|---|---|---|---|---|---|
+| tiny, none, word anywhere, POST 0 | 22 | 0 | 36 | 0 | 3 | — | 0.15 s |
+| base, none, word anywhere, POST 0 | 28 | 4 | 30 | 0 | 3 | — | 0.33 s |
+| small, none, word anywhere, POST 0 | 29 | 13 | 33 | 0 | 3 | — | 1.17 s |
+| base, none, word anywhere | 28 | 7 | 30 | 0 | 4 | — | 0.29 s |
+| base, prompt, word anywhere | 29 | 60 | 57 | 1 | 4 | 9 | 0.33 s |
+| base, `hotwords`, word anywhere | 28 | 41 | 56 | 18 | 4 | — | 0.31 s |
+| **base, prompt, ends in *hey <word>*** (installed) | **29** | **60** | **56** | **0** | **4** | **2** | **0.30 s** |
+| tiny, prompt, ends in *hey <word>* | 29 | 55 | 59 | 2 | 4 | 23 | 0.15 s |
+
+- Without the prompt *Gepetto* is not a word the decoder writes (*"Japitong"*, *"the peto"*,
+  *"Hey Chipotle"*). `hotwords` makes it write the list over anything (*"Santa Gepetto Claude"*).
+- The 0.4 s matter: the detector fires before the phrase is over, and the said trigger
+  `20261114-135058` decoded as *"Google."* without them.
+- The one take of his it loses (`Victor-…-01`, *"Hey."*) is lost by every model.
+- **What it does not fix:** 2 of 300 teaching windows decode to *"Hey Santa."* / *"Hey, Claude."*
+  on their own (Romanian forced to English, with the phrases as the prompt). A false wake now needs
+  that *and* a detector hit on the same audio; nothing here measures how often the two coincide —
+  the next workshop day's `rejected` / `cancelled` count in `outcomes.jsonl` does.
+
+`replay_confirm.py` — the helper itself (`--wav`, the app's arguments), detectors alone → with
+`--confirm base`: his takes 30 → 29 wakes, said triggers 4 → 4, `say` gepetto 19 → 18 of 20, false
+triggers 5 → 0 (only 5 of the 37 still fire the retrained detectors on replay).
+
+Cost: `base` is ~150 MB more in the helper and one 0.3 s decode per detector hit; the wake reaches
+the app ~0.7 s after the phrase instead of at once. `WT_WAKE_CONFIRM=off` is the detectors alone.
+A rejected hit keeps its audio in `triggers/` (`.json`: `confirmed`, `heard`) and a `rejected`
+line in `outcomes.jsonl`.
