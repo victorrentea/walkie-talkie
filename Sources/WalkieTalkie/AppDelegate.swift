@@ -3644,6 +3644,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The corner's wheel starts as the pointer's dust arrives (2026-11-16).
         caretHalo.onCornerFlight = { [weak self] arrives in self?.cornerTunnel.notBefore = arrives }
         // …or rather it *is* that dust: the corner draws nothing while it turns there.
+        // The wheel turns until the text is in: keystrokes, a new window, the caret's paste.
+        cornerTunnel.stillDelivering = { [weak self] in
+            guard let self else { return false }
+            return self.panelsComing > 0 || self.deliveriesInFlight > 0 || self.spawnsInFlight > 0 || self.caretLanding != 0
+        }
         cornerTunnel.standIn = (adopt: { [weak self] in self?.caretHalo.adoptCornerOrbit() ?? false },
                                 end: { [weak self] in self?.caretHalo.endCornerOrbit() })
         edgeDust.samples = { [weak self] in self?.liveMeter?.recentSamples }
@@ -7510,13 +7515,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard listening || source.isRecording || speculative || settling else { return false }
         FaceRead.shared.discard()
         Log.info("🗑️ dictation cancelled via \(reason)")
-        // The wave wipes the pointer's effect where it is — no flight to the
-        // corner's wheel for words that are not coming (2026-11-16).
-        if caretHalo.live {
-            StopWave.fire(at: NSEvent.mouseLocation)
-            caretHalo.wipeForCancel()
-        }
-        edgeDust.drop("cancelled")
+        // **Everything drawn goes at once, with no wave** (2026-11-16, *"la cancel
+        // dispare brusc toată grafica de pe ecran (fără inel)"*): the pointer's
+        // effect, the prompt's edge, the corner's wheel.
+        caretHalo.vanishForCancel()
+        edgeDust.cut("cancelled")
+        cornerTunnel.cut()
         if wakeTake { closeWake("cancelled", why: reason) }
         // **A recogniser with nothing to cancel leaves the relay's own state
         // standing, and until now nothing could take it down** (2026-09-14,

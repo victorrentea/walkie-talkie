@@ -1707,8 +1707,16 @@ final class CaretHalo {
         return NSPoint(x: f.from.x + (f.to.x - f.from.x) * p, y: f.from.y + (f.to.y - f.from.y) * p)
     }
 
+    /// **Off since the same evening** (Victor, 2026-11-16, after four passes at it:
+    /// *"m-am răzgândit în privința fumului: la terminarea dictării, să revenim la
+    /// inelul care se mărește din dreptul mouse-ului și șterge ecranul. nu mai vreau
+    /// ca dustul să se ducă la spin wheel. revenim și la spin wheel de dust cum era
+    /// ieri în colțul stânga sus"*). The stop's wave wipes the dust again and
+    /// `CornerTunnel` draws its own wheel. The flight stays in the file, unreachable;
+    /// `WT_DUST_FLIGHT=1` brings it back for a run.
+    static let dustFliesToCorner = ProcessInfo.processInfo.environment["WT_DUST_FLIGHT"] == "1"
     private var fliesToCorner: Bool {
-        Self.quietSettle && HaloStyle.promptsWearDust && web != nil && !quick && !frozeThisRing && !cancelled
+        Self.dustFliesToCorner && Self.quietSettle && HaloStyle.promptsWearDust && web != nil && !quick && !frozeThisRing && !cancelled
             && drawn == .smoke && destination.isPrompt && CornerTunnel.dress == .dust && dock == nil
     }
 
@@ -1716,11 +1724,27 @@ final class CaretHalo {
     /// cancel să nu meargă în colț stânga sus, ci să facă acel wave în jurul
     /// mouse-ului care să curețe animația"*). The cancel's short settle used to
     /// send the dust to the corner like a stop. `AppDelegate` fires the wave.
+    ///
+    /// **And then no wave either: a cancel takes everything off the screen at once**
+    /// (later that evening: *"iar la cancel dispare brusc toată grafica de pe ecran
+    /// (fără inel)"*). The panel is out in this call; `hide`, a moment later, has
+    /// only the engine to stop.
     private var cancelled = false
-    func wipeForCancel() {
-        guard live, cornerFlight == nil else { return }
+    func vanishForCancel() {
+        guard live || closing, let panel else { return }
         cancelled = true
-        wipeWithTheWave()
+        cornerFlight = nil
+        stillGeneration &+= 1
+        closingGeneration &+= 1
+        panel.contentView?.layer?.mask = nil
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0
+            panel.animator().alphaValue = 0
+        }
+        panel.alphaValue = 0
+        panel.orderOut(nil)
+        arrow.hide()
+        Log.info("◯ caret halo cut — the sentence was cancelled")
     }
 
     /// The stop's press (`AppDelegate.endDictation`), or the settle of a sentence no
@@ -2351,6 +2375,20 @@ final class CaretHalo {
             return
         }
         hiddenAt = CFAbsoluteTimeGetCurrent()
+        // Cancelled: the panel went in `vanishForCancel`; no fade, no collapse.
+        if cancelled {
+            renderTimer?.invalidate(); renderTimer = nil
+            growGraceTimer?.invalidate(); growGraceTimer = nil
+            growOnShow = false
+            small = false
+            web?.stop(); under?.stop()
+            pageRunning = false
+            closing = false
+            arrow.hide()
+            releaseMonitorsIfIdle()
+            panel?.orderOut(nil)
+            return
+        }
         // **The dust is on its way to the corner's wheel** (2026-11-16): it keeps
         // being drawn until it is there, then fades under the wheel.
         if let flight = cornerFlight, web != nil, let panel {

@@ -130,6 +130,17 @@ final class EdgeDust {
         leave(sent: false, why: why)
     }
 
+    /// A cancel: off the screen in this call, no fade (2026-11-16, *"la cancel
+    /// dispare brusc toată grafica de pe ecran"*).
+    func cut(_ why: String) {
+        guard phase != .down, panel != nil else { return }
+        turn += 1
+        pollTimer?.invalidate(); pollTimer = nil
+        Log.info("🌫️ the \(edge?.rawValue ?? "?") edge is cut — \(why)")
+        panel?.alphaValue = 0
+        settleDown()
+    }
+
     /// `POST /test/edge-dust {"edge": "top"|"right", "seconds": 4, "sent": true, "capturable": true}`:
     /// the edge with no sentence behind it, then the swell (or the quiet end).
     func demo(_ edge: Edge, seconds: Double, sent: Bool, capturable: Bool) {

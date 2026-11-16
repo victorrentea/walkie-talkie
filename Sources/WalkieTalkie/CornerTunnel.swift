@@ -72,7 +72,7 @@ final class CornerTunnel {
 
     private static let minSamples = 8000          // half a second at 16 kHz, as the rewind
     private static let maxSpeed: Double = 8
-    private static let fadeOut: TimeInterval = 0.3
+    private static let fadeOut: TimeInterval = 0.25
 
     private var panel: NSPanel?
     private var host: ProjectMHalo?
@@ -234,6 +234,31 @@ final class CornerTunnel {
         }
     }
 
+    /// A cancel: the wheel is off the screen in this call, no fade.
+    func cut() {
+        guard up || panel?.isVisible == true else { return }
+        up = false
+        turn += 1
+        panel?.alphaValue = 0
+        panel?.orderOut(nil)
+        feedTimer?.invalidate(); feedTimer = nil
+        pathTimer?.invalidate(); pathTimer = nil
+        host?.stop()
+        running = false
+        lingering = false
+        Log.info("🌀 the corner's wheel is cut — the sentence was cancelled")
+    }
+
+    /// **The wheel stays until the text is in** (2026-11-16, Victor: *"când termină
+    /// injectarea textului spin wheel dispare făcând un fadeout scurt"*): the settle
+    /// ends when the delivery *starts*, and the words reach the terminal a second or
+    /// more later. Asked when the wheel would go; while it answers true the wheel
+    /// turns on, re-asked five times a second, 15 s at most.
+    var stillDelivering: (() -> Bool)?
+    private var lingering = false
+    private var lingerFrom: CFAbsoluteTime = 0
+    static let lingerCeiling: TimeInterval = 15
+
     var standIn: (adopt: () -> Bool, end: () -> Void)?
     private var delegated = false
 
@@ -300,7 +325,19 @@ final class CornerTunnel {
             standIn?.end()
             return
         }
-        if wanted, CFAbsoluteTimeGetCurrent() >= notBefore { show() } else { hide() }
+        if wanted, CFAbsoluteTimeGetCurrent() >= notBefore { lingering = false; show(); return }
+        if !wanted, up, !held, !Self.off, stillDelivering?() == true {
+            if !lingering { lingering = true; lingerFrom = CFAbsoluteTimeGetCurrent() }
+            if CFAbsoluteTimeGetCurrent() - lingerFrom < Self.lingerCeiling {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                    guard let self, self.lingering else { return }
+                    self.sync()
+                }
+                return
+            }
+        }
+        lingering = false
+        hide()
     }
 
     private func show() {

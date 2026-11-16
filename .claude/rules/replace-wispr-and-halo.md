@@ -803,6 +803,21 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   stânga sus, ci să facă acel wave în jurul mouse-ului care să curețe animația"*). The cancel's short
   settle sent the dust to the corner like a stop; `cancelDictationInFlight` now fires `StopWave` and
   `CaretHalo.wipeForCancel` (which refuses the flight for this ring), and drops the edge.
+- **⚠️ The flight to the corner is OFF; the wave wipes the dust again** (2026-11-16, the evening's
+  last word on it, after four passes: *"m-am răzgândit în privința fumului: la terminarea dictării,
+  să revenim la inelul care se mărește din dreptul mouse-ului și șterge ecranul. nu mai vreau ca
+  dustul să se ducă la spin wheel. revenim și la spin wheel de dust cum era ieri în colțul stânga
+  sus. iar când termină injectarea textului spin wheel dispare făcând un fadeout scurt"*).
+  `CaretHalo.dustFliesToCorner` is false (`WT_DUST_FLIGHT=1` for a run): `flyToCorner` answers false,
+  `wipeWithTheWave` runs as before 2026-11-16, `CornerTunnel` draws its own Dust wheel (its 0.2 s
+  warm-up is kept). **The two bullets below this one and the *At the stop the dust flies* one describe
+  code that is still in the file and not reachable** — do not re-enable it on the strength of them.
+  New with this: **the wheel stays until the text is in** — `CornerTunnel.stillDelivering` (a panel
+  coming, keystrokes or a spawn in flight, `caretLanding`) keeps it turning past the settle's end,
+  re-asked at 5 Hz, 15 s at most, then out in 0.25 s. **A cancel cuts everything at once, no wave**
+  (*"iar la cancel dispare brusc toată grafica de pe ecran (fără inel)"*, superseding the same
+  day's *wave on cancel*): `cancelDictationInFlight` → `CaretHalo.vanishForCancel` (panel alpha 0 and
+  out in the call; `hide` only stops the engine), `EdgeDust.cut`, `CornerTunnel.cut`.
 - **The pointer's own smoke is the wheel — one unbroken movement** (2026-11-16, third pass: *"dustul
   care vine de la mouse trebuie să devină mai mic și mai intens pentru a da senzația că chiar el
   începe să se învârtă. ideal chiar acel smoke să se învârtă pe bune … ca o animație continuă"*).
