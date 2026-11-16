@@ -1560,7 +1560,9 @@ final class CaretHalo {
     /// moves until the words land.
     private var cornerFlight: (from: NSPoint, to: NSPoint, at: CFAbsoluteTime)?
     static let cornerFlightTime: TimeInterval = 0.7
-    static let cornerFlightFade: TimeInterval = 0.4
+    static let cornerFlightFade: TimeInterval = 0.6
+    /// How long the arrived dust stays whole over the wheel before it fades.
+    static let cornerFlightLinger: TimeInterval = 0.25
     /// The flight has begun; the argument is when the dust is there.
     var onCornerFlight: ((CFAbsoluteTime) -> Void)?
 
@@ -1609,7 +1611,9 @@ final class CaretHalo {
         frozeThisRing = true
         if !atCaret { arrow.hide() }
         Log.info(String(format: "💨 the dust leaves the pointer (%.0f, %.0f) for the corner's wheel (%.0f, %.0f)", from.x, from.y, to.x, to.y))
-        onCornerFlight?(now + Self.cornerFlightTime)
+        // The wheel is asked for mid-flight: with its 0.2 s warm-up and fade-in it
+        // is turning as this dust arrives, and this panel fades over it after.
+        onCornerFlight?(now + Self.cornerFlightTime * 0.4)
         follow()
         return true
     }
@@ -2211,7 +2215,7 @@ final class CaretHalo {
             closing = true
             closingGeneration &+= 1
             let generation = closingGeneration
-            let left = max(0, flight.at + Self.cornerFlightTime - CFAbsoluteTimeGetCurrent())
+            let left = max(0, flight.at + Self.cornerFlightTime + Self.cornerFlightLinger - CFAbsoluteTimeGetCurrent())
             DispatchQueue.main.asyncAfter(deadline: .now() + left) { [weak self] in
                 guard let self, self.closingGeneration == generation, !self.live else { return }
                 NSAnimationContext.runAnimationGroup { ctx in

@@ -374,7 +374,12 @@ final class CornerTunnel {
             let screen = (NSScreen.main?.frame.size) ?? box.size
             return ProjectMHalo(preset: preset, side: Self.side, screen: screen)
         case .dust:
-            guard let preset = HaloStyle.smoke.preset else { return nil }
+            guard var preset = HaloStyle.smoke.preset else { return nil }
+            // **No second and a half of nothing** (2026-11-16, Victor: *"s-a dus smogul
+            // la colț … a dispărut și apoi a început spinnerul. Nu asta vreau … cumva
+            // imediat, continuă mișcarea"*): the engine's standard warm-up hid the
+            // wheel for 1.5 s after the pointer's dust had arrived and faded.
+            preset.warmup = 0.2
             let canvas = CGSize(width: box.width * Self.dustGrain, height: box.height * Self.dustGrain)
             let engine = ProjectMHalo(preset: preset, side: (Self.side * preset.scale).rounded(), screen: canvas)
             engine?.tunes = false

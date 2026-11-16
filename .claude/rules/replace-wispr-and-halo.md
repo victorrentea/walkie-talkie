@@ -820,9 +820,11 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   settle no press began; never on a cancel. For a prompt in Smoke with the corner in its Dust dress:
   nothing freezes, `aim` runs from where it was to `CornerTunnel.dustPoint(at: 0)` on that screen
   over `cornerFlightTime` 0.7 s (smoothstep, driven by the render timer through `follow`), the
-  engine drawing the trail a fast hand would; `onCornerFlight` sets `CornerTunnel.notBefore`, so the
-  wheel comes up as the dust arrives; `hide` keeps the panel drawn until then and fades it over
-  `cornerFlightFade` 0.4 s. It sets `frozeThisRing`, so no wipe, no second freeze and no dock on the
+  engine drawing the trail a fast hand would; `onCornerFlight` sets `CornerTunnel.notBefore` to 40 %
+  of the flight and the corner's Smoke warms up in 0.2 s, not the standard 1.5 s — the first build
+  asked for the wheel at the arrival and he saw *"a dispărut și apoi a început spinnerul … continuă
+  mișcarea"*; `hide` keeps the panel drawn through the flight and 0.25 s more, then fades it over
+  `cornerFlightFade` 0.6 s, on top of the wheel already turning. It sets `frozeThisRing`, so no wipe, no second freeze and no dock on the
   prompt panel follow. Log `💨 …`. Supersedes, for these three, *the wave wipes every dress*.
 - **📍 The pin stays until the delivery says the words are in** (2026-11-11, Victor: *"pinul acela
   roșu … să nu dispară decât după ce ai confirmarea că ai inserat textul … abia după o secundă, două,
