@@ -796,6 +796,22 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   "seconds", "sent", "capturable"}`. Log `🌫️ …`.
   **Not yet seen on a screen** when written (the Mac was locked, a screenshot is black there) — the
   numbers are first guesses, tune them from a desk shot.
+- **The pointer's own smoke is the wheel — one unbroken movement** (2026-11-16, third pass: *"dustul
+  care vine de la mouse trebuie să devină mai mic și mai intens pentru a da senzația că chiar el
+  începe să se învârtă. ideal chiar acel smoke să se învârtă pe bune … ca o animație continuă"*).
+  Supersedes the hand-over in the bullet above: arrived, `CaretHalo.aim` goes on along
+  `CornerTunnel.dustPoint` round the atom's centre, on the same engine and panel. During the flight
+  its knobs run (cubic, so the streak keeps his look) from his sliders to `cornerKnobs(canvas:)` —
+  the corner dust's radius, gain and fade re-expressed for a screen-sized canvas, plus force and
+  **`PMH_FLUID_KNEE`** (new knob, `look.motionKnee`): at the standard 0.5 canvas-widths/s a 46 pt
+  ring on a 1728 pt canvas is worth ~1 % dye, so the knee is scaled by `side / width`. `hide` keeps
+  the panel and its render timer; `CornerTunnel.sync` asks `standIn.adopt` before drawing and, while
+  `delegated`, draws nothing and calls `standIn.end` when it would have hidden → `endCornerOrbit`
+  (fade 0.6 s, sliders restored, engine stopped). Unadopted for 2.5 s after arriving (no take, another
+  dress) it goes by itself; 90 s is the ceiling; a new ring restores the sliders at once. The
+  corner's own engine still draws the wheel when no pointer dust flew (typed prompt, battery, the
+  demo route). Log `💨 …`, `🌀 the corner's wheel is the pointer's own dust`. Not seen on a screen
+  when written.
 - **The edge's picture is a variant, and nine are in the build to choose from** (2026-11-16, of the
   glitter: *"dustul de pe margine nu arată a dust. mai încearcă încă 5 moduri … să imite animația
   dust din jurul mouse-ului dar liniară … redă-le alternativ cu un label mare pe centru ecran, să le

@@ -1,4 +1,5 @@
 import AppKit
+import CProjectM
 import AVFoundation
 import QuartzCore
 
@@ -1539,7 +1540,13 @@ final class CaretHalo {
     private var fadeAim: NSPoint?
     /// Where the effect is centred: the pointer, or the rewind's path.
     private var aim: NSPoint {
-        if let f = cornerFlight { return Self.cornerFlightPoint(f, at: CFAbsoluteTimeGetCurrent()) }
+        if let f = cornerFlight {
+            let now = CFAbsoluteTimeGetCurrent(), since = now - f.at - Self.cornerFlightTime
+            guard since > 0, let centre = cornerWheelCentre else { return Self.cornerFlightPoint(f, at: now) }
+            // There: the same dust goes round, on the wheel's own path.
+            let p = CornerTunnel.dustPoint(at: since)
+            return NSPoint(x: centre.x - CornerTunnel.side / 2 + p.x, y: centre.y + CornerTunnel.side / 2 - p.y)
+        }
         return (rewinding || orbitFading ? rewindPoint : fadeAim) ?? pointerAim
     }
 
@@ -1558,7 +1565,102 @@ final class CaretHalo {
     /// arrives (`onCornerFlight` → `notBefore`) and this panel fades under it over
     /// `cornerFlightFade`. The quiet settle's rule otherwise stands: nothing else
     /// moves until the words land.
+    ///
+    /// **The same smoke, not a second one, and one unbroken movement** (later that
+    /// evening: *"dustul din spin wheel e mai mic și mai intens. dustul care vine de
+    /// la mouse trebuie să devină mai mic și mai intens pentru a da senzația că
+    /// chiar el începe să se învârtă. ideal chiar acel smoke să se învârtă pe bune …
+    /// ca o animație continuă"*). So the pointer's own engine **is** the wheel:
+    /// arrived, `aim` goes on along `CornerTunnel.dustPoint` round the atom's
+    /// centre, and on the way its knobs run from his sliders to the corner dust's
+    /// (`cornerKnobs`: the puff shrinks to the wheel's 9 pt, gain and fade the
+    /// wheel's, and the force and the *knee* — a new knob, `PMH_FLUID_KNEE` — are
+    /// scaled so a 46 pt ring on a screen-wide canvas stirs the fluid as it does on
+    /// the wheel's 230 pt one; at the standard knee that ring would splat 1 % dye).
+    /// `CornerTunnel` draws nothing meanwhile and only says when it would have gone
+    /// (`standIn` → `endCornerOrbit`); the sliders come back when this panel is out.
     private var cornerFlight: (from: NSPoint, to: NSPoint, at: CFAbsoluteTime)?
+    private var cornerWheelCentre: NSPoint?
+    /// His sliders as they were when the flight began, to put back.
+    private var cornerKnobsBefore: [Int32: Float] = [:]
+    private var cornerKnobsTarget: [Int32: Float] = [:]
+    /// `CornerTunnel` has taken the orbit as its picture; until then a ceiling ends it.
+    private var cornerOrbitAdopted = false
+    var cornerOrbiting: Bool { cornerFlight != nil }
+    static let cornerOrbitOrphan: TimeInterval = 2.5
+
+    /// The corner dust's look on a canvas `canvas` points in size (the pointer's screen).
+    static func cornerKnobs(canvas: CGSize) -> [Int32: Float] {
+        let own = CornerTunnel.dustKnobs
+        let w = Float(max(canvas.width, 1)), h = Float(max(canvas.height, 1)), side = Float(CornerTunnel.side)
+        let scale = Float(ProjectMHalo.renderScale)
+        var out: [Int32: Float] = [:]
+        // The splat's Gaussian is in canvas heights: the same points across.
+        out[Int32(PMH_FLUID_RADIUS)] = (own[Int32(PMH_FLUID_RADIUS)] ?? 0.003) * (side / h) * (side / h)
+        out[Int32(PMH_FLUID_GAIN)] = own[Int32(PMH_FLUID_GAIN)] ?? 0.35
+        out[Int32(PMH_FLUID_FADE)] = own[Int32(PMH_FLUID_FADE)] ?? 0.9
+        out[Int32(PMH_FLUID_OPACITY)] = own[Int32(PMH_FLUID_OPACITY)] ?? 1
+        // The wheel's canvas is `dustGrain` × its square, 5 × its pixel width of force:
+        // the same push per point moved.
+        out[Int32(PMH_FLUID_FORCE)] = 5 * side * Float(CornerTunnel.dustGrain) * scale * (w / side)
+        // …and the same weight for the ring's pace: 0.5 of the wheel's width a second.
+        out[Int32(PMH_FLUID_KNEE)] = 0.5 * side / w
+        return out
+    }
+
+    private func rampCornerKnobs() {
+        guard let f = cornerFlight, let engine = web as? ProjectMHalo, !cornerKnobsTarget.isEmpty else { return }
+        let t = Float(min(max((CFAbsoluteTimeGetCurrent() - f.at) / Self.cornerFlightTime, 0), 1))
+        guard t < 1 || !cornerKnobsSettled else { return }
+        // Late in the flight: the long streak is drawn with his own look, the wheel's comes in as it arrives.
+        let p = t * t * t
+        for (which, to) in cornerKnobsTarget {
+            guard let from = cornerKnobsBefore[which] else { continue }
+            engine.setFluid(which, from + (to - from) * p)
+        }
+        cornerKnobsSettled = t >= 1
+    }
+    private var cornerKnobsSettled = false
+
+    private func restoreCornerKnobs() {
+        if let engine = web as? ProjectMHalo { for (which, was) in cornerKnobsBefore { engine.setFluid(which, was) } }
+        cornerKnobsBefore = [:]; cornerKnobsTarget = [:]; cornerKnobsSettled = false
+    }
+
+    /// `CornerTunnel` would be up now: it leaves the corner to this dust.
+    func adoptCornerOrbit() -> Bool {
+        guard cornerFlight != nil else { return false }
+        cornerOrbitAdopted = true
+        return true
+    }
+
+    /// The words are in (or the prompt left the corner): the wheel fades where it turns.
+    func endCornerOrbit() {
+        guard cornerFlight != nil, let panel, let web else { return }
+        // Still on its way: let it arrive and turn a moment first.
+        let wait = max(0, (cornerFlight?.at ?? 0) + Self.cornerFlightTime + 0.3 - CFAbsoluteTimeGetCurrent())
+        let generation = closingGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self, self.closingGeneration == generation, !self.live, self.cornerFlight != nil else { return }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = Self.cornerFlightFade
+                panel.animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                guard let self, self.closingGeneration == generation, !self.live else { return }
+                self.restoreCornerKnobs()
+                self.cornerFlight = nil
+                self.cornerOrbitAdopted = false
+                self.closing = false
+                self.renderTimer?.invalidate()
+                self.renderTimer = nil
+                web.stop(); self.under?.stop()
+                self.pageRunning = false
+                self.releaseMonitorsIfIdle()
+                panel.orderOut(nil)
+                Log.info("💨 the wheel of the pointer's dust is out")
+            }
+        }
+    }
     static let cornerFlightTime: TimeInterval = 0.7
     static let cornerFlightFade: TimeInterval = 0.6
     /// How long the arrived dust stays whole over the wheel before it fades.
@@ -1607,13 +1709,20 @@ final class CaretHalo {
         guard let to = Self.cornerWheelStart(for: from) else { return false }
         let now = CFAbsoluteTimeGetCurrent()
         cornerFlight = (from, to, now)
+        cornerOrbitAdopted = false
+        let start = CornerTunnel.dustPoint(at: 0)
+        cornerWheelCentre = NSPoint(x: to.x - start.x + CornerTunnel.side / 2, y: to.y + start.y - CornerTunnel.side / 2)
+        if let engine = web as? ProjectMHalo, let panel {
+            cornerKnobsTarget = Self.cornerKnobs(canvas: panel.frame.size)
+            cornerKnobsBefore = [:]
+            for which in cornerKnobsTarget.keys { if let v = engine.fluid(which) { cornerKnobsBefore[which] = v } }
+            cornerKnobsSettled = false
+        }
         // No wipe, no freeze, no dock on the prompt panel after this.
         frozeThisRing = true
         if !atCaret { arrow.hide() }
         Log.info(String(format: "💨 the dust leaves the pointer (%.0f, %.0f) for the corner's wheel (%.0f, %.0f)", from.x, from.y, to.x, to.y))
-        // The wheel is asked for mid-flight: with its 0.2 s warm-up and fade-in it
-        // is turning as this dust arrives, and this panel fades over it after.
-        onCornerFlight?(now + Self.cornerFlightTime * 0.4)
+        onCornerFlight?(now + Self.cornerFlightTime)
         follow()
         return true
     }
@@ -2047,7 +2156,7 @@ final class CaretHalo {
             // A bound sentence's effect flies to the terminal on its own clock too.
             if (self.rewinding || self.orbitFading) && self.flies { self.follow() }
             // …and the dust to the corner's wheel (2026-11-16).
-            if self.cornerFlight != nil { self.follow() }
+            if self.cornerFlight != nil { self.rampCornerKnobs(); self.follow() }
             // The puzzle and the stars slide onto the caret / the pointer (2026-10-10).
             if self.rewinding && self.anchorStart != nil && self.dock == nil { self.flyAnchor() }
             self.under?.feed(samples)
@@ -2069,7 +2178,9 @@ final class CaretHalo {
         settleDock()
         settleLanding()
         orbitFading = false
+        if cornerFlight != nil { restoreCornerKnobs() }
         cornerFlight = nil
+        cornerOrbitAdopted = false
         cancelled = false
         frozenAt = nil
         stillGeneration &+= 1
@@ -2206,7 +2317,7 @@ final class CaretHalo {
         hiddenAt = CFAbsoluteTimeGetCurrent()
         // **The dust is on its way to the corner's wheel** (2026-11-16): it keeps
         // being drawn until it is there, then fades under the wheel.
-        if let flight = cornerFlight, let web, let panel {
+        if let flight = cornerFlight, web != nil, let panel {
             growGraceTimer?.invalidate()
             growGraceTimer = nil
             growOnShow = false
@@ -2215,24 +2326,22 @@ final class CaretHalo {
             closing = true
             closingGeneration &+= 1
             let generation = closingGeneration
-            let left = max(0, flight.at + Self.cornerFlightTime + Self.cornerFlightLinger - CFAbsoluteTimeGetCurrent())
-            DispatchQueue.main.asyncAfter(deadline: .now() + left) { [weak self] in
+            // Whole, whatever his voice had left the panel's alpha at.
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                panel.animator().alphaValue = 1
+            }
+            // Nobody took it for the wheel (no take to play, the corner in another
+            // dress since): it does not turn for ever.
+            let orphanAt = max(0, flight.at + Self.cornerFlightTime + Self.cornerOrbitOrphan - CFAbsoluteTimeGetCurrent())
+            DispatchQueue.main.asyncAfter(deadline: .now() + orphanAt) { [weak self] in
+                guard let self, self.closingGeneration == generation, !self.live, !self.cornerOrbitAdopted else { return }
+                Log.info("💨 nobody took the dust for the wheel — it goes")
+                self.endCornerOrbit()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 90) { [weak self] in
                 guard let self, self.closingGeneration == generation, !self.live else { return }
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = Self.cornerFlightFade
-                    panel.animator().alphaValue = 0
-                } completionHandler: { [weak self] in
-                    guard let self, self.closingGeneration == generation, !self.live else { return }
-                    self.cornerFlight = nil
-                    self.closing = false
-                    self.renderTimer?.invalidate()
-                    self.renderTimer = nil
-                    web.stop(); self.under?.stop()
-                    self.pageRunning = false
-                    self.releaseMonitorsIfIdle()
-                    panel.orderOut(nil)
-                    Log.info("💨 the dust is at the corner's wheel — the pointer's panel is out")
-                }
+                self.endCornerOrbit()
             }
             return
         }

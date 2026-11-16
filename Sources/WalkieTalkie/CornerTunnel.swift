@@ -234,6 +234,9 @@ final class CornerTunnel {
         }
     }
 
+    var standIn: (adopt: () -> Bool, end: () -> Void)?
+    private var delegated = false
+
     /// Battery, a ⚡ question: down now, whatever the reasons.
     var held = false { didSet { if held != oldValue { sync() } } }
 
@@ -284,8 +287,20 @@ final class CornerTunnel {
 
     private func sync() {
         let wanted = (settling || holding) && !take.isEmpty && !held && home != nil && !Self.off
-            && CFAbsoluteTimeGetCurrent() >= notBefore
-        if wanted { show() } else { hide() }
+        // **The pointer's own dust is the wheel** (2026-11-16, `CaretHalo.adoptCornerOrbit`):
+        // nothing of this class is drawn, it only says when the wheel would have gone.
+        if wanted, !up, Self.dress == .dust, standIn?.adopt() == true {
+            if !delegated { Log.info("🌀 the corner's wheel is the pointer's own dust") }
+            delegated = true
+            return
+        }
+        if delegated {
+            if wanted { return }
+            delegated = false
+            standIn?.end()
+            return
+        }
+        if wanted, CFAbsoluteTimeGetCurrent() >= notBefore { show() } else { hide() }
     }
 
     private func show() {

@@ -661,6 +661,7 @@ static float* fluid_param(pmh* h, int which) {
     case PMH_FLUID_CURL:    return &h->look.curl;
     case PMH_FLUID_FORCE:   return &h->look.force;
     case PMH_FLUID_OPACITY: return &h->look.opacity;
+    case PMH_FLUID_KNEE:    return &h->look.motionKnee;
     default: return nullptr;
     }
 }

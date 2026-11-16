@@ -3643,6 +3643,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.samples = { [weak self] in self?.liveMeter?.recentSamples }
         // The corner's wheel starts as the pointer's dust arrives (2026-11-16).
         caretHalo.onCornerFlight = { [weak self] arrives in self?.cornerTunnel.notBefore = arrives }
+        // …or rather it *is* that dust: the corner draws nothing while it turns there.
+        cornerTunnel.standIn = (adopt: { [weak self] in self?.caretHalo.adoptCornerOrbit() ?? false },
+                                end: { [weak self] in self?.caretHalo.endCornerOrbit() })
         edgeDust.samples = { [weak self] in self?.liveMeter?.recentSamples }
         // The edge stays while anything of the sentence is on its way: its words,
         // its held panel, its keystrokes, its new window.

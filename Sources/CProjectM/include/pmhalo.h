@@ -71,7 +71,8 @@ void pmh_output_size(pmh* h, int* w, int* h_);
 /// units (SPLAT_RADIUS / 100), gain the dye's colour multiplier, fade the dye's
 /// dissipation per second, curl the vorticity, force the splat force, opacity the
 /// whole layer's.
-enum { PMH_FLUID_RADIUS = 0, PMH_FLUID_GAIN, PMH_FLUID_FADE, PMH_FLUID_CURL, PMH_FLUID_FORCE, PMH_FLUID_OPACITY };
+enum { PMH_FLUID_RADIUS = 0, PMH_FLUID_GAIN, PMH_FLUID_FADE, PMH_FLUID_CURL, PMH_FLUID_FORCE, PMH_FLUID_OPACITY,
+       /* how fast a move must be to count whole, in canvas widths a second (Smoke) */ PMH_FLUID_KNEE };
 void pmh_set_fluid_param(pmh* h, int which, float value);
 float pmh_fluid_param(pmh* h, int which);
 

@@ -607,6 +607,11 @@ final class ProjectMHalo: NSView, HaloWebHost {
         guard let r = renderer else { return }
         renderQueue.async { pmh_set_fluid_param(r, which, value) }
     }
+    /// A knob as the engine holds it now (waits for the frame in flight).
+    func fluid(_ which: Int32) -> Float? {
+        guard let r = renderer else { return nil }
+        return renderQueue.sync { pmh_fluid_param(r, which) }
+    }
 
     /// The square follows the pointer as a window; nothing to tell the engine —
     /// unless it leaves a trail, in which case the panel is the screen and the
