@@ -796,6 +796,23 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   "seconds", "sent", "capturable"}`. Log `🌫️ …`.
   **Not yet seen on a screen** when written (the Mac was locked, a screenshot is black there) — the
   numbers are first guesses, tune them from a desk shot.
+- **The edge's picture is a variant, and nine are in the build to choose from** (2026-11-16, of the
+  glitter: *"dustul de pe margine nu arată a dust. mai încearcă încă 5 moduri … să imite animația
+  dust din jurul mouse-ului dar liniară … redă-le alternativ cu un label mare pe centru ecran, să le
+  aleg"*, then *"și încă 3 efecte tip «foc» dar cu praf"*). `EdgeDustPicture` (`EdgeDustPictures.swift`)
+  draws into the strip `EdgeDust` hands it; `EdgeDustPictures.all`: 0 Glitter, 1 Real smoke
+  (`ProjectMHalo` Smoke, puffs dropped at shuffled spots — `pmh_lift_pointer` lifts the stamp so a
+  jump is not a streak), 2 Emitter smoke, 3 Shader smoke (Metal, 1 px/pt), 4 Curl dust (CPU dye
+  buffer in a curl-noise field), 5 Field dust (SpriteKit noise field), 6 Dust flames (emitter
+  segments), 7 Shader fire dust (Metal), 8 Ember dust (CPU grains with short trails). Each was written
+  by a subagent and checked only on offscreen stills, never live. Sentences wear `edgeDust.variant`
+  (defaults; `POST /test/edge-dust-pick {"variant": n}`); **the show**: `POST /test/edge-dust-show
+  {"seconds", "rounds", "only": [n…], "capturable"}` — each on both edges with `n · title` mid-screen
+  and a synthetic voice, `{"stop": true}` ends it. Once he has picked, delete the losers.
+- **A cancel is wiped where it is, by the wave** (same day: *"când dau cancel să nu meargă în colț
+  stânga sus, ci să facă acel wave în jurul mouse-ului care să curețe animația"*). The cancel's short
+  settle sent the dust to the corner like a stop; `cancelDictationInFlight` now fires `StopWave` and
+  `CaretHalo.wipeForCancel` (which refuses the flight for this ring), and drops the edge.
 - **At the stop the dust flies to the corner's wheel** (same day: *"when the dictation finishes, the
   dust, wherever it is at that point, should head towards the spinning wheel … and then starts
   spinning while the transcription is performed"*). `CaretHalo.flyToCorner` — from `endDictation` in

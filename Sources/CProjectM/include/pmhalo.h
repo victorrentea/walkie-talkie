@@ -60,6 +60,9 @@ int pmh_set_canvas(pmh* h, int w, int h_, int mode, float seconds, float lag, ch
 void pmh_set_pointer(pmh* h, float x, float y);
 /// Forget the trail: the next frame starts on a clear surface at the pointer.
 void pmh_reset_trail(pmh* h);
+/// Lift the pointer: the next `pmh_set_pointer` lands with no stroke from where
+/// it was. Unlike `pmh_reset_trail`, the fluid on the canvas stays.
+void pmh_lift_pointer(pmh* h);
 /// The surface's size in pixels — `px` × `px` unless a trail made it the screen.
 void pmh_output_size(pmh* h, int* w, int* h_);
 

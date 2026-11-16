@@ -69,6 +69,8 @@ final class EdgeDust {
     static let patience: TimeInterval = 1.2
     static let ceiling: TimeInterval = 90
 
+    /// The microphone's recent samples, as `CaretHalo.samples`.
+    var samples: (() -> [Float]?)?
     /// Something of the sentence is still on its way: transcribing, held, being typed.
     var stillPending: (() -> Bool)?
 
@@ -76,7 +78,9 @@ final class EdgeDust {
     private var phase: Phase = .down
     private var edge: Edge?
     private var panel: NSPanel?
-    private var emitter: CAEmitterLayer?
+    private var picture: EdgeDustPicture?
+    private var feedTimer: Timer?
+    private var builtVariant = -1
     private var built: (edge: Edge, screen: NSRect, thickness: CGFloat)?
     private var pollTimer: Timer?
     private var micOpen = false
@@ -160,13 +164,15 @@ final class EdgeDust {
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
         let thickness = Self.thickness
-        if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness { teardown() }
+        if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness
+            || builtVariant != EdgeDustPictures.current { teardown() }
+        builtVariant = EdgeDustPictures.current
         guard let p = panel ?? make(wanted, on: screen.frame, thickness: thickness) else { return }
         turn += 1
         edge = wanted
         phase = .listening
         pollTimer?.invalidate(); pollTimer = nil
-        emitter?.birthRate = 1
+        picture?.setIntensity(1)
         setSwell(1, animated: false)
         p.sharingType = Self.capturable ? .readOnly : .none
         if !p.isVisible { p.alphaValue = 0 }
@@ -174,6 +180,8 @@ final class EdgeDust {
             ctx.duration = 0.5
             p.animator().alphaValue = Self.restAlpha
         }
+        picture?.start()
+        if feedTimer == nil { startFeeding() }
         p.orderFrontRegardless()
         Log.info("🌫️ the \(wanted.rawValue) edge is up — \(wanted == .top ? "a prompt to a new session" : "a prompt to the bound terminal")")
     }
@@ -196,7 +204,7 @@ final class EdgeDust {
             })
         }
         guard sent else { out(Self.quietFade); return }
-        emitter?.birthRate = 2
+        picture?.setIntensity(2)
         setSwell(2, animated: true)
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = Self.swell
@@ -212,7 +220,8 @@ final class EdgeDust {
         phase = .down
         edge = nil
         panel?.orderOut(nil)
-        emitter?.birthRate = 0
+        feedTimer?.invalidate(); feedTimer = nil
+        picture?.stop()
         setSwell(1, animated: false)
     }
 
@@ -222,7 +231,9 @@ final class EdgeDust {
         edge = nil
         pollTimer?.invalidate(); pollTimer = nil
         panel?.orderOut(nil)
-        panel = nil; emitter = nil; built = nil
+        feedTimer?.invalidate(); feedTimer = nil
+        picture?.stop()
+        panel = nil; picture = nil; built = nil
     }
 
     private func startPolling() {
@@ -239,6 +250,17 @@ final class EdgeDust {
     }
 
     // MARK: - The picture
+
+    /// His voice into the picture while the microphone is open, silence after.
+    private func startFeeding() {
+        let t = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
+            guard let self, let picture = self.picture else { return }
+            let live = self.micOpen ? (self.samples?() ?? nil) : nil
+            picture.feed(CaretHalo.lift(CaretHalo.undoInputGain(live ?? [Float](repeating: 0, count: 1024))))
+        }
+        feedTimer = t
+        RunLoop.main.add(t, forMode: .common)
+    }
 
     /// The strip twice as deep (or back), about the screen's edge — the content
     /// view's `sublayerTransform`, as `CaretHalo`'s dock scales its content.
@@ -269,19 +291,17 @@ final class EdgeDust {
         CATransaction.commit()
     }
 
-    /// A soft round grain, white, to be tinted by the cell.
-    private static let grainImage: CGImage? = {
-        let px = 32
-        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
-                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-              let glow = CGGradient(colorsSpace: nil, colors: [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0.35), CGColor(gray: 1, alpha: 0)] as CFArray,
-                                    locations: [0, 0.35, 1]) else { return nil }
-        let c = CGPoint(x: px / 2, y: px / 2)
-        ctx.drawRadialGradient(glow, startCenter: c, startRadius: 0, endCenter: c, endRadius: CGFloat(px) / 2, options: [])
-        return ctx.makeImage()
-    }()
-
     private func make(_ edge: Edge, on screen: NSRect, thickness: CGFloat) -> NSPanel? {
+        guard let made = Self.build(edge, on: screen, thickness: thickness, variant: EdgeDustPictures.current) else { return nil }
+        panel = made.panel
+        picture = made.picture
+        built = (edge, screen, thickness)
+        return made.panel
+    }
+
+    /// A strip's panel with one picture in it — for a sentence, and for the show
+    /// that plays every picture in turn (`EdgeDustShow`).
+    static func build(_ edge: Edge, on screen: NSRect, thickness: CGFloat, variant: Int) -> (panel: NSPanel, picture: EdgeDustPicture)? {
         let frame = Self.frame(edge, on: screen, thickness: thickness)
         // The strip: the half of the panel on the screen's edge.
         let box: NSRect
@@ -302,44 +322,10 @@ final class EdgeDust {
         content.autoresizesSubviews = false
         let strip = NSView(frame: box)
         strip.wantsLayer = true
-        let depth = min(Self.depth, thickness)
-        let dust = CAEmitterLayer()
-        dust.frame = strip.bounds
-        dust.emitterShape = .rectangle
-        dust.emitterMode = .surface
-        dust.renderMode = .additive
-        let length: CGFloat
-        switch edge {
-        case .top:
-            length = box.width
-            dust.emitterPosition = CGPoint(x: box.width / 2, y: box.height - depth / 2)
-            dust.emitterSize = CGSize(width: box.width, height: depth)
-        case .right:
-            length = box.height
-            dust.emitterPosition = CGPoint(x: box.width - depth / 2, y: box.height / 2)
-            dust.emitterSize = CGSize(width: depth, height: box.height)
+        guard let picture = EdgeDustPictures.type(variant).init(strip: strip, edge: edge) else {
+            Log.error("🌫️ no edge — \(EdgeDustPictures.type(variant).title) cannot be drawn")
+            return nil
         }
-        // Three sizes of grain, every colour: the cell's white ± the whole range.
-        let life = Float(Self.life)
-        dust.emitterCells = [(1.0, 0.5), (0.55, 0.35), (1.9, 0.15)].map { size, share in
-            let cell = CAEmitterCell()
-            cell.contents = Self.grainImage
-            cell.birthRate = Self.birthRate(edgeLength: length) * Float(share)
-            cell.lifetime = life
-            cell.lifetimeRange = life * 0.5
-            cell.color = CGColor(red: 0.62, green: 0.62, blue: 0.62, alpha: 0.9)
-            cell.redRange = 0.38; cell.greenRange = 0.38; cell.blueRange = 0.38
-            cell.alphaRange = 0.1
-            cell.alphaSpeed = -0.9 / life
-            cell.scale = Self.grain * CGFloat(size) / 32
-            cell.scaleRange = cell.scale * 0.5
-            cell.scaleSpeed = cell.scale * 0.15
-            cell.velocity = Self.drift / 2
-            cell.velocityRange = Self.drift / 2
-            cell.emissionRange = .pi * 2
-            return cell
-        }
-        strip.layer?.addSublayer(dust)
         // To nothing away from the edge, and at the strip's two ends.
         let away = CAGradientLayer()
         away.frame = strip.bounds
@@ -353,9 +339,6 @@ final class EdgeDust {
         content.addSubview(strip)
         p.contentView = content
         p.setFrame(frame, display: false)
-        panel = p
-        emitter = dust
-        built = (edge, screen, thickness)
-        return p
+        return (p, picture)
     }
 }

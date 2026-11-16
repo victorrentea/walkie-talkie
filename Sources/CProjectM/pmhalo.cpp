@@ -647,6 +647,9 @@ void pmh_set_pointer(pmh* h, float x, float y) {
 }
 
 void pmh_reset_trail(pmh* h) { h->fresh = true; h->havePointer = false; }
+// The pointer lifted off the canvas: the next `pmh_set_pointer` puts it down with
+// no move from where it was (a jump would splat as a fast stroke). The fluid stays.
+void pmh_lift_pointer(pmh* h) { h->havePointer = false; }
 
 void pmh_output_size(pmh* h, int* w, int* hgt) { *w = h->ow; *hgt = h->oh; }
 

@@ -1579,8 +1579,19 @@ final class CaretHalo {
     }
 
     private var fliesToCorner: Bool {
-        Self.quietSettle && HaloStyle.promptsWearDust && web != nil && !quick && !frozeThisRing
+        Self.quietSettle && HaloStyle.promptsWearDust && web != nil && !quick && !frozeThisRing && !cancelled
             && drawn == .smoke && destination.isPrompt && CornerTunnel.dress == .dust && dock == nil
+    }
+
+    /// **A cancel is wiped where it is, by the wave** (2026-11-16, Victor: *"când dau
+    /// cancel să nu meargă în colț stânga sus, ci să facă acel wave în jurul
+    /// mouse-ului care să curețe animația"*). The cancel's short settle used to
+    /// send the dust to the corner like a stop. `AppDelegate` fires the wave.
+    private var cancelled = false
+    func wipeForCancel() {
+        guard live, cornerFlight == nil else { return }
+        cancelled = true
+        wipeWithTheWave()
     }
 
     /// The stop's press (`AppDelegate.endDictation`), or the settle of a sentence no
@@ -2055,6 +2066,7 @@ final class CaretHalo {
         settleLanding()
         orbitFading = false
         cornerFlight = nil
+        cancelled = false
         frozenAt = nil
         stillGeneration &+= 1
         let panel = self.panel ?? makePanel()

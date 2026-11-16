@@ -1113,6 +1113,26 @@ final class ElementPicker {
             }
             respond(conn, 200, ["ok": true].merging(report) { _, new in new })
 
+        // Every picture of the edge in turn, named mid-screen (`EdgeDustShow`).
+        case ("POST", "/test/edge-dust-show"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            let stop = body?["stop"] as? Bool ?? false
+            let seconds = body?["seconds"] as? Double ?? 7
+            let rounds = body?["rounds"] as? Int ?? 2
+            let only = body?["only"] as? [Int]
+            let capturable = body?["capturable"] as? Bool ?? false
+            DispatchQueue.main.sync {
+                if stop { EdgeDustShow.shared.stop() }
+                else { EdgeDustShow.shared.run(seconds: seconds, rounds: rounds, only: only, capturable: capturable) }
+            }
+            respond(conn, 200, ["ok": true, "variants": EdgeDustPictures.all.map { $0.title }, "current": EdgeDustPictures.current])
+
+        // The picture sentences wear from now on.
+        case ("POST", "/test/edge-dust-pick"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+            if let n = body?["variant"] as? Int { UserDefaults.standard.set(n, forKey: EdgeDustPictures.key) }
+            respond(conn, 200, ["ok": true, "current": EdgeDustPictures.current, "title": EdgeDustPictures.type(EdgeDustPictures.current).title])
+
         // ⌘⌃X — the local model, now (2026-09-28): the key's action, not the key.
         case ("POST", "/test/local-now"):
             onTestLocalNow?()
