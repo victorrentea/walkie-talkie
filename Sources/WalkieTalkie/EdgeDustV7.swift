@@ -225,7 +225,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float n = v7_n(float2(as / 36.0, t * 0.42 + 7.0));
     float n2 = v7_n(float2(as / 13.0, t * 1.1 + 3.0));
     float tongue = smoothstep(0.18, 0.86, n);
-    float h = (14.0 + 62.0 * tongue * tongue + 9.0 * n2) * grow;
+    float h = (14.0 + 62.0 * tongue * tongue + 9.0 * n2) * grow * 0.7;   // −30 % (Victor, 2026-11-16)
 
     // The fire field, carried away from the edge.
     float f = v7_fbm(float2(as / 17.0, (d - 52.0 * t) / 34.0));
