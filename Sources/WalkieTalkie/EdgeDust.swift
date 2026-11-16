@@ -50,13 +50,13 @@ final class EdgeDust {
     }
     /// How deep the strip is, in points; the swell doubles it.
     static var thickness: CGFloat { CGFloat(knob("thickness", 110)) }
-    static var restAlpha: CGFloat { CGFloat(knob("alpha", 0.5)) }
+    static var restAlpha: CGFloat { CGFloat(knob("alpha", 0.9)) }
     /// How far from the edge grains are born, in points.
-    static var depth: CGFloat { CGFloat(knob("depth", 34)) }
+    static var depth: CGFloat { CGFloat(knob("depth", 46)) }
     /// Grains born a second per 100 pt of edge.
-    static var grains: Double { knob("grains", 5) }
+    static var grains: Double { knob("grains", 12) }
     /// A grain's size, in points, on average.
-    static var grain: CGFloat { CGFloat(knob("grain", 5)) }
+    static var grain: CGFloat { CGFloat(knob("grain", 8)) }
     /// How long a grain glows, in seconds, on average.
     static var life: Double { knob("life", 3) }
     /// How fast a grain drifts, in points a second, at most.

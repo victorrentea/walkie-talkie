@@ -780,9 +780,10 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   ⚡ question keep their own. **`EdgeDust`**: **nothing travels along the edge** — the first version
   (Smoke on a strip, its stamp sweeping back and forth) lasted an hour: *"să nu se miște pe edge
   nimic. doar să strălucească un fel de dust, static sau ff ușor în mișcare, multicolor"*. It is a
-  `CAEmitterLayer`: soft grains of every colour (three sizes, ~5 pt, additive) born all along the
-  edge within 34 pt of it, drifting ≤ 2 pt/s in no direction, each glowing ~3 s and fading as others
-  appear; a gradient takes the 110 pt strip to nothing away from the edge, the panel at alpha 0.5 —
+  `CAEmitterLayer`: soft grains of every colour (three sizes, ~8 pt, additive, 12 a second per
+  100 pt — *"e prea slab"* took it from 5 pt, 5 a second, alpha 0.5) born all along the
+  edge within 46 pt of it, drifting ≤ 2 pt/s in no direction, each glowing ~3 s and fading as others
+  appear; a gradient takes the 110 pt strip to nothing away from the edge, the panel at alpha 0.9 —
   top for a spawn, right for a bound sentence, none at the caret; from `syncBorrowedGestures`, where
   the destination is known. No engine, no warm-up, no microphone. **It outlives the microphone**:
   `waiting` while `stillPending` (settling, a panel coming or held, keystrokes or a spawn in flight),
