@@ -261,7 +261,7 @@ enum GestureGuide {
                      "At rest: let go of the bound terminal."]),
         Card(section: "back", title: "Cancel — or ChatGPT voice", chord: "Hold Back, swipe left",
              scene: .swipe(.back, .left),
-             lines: ["Microphone open: cancel it.", "At rest: talk to ChatGPT; again ends it."]),
+             lines: ["Microphone open: cancel it.", "At rest: talk to Codex, full screen, new chat; again ends it."]),
         Card(section: "back", title: "Record the screen", chord: "Hold Back, swipe up",
              scene: .swipe(.back, .up),
              lines: ["While dictating: start or stop a screen recording for the prompt.",

@@ -50,8 +50,10 @@ enum ChatGPTVoice {
         CGRect(x: visible.minX, y: primaryHeight - visible.maxY, width: visible.width, height: visible.height)
     }
 
-    /// The flick. `say` flashes on the chip (main thread).
-    static func toggle(say: @escaping (String) -> Void) {
+    /// The flick. `say` flashes on the chip (main thread). `fresh`: a start
+    /// is always a new chat, never the last conversation going on (🔽 ←,
+    /// 2026-11-16 — *"să pornească codex curat"*).
+    static func toggle(fresh: Bool = false, say: @escaping (String) -> Void) {
         DispatchQueue.main.async {
             guard !busy else { Log.info("🗣️ ChatGPT voice — a flick while the last one is still opening, dropped"); return }
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
@@ -116,7 +118,7 @@ enum ChatGPTVoice {
                     // thread; later than that, or the first time, a new chat.
                     var resumed: String?
                     DispatchQueue.main.sync {
-                        if let t = lastThread, CFAbsoluteTimeGetCurrent() - t.at < sameConversation { resumed = t.id }
+                        if !fresh, let t = lastThread, CFAbsoluteTimeGetCurrent() - t.at < sameConversation { resumed = t.id }
                     }
                     if !wasOn, let fresh = URL(string: "codex://threads/\(resumed ?? "new")") {
                         NSWorkspace.shared.open(fresh)

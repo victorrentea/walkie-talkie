@@ -2690,9 +2690,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 🔽 ← at rest (2026-11-13): ChatGPT's voice conversation, on / off.
         // **This app's own voice panel since 2026-11-14** (`VoiceDialog`); the
         // ChatGPT app's window only with `chatVoiceEngine app`.
+        // **The flick is the plain Codex again since 2026-11-16** (*"la
+        // back-swipe-left să pornească codex curat în dialog fullscreen"*):
+        // the app's window filling the screen, a new chat every time, no
+        // Claude behind it. The panel is Link's and the wake word's; a flick
+        // with the panel up still ends it.
         hotkeys.onChatVoice = { [weak self] in
-            if VoiceDialog.usesPanel { VoiceDialog.shared.toggle(); return }
-            ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
+            DispatchQueue.main.async {
+                if VoiceDialog.shared.isOn { VoiceDialog.shared.stop(why: "the flick"); return }
+                ChatGPTVoice.toggle(fresh: true) { [weak self] words in self?.overlay.flash(words, duration: 2) }
+            }
         }
         // The DJI transmitter's Link button (2026-11-13, *"pentru moment"*):
         // the same conversation.
@@ -2716,7 +2723,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         VoiceDialog.shared.onChange = { [weak self] on in self?.hotkeys.voiceDialogOn = on }
         DjiButton.watch()
         picker.onTestChatVoice = { [weak self] in
-            ChatGPTVoice.toggle { [weak self] words in self?.overlay.flash(words, duration: 2) }
+            ChatGPTVoice.toggle(fresh: true) { [weak self] words in self?.overlay.flash(words, duration: 2) }
             return ["ok": true]
         }
         // `onWisprMaybeStarting` belongs to `WisprFlowSource` now — it is the
