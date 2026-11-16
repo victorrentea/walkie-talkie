@@ -623,12 +623,6 @@ final class ProjectMHalo: NSView, HaloWebHost {
         let s = Self.renderScale, x = Float(p.x * s), y = Float(p.y * s)
         renderQueue.async { pmh_set_pointer(r, x, y) }
     }
-    /// The pointer lifted (`EdgeDustV1`): the next `center` puts it down elsewhere
-    /// with no stroke between the two places; the fluid stays.
-    func liftPointer() {
-        guard trail, let r = renderer else { return }
-        renderQueue.async { pmh_lift_pointer(r) }
-    }
     func approach(scale: CGFloat, alpha: CGFloat) {
         guard let r = renderer else { return }
         let z = Float(preset.zoom * scale), a = Float(alpha)

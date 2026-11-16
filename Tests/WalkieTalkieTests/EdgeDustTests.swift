@@ -13,12 +13,6 @@ final class EdgeDustTests: XCTestCase {
         XCTAssertEqual(right.minY, screen.minY); XCTAssertEqual(right.height, screen.height)
     }
 
-    /// As dense on a short edge as on a long one.
-    func testTheGrainsAreAsDenseOnEitherEdge() {
-        XCTAssertEqual(EdgeDust.birthRate(edgeLength: 1728, per100: 5), 86.4, accuracy: 0.01)
-        XCTAssertEqual(EdgeDust.birthRate(edgeLength: 1117, per100: 5) / 1117, EdgeDust.birthRate(edgeLength: 1728, per100: 5) / 1728, accuracy: 0.0001)
-    }
-
     func testTheDustFliesFromThePointerToTheWheelAndStaysThere() {
         let f = (from: NSPoint(x: 900, y: 300), to: NSPoint(x: 140, y: 950), at: 100.0)
         XCTAssertEqual(CaretHalo.cornerFlightPoint(f, at: 99), f.from)

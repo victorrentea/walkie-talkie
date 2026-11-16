@@ -13,14 +13,13 @@ import AppKit
 /// session) the top edge, 🔼 → (the bound terminal) the right one, the bare 🔼 (the
 /// caret) none.
 ///
-/// - **Nothing travels along it** (the same evening, on hearing the first version —
-///   Smoke with a stamp sweeping the edge: *"să nu se miște pe edge nimic. doar să
-///   strălucească un fel de dust, static sau ff ușor în mișcare, multicolor"*). A
-///   `CAEmitterLayer`: small soft grains of every colour born all along the edge,
-///   within `depth` points of it, drifting a couple of points a second in no
-///   direction, each fading out over a few seconds as others appear — a glitter
-///   that stands where it is. No engine, no warm-up, nothing per frame in this app.
-///   A gradient takes it to nothing away from the edge.
+/// - **A fire made of dust** (`EdgeDustV7`, a Metal shader — chosen the same evening
+///   out of nine pictures, `EdgeDustPictures`): tongues of fine multicoloured grains
+///   licking in from the edge, dense at the base, single grains at the tips. Nothing
+///   travels along the edge: the first version's sweeping smoke was refused for that
+///   (*"să nu se miște pe edge nimic"*), the still glitter after it for not being
+///   dust (*"nu arată a dust"*). This class owns the panel, the fade, the alpha and
+///   the swell; the picture only draws into the strip.
 /// - **Faint**: the panel at `restAlpha`.
 /// - **Up from the first word until the message is in.** *"That edge is glowing and
 ///   having this effect until the message is confirmed to be dispatched to the
@@ -29,13 +28,13 @@ import AppKit
 ///   `sent()` from the terminal's `.delivered` or the new window's `.opened`:
 ///   *"it … becomes a bit more visible. Let's say it doubles its size and opacity
 ///   and then fades out, suggesting the message was sent"* — twice as deep, twice
-///   the alpha, twice the grains, over `swell`; held `swellHold`; out in
+///   the alpha, taller flames, over `swell`; held `swellHold`; out in
 ///   `sentFade`. A cancel, a flip to the caret, a sentence that went nowhere: out
 ///   in `quietFade`, no swell.
 /// - Click-through, `sharingType = .none` (`capturable` for a desk shot), above the
 ///   menu bar — the top edge is the screen's, not the visible frame's.
 ///
-/// Knobs, in the defaults (`edgeDust.alpha|thickness|depth|grains|grain|life|drift`):
+/// Knobs, in the defaults (`edgeDust.alpha|thickness`):
 /// read when the strip is built, so a `defaults write` and the next sentence (or
 /// `POST /test/edge-dust`) show it with no restart.
 final class EdgeDust {
@@ -51,16 +50,7 @@ final class EdgeDust {
     /// How deep the strip is, in points; the swell doubles it.
     static var thickness: CGFloat { CGFloat(knob("thickness", 110)) }
     static var restAlpha: CGFloat { CGFloat(knob("alpha", 0.9)) }
-    /// How far from the edge grains are born, in points.
-    static var depth: CGFloat { CGFloat(knob("depth", 46)) }
-    /// Grains born a second per 100 pt of edge.
-    static var grains: Double { knob("grains", 12) }
-    /// A grain's size, in points, on average.
-    static var grain: CGFloat { CGFloat(knob("grain", 8)) }
-    /// How long a grain glows, in seconds, on average.
-    static var life: Double { knob("life", 3) }
-    /// How fast a grain drifts, in points a second, at most.
-    static var drift: CGFloat { CGFloat(knob("drift", 2)) }
+
     static let swell: TimeInterval = 0.35
     static let swellHold: TimeInterval = 0.45
     static let sentFade: TimeInterval = 0.8
@@ -102,11 +92,6 @@ final class EdgeDust {
         case .top:   return NSRect(x: screen.minX, y: screen.maxY - 2 * thickness, width: screen.width, height: 2 * thickness)
         case .right: return NSRect(x: screen.maxX - 2 * thickness, y: screen.minY, width: 2 * thickness, height: screen.height)
         }
-    }
-
-    /// Grains a second for an edge `length` points long.
-    static func birthRate(edgeLength length: CGFloat, per100: Double = grains) -> Float {
-        Float(Double(length) / 100 * per100)
     }
 
     // MARK: - The sentence

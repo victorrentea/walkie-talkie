@@ -777,25 +777,32 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `current(for:)` answers Smoke for caret / bound / spawn (`HaloDestination.isPrompt`), their saved
   picks are kept and not read, their three rows are off the 𝓯𝔁 menu — *"momentarily remove the other
   2 … comment them out for a second"*, so do not delete the styles. Plain dictation (`wispr`) and the
-  ⚡ question keep their own. **`EdgeDust`**: **nothing travels along the edge** — the first version
-  (Smoke on a strip, its stamp sweeping back and forth) lasted an hour: *"să nu se miște pe edge
-  nimic. doar să strălucească un fel de dust, static sau ff ușor în mișcare, multicolor"*. It is a
-  `CAEmitterLayer`: soft grains of every colour (three sizes, ~8 pt, additive, 12 a second per
-  100 pt — *"e prea slab"* took it from 5 pt, 5 a second, alpha 0.5) born all along the
-  edge within 46 pt of it, drifting ≤ 2 pt/s in no direction, each glowing ~3 s and fading as others
-  appear; a gradient takes the 110 pt strip to nothing away from the edge, the panel at alpha 0.9 —
-  top for a spawn, right for a bound sentence, none at the caret; from `syncBorrowedGestures`, where
-  the destination is known. No engine, no warm-up, no microphone. **It outlives the microphone**:
-  `waiting` while `stillPending` (settling, a panel coming or held, keystrokes or a spawn in flight),
-  then `sent()` from `deliverToTerminal`'s `.delivered` / `spawnClaude`'s bound window — *"it
-  doubles its size and opacity and then fades out, suggesting the message was sent"*: strip ×2 deep
-  about the edge (`sublayerTransform`), alpha ×2, twice the grains, 0.35 s, held 0.45 s, out in
-  0.8 s. Nothing pending for 1.2 s (a cancel, a refusal), a flip to the caret mid-sentence, or 90 s:
-  out in 0.4 s with no swell. Knobs `edgeDust.alpha|thickness|depth|grains|grain|life|drift` in the
-  defaults, read when the strip is built. Desk: `POST /test/edge-dust {"edge": "top"|"right",
-  "seconds", "sent", "capturable"}`. Log `🌫️ …`.
-  **Not yet seen on a screen** when written (the Mac was locked, a screenshot is black there) — the
-  numbers are first guesses, tune them from a desk shot.
+  ⚡ question keep their own. **`EdgeDust`** owns a click-through strip on that edge (110 pt deep,
+  masked to nothing away from the edge, panel alpha 0.9) and the lifecycle; **the picture in it is
+  `EdgeDustV7`, *Shader fire dust*** — a Metal fragment shader: tongues of fine multicoloured grains
+  (cells 3.9 / 5.4 / 7.5 pt) licking in from the edge, dense at the base, single grains at the tips,
+  each tongue its own hue, taller with his voice. **How it was chosen, so it is not re-derived**: the
+  first build's Smoke with a stamp sweeping the edge — *"să nu se miște pe edge nimic"*; a still
+  glitter of emitter grains — *"e prea slab"*, then *"nu arată a dust"*; then nine pictures written
+  by subagents and shown in turn with their names mid-screen (`POST /test/edge-dust-show`), three
+  viewings: Real smoke, Emitter smoke, Field dust, Dust flames, Ember dust refused and deleted
+  (commit `279a3867` has them), Shader smoke (`EdgeDustV3`) and Curl dust (`EdgeDustV4`) the other
+  finalists, still in the build and commented out of `EdgeDustPictures.all` (*"7 rămâne. comentează pe
+  celelalte 2. șterge pe cele precedent refuzate"*). Numbers he set on 7 by eye: grains ×1.5,
+  brightness ×1.2, reach ×0.7. Top for a spawn, right for a bound sentence, none at the caret; from
+  `syncBorrowedGestures`. **It outlives the microphone**: `waiting` while `stillPending` (settling, a
+  panel coming or held, keystrokes or a spawn in flight), then `sent()` from `deliverToTerminal`'s
+  `.delivered` / `spawnClaude`'s bound window — *"it doubles its size and opacity and then fades out,
+  suggesting the message was sent"*: strip ×2 deep about the edge (`sublayerTransform`), alpha ×2,
+  the picture at intensity 2, 0.35 s, held 0.45 s, out in 0.8 s. Nothing pending for 1.2 s, a flip
+  to the caret mid-sentence, a cancel, or 90 s: out in 0.4 s with no swell. Knobs
+  `edgeDust.alpha|thickness`. A new picture is an `EdgeDustPicture` (`EdgeDustPictures.swift`) added
+  to `all`; `edgeDust.variant` / `POST /test/edge-dust-pick` choose among those listed. Desk: `POST
+  /test/edge-dust {"edge", "seconds", "sent", "capturable"}`. Log `🌫️ …`.
+- **A cancel is wiped where it is, by the wave** (same day: *"când dau cancel să nu meargă în colț
+  stânga sus, ci să facă acel wave în jurul mouse-ului care să curețe animația"*). The cancel's short
+  settle sent the dust to the corner like a stop; `cancelDictationInFlight` now fires `StopWave` and
+  `CaretHalo.wipeForCancel` (which refuses the flight for this ring), and drops the edge.
 - **The pointer's own smoke is the wheel — one unbroken movement** (2026-11-16, third pass: *"dustul
   care vine de la mouse trebuie să devină mai mic și mai intens pentru a da senzația că chiar el
   începe să se învârtă. ideal chiar acel smoke să se învârtă pe bune … ca o animație continuă"*).

@@ -27,10 +27,16 @@ protocol EdgeDustPicture: AnyObject {
 }
 
 enum EdgeDustPictures {
-    static let all: [EdgeDustPicture.Type] = [GlitterEdge.self, EdgeDustV1.self, EdgeDustV2.self, EdgeDustV3.self,
-                                              EdgeDustV4.self, EdgeDustV5.self,
-                                              // *"și încă 3 efecte tip «foc» dar cu praf"* (the same evening).
-                                              EdgeDustV6.self, EdgeDustV7.self, EdgeDustV8.self]
+    /// **Shader fire dust is the one** (2026-11-16, after three viewings: *"7 rămâne.
+    /// comentează pe celelalte 2. șterge pe cele precedent refuzate"*). Shader smoke
+    /// and Curl dust were the other two finalists: their files stay in the build,
+    /// off the list. Glitter, Real smoke, Emitter smoke, Field dust, Dust flames and
+    /// Ember dust were refused and are deleted (`git log` has them: `279a3867`).
+    static let all: [EdgeDustPicture.Type] = [
+        EdgeDustV7.self,
+        // EdgeDustV3.self,   // Shader smoke
+        // EdgeDustV4.self,   // Curl dust
+    ]
     static let key = "edgeDust.variant"
     /// The one sentences wear: `defaults write … edgeDust.variant -int n`, or `POST /test/edge-dust-pick`.
     static var current: Int {
@@ -38,68 +44,6 @@ enum EdgeDustPictures {
         return all.indices.contains(n) ? n : 0
     }
     static func type(_ n: Int) -> EdgeDustPicture.Type { all.indices.contains(n) ? all[n] : all[0] }
-}
-
-/// Variant 0, the evening's second try: still grains of every colour.
-final class GlitterEdge: EdgeDustPicture {
-    static let title = "Glitter"
-    private let dust = CAEmitterLayer()
-
-    private static let grainImage: CGImage? = {
-        let px = 32
-        guard let ctx = CGContext(data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
-                                  space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-              let glow = CGGradient(colorsSpace: nil, colors: [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0.35), CGColor(gray: 1, alpha: 0)] as CFArray,
-                                    locations: [0, 0.35, 1]) else { return nil }
-        let c = CGPoint(x: px / 2, y: px / 2)
-        ctx.drawRadialGradient(glow, startCenter: c, startRadius: 0, endCenter: c, endRadius: CGFloat(px) / 2, options: [])
-        return ctx.makeImage()
-    }()
-
-    init?(strip: NSView, edge: EdgeDust.Edge) {
-        let box = strip.bounds
-        let depth = min(EdgeDust.depth, edge == .top ? box.height : box.width)
-        dust.frame = box
-        dust.emitterShape = .rectangle
-        dust.emitterMode = .surface
-        dust.renderMode = .additive
-        let length: CGFloat
-        switch edge {
-        case .top:
-            length = box.width
-            dust.emitterPosition = CGPoint(x: box.width / 2, y: box.height - depth / 2)
-            dust.emitterSize = CGSize(width: box.width, height: depth)
-        case .right:
-            length = box.height
-            dust.emitterPosition = CGPoint(x: box.width - depth / 2, y: box.height / 2)
-            dust.emitterSize = CGSize(width: depth, height: box.height)
-        }
-        let life = Float(EdgeDust.life)
-        dust.emitterCells = [(1.0, 0.5), (0.55, 0.35), (1.9, 0.15)].map { size, share in
-            let cell = CAEmitterCell()
-            cell.contents = Self.grainImage
-            cell.birthRate = EdgeDust.birthRate(edgeLength: length) * Float(share)
-            cell.lifetime = life
-            cell.lifetimeRange = life * 0.5
-            cell.color = CGColor(red: 0.62, green: 0.62, blue: 0.62, alpha: 0.9)
-            cell.redRange = 0.38; cell.greenRange = 0.38; cell.blueRange = 0.38
-            cell.alphaRange = 0.1
-            cell.alphaSpeed = -0.9 / life
-            cell.scale = EdgeDust.grain * CGFloat(size) / 32
-            cell.scaleRange = cell.scale * 0.5
-            cell.scaleSpeed = cell.scale * 0.15
-            cell.velocity = EdgeDust.drift / 2
-            cell.velocityRange = EdgeDust.drift / 2
-            cell.emissionRange = .pi * 2
-            return cell
-        }
-        dust.birthRate = 0
-        strip.layer?.addSublayer(dust)
-    }
-    func start() { dust.birthRate = 1 }
-    func stop() { dust.birthRate = 0 }
-    func feed(_ samples: [Float]) {}
-    func setIntensity(_ k: CGFloat) { dust.birthRate = Float(k) }
 }
 
 /// **Every picture in turn, each named in the middle of the screen** — `POST
