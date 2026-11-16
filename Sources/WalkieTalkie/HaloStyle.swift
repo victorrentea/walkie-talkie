@@ -762,7 +762,7 @@ enum HaloStyle: String, CaseIterable {
     static func current(for destination: HaloDestination) -> HaloStyle {
         if let name = ProcessInfo.processInfo.environment["WT_HALO_STYLE"],
            let forced = HaloStyle(rawValue: name) { return forced }
-        if promptsWearDust, destination.isPrompt, HaloStyle.smoke.isAvailable { return .smoke }
+        if promptsWearDust, destination.isPrompt, dustIsAvailable { return .smoke }
         guard let name = UserDefaults.standard.string(forKey: destination.defaultsKey),
               let saved = HaloStyle(rawValue: name), saved.isOffered else { return destination.fallback }
         return saved
@@ -777,6 +777,16 @@ enum HaloStyle: String, CaseIterable {
     /// saved picks are kept and not read, and their rows are off the 𝓯𝔁 menu,
     /// while this is on; `WT_PROMPT_DUST=0` brings both back for a run.
     static let promptsWearDust = ProcessInfo.processInfo.environment["WT_PROMPT_DUST"] != "0"
+    /// `smoke.isAvailable`, asked of the disk once per engine: `current(for:)` is read
+    /// on hot paths (a mouse event, a sync), and the answer does not change in a run.
+    private static var dustAvailability: (engine: HaloEngine, ok: Bool)?
+    private static var dustIsAvailable: Bool {
+        let engine = HaloEngine.current
+        if let known = dustAvailability, known.engine == engine { return known.ok }
+        let ok = HaloStyle.smoke.isAvailable
+        dustAvailability = (engine, ok)
+        return ok
+    }
 
     /// What is drawn before the first dictation of the session says where it is
     /// going — the caret's, because an unbound sentence is the common case.

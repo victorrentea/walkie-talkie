@@ -1743,8 +1743,13 @@ final class CaretHalo {
     /// keeps its size, and only a square that rides: a screen-sized page already
     /// moves nothing but the point it is handed.
     private var parallaxes: Bool {
-        guard destination == .bound, drawn == HaloStyle.current(for: .bound) else { return false }
-        return drawn.preset != nil && !drawn.coversScreen && Self.rides(drawn)
+        // Cheapest first: this is asked on every mouse event. (2026-11-16: with every
+        // prompt in the dust, `current(for:)` came to stat the preset's file here,
+        // hundreds of times a second through a bound sentence — *"ai stricat
+        // fluiditatea animației de bază. la mișcarea mouse-ului e sacadat"*.)
+        guard destination == .bound, drawn.preset != nil, !drawn.coversScreen, Self.rides(drawn),
+              drawn == HaloStyle.current(for: .bound) else { return false }
+        return true
     }
     static let parallaxShare: CGFloat = 0.5
     static func parallax(of pointer: NSPoint, on screen: NSRect) -> NSPoint {
