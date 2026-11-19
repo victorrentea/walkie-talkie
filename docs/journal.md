@@ -16414,3 +16414,14 @@ at each use (`terminal list` + `diagnostics memory` + one `ps`).
 Orca's selling point is one git worktree per agent; Victor deploys from local and avoids worktrees
 (`~/.claude/CLAUDE.md`). Orca allows the main checkout — a registered repo's own folder is a workspace
 (`isMainWorktree: true`) — so the switch **never** creates a worktree; nothing calls `worktree create`.
+
+### The tab wears the session's title (2026-11-19, evening)
+
+Victor: *"Îmi plăcea foarte mult la terminal că am arătat titlul cu tot cu, ă, ce a făcut cât de cât. Acum, în
+Orca îmi apare doar proiectul în care este."* Two causes. The spawn passed `--title <folder>`, a custom title,
+which Orca never overrides. And Orca never uses the program's OSC title for a tab anyway: the custom title wins,
+else a title Orca generates **once** from the first prompt (`agent-generated-tab-title-rules.ts`); a reset
+showed *macOS addon walk animation* where the pane said `✳ victor-macos-addons — Gândac pe ⌘⌃9 gata`. There
+is no setting for it. So `OrcaBridge.syncTabTitles` (every 10 s while the switch is on, from launch) copies
+each Claude-shaped pane title onto its tab, leading glyph dropped. First tick: 22 tabs renamed in 3 s; the next
+ticks renamed none.

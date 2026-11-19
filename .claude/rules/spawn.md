@@ -22,6 +22,7 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   tty from the answered `processId`. **Never `worktree create`, never `agent launch`**: main checkout, Victor's
   own `claude` flags. No tiling (one Orca window); the flight lands on Orca's window. Active Terminals lists
   Orca's sessions beside Terminal's. → journal: *🐋 Orca as the terminal host*
+- **No `--title` on the new tab; every Claude tab wears its session's title** (2026-11-19 evening, Victor: *"îmi plăcea … la terminal … titlul cu tot cu ce a făcut … în Orca îmi apare doar proiectul"*). Orca names a tab by its custom title, else by one it generates once from the first prompt — never by the program's OSC title. `OrcaBridge.syncTabTitles` (every 10 s, switch on) copies the pane's `✳ folder — task` onto its tab as the custom title, glyph dropped (Orca draws its own state), only for Claude-shaped titles and only when different. A hand rename in Orca is overwritten while a session runs there.
 
 ## The gesture and what travels
 

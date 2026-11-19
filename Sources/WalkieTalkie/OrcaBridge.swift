@@ -302,8 +302,9 @@ enum OrcaBridge {
             guard call(add) != nil else { return .failure(OrcaError("Orca would not add \(path) as a project")) }
             Log.info("🐋 \(path) added to Orca as a \(git ? "git" : "folder") project")
         }
+        // No `--title`: a custom title freezes the tab on the folder's name; the
+        // session's own title is what the tab should wear (`syncTabTitles`).
         guard let created = call(["terminal", "create", "--worktree", "path:\(path)",
-                                  "--title", (path as NSString).lastPathComponent,
                                   "--command", launcher, "--focus", "--json"], timeout: 15),
               let terminal = created["terminal"] as? [String: Any],
               let handle = terminal["handle"] as? String else {
@@ -322,6 +323,68 @@ enum OrcaBridge {
     }
 
     struct OrcaError: Error { let why: String; init(_ why: String) { self.why = why } }
+
+    // MARK: - Tab titles (2026-11-19, evening)
+
+    /// **Each Claude Code tab named like its Terminal.app window: `walkie-talkie — <the task>`**
+    /// (Victor: *"Îmi plăcea foarte mult la terminal că am arătat titlul cu tot cu … ce a făcut cât de
+    /// cât. Acum, în Orca îmi apare doar proiectul în care este"*). Orca names a tab by its custom
+    /// title, else by a title it generates **once** from the first prompt — never by the title the
+    /// program sets (Claude Code's `✳ folder — task`, kept current by the title hook). So Walkie
+    /// copies the pane's own title onto its tab as the custom title, every `titleSyncEvery` while
+    /// the switch is on, renaming only a tab whose name differs. The leading state glyph (✳, the
+    /// braille spinner) is dropped: Orca draws its own busy/idle mark on the tab, and a glyph that
+    /// spins would be a rename every tick. Only panes whose title has Claude Code's shape (a glyph,
+    /// then `folder — task`) are touched; a shell tab keeps whatever Orca calls it. A tab renamed by
+    /// hand in Orca is renamed back while a session runs in it.
+    static let titleSyncEvery: TimeInterval = 10
+    private static var titleTimer: DispatchSourceTimer?
+
+    static func startTitleSync() {
+        guard titleTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        timer.schedule(deadline: .now() + titleSyncEvery, repeating: titleSyncEvery, leeway: .seconds(2))
+        timer.setEventHandler { if enabled, app != nil { syncTabTitles() } }
+        titleTimer = timer
+        timer.resume()
+    }
+
+    /// `✳ walkie-talkie — Orca` → `walkie-talkie — Orca`; nil for a title not shaped like a session's.
+    static func sessionTabTitle(_ paneTitle: String) -> String? {
+        let t = paneTitle.trimmingCharacters(in: .whitespaces)
+        guard let first = t.unicodeScalars.first, !CharacterSet.alphanumerics.contains(first),
+              first != "~", first != "/", t.contains(" — ") else { return nil }
+        let body = t.unicodeScalars.drop { !CharacterSet.alphanumerics.contains($0) && $0 != "~" }
+        let text = String(String.UnicodeScalarView(body)).trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? nil : text
+    }
+
+    static func syncTabTitles() {
+        guard let list = call(["terminal", "list", "--include-visual-layouts", "--json"]),
+              let rows = list["terminals"] as? [[String: Any]] else { return }
+        var tabs: [[String: Any]] = []
+        func collect(_ node: Any) {
+            if let d = node as? [String: Any] {
+                if d["tabId"] != nil, d["panes"] != nil { tabs.append(d) }
+                for v in d.values { collect(v) }
+            } else if let a = node as? [Any] { for v in a { collect(v) } }
+        }
+        collect(list["visualLayouts"] ?? [])
+        var renamed = 0
+        for tab in tabs {
+            guard let tabID = tab["tabId"] as? String else { continue }
+            let inTab = rows.filter { $0["tabId"] as? String == tabID }
+            let pane = inTab.first { $0["leafId"] as? String == tab["activeLeafId"] as? String } ?? inTab.first
+            guard let pane, let handle = pane["handle"] as? String,
+                  let want = (pane["title"] as? String).flatMap(sessionTabTitle),
+                  tab["title"] as? String != want else { continue }
+            if call(["terminal", "rename", "--terminal", handle, "--title=" + want, "--json"]) != nil {
+                renamed += 1
+                Log.info("🐋 tab \(tabID.prefix(8)) named «\(want)» (was «\(tab["title"] as? String ?? "")»)")
+            }
+        }
+        _ = renamed
+    }
 
     // MARK: - Sessions under the spawn menu
 

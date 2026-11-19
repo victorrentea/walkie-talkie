@@ -1614,6 +1614,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `walkie-reply` reads it; made now, not at the first answer.
         _ = Self.replyToken
         ReplyPanel.watchShareZoom()
+        // 🐋 Orca's tabs wear their sessions' titles (2026-11-19) — idle while the switch is off.
+        OrcaBridge.startTitleSync()
         ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the reply pop-up", fly: true) }
         ReplyPanel.isBound = { [weak self] tty in
             self?.terminal.target?.address == (tty as NSString).lastPathComponent
