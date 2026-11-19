@@ -196,8 +196,13 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
   alike): walkie-talkie `Glyphs.walkie`, victor-net SF `cellularbars`, victor-insomnia
   `cup.and.saucer.fill` (template, in the row's ink), victor-vsc VS Code's app icon, petclinic and
   `petclinic-*` 🐱, human-review 👱🏻‍♂️ (the review page's favicon), gmail-dark-css
-  `assets/gmail-logo.png` (Chrome's icon if missing). Drawn 20 pt in the width "✨ " measures, so
-  `measure()` is unchanged. `WT_SHOOT_MENU` shows them.
+  `assets/gmail-logo.png` (Chrome's icon if missing), training-assistant 🎓 (the participant page's
+  favicon). Drawn 20 pt in the width "✨ " measures, so `measure()` is unchanged. `WT_SHOOT_MENU` shows them.
+- **Victor Addons and Victor Effects wear their menu-bar marks bare, as large as the slot allows**
+  (same evening, Victor: *"without the blue background and larger to fit as much space as you can"* —
+  their Dock icons, tile and all, lasted an hour): the V in a ring (`ProjectIcons.vInCircle`, drawn —
+  the Addons bundle carries no PNG) and the 𝓯𝔁, both templates in the row's ink, sized
+  `min(row − 4, slot − 2)` (`ProjectIcons.fillsSlot`) instead of `markSize`.
 - **A session told `kamikaze` is offered with a 💀 in the ⏳'s place** (Victor: *"it should show a death
   skull instead of the hourglass … It's about to die"*) — it was hidden from 2026-10-07. It still binds
   on a click. `agentState` scans a transcript for the word **or** the 💀: since 2026-11-12 the mod

@@ -42,11 +42,19 @@ enum ProjectIcons {
         // Insomnia's menu-bar cup (`InsomniaIcon.cup`).
         case "victor-insomnia": return symbol("cup.and.saucer.fill")
         case "victor-vsc": return app("com.microsoft.VSCode")
-        // Victor's own two menu-bar apps wear their Dock icons (2026-11-19): the V
-        // in a circle for Victor Addons, the ƒx for Victor Effects. Read from the
-        // installed apps, so this public repo carries neither picture.
-        case "victor-macos-addons": return app("ro.victorrentea.macos-addons")
-        case "victor-effects": return app("ro.victorrentea.victor-effects")
+        // Victor's own two menu-bar apps wore their Dock icons for an hour, then
+        // went bare and larger (2026-11-19, Victor: *"without the blue background
+        // and larger to fit as much space as you can … the same with no background
+        // behind"*): their menu-bar marks, drawn here in the row's ink and filling
+        // the slot (`fillsSlot`) — the V in a ring and the 𝓯𝔁. Drawn, so this
+        // public repo carries neither picture.
+        case "victor-macos-addons": return .template(vInCircle(side: 24))
+        case "victor-effects":
+            let fx = Glyphs.emoji("𝓯𝔁", ink: 24, colour: .black)
+            fx.isTemplate = true
+            return .template(fx)
+        // The participant page's favicon (`static/favicon-new.svg`, the mortarboard).
+        case "training-assistant": return .colour(Glyphs.emoji("🎓", ink: 18))
         // The review page's favicon (`human-review` `masthead.py`, `FAVICON_EMOJI`).
         case "human-review": return .colour(Glyphs.emoji("👱🏻‍♂️", ink: 18))
         // The Gmail logo (`assets/gmail-logo.png`, the one Victor Addons draws), else Chrome's.
@@ -57,6 +65,35 @@ enum ProjectIcons {
             return app("com.google.Chrome")
         default: return nil
         }
+    }
+
+    /// The marks that are the whole picture — no tile, no margin of their own — and
+    /// so take the slot's full height rather than `markSize`.
+    static func fillsSlot(_ folder: String) -> Bool {
+        folder == "victor-macos-addons" || folder == "victor-effects"
+    }
+
+    /// Victor Addons' menu-bar logo (`icon_v.png` there, a V in a ring), drawn
+    /// rather than read: that app's bundle carries no PNG to read.
+    private static func vInCircle(side: CGFloat) -> NSImage {
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { r in
+            let ring = r.width * 0.09
+            let circle = NSBezierPath(ovalIn: r.insetBy(dx: ring / 2, dy: ring / 2))
+            circle.lineWidth = ring
+            NSColor.black.setStroke()
+            circle.stroke()
+            let v = NSBezierPath()
+            v.move(to: NSPoint(x: r.width * 0.33, y: r.height * 0.71))
+            v.line(to: NSPoint(x: r.width * 0.50, y: r.height * 0.29))
+            v.line(to: NSPoint(x: r.width * 0.67, y: r.height * 0.71))
+            v.lineWidth = r.width * 0.12
+            v.lineCapStyle = .round
+            v.lineJoinStyle = .round
+            v.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
     }
 
     private static func symbol(_ name: String) -> Mark? {

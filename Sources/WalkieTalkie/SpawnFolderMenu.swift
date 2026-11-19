@@ -1244,7 +1244,9 @@ final class FolderRow: NSView {
         var prefix = enabled ? SpawnFolderMenu.sparkle : ""
         if choice.tty == nil, enabled, let mark = ProjectIcons.mark(for: choice.name) {
             let slot = (SpawnFolderMenu.sparkle as NSString).size(withAttributes: [.font: font]).width
-            let side = min(SpawnFolderMenu.markSize, slot - 4)
+            let side = ProjectIcons.fillsSlot(choice.name)
+                ? min(bounds.height - 4, slot - 2)
+                : min(SpawnFolderMenu.markSize, slot - 4)
             ProjectIcons.draw(mark, in: NSRect(x: x, y: (bounds.height - side) / 2, width: side, height: side),
                               ink: ink)
             x += slot
