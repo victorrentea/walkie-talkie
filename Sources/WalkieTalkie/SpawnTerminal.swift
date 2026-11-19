@@ -113,6 +113,20 @@ enum SpawnTerminal {
             return .failed("could not stage the new session — \(error.localizedDescription)")
         }
 
+        // **In Orca, when its switch is on** (2026-11-19, experimental): the same
+        // launcher, run in a new tab of the folder's own Orca project — no
+        // window to tile, the tab is where Orca keeps it (`OrcaBridge.open`).
+        if OrcaBridge.enabled {
+            switch OrcaBridge.open(launcher: launcher.path, directory: directory) {
+            case .success(let tty):
+                Log.info("✨ 🐋 \(what) opened in Orca on \(tty)")
+                return .opened(tty: tty)
+            case .failure(let error):
+                Log.error("✨ 🐋 \(what) — \(error.why)")
+                return .failed("Orca: \(error.why)")
+            }
+        }
+
         // **Where it opens is not where Terminal would have put it.** See
         // `board(preferring:)` and `slot(for:on:avoiding:)`: tiled across the
         // displays around the Retina one, the one the pointer is on first, and

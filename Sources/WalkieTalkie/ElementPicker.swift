@@ -536,6 +536,9 @@ final class ElementPicker {
     /// forced budget / local ETA (2026-09-29) and the Wispr fakes (2026-09-28);
     /// answers `state.localAuto`. Run on the main queue.
     var onTestLocalAuto: (([String: Any]) -> [String: Any])?
+    /// `POST /test/orca` (2026-11-19) — the Orca bridge at a desk; runs on the
+    /// listener thread (it is Orca CLI calls, never AppKit).
+    var onTestOrca: (([String: Any]) -> [String: Any])?
     /// `POST /test/transcript-guard` — `{"on"}` the switch, `{"text", "retry"?,
     /// "duration"?}` the pure verdict, `{"text", "replay": wav, "duration"}` a whole sentence.
     var onTestTranscriptGuard: (([String: Any]) -> [String: Any])?
@@ -1148,6 +1151,13 @@ final class ElementPicker {
             var answer: [String: Any] = [:]
             DispatchQueue.main.sync { answer = handler(body) }
             respond(conn, 200, ["ok": true].merging(answer) { _, new in new })
+
+        // 🐋 Orca (experimental): panes, the front pane, sessions, a latched
+        // delivery to one pane without touching the binding — see `onTestOrca`.
+        case ("POST", "/test/orca"):
+            let body = ((try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]) ?? [:]
+            guard let handler = onTestOrca else { return respond(conn, 503, ["error": "no handler"]) }
+            respond(conn, 200, ["ok": true].merging(handler(body)) { _, new in new })
 
         // ⏎ on a closed session's row — see `onTestResumeSession`.
         case ("POST", "/test/resume-session"):

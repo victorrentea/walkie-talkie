@@ -14,6 +14,15 @@ spoken (`SpawnFolderMenu`, `ProjectList`), where the window opens and
 how the dialog hands over to it.
 Full history and reasoning: docs/journal.md — see the sections named after each rule below.
 
+## 🐋 In Orca when its switch is on (2026-11-19, experimental)
+
+- **`SpawnTerminal.open` hands the same launcher to `OrcaBridge.open`** instead of `do script` while
+  `Orca (experimental)` is ticked: a new Orca tab in the folder's own project (`repo add` first when Orca does
+  not know it — git, or `--kind folder`), `terminal create --worktree path:<dir> --command <launcher> --focus`,
+  tty from the answered `processId`. **Never `worktree create`, never `agent launch`**: main checkout, Victor's
+  own `claude` flags. No tiling (one Orca window); the flight lands on Orca's window. Active Terminals lists
+  Orca's sessions beside Terminal's. → journal: *🐋 Orca as the terminal host*
+
 ## The gesture and what travels
 
 - **There are two entry points now** (2026-09-12): `launchClaude(prompt:directory:)` for the

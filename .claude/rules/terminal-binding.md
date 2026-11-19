@@ -32,6 +32,20 @@ Rules for pointing the relay at a terminal, delivering into it, and keeping that
 - **Binding takes the first port that answers, not all of them** (unlike the Chrome extension): pointing every relay on the machine at one terminal would deliver every dictation there two or three times. → journal: *⌘⌃D is this app's own key (since 2026-08-26)*
 - **The tab in front is found front to back, and every `osascript` failure is logged with its reason** (2026-09-28). `frontTerminalTab` used to read `selected tab of front window` only, and `osascript(_:)` dropped stderr: seven bind gestures at 19:55 failed with *would not name its front tab's tty* and no evidence, while the same script answered fine from a shell at 19:58. (The cause turned out to be outside this file: `relay-restart.sh --build` had swapped the bundle on disk at 19:54:13 under the running process, and macOS refused it AppleEvents and the microphone until the relaunch at 20:01:04 — so a failure now appends *the bundle on disk was replaced under this process — restart pending* when the executable is newer than the process, `bundleReplacedNote()`.) Now each window is asked inside its own `try`, hidden/miniaturised/throwing/tty-less windows are skipped (and named in the log), the pick is keyboard focus (AX frame or title) → Terminal's `frontmost` → order, and the bind logs `bind: front tab ttysNNN «title» — window i of n, by …`. `osascript` is killed after 5 s (`osascriptTimeout`), logs exit status + stderr + elapsed ms, and the chip's *nothing bindable in front* carries `lastBindFailure` (e.g. *Terminal did not answer in 5 s*, *no Terminal window*). Tests: `FrontTabTests`.
 
+## 🐋 Orca panes (2026-11-19, experimental — `OrcaBridge`, menu `Orca (experimental)`)
+
+- **An Orca pane is a tty under a `login` of its own, so it binds as `Handle.orca(tty:)`** — `.terminalApp`
+  with Orca's CLI as the transport. Guard, carriers, owner, liveness, folder, `bound-tty` and the restore are
+  the tty's, unchanged; typing, the title and the raise go through `orca … --json` (~0.35 s a call). The Orca
+  handle is runtime-scoped: never stored, looked up from the tty each time (`terminal list` +
+  `diagnostics memory` + `ps`). → journal: *🐋 Orca as the terminal host*
+- **Text and Return are two calls, and the text is `--text=<words>`.** `--enter` with text bracket-pastes into
+  Claude Code (`<pasted_content>`, see *Never reintroduce*); a separate value starting with `-` is read as a
+  flag. Orca refusing a line is `.failed`; only *no Orca pane on the tty* is `targetGone`.
+- **`resolve(tty:)` asks Orca only after Terminal.app and tmux said no**; ⌘⌃B on Orca binds `frontPane()`
+  (active workspace → active tab → active leaf) only while the switch is on. A pane bound while on still
+  gets its prompts after it is turned off.
+
 ## The session's inbox — delivery without keystrokes (2026-10-08)
 
 ## The session's inbox — delivery without keystrokes (2026-10-08, off since 2026-10-12)

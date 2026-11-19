@@ -2620,6 +2620,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             out["via"] = r.sentence.via
             return out
         }
+        // 🐋 Orca at a desk (2026-11-19): `enabled` (written to the defaults —
+        // the caller puts it back), `panes`, `front`, `sessions`, `resolve`,
+        // and `{"tty", "text"}` — a delivery to that pane as a latched sentence
+        // would make it, the binding left as it is (the reply pop-up's ☠️ path).
+        picker.onTestOrca = { [weak self] body in
+            guard let self = self else { return [:] }
+            var answer: [String: Any] = [:]
+            if let on = body["enabled"] as? Bool { OrcaBridge.enabled = on }
+            answer["enabled"] = OrcaBridge.enabled
+            answer["installed"] = OrcaBridge.installed
+            answer["running"] = OrcaBridge.app != nil
+            let describe = { (p: OrcaBridge.Pane) -> [String: Any] in
+                ["handle": p.handle, "tty": p.tty ?? "", "title": p.title ?? "", "path": p.worktreePath]
+            }
+            if body["panes"] as? Bool == true { answer["panes"] = OrcaBridge.panes().map(describe) }
+            if body["front"] as? Bool == true { answer["front"] = OrcaBridge.frontPane().map(describe) ?? NSNull() }
+            if body["sessions"] as? Bool == true {
+                answer["orcaTitles"] = OrcaBridge.liveTitles()
+                answer["sessions"] = TerminalBinding.activeAgentSessions().map {
+                    ["tty": $0.tty, "directory": $0.directory, "title": $0.title ?? "", "busy": $0.busy]
+                }
+            }
+            let describeTarget = { (t: TerminalBinding.Target) -> [String: Any] in
+                ["address": t.address, "app": t.appName, "label": t.label, "folder": t.folder ?? "",
+                 "title": t.title ?? "", "guarded": t.isGuarded, "owner": t.owner?.token ?? ""]
+            }
+            if let tty = body["resolve"] as? String {
+                answer["resolved"] = self.terminal.resolve(tty: tty).map(describeTarget) ?? NSNull()
+            }
+            if let tty = body["tty"] as? String, let text = body["text"] as? String {
+                guard let target = self.terminal.resolve(tty: tty) else {
+                    answer["outcome"] = "no terminal on \(tty)"
+                    return answer
+                }
+                switch self.terminal.deliver(text, to: target) {
+                case .delivered: answer["outcome"] = "delivered"
+                case .noTarget: answer["outcome"] = "noTarget"
+                case .targetGone(let why): answer["outcome"] = "targetGone: \(why)"
+                case .wouldRunAsShell(let c): answer["outcome"] = "wouldRunAsShell: \(c)"
+                case .failed(let why): answer["outcome"] = "failed: \(why)"
+                }
+            }
+            return answer
+        }
         picker.onTestLocalAuto = { [weak self] body in
             guard let self else { return ["error": "gone"] }
             if let on = body["on"] as? Bool { self.setAutoLocal(on, from: "POST /test/local-auto") }
@@ -9859,9 +9903,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the way down, like every other question this app asks Terminal.
             var frame: CGRect?
             let deadline = Date().addingTimeInterval(Self.spawnWindowWait)
-            while Date() < deadline {
-                if let found = TerminalBinding.terminalWindowFrame(tty: tty) { frame = found; break }
-                Thread.sleep(forTimeInterval: 0.08)
+            // An Orca tab has no window of its own: Orca's is the landing (2026-11-19).
+            if OrcaBridge.enabled, OrcaBridge.app != nil, TerminalBinding.terminalWindowFrame(tty: tty) == nil {
+                frame = OrcaBridge.windowFrame()
+            } else {
+                while Date() < deadline {
+                    if let found = TerminalBinding.terminalWindowFrame(tty: tty) { frame = found; break }
+                    Thread.sleep(forTimeInterval: 0.08)
+                }
             }
             if let frame = frame {
                 DispatchQueue.main.async {
@@ -14240,6 +14289,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch target.handle {
         case .terminalApp(let t): tty = t
         case .tmux(_, let t): tty = t
+        // Orca's window is the rectangle; a pane has none of its own (2026-11-19).
+        case .orca: tty = nil
+            DispatchQueue.global(qos: .userInitiated).async {
+                let destination = OrcaBridge.windowFrame()
+                DispatchQueue.main.async {
+                    guard let destination else { return giveUp() }
+                    BindFlight.fly(from: frame, to: { destination },
+                                   seconds: Self.sendFlightSeconds,
+                                   outlined: true, tail: Self.spawnFlightRest)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.spawnPanelFadeDelay) { [weak self] in
+                        self?.overlay.releaseSpawnPanel(fadeOver: Self.spawnPanelFade)
+                    }
+                }
+            }
+            return
         case .ide, .keystroke: tty = nil
         }
         guard let tty = tty else { return giveUp() }

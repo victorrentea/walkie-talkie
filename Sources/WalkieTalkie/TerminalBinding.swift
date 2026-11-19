@@ -62,6 +62,14 @@ final class TerminalBinding {
         /// reported as `delivered`, because "⌘V was sent" is all this can see.
         case keystroke(pid: pid_t, app: String)
 
+        /// **A pane of an Orca terminal tab, by its tty** (2026-11-19, experimental —
+        /// `OrcaBridge`). Orca's panes are real local ttys under a `login` of their
+        /// own, so this is `.terminalApp` with another transport: the guard, the
+        /// owner, liveness and the folder are asked of the tty exactly as there; the
+        /// typing, the raise and the title go through Orca's CLI. Device path, like
+        /// `.terminalApp`.
+        case orca(tty: String)
+
         /// **The tty this handle delivers to, when there is one to name.**
         /// Published to disk so the status line can put a microphone in front of
         /// its own row — see `Outbox.publishBound`. The tty is the only handle
@@ -112,6 +120,7 @@ final class TerminalBinding {
         var deviceTTY: String? {
             switch self {
             case .terminalApp(let tty):   return tty
+            case .orca(let tty):          return tty
             case .tmux(_, let tty):       return tty
             case .ide(let h):             return h.shellPID.flatMap { TerminalBinding.tty(ofPID: $0) }
             case .keystroke:              return nil
@@ -185,7 +194,8 @@ final class TerminalBinding {
         /// the first word (`awk '{print $1; exit}'`, `.split()[:1]`) is unchanged.
         var restoreRecord: String? {
             guard let key = handle.restoreKey else { return nil }
-            guard case .terminalApp = handle, let owner = owner else { return key }
+            switch handle { case .terminalApp, .orca: break; default: return key }
+            guard let owner = owner else { return key }
             return key + "\n" + owner.token
         }
 
@@ -198,7 +208,7 @@ final class TerminalBinding {
             // owns the panel. It normally can; if it could not, saying so is
             // better than implying a check that will not happen.
             case .ide(let h): return h.isChat || h.shellPID != nil
-            case .terminalApp, .tmux: return true
+            case .terminalApp, .tmux, .orca: return true
             }
         }
     }
@@ -284,6 +294,7 @@ final class TerminalBinding {
     /// the real work and can still refuse (an editor with no terminal open).
     static func isBindable(bundleID: String) -> Bool {
         bundleID == "com.apple.Terminal" || IDEBridge.kind(bundleID: bundleID) != nil
+            || (bundleID == OrcaBridge.bundleID && OrcaBridge.enabled)
     }
 
     func bind(app: NSRunningApplication) -> Target? {
@@ -294,6 +305,16 @@ final class TerminalBinding {
         let bound: Target?
         if bundleID == "com.apple.Terminal" {
             bound = bindTerminalApp(fallbackName: name, bundleID: bundleID, pid: app.processIdentifier)
+        } else if bundleID == OrcaBridge.bundleID, OrcaBridge.enabled {
+            // **The pane Orca shows** (2026-11-19, experimental): its active
+            // workspace's active tab's active leaf, by Orca's own answer.
+            if let pane = OrcaBridge.frontPane(), let tty = pane.tty {
+                Log.info("bind: Orca's front pane \(pane.handle.prefix(13))… on \((tty as NSString).lastPathComponent) «\(pane.title ?? "")»")
+                bound = orcaTarget(tty: tty, title: pane.title)
+            } else {
+                noteBindFailure("Orca shows no terminal pane")
+                bound = nil
+            }
         } else if let editor = IDEBridge.kind(bundleID: bundleID) {
             let window = Self.focusedWindow(pid: app.processIdentifier)
             // **Ask the editor.** Its extension knows which terminal is active,
@@ -403,7 +424,17 @@ final class TerminalBinding {
         let short = (device as NSString).lastPathComponent
         let tabs = Self.liveTitles()
         guard tabs[short] != nil || Self.tmuxPane(clientTTY: device) != nil else {
-            Log.error("bind: no Terminal.app tab or tmux client on \(short) — not bound")
+            // **An Orca pane** (2026-11-19, experimental) — asked only once
+            // Terminal.app and tmux have both said no, and only of a running Orca.
+            if let pane = OrcaBridge.pane(tty: device) {
+                guard let bound = orcaTarget(tty: device, title: pane.title) else { return nil }
+                if let expected = expected, let now = bound.owner, now != expected {
+                    Log.error("bind: \(short) now belongs to another Orca pane (login \(now.pid), was \(expected.pid)) — not restored")
+                    return nil
+                }
+                return bound
+            }
+            Log.error("bind: no Terminal.app tab, tmux client or Orca pane on \(short) — not bound")
             return nil
         }
         let title = tabs[short].flatMap { $0.isEmpty ? nil : $0 }
@@ -501,6 +532,21 @@ final class TerminalBinding {
                       sourceFrame: frame, boundAt: Date(), owner: owner)
     }
 
+    /// An Orca pane on `tty` (device path) as a `Target` — `terminalTarget`'s
+    /// Terminal.app half with Orca's names: the folder and the owner from the tty,
+    /// the frame Orca's window.
+    private func orcaTarget(tty: String, title: String?) -> Target? {
+        let device = Self.devicePath(tty)
+        let short = (device as NSString).lastPathComponent
+        let folder = Self.sessionLabel(onTTY: device)
+        let owner = Self.tabOwner(onTTY: device)
+        if owner == nil { Log.error("bind: could not read the owner of Orca's \(short) — tty reuse will not be caught") }
+        return Target(handle: .orca(tty: device), label: folder ?? OrcaBridge.appName,
+                      address: short, appName: OrcaBridge.appName, bundleID: OrcaBridge.bundleID,
+                      folder: folder, title: title, sourceFrame: OrcaBridge.windowFrame(),
+                      boundAt: Date(), owner: owner)
+    }
+
     /// Re-read the two parts of a binding that move under it: what the terminal
     /// calls itself, and **which directory it is in**.
     ///
@@ -519,6 +565,7 @@ final class TerminalBinding {
         switch existing.handle {
         case .terminalApp(let tty): fresh = Self.title(forTTY: tty)
         case .tmux(let pane, _): fresh = Self.tmuxPaneTitle(pane)
+        case .orca(let tty): fresh = OrcaBridge.pane(tty: tty)?.title
         // An IDE retitles its window as the open file changes, which is the same
         // kind of movement an agent's terminal title has — and this one costs an
         // AX read rather than a subprocess.
@@ -548,7 +595,7 @@ final class TerminalBinding {
     /// whatever happens to be running elsewhere.
     private func currentFolder(for target: Target) -> String? {
         switch target.handle {
-        case .terminalApp(let tty):     return Self.sessionLabel(onTTY: tty)
+        case .terminalApp(let tty), .orca(let tty): return Self.sessionLabel(onTTY: tty)
         case .tmux(let pane, _):        return Self.tmuxPaneLabel(pane)
         case .ide(let handle):          return handle.shellPID.flatMap { Self.folderLabel(shellPID: $0) }
                                             ?? IDEBridge.currentDirectory(of: handle).map { Self.label(forDirectory: $0) }
@@ -590,7 +637,7 @@ final class TerminalBinding {
     func checkAlive() -> Liveness {
         guard let target = target else { return .unknown }
         switch target.handle {
-        case .terminalApp(let tty):
+        case .terminalApp(let tty), .orca(let tty):
             // **Any process on the tty, not the *foreground* one** — which is
             // the weaker test on purpose, and the difference between this and
             // the delivery guard. `foregroundCommand` answers nil for a live tab
@@ -795,6 +842,34 @@ final class TerminalBinding {
                 return .targetGone("no Terminal.app tab on \(target.address)")
             }
             return .delivered
+
+        case .orca(let tty):
+            // Exactly the Terminal.app tab's checks — the pane is a tty under a
+            // `login` of its own — and Orca's CLI for the keystrokes.
+            if let owner = target.owner, let now = Self.tabOwner(onTTY: tty), now != owner {
+                Log.error("⌨️ \(target.address) now belongs to another Orca pane (login \(now.pid), bound to login \(owner.pid)) — not typing into it")
+                unbind()
+                return .targetGone("the bound Orca pane was closed (\(target.address) is another pane now)")
+            }
+            let foreground = Self.foregroundCommand(onTTY: tty)
+            Log.info("⌨️ 🐋 \(target.address) foreground=\(foreground ?? "nothing") — \(line.count) chars")
+            switch foreground {
+            case .none:
+                unbind()
+                return .targetGone("\(target.address) is gone")
+            case .some(let command) where Self.refusesDelivery(command):
+                return .wouldRunAsShell(command)
+            case .some:
+                break
+            }
+            if Self.deliverToInbox(line, tty: tty) { return .delivered }
+            switch OrcaBridge.deliver(line, tty: tty) {
+            case .delivered: return .delivered
+            case .refused: return .failed("Orca would not take the line")
+            case .noPane:
+                unbind()
+                return .targetGone("no Orca pane on \(target.address)")
+            }
 
         case .tmux(let pane, _):
             switch Self.tmuxPaneCommand(pane) {
@@ -1165,7 +1240,9 @@ final class TerminalBinding {
     ///
     /// Off the main thread — it is an `osascript` and a `ps`.
     static func activeAgentSessions() -> [ActiveTerminals.Session] {
-        let titles = liveTitles()
+        // Orca's panes join Terminal.app's tabs while the switch is on (2026-11-19).
+        let orca = OrcaBridge.liveTitles()
+        let titles = liveTitles().merging(orca) { terminal, _ in terminal }
         guard !titles.isEmpty, let out = run("/bin/ps", ["-ax", "-o", "pid=,tty="]) else { return [] }
         var pids: [String: [Int32]] = [:]
         for line in out.components(separatedBy: "\n") {
@@ -1178,7 +1255,10 @@ final class TerminalBinding {
         return titles.keys.sorted().compactMap { tty in
             guard let (pid, dir) = pids[tty]?.lazy
                     .compactMap({ pid in publishedDirectory(ownedBy: pid).map { (pid, $0) } }).first
-            else { return nil }
+            else {
+                if orca[tty] != nil, agentRunning(onTTY: tty) { Log.info("🐋 sessions: Orca's \(tty) — pids \(pids[tty] ?? []), none published a folder — an agent runs there, not listed") }
+                return nil
+            }
             let state = agentState(pid: pid)
             // **Told to close when done: offered with a 💀** (2026-11-19, Victor:
             // *"it should show a death skull instead of the hourglass … It's about
@@ -1321,6 +1401,10 @@ final class TerminalBinding {
             windowAt = Self.topLeft(answer)
             pid = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Terminal")
                 .first?.processIdentifier
+        case .orca(let tty):
+            // Orca's view switched to the pane, then Orca's window raised.
+            if !OrcaBridge.show(tty: tty) { Log.error("🪟 🐋 Orca would not switch to \(target.address)") }
+            pid = OrcaBridge.app?.processIdentifier
         case .ide:
             pid = NSRunningApplication.runningApplications(withBundleIdentifier: target.bundleID)
                 .first?.processIdentifier
@@ -1503,6 +1587,8 @@ final class TerminalBinding {
         switch target.handle {
         case .terminalApp(let tty), .tmux(_, let tty):
             return terminalWindowFrame(tty: tty)
+        case .orca:
+            return OrcaBridge.windowFrame()
         case .ide:
             return NSRunningApplication.runningApplications(withBundleIdentifier: target.bundleID).first
                 .flatMap { focusedWindow(pid: $0.processIdentifier).frame }

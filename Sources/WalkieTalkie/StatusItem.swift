@@ -857,6 +857,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let wakeRow = NSMenuItem(title: WakeWord.menuTitle, action: nil, keyEquivalent: "")
     private let gepettoRow = NSMenuItem(title: WakeWord.gepettoMenuTitle, action: nil, keyEquivalent: "")
     private let faceRow = NSMenuItem(title: FaceRead.menuTitle, action: nil, keyEquivalent: "")
+    /// **🐋 Orca (experimental)** (2026-11-19): new sessions open as Orca tabs,
+    /// ⌘⌃B binds Orca's front pane, the spawn menu lists Orca's sessions.
+    private let orcaRow = NSMenuItem(title: OrcaBridge.menuTitle, action: nil, keyEquivalent: "")
     private var engineLoading = false
     /// Whether the relay is pointed at a terminal, which is what the two icons
     /// distinguish. Set from the same `setDestination` the header uses, so the
@@ -1058,7 +1061,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // top level"*). The Engine list is the engines and the quota again;
         // these are ticks like Autosend, drawn the same way, re-read at every
         // open (`applySwitchRows`).
-        for row in [autoLocalRow, liveRow, editorRow, wakeRow, gepettoRow, faceRow] {
+        for row in [autoLocalRow, liveRow, editorRow, wakeRow, gepettoRow, faceRow, orcaRow] {
             row.target = self
             menu.addItem(row)
         }
@@ -1068,6 +1071,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         wakeRow.action = #selector(wakeClicked)
         gepettoRow.action = #selector(gepettoClicked)
         faceRow.action = #selector(faceClicked)
+        orcaRow.action = #selector(orcaClicked)
         applySwitchRows()
 
         menu.addItem(.separator())
@@ -1371,6 +1375,19 @@ final class StatusItem: NSObject, NSMenuDelegate {
         faceRow.toolTip = "While a prompt records, the camera takes two frames a second, read on this Mac and thrown away. "
             + "The prompt gets a tag only for what the words lose: you smiled, you look tired, or you were away from the screen.\n"
             + "Nothing is stored but the numbers in the outbox. Never on a plain dictation."
+        orcaRow.isEnabled = OrcaBridge.installed
+        orcaRow.image = Self.tick(OrcaBridge.enabled && OrcaBridge.installed)
+        orcaRow.toolTip = (OrcaBridge.installed ? "" : "Orca is not installed (/Applications/Orca.app).\n")
+            + "New Claude sessions open as tabs in Orca, in the folder's own checkout (never a worktree). "
+            + "⌘⌃B with Orca in front binds the terminal pane it shows; prompts are typed into that pane "
+            + "through Orca's CLI, behind the same shell guard. The spawn menu lists Orca's sessions too.\n"
+            + "Off: Terminal.app only, as before. A pane bound while on still gets its prompts."
+    }
+
+    @objc private func orcaClicked() {
+        OrcaBridge.enabled.toggle()
+        Log.info("🐋 Orca integration \(OrcaBridge.enabled ? "on" : "off") — from the menu")
+        applySwitchRows()
     }
 
     @objc private func autoLocalClicked() {

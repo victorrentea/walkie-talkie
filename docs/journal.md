@@ -16319,3 +16319,98 @@ rules"*.
   It is `AgentRules.replyNudge`, Copilot only, under a `?` only — the one sanctioned exception to *no
   per-message clause*.
 
+
+## 🐋 Orca as the terminal host — experimental, behind one switch (2026-11-19)
+
+Victor, dictated: *"I want to develop an experimental integration with OrcaDev. So install Orca, the IDE for
+agentic, and first mine all the harness and tweaks we have around the terminal in Apple [Terminal.app] in
+Walkie Talkie. And let's put a toggle in the menu which, if enabled, switches from the Terminal thing to
+integration with Orca: for starting a new terminal, for giving another prompt to an existing terminal
+running in there, and for binding a terminal in OrcaDev. These many terminals I'm running right now can be
+a bit hard to track which are which."*
+
+**Orca** (onorca.dev, github.com/stablyai/orca, MIT, Electron) 1.4.264 is installed from the notarized
+GitHub release (Developer ID *Lovecast LLC*, 6CX3WHS9HZ). The `orca` Homebrew cask is a **different app**
+(plotly's chart renderer, disabled since 2026-09); the repo ships its own `Casks/orca.rb` but no tap. CLI:
+`/Applications/Orca.app/Contents/Resources/bin/orca`, linked to `/opt/homebrew/bin/orca`.
+
+### What a script can do in Orca (read from its CLI and source)
+
+- **No AppleScript dictionary, no deep links worth using; everything is the `orca … --json` CLI**, a node
+  process talking to the running app over a local socket, **~0.35 s a call** (`terminal list` 334 ms,
+  `diagnostics memory` 346 ms, measured).
+- **Open**: `terminal create --worktree path:<dir> --command <cmd> --title <t> --focus` (a tab in that
+  project's checkout, answers the handle **and the pane's processId**); `agent launch --agent claude
+  --prompt …` (Orca's own launch, its own flags); `worktree create --agent …` (a **new git worktree** — never
+  used here).
+- **List**: `terminal list` (handle, ptyId, worktree path, title, preview, `--include-visual-layouts` for
+  tabs / active tab / active leaf); `worktree ps` (`isActive` = the workspace on screen); `agent list`
+  (only agents that reported to Orca's hooks — none of Victor's did).
+- **Send**: `terminal send --text` writes the bytes verbatim; with `--enter` **and** text, a recognised agent
+  gets a **bracketed paste** (Claude Code then wraps it in `<pasted_content>` — the trap
+  `terminal-binding.md` already paid for), so text and Enter go as two calls. `--enter` alone is a bare
+  Return. **A value starting with `-` is read as a flag** (`--text --version is what I meant` → exit 1,
+  measured): the text goes as one argument, `--text=<words>`.
+- **Read**: `terminal read --screen` = the frame as drawn (rows), which is what the read-back Returns need.
+- **Focus**: `terminal switch` changes the pane Orca shows; it does not activate the app.
+- **Busy / idle**: `terminal wait --for tui-idle`, `agentWait` — not needed: Claude Code's own
+  `~/.claude/sessions/<pid>.json` already answers it for any tty.
+- **Not there**: a pane → pid call. `diagnostics memory` is the one public answer that names a pid
+  (`sessions[].sessionId` = `ptyId`, `pid` = the pane's `login`).
+
+### The finding that made it small: an Orca pane is a tty
+
+Orca's terminal daemon (`Orca Agents`) starts every pane as
+`/usr/bin/login -flpq victorrentea /bin/bash … orca-tcc-login /bin/zsh -l` on an ordinary `/dev/ttysNNN` —
+the shape of a Terminal.app tab, `login` at the root. So **the binding is the tty**, a new
+`Handle.orca(tty:)` that is `.terminalApp` with another transport, and everything Walkie asks of a tty
+works untouched: the shell guard, the carriers, `TTYOwner` (login pid + start), liveness, the folder
+(`~/.claude/cwd/<tty>`), ⏳ / 💀, `bound-tty` and the status line's 🎙️, the restart's re-bind, the
+walkie-inbox mod. The Orca handle (`term_…`) is runtime-scoped, so it is never stored: looked up from the tty
+at each use (`terminal list` + `diagnostics memory` + one `ps`).
+
+### The map — every Terminal.app feature, and its Orca equivalent
+
+| Terminal.app feature (where) | with the switch on |
+|---|---|
+| Spawn: `do script <launcher>`, a new window (`SpawnTerminal.open`) | the **same launcher** (`claude --allow-dangerously-skip-permissions --permission-mode auto "<prompt>"`) in a new Orca tab: `terminal create --worktree path:<dir> --command … --focus`. The folder is added as an Orca project first if it is not one (`repo add`, git or `--kind folder`). **Main checkout, never a worktree.** |
+| Window tiling across the side displays (`board`, `slot`) | **gap, by design** — Orca is one window; the new tab is shown inside it (`--focus`) and Orca is not activated |
+| `resumeClaude` (⏎ on a closed session in *Rebind to…*) | goes through the same `open`, so it opens in Orca too |
+| Bind the tab in front, ⌘⌃B / ◀️ + 🔼 (`bindTerminalApp`) | `OrcaBridge.frontPane`: `worktree ps`'s active workspace → its layout's `activeTabId` → that tab's `activeLeafId`. **Gap**: a split into several tab groups names an active tab in each and nothing says which has the keyboard — the first group's is taken, and logged |
+| Bind by tty (`bind(tty:)` — restart restore, spawn adoption, Active Terminals, the reply pop-up's 📍) | `resolve(tty:)` asks Orca once Terminal.app and tmux have said no; owner checked like a tab |
+| Delivery: `do script` chunk, 0.5 s, Return, read-back Returns ≤ 4 over 4 s (`writeToTerminalApp`) | `OrcaBridge.deliver`: `send --text=`, 0.5 s, `send --enter`, `read --screen`, the same predicates (`stillInPrompt`, `asksForReview`, `submitted`) — a copy of the loop, so the Terminal path stays untouched |
+| ⌃X ⌃S on a sentence queued behind a turn (`waitsToSendNow`) | `send --text=^X^S` then a Return — same trigger. **Not yet seen live in Orca** |
+| Shell guard, carriers, fail-closed (`foregroundCommand`) | **unchanged** — the tty's foreground job (desk: `echo THIS MUST NEVER RUN` to a zsh pane → `wouldRunAsShell: zsh`) |
+| Liveness, tty reuse (`checkAlive`, `TTYOwner`) | **unchanged** (desk: pane closed → `📍 ttys023 is gone — letting the binding go` on the next poll) |
+| The chip's title, refreshed every 10 s (`title(forTTY:)`) | the pane's title from `terminal list` (the agent's OSC title, as Terminal's `custom title`) |
+| Spawn menu's Active Terminals, ⏳ / 💀 (`activeAgentSessions`) | Orca's panes join Terminal's tabs (`OrcaBridge.liveTitles`), same `.last-<pid>` test |
+| Bring forward (`bringToFront`, menu rebind, reply pop-up's name) | `terminal switch`, then Orca's window raised (`raise(pid:)`). **Not exercised at the desk** (it would take Victor's screen) |
+| Centre on the pointer (`presentAtPointer`, the reply pop-up's walkie) | **gap**: falls back to bring-forward where it is — Orca's window is not moved |
+| Send / spawn flight (`terminalWindowFrame`) | flies to Orca's focused window (AX); a pane has no frame of its own |
+| A plain dictation over a Claude Code tab binds it (`frontClaudePromptTTY`) | **gap** — Terminal.app only |
+| Caret prompt's short envelope (`focusedTTY`, `AgentRules.known`) | **gap** for the caret in Orca (the bound route uses the tty and gets it) |
+| kamikaze (the `close-terminal` skill closes the session's Terminal window) | **not tried in Orca** — the skill is written for Terminal.app; at worst the pane is left at a shell, which the guard then refuses |
+| Rebind to… panel's liveness (`liveTitles` AppleScript) | **gap** — an Orca row reads *window closed*; Active Terminals and ⌘⌃B work |
+
+### Proven on the desk (installed build, `POST /test/orca`)
+
+- `panes` / `front`: Orca's panes with their ttys; the front pane by Orca's own answer.
+- Guard: a zsh pane refused (`wouldRunAsShell: zsh`); a `cat` pane delivered, text on screen.
+- `-`-leading text: refused before `--text=` (and the refusal was then `targetGone` — fixed: Orca refusing
+  a line is `.failed`, only *no pane on the tty* is `targetGone`); delivered after.
+- Spawn (`POST /test/spawn`): `~/workspace` added as a folder project, tab on `ttys023`, Claude took the
+  prompt in 2.8 s, the relay bound it; a second prompt through `POST /test/dictation` went down the
+  ordinary bound route (`foreground=claude — 102 chars`) and was answered; the status line wore 🎙️.
+- Closed pane → unbound by the 10 s poll.
+- **Victor used it while it was being tested**: at 13:28 a dictated 🔼 ↑ to `training-assistant` opened as an
+  Orca tab (the project added as git) and bound itself; the next `relay-restart.sh` re-bound that Orca pane
+  (`→ re-bound to ttys015`) — the restore path, live.
+- One unexplained miss: for a minute after one launch, Active Terminals left out a live Orca session three
+  times in a row, then listed it on every call after the next relaunch. A log line now names the case
+  (`🐋 sessions: Orca's ttysNNN — … an agent runs there, not listed`).
+
+### The worktree question
+
+Orca's selling point is one git worktree per agent; Victor deploys from local and avoids worktrees
+(`~/.claude/CLAUDE.md`). Orca allows the main checkout — a registered repo's own folder is a workspace
+(`isMainWorktree: true`) — so the switch **never** creates a worktree; nothing calls `worktree create`.
