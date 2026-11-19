@@ -281,7 +281,8 @@ def main():
             continue
         if n >= needed(e) and not contested:
             if not a.dry_run:
-                r = subprocess.run([WALKIE_DICT, "add", e["right"], "--heard", e["heard"]], capture_output=True, text=True)
+                r = subprocess.run([WALKIE_DICT, "add", e["right"], "--heard", e["heard"]], capture_output=True, text=True,
+                                   env=dict(os.environ, WALKIE_DICT_BY="harvest"))
                 entry["walkie_dict"] = (r.stdout + r.stderr).strip()[-200:]
                 e["promoted"] = dt.datetime.now().strftime("%Y-%m-%d")
             applied.append(entry)

@@ -848,6 +848,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
                                      action: nil, keyEquivalent: "")
     /// Opens `GestureGuide` (2026-11-12).
     private let guide = NSMenuItem(title: "Gesture Guide", action: nil, keyEquivalent: "")
+    /// **The ✍️ editor's dictionary as a page** (2026-11-19, Victor: *"aș vrea să existe un
+    /// mode în care să văd și dicționarul redactorului, ideal și cu sursa+timpul când a fost
+    /// învățat sau dedus"*): `walkie-dict show` puts it together on the click — who taught each
+    /// word (an agent and the dictation it heard wrong, the weekly harvest, Wispr, the seed),
+    /// when, and the pairs the harvest is still counting — and opens it in the browser.
+    private let dictionaryRow = NSMenuItem(title: "Editor Dictionary", action: nil, keyEquivalent: "")
+    static var walkieDict: String { FileManager.default.homeDirectoryForCurrentUser.path + "/.local/bin/walkie-dict" }
 
     /// **The engine switches, top level since 2026-11-12** — they sat under
     /// `Engine` beside the engines; `applySwitchRows` ticks them at every open.
@@ -1082,6 +1089,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         guide.action = #selector(guideClicked)
         guide.target = self
         menu.addItem(guide)
+
+        dictionaryRow.image = Self.symbolIcon("character.book.closed")
+        dictionaryRow.action = #selector(dictionaryClicked)
+        dictionaryRow.target = self
+        menu.addItem(dictionaryRow)
 
         // The stamp answers "am I looking at what I just built?" without a click;
         // the click opens the guide at its foot, where the build and the
@@ -1980,6 +1992,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // cheap.
         guard menu === item.menu else { return }
         SessionLabel.refresh()
+        // Greyed, never hidden, when the script is not installed — and it says why.
+        let dictInstalled = FileManager.default.fileExists(atPath: Self.walkieDict)
+        dictionaryRow.isEnabled = dictInstalled
+        dictionaryRow.toolTip = dictInstalled
+            ? "Every word the ✍️ editor knows: who taught it (an agent, the weekly harvest, Wispr), when, and the dictation it came from."
+            : "walkie-dict is not installed at ~/.local/bin"
         applyHeader()
         applyAutoAttachRows()
         // 🧾 cached for 5 min; a stale one refreshes in the background and the
@@ -2046,6 +2064,27 @@ final class StatusItem: NSObject, NSMenuDelegate {
     @objc private func versionClicked() {
         GestureGuide.logiGesturesOn = logiGesturesOn
         GestureGuide.show(at: .about)
+    }
+
+    @objc private func dictionaryClicked() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+            p.arguments = [Self.walkieDict, "show"]
+            p.standardOutput = FileHandle.nullDevice
+            let err = Pipe()
+            p.standardError = err
+            do {
+                try p.run()
+                p.waitUntilExit()
+                if p.terminationStatus != 0 {
+                    let why = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                    Log.error("📖 walkie-dict show failed (\(p.terminationStatus)): \(why.suffix(300))")
+                }
+            } catch {
+                Log.error("📖 could not run walkie-dict show: \(error)")
+            }
+        }
     }
 
     @objc private func guideClicked() {

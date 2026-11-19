@@ -3,6 +3,8 @@
 
     walkie-dict add "<right>" [--heard "<as it came out>"]   # both dictionaries, then sync
     walkie-dict sync [--dry-run]                             # merge both ways (Victor Addons, every 10 min)
+    walkie-dict show [--no-open]                             # the dictionary as a page: who taught each word, when
+    walkie-dict backfill                                     # the adds agents made before the log, from their transcripts
 
 **Why.** Victor, 2026-11-09: *"când modelul este 100% sigur … că mesajul dictat conține
 un cuvânt greșit … Claude să poată adăuga în dicționarul folosit de Walkie Talkie
@@ -214,9 +216,332 @@ def add(right, heard=None):
             adds.append((heard, right))
     if adds:
         write_local(lines, adds, set(), {})
+    log_add(right, heard)
     sync(quiet=True)
     print(f"✓ {right}" + (f"  ({heard} → {right})" if heard else "") +
           " — ✍️ editor now; Wispr from its next start or Hub sync")
+
+
+# ---- provenance and the page (2026-11-19) -------------------------------------------------
+#
+# Victor: *"aș vrea să existe un mode în care să văd și dicționarul redactorului, ideal și cu
+# sursa+timpul când a fost învățat sau dedus"*. `vocabulary.txt` holds no provenance, so it is
+# put together from what each writer leaves behind:
+#   - `vocabulary-log.jsonl` — every `add` from now on: when, who (`WALKIE_DICT_BY`, else the
+#     agent found up the process tree), its Claude session and folder; `backfill` writes the same
+#     records for the adds agents made before the log, read off their transcripts;
+#   - `dict-harvest/ledger.json` — what the weekly harvest deduced from transcripts, with the
+#     sightings (quote + the dictation it came from), promoted or still counting;
+#   - Wispr's own `Dictionary` rows — `createdAt`, `source` (`manual`, `user_edits` = learned from
+#     his corrections, `default`), how often it was used;
+#   - the seed — the lines above the synced section, written 2026-10-22.
+
+ADD_LOG = os.path.join(HOME, "vocabulary-log.jsonl")
+LEDGER = os.path.join(HOME, "dict-harvest", "ledger.json")
+PAGE = os.path.expanduser("~/Library/Caches/ro.victorrentea.wispr-relay/dictionary.html")
+PROJECTS = os.path.expanduser("~/.claude/projects")
+
+
+def caller():
+    """The agent that ran us: the first claude / codex / copilot up the process tree."""
+    import subprocess
+    pid = os.getppid()
+    for _ in range(12):
+        try:
+            out = subprocess.run(["ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=2).stdout.strip()
+        except Exception:
+            return None
+        if not out:
+            return None
+        ppid, comm = out.split(None, 1)
+        name = os.path.basename(comm).lower()
+        for agent in ("claude", "codex", "copilot", "cursor"):
+            if agent in name:
+                return agent
+        pid = int(ppid)
+        if pid <= 1:
+            return None
+    return None
+
+
+def log_add(right, heard, **extra):
+    rec = {"ts": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+           "right": right, "heard": heard,
+           "by": os.environ.get("WALKIE_DICT_BY") or caller() or "shell",
+           "session": os.environ.get("CLAUDE_CODE_SESSION_ID"), "cwd": os.getcwd()}
+    rec.update(extra)
+    try:
+        with open(ADD_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def read_log():
+    out = []
+    if os.path.exists(ADD_LOG):
+        for line in open(ADD_LOG, encoding="utf-8"):
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+    return out
+
+
+ADD_CALL = re.compile(r"""(?:^|[;&|(\n]\s*)walkie-dict\s+add\s+(.*)""")
+
+
+def parse_add(cmd):
+    """`walkie-dict add "<right>" [--heard "<heard>"]` inside a shell command → (right, heard)."""
+    import shlex
+    m = ADD_CALL.search(cmd)
+    if not m:
+        return None
+    rest = re.split(r"\s(?:2>|>|\||&&|;)", " " + m.group(1))[0].strip()
+    try:
+        args = shlex.split(rest)
+    except ValueError:
+        return None
+    if not args or args[0].startswith("-"):
+        return None
+    heard = args[args.index("--heard") + 1] if "--heard" in args[:-1] else None
+    return args[0], heard
+
+
+def spoken(content):
+    """A user turn's own words — not a tool result, not a skill's body."""
+    if isinstance(content, list):
+        content = "\n".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+    if not isinstance(content, str) or not content.strip():
+        return None
+    if content.startswith(("Base directory for this skill", "<command-", "<local-command", "Caveat:")):
+        return None
+    return content
+
+
+def transcript_adds(path, want=None):
+    """Every `walkie-dict add` a transcript ran: (ts, right, heard, cwd, session, the prompt before it)."""
+    found, prompt = [], None
+    try:
+        data = open(path, encoding="utf-8").read()
+    except OSError:
+        return found
+    if "walkie-dict" not in data:
+        return found
+    for line in data.splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if e.get("type") == "user":
+            prompt = spoken(e.get("message", {}).get("content")) or prompt
+        if e.get("type") != "assistant":
+            continue
+        for b in e.get("message", {}).get("content") or []:
+            if not (isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Bash"):
+                continue
+            call = parse_add(b.get("input", {}).get("command", ""))
+            if call and (want is None or key(call[0]) == key(want)):
+                found.append({"ts": (e.get("timestamp") or "")[:19] + "Z", "right": call[0], "heard": call[1],
+                              "cwd": e.get("cwd"), "session": e.get("sessionId"), "prompt": (prompt or "")[:600]})
+    return found
+
+
+def backfill():
+    """The adds made before the log existed, read off the Claude transcripts since walkie-dict."""
+    import glob
+    since = os.path.getmtime(os.path.realpath(__file__)) - 30 * 86400
+    have = {(r.get("right"), (r.get("ts") or "")[:16]) for r in read_log()}
+    new = []
+    for path in glob.glob(os.path.join(PROJECTS, "*", "*.jsonl")):
+        if os.path.getmtime(path) < since:
+            continue
+        for r in transcript_adds(path):
+            # An eval's sandbox ran it under `WALKIE_EVAL_LOG`: nothing was added.
+            if any(t in (r.get("cwd") or "") for t in ("/evals/", "/tmp/", "/var/folders/", "/private/")):
+                continue
+            if (r["right"], r["ts"][:16]) not in have:
+                have.add((r["right"], r["ts"][:16]))
+                new.append(dict(r, by="claude", backfilled=True))
+    new.sort(key=lambda r: r["ts"])
+    with open(ADD_LOG, "a", encoding="utf-8") as f:
+        for r in new:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    print(f"{len(new)} add(s) recovered from transcripts → {ADD_LOG}")
+
+
+def prompt_of(rec):
+    """The words that led to a logged add: read once from its session's transcript."""
+    if rec.get("prompt") or not rec.get("session"):
+        return rec.get("prompt")
+    import glob
+    for path in glob.glob(os.path.join(PROJECTS, "*", rec["session"] + ".jsonl")):
+        hits = transcript_adds(path, want=rec["right"])
+        if hits:
+            return hits[-1]["prompt"]
+    return None
+
+
+def wispr_rows():
+    rows = {}
+    try:
+        db = sqlite3.connect(f"file:{WISPR_DB}?mode=ro", uri=True, timeout=5)
+        for phrase, repl, source, created, used, last in db.execute(
+                "SELECT phrase, replacement, source, createdAt, frequencyUsed + remoteFrequencyUsed, lastUsed "
+                "FROM Dictionary WHERE teamDictionaryId = ? AND isSnippet = 0 AND isDeleted = 0", (PERSONAL,)):
+            rows[key(phrase)] = {"phrase": phrase, "replacement": repl, "source": source,
+                                 "created": created, "used": used or 0, "last": last}
+    except sqlite3.Error:
+        pass
+    return rows
+
+
+def local_time(ts):
+    if not ts:
+        return ""
+    t = ts.strip().replace(" +00:00", "+00:00").replace("Z", "+00:00")
+    for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%d %H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%d"):
+        try:
+            d = datetime.datetime.strptime(t, fmt)
+            if d.tzinfo:
+                d = d.astimezone()
+                return d.strftime("%Y-%m-%d %H:%M")
+            return d.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return ts[:16]
+
+
+def clean(prompt):
+    """The dictation without its envelope rows (`🎤 · 💻`, `[dictated …]`, `[📁=…]`)."""
+    if not prompt:
+        return prompt
+    keep = [l for l in prompt.split("\n")
+            if not (l.strip() and len(l) < 40 and not re.search(r"[^\W\d_]", l))   # `🎤 · 💻 · 📸 ×1`
+            and not re.match(r"\s*(\[dictated|\[Transcribed|\[📁|\[📸\d+ (?:auto|at)|🎤 ·|\[a question)", l)]
+    return "\n".join(keep).strip()
+
+
+def marked(text, heard):
+    """`text` escaped, with what was misheard highlighted."""
+    import html
+    out = html.escape(text)
+    if heard:
+        out = re.sub(re.escape(html.escape(heard)), lambda m: f"<mark>{m.group(0)}</mark>", out, flags=re.I)
+    return out
+
+
+def show(open_it=True):
+    import html
+    esc = html.escape
+    lines, _ = read_local()
+    wispr = wispr_rows()
+    log = read_log()
+    by_key = {}
+    for r in log:                                     # the newest add of a word wins
+        for k in filter(None, [key(r["right"]) if r.get("right") else None, key(r["heard"]) if r.get("heard") else None]):
+            by_key[k] = r
+    ledger = json.load(open(LEDGER, encoding="utf-8")) if os.path.exists(LEDGER) else {}
+    harvested = {key(e["heard"]): e for e in ledger.values() if e.get("promoted")}
+    harvested.update({key(e["right"]): e for e in ledger.values() if e.get("promoted")})
+
+    def sightings(e):
+        out = []
+        for ts, s in sorted(e.get("sightings", {}).items()):
+            out.append(f"<li><time>{esc(local_time(ts))}</time> <span class=ev>{esc(s.get('evidence', ''))}</span> "
+                       f"“{esc(s.get('quote', ''))}”<div class=said>{esc(s.get('dictation', ''))}</div></li>")
+        return "<ul class=sight>" + "".join(out) + "</ul>" if out else ""
+
+    # One add writes the word and its `heard → word` pair; the pair's row says both.
+    paired = {key(r["right"]) for r in log if r.get("heard")}
+    paired |= {key(e[1]) for e in (parse_line(l) for l in lines) if e and e[1]}
+    rows, section, synced, counts = [], "", False, {}
+    for raw in lines:
+        st = raw.strip()
+        if st.startswith("#"):
+            if st == SECTION:
+                synced = True
+            if not st.startswith("# Vocabulary") and not st.startswith("# `") and len(st) < 80:
+                section = st.lstrip("# ").strip()
+            continue
+        e = parse_line(raw)
+        if not e:
+            continue
+        heard, written = e
+        k = key(heard)
+        if not written and k in paired:
+            continue
+        w, rec, hv = wispr.get(k), by_key.get(k), harvested.get(k)
+        detail = ""
+        if hv:
+            badge, cls, when = "🌾 harvested from transcripts", "harvest", hv["promoted"]
+            detail = sightings(hv)
+        elif rec:
+            who = rec.get("by", "?")
+            where = os.path.basename(rec.get("cwd") or "") or "?"
+            badge = ("🤖 " + who + " in " + where) if who not in ("shell", "harvest") else ("🌾 harvest" if who == "harvest" else "⌨️ by hand")
+            cls, when = ("harvest" if who == "harvest" else "agent"), rec.get("ts")
+            said = clean(prompt_of(rec))
+            detail = f"<div class=said>{marked(said, rec.get('heard'))}</div>" if said else ""
+        elif w and w["source"] == "user_edits":
+            badge, cls, when = "✏️ Wispr learned it from your corrections", "wispr", w["created"]
+        elif w and synced:
+            badge, cls, when = "📕 Wispr dictionary (Hub, or an agent before the log)", "wispr", w["created"]
+        elif not synced:
+            badge, cls, when = "🌱 seed — from Wispr's dictionary and the local model's prompt", "seed", "2026-10-22"
+        else:
+            badge, cls, when = "❓ unknown", "seed", ""
+        counts[cls] = counts.get(cls, 0) + 1
+        wcol = ""
+        if w:
+            wcol = f"in Wispr since {esc(local_time(w['created']))}" + (f" · used {w['used']}×" if w["used"] else "")
+        sec = "" if synced else esc(section)
+        term = (f"<s>{esc(heard)}</s> → <b>{esc(written)}</b>" if written else f"<b>{esc(heard)}</b>")
+        rows.append((local_time(when), f"<tr class='{cls}'><td class=term>{term}</td><td><span class='badge {cls}'>{esc(badge)}</span>"
+                     f"{detail}</td><td class=when>{esc(local_time(when))}</td><td class=sec>{sec}</td><td class=wis>{wcol}</td></tr>"))
+    rows.sort(key=lambda r: r[0], reverse=True)       # newest learned first
+
+    pending = sorted((e for e in ledger.values() if not e.get("promoted")),
+                     key=lambda e: max(e.get("sightings", {}) or {"": 0}), reverse=True)
+    prow = "".join(f"<tr class=pending><td class=term><s>{esc(e['heard'])}</s> → <b>{esc(e['right'])}</b></td>"
+                   f"<td>{sightings(e)}</td><td class=when>{esc(local_time(max(e.get('sightings') or {'': ''})))}</td>"
+                   f"<td class=sec>{len(e.get('sightings', {}))} sighting(s)</td><td></td></tr>" for e in pending)
+    harvest_runs = sorted(f for f in os.listdir(os.path.dirname(LEDGER)) if f.endswith(".md")) if os.path.isdir(os.path.dirname(LEDGER)) else []
+    last_run = harvest_runs[-1][:-3] if harvest_runs else "never"
+    summary = " · ".join(f"{n} {c}" for c, n in sorted(counts.items(), key=lambda x: -x[1]))
+    page = f"""<!doctype html><meta charset=utf-8><title>Editor dictionary</title>
+<style>
+:root{{--bg:#fff;--fg:#1d1d1f;--mute:#6e6e73;--line:#e5e5ea;--card:#f5f5f7;--seed:#e8f5e9;--agent:#e3f2fd;--harvest:#fff8e1;--wispr:#f3e5f5}}
+@media (prefers-color-scheme:dark){{:root{{--bg:#1c1c1e;--fg:#f2f2f7;--mute:#98989f;--line:#38383a;--card:#2c2c2e;--seed:#1e3323;--agent:#152a3f;--harvest:#3a3216;--wispr:#33203a}}}}
+body{{background:var(--bg);color:var(--fg);font:14px -apple-system,system-ui,sans-serif;margin:24px}}
+h1{{font-size:20px;margin:0 0 4px}} h2{{font-size:16px;margin:28px 0 8px}} .mute{{color:var(--mute)}}
+input{{font:inherit;padding:6px 10px;width:320px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);margin:12px 0}}
+table{{border-collapse:collapse;width:100%}} td{{border-top:1px solid var(--line);padding:6px 8px;vertical-align:top}}
+td.term{{white-space:nowrap}} td.when,td.sec,td.wis{{color:var(--mute);white-space:nowrap;font-size:12px}}
+s{{color:var(--mute)}} .badge{{border-radius:6px;padding:1px 6px;font-size:12px;white-space:nowrap}}
+.badge.seed{{background:var(--seed)}} .badge.agent{{background:var(--agent)}} .badge.harvest{{background:var(--harvest)}} .badge.wispr{{background:var(--wispr)}}
+.said{{color:var(--mute);font-size:12px;margin-top:3px;max-width:680px;white-space:pre-wrap;max-height:4.5em;overflow:hidden}}
+.said:hover{{max-height:none}} mark{{background:#ffd60a55;color:inherit;border-radius:3px;padding:0 2px}} ul.sight{{margin:4px 0 0;padding-left:16px;font-size:12px}} .ev{{font-style:italic;color:var(--mute)}}
+</style>
+<h1>✍️ Editor dictionary</h1>
+<div class=mute>{len(rows)} entries in <code>{esc(VOCAB)}</code> — {esc(summary)}. Newest first; hover a dictation to read it whole.
+Harvest last ran {esc(last_run)} (weekly, Saturdays 03:30).</div>
+<input id=q placeholder="Filter…" autofocus>
+<table id=t>{"".join(r[1] for r in rows)}</table>
+<h2>🌾 Deduced from transcripts, not in the dictionary yet ({len(pending)})</h2>
+<div class=mute>The weekly harvest promotes a pair once it has been seen often enough; until then it is only counted.</div>
+<table id=p>{prow}</table>
+<script>
+q.oninput=()=>{{const v=q.value.toLowerCase();for(const tr of document.querySelectorAll('tr'))tr.style.display=tr.textContent.toLowerCase().includes(v)?'':'none'}}
+</script>"""
+    os.makedirs(os.path.dirname(PAGE), exist_ok=True)
+    with open(PAGE, "w", encoding="utf-8") as f:
+        f.write(page)
+    print(PAGE)
+    if open_it:
+        import subprocess
+        subprocess.run(["open", PAGE])
 
 
 def main(argv):
@@ -227,6 +552,10 @@ def main(argv):
             f.write(json.dumps({"cmd": "walkie-dict", "argv": argv}, ensure_ascii=False) + "\n")
         print("✓ recorded")
         return
+    if argv[:1] == ["show"]:
+        return show(open_it="--no-open" not in argv)
+    if argv[:1] == ["backfill"]:
+        return backfill()
     with open(LOCK, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if argv[:1] == ["sync"]:
