@@ -104,7 +104,7 @@ import AppKit
 /// folder row with live sessions in it grows a chevron and a submenu on hover —
 /// **its click still opens a new session**, unlike an `NSMenu` parent — and
 /// the sessions it claims leave *Active Terminals*. A session told `kamikaze`
-/// is offered nowhere; one working right now wears a ⏳.
+/// is offered with a 💀 (hidden until 2026-11-19); one working right now wears a ⏳.
 ///
 /// # …on lines of their own, not in a submenu (2026-10-09)
 ///
@@ -161,6 +161,8 @@ enum SpawnFolderMenu {
         var bound: Bool = false
         /// The session is working right now — a ⏳ in front of its name.
         var busy: Bool = false
+        /// The session was told `kamikaze` — a 💀 instead (2026-11-19).
+        var kamikazed: Bool = false
     }
 
     /// **The folder rows, in the order they are drawn**: the pinned ones,
@@ -268,6 +270,8 @@ enum SpawnFolderMenu {
     static let iconGap: CGFloat = 6
     /// In front of every folder name: *a click here opens a new session*.
     static let sparkle = "✨ "
+    /// A project's own mark in the ✨'s slot (`ProjectIcons`).
+    static let markSize: CGFloat = 20
     /// A session's line under its folder: a smaller face and row, so it reads
     /// as belonging to the folder above rather than as a folder of its own.
     private static let sessionFont = NSFont.systemFont(ofSize: 15)
@@ -443,7 +447,8 @@ enum SpawnFolderMenu {
     }
 
     private static func choice(_ item: ActiveTerminals.Item) -> Choice {
-        Choice(name: item.name, path: "", tty: item.tty, bound: item.bound, busy: item.busy)
+        Choice(name: item.name, path: "", tty: item.tty, bound: item.bound, busy: item.busy,
+               kamikazed: item.kamikazed)
     }
 
     /// Look for the running sessions off the main thread and hand them to
@@ -856,7 +861,10 @@ enum SpawnFolderMenu {
 
     /// What a session row draws as its name: the ⏳ when it is working.
     static func sessionText(_ choice: Choice) -> String {
-        choice.busy ? "⏳ " + choice.name : choice.name
+        // About to die outranks working (2026-11-19, Victor: *"if a session was
+        // already marked with Kamikaze, it should show a death skull instead of
+        // the hourglass"*).
+        choice.kamikazed ? "💀 " + choice.name : choice.busy ? "⏳ " + choice.name : choice.name
     }
 
     /// The submenu's rows: the live sessions, or one dimmed `Looking…` while
@@ -1231,9 +1239,19 @@ final class FolderRow: NSView {
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail
         // A folder row says *a click here opens a new session* with the ✨ in
-        // front of its name; a session row says *working* with a ⏳.
+        // front of its name — or the project's own mark in the ✨'s slot
+        // (`ProjectIcons`, 2026-11-19); a session row says *working* with a ⏳.
+        var prefix = enabled ? SpawnFolderMenu.sparkle : ""
+        if choice.tty == nil, enabled, let mark = ProjectIcons.mark(for: choice.name) {
+            let slot = (SpawnFolderMenu.sparkle as NSString).size(withAttributes: [.font: font]).width
+            let side = min(SpawnFolderMenu.markSize, slot - 4)
+            ProjectIcons.draw(mark, in: NSRect(x: x, y: (bounds.height - side) / 2, width: side, height: side),
+                              ink: ink)
+            x += slot
+            prefix = ""
+        }
         let name = choice.tty == nil
-            ? (enabled ? SpawnFolderMenu.sparkle : "") + choice.name
+            ? prefix + choice.name
             : SpawnFolderMenu.sessionText(choice)
         let text = NSAttributedString(string: name,
                                       attributes: [.font: font, .foregroundColor: ink,

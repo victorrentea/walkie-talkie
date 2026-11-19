@@ -177,6 +177,23 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
   the hand reaches it. It fades and hides with the menu.
 - **`WT_SHOOT_MENU` draws it open** with the real sessions; `WT_SHOOT_BOUND=ttysNNN` ticks one.
 
+## A project's own mark, and the 💀 (2026-11-19)
+
+- **A folder row wears its project's mark in the ✨'s slot** (Victor: *"for Walkie Talkie … the icon
+  of the application from the menu bar. VictorNet … the GSM thing. VS Code … Petclinic … the face of a
+  cat. Human review, the … favicon … Gmail dark CSS … the Gmail logo. Insomnia … the coffee icon …
+  The rest remain with stars"*). `ProjectIcons`, keyed by folder name (pinned rows and *Workspace ›*
+  alike): walkie-talkie `Glyphs.walkie`, victor-net SF `cellularbars`, victor-insomnia
+  `cup.and.saucer.fill` (template, in the row's ink), victor-vsc VS Code's app icon, petclinic and
+  `petclinic-*` 🐱, human-review 👱🏻‍♂️ (the review page's favicon), gmail-dark-css
+  `assets/gmail-logo.png` (Chrome's icon if missing). Drawn 20 pt in the width "✨ " measures, so
+  `measure()` is unchanged. `WT_SHOOT_MENU` shows them.
+- **A session told `kamikaze` is offered with a 💀 in the ⏳'s place** (Victor: *"it should show a death
+  skull instead of the hourglass … It's about to die"*) — it was hidden from 2026-10-07. It still binds
+  on a click. `agentState` scans a transcript for the word **or** the 💀: since 2026-11-12 the mod
+  leaves only `· 💀` in the prompt and moves `kamikaze` into a hook record, so the word-only scan had
+  stopped finding any 🔼 ↓ session (they showed ⏳ instead of being hidden).
+
 ## Sessions under their folders (2026-10-07)
 
 Victor: *"to have the active session grouped under [the projects] … only if you've never sent
@@ -429,4 +446,4 @@ star to get them onto the main list"*.
 - Do not hide *Active terminals* when nothing is running, move it off the last row, or let a
   pick's words out before its bind lands.
 - Do not make a folder row's click do anything but start a new session, and do not put the folder submenus back.
-- Do not offer a session that was sent `kamikaze`.
+- Do not hide a session that was sent `kamikaze` — it is offered with a 💀 (below).

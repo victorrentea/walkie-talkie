@@ -49,6 +49,9 @@ enum ActiveTerminals {
         /// (2026-10-07, Victor: *"to have a hourglass in front of them if you
         /// detect that Claude session to be active right now"*).
         var busy: Bool = false
+        /// **Told `kamikaze`: it closes when its turn ends** — drawn as a 💀
+        /// in the ⏳'s place (2026-11-19).
+        var kamikazed: Bool = false
     }
 
     /// One submenu row, already decided.
@@ -60,6 +63,7 @@ enum ActiveTerminals {
         /// new session to the terminal it was already going to.
         let bound: Bool
         var busy: Bool = false
+        var kamikazed: Bool = false
     }
 
     /// **Sessions → rows.** The folder name alone when it is unique; when two
@@ -94,7 +98,8 @@ enum ActiveTerminals {
     private static func rows(_ sessions: [Session], names: [String], bound: String?) -> [Item] {
         sessions.indices
             .map { Item(tty: short(sessions[$0].tty), name: names[$0],
-                        bound: short(sessions[$0].tty) == bound, busy: sessions[$0].busy) }
+                        bound: short(sessions[$0].tty) == bound, busy: sessions[$0].busy,
+                        kamikazed: sessions[$0].kamikazed) }
             .sorted {
                 let order = $0.name.localizedStandardCompare($1.name)
                 return order == .orderedSame ? $0.tty < $1.tty : order == .orderedAscending

@@ -10,6 +10,16 @@ final class ActiveTerminalsTests: XCTestCase {
         ActiveTerminals.Session(tty: tty, directory: dir, title: title)
     }
 
+    func testAKamikazeSessionIsOfferedMarkedAsDying() {
+        // 2026-11-19: told `kamikaze`, it stays on the menu with a 💀 (it was hidden).
+        var s = session("ttys009", "/Users/v/workspace/walkie-talkie")
+        s.busy = true
+        s.kamikazed = true
+        let item = ActiveTerminals.items([s], boundTTY: nil).first
+        XCTAssertEqual(item?.kamikazed, true)
+        XCTAssertEqual(item?.busy, true)
+    }
+
     func testNoSessionsIsNoRows() {
         XCTAssertEqual(ActiveTerminals.items([], boundTTY: "ttys004"), [])
     }

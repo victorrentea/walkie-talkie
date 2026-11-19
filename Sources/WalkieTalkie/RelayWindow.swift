@@ -2949,7 +2949,8 @@ private let heardLabel = NSTextField(labelWithString: "")
                       relativeTo: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
             .standardizedFileURL.resolvingSymlinksInPath()
         var dir = exe.deletingLastPathComponent()
-        for _ in 0..<4 {
+        // Six levels: `.build/debug` now resolves to `.build/out/Products/Debug`.
+        for _ in 0..<6 {
             candidates.append(dir.appendingPathComponent("assets/\(name).png"))
             dir = dir.deletingLastPathComponent()
         }

@@ -1180,11 +1180,13 @@ final class TerminalBinding {
                     .compactMap({ pid in publishedDirectory(ownedBy: pid).map { (pid, $0) } }).first
             else { return nil }
             let state = agentState(pid: pid)
-            // **Told to close when done: not offered** (2026-10-07) — see
+            // **Told to close when done: offered with a 💀** (2026-11-19, Victor:
+            // *"it should show a death skull instead of the hourglass … It's about
+            // to die"*) — hidden from 2026-10-07 until then. See
             // `ActiveTerminals.isKamikaze`.
-            if state.kamikazed { return nil }
             let title = titles[tty].flatMap { $0.isEmpty ? nil : $0 }
-            return ActiveTerminals.Session(tty: tty, directory: dir, title: title, busy: state.busy)
+            return ActiveTerminals.Session(tty: tty, directory: dir, title: title, busy: state.busy,
+                                           kamikazed: state.kamikazed)
         }
     }
 
@@ -1215,10 +1217,14 @@ final class TerminalBinding {
     /// (a string `content`, or the `text` blocks of an array).
     private static func sentKamikaze(transcript: URL) -> Bool {
         guard let data = try? Data(contentsOf: transcript, options: .mappedIfSafe) else { return false }
-        let word = Data("kamikaze".utf8), user = Data(#""type":"user""#.utf8)
-        guard data.range(of: word) != nil else { return false }
+        // **The word or the skull** (2026-11-19): since 2026-11-12 the mod leaves
+        // only `· 💀` in the prompt and moves `kamikaze` into the hook's context,
+        // a record of its own — a scan for the word alone never saw a 🔼 ↓ again.
+        let marks = [Data("kamikaze".utf8), Data("💀".utf8)], user = Data(#""type":"user""#.utf8)
+        func marked(_ bytes: Data) -> Bool { marks.contains { bytes.range(of: $0) != nil } }
+        guard marked(data) else { return false }
         for line in data.split(separator: UInt8(ascii: "\n"))
-        where line.range(of: word) != nil && line.range(of: user) != nil {
+        where marked(line) && line.range(of: user) != nil {
             guard let record = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
                   let message = record["message"] as? [String: Any] else { continue }
             let texts: [String]
