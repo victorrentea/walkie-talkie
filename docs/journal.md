@@ -16425,3 +16425,14 @@ showed *macOS addon walk animation* where the pane said `✳ victor-macos-addons
 is no setting for it. So `OrcaBridge.syncTabTitles` (every 10 s while the switch is on, from launch) copies
 each Claude-shaped pane title onto its tab, leading glyph dropped. First tick: 22 tabs renamed in 3 s; the next
 ticks renamed none.
+
+### Ask before closing only while Claude works — not possible in Orca (2026-11-19, evening)
+
+Victor wanted Orca to ask before closing a tab only while Claude is not done, as Terminal.app does through
+`~/.claude/hooks/close-sentinel.sh` (hooks swap the tab's profile: `ClaudeKeys-Ask` while working or ending on a
+question, `ClaudeKeys-Quiet` otherwise). Orca has no such knob: its guard (`running-terminal-close-guard.ts`)
+probes the pane and calls any non-shell foreground `live` — `claude` always is — and the only switch is the
+global `skipCloseTerminalWithRunningProcessConfirm` (*Confirm before closing active chats or terminals*), which
+the runtime's `settings.update` RPC does not accept and no plugin hook reaches. The one way left was Walkie
+taking ⌘W in Orca and closing a done session's tab itself through the CLI (CLI closes skip the guard); Victor
+chose to leave it: Orca keeps never asking.
