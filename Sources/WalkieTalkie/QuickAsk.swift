@@ -78,25 +78,92 @@ final class QuickAsk {
         nothing else on it: [n] <url>. Last, only if the substance of your answer \
         differs from the one you were given, a line with just: CHANGED
         """ }
-    static let webPrompt = """
+    static var webPrompt: String { """
         You were given a spoken question by Victor and a quick answer to it, written \
         from memory without any checking. Search the web for evidence, writing \
         nothing before your searches are done, and write the answer again: \
         corrected where the sources say otherwise, completed where they add \
         something that matters.
-        """ + " " + citeFormat
-    static let reviewPrompt = reviewTask + " " + citeFormat
+        """ + videoHint + " " + citeFormat }
+    static var reviewPrompt: String { reviewTask + " " + citeFormat }
     /// The review after a 🪏 dig more keeps what it found, at its length.
-    static let digReviewPrompt = reviewTask + " Keep the new information that holds up. " + digCiteFormat
-    private static let reviewTask = """
+    static var digReviewPrompt: String { reviewTask + " Keep the new information that holds up. " + digCiteFormat }
+    private static var reviewTask: String { """
         You are an adversarial reviewer. You get a spoken question by Victor and an \
         answer to it with quotes and sources. Assume it is wrong somewhere and try \
         to prove it: open the cited pages and check that each quote is really \
         there and really means what the answer says (out of context, outdated, \
         about something else, a weak source); look for what is missing and \
-        changes the answer. Write nothing before your checks are done, then write \
-        the answer again, fixed.
-        """
+        changes the answer.
+        """ + (youTube == nil ? "" : " A video's quote is checked in its transcript.") + videoHint + """
+         Write nothing before your checks are done, then write the answer again, fixed.
+        """ }
+
+    /// **▶️ What people said on camera is a source too** (2026-11-19, Victor:
+    /// *"when you do the research on question mode … include in your research
+    /// YouTube transcripts of videos … When someone comes out and speaks in front
+    /// of a camera, they really mean what they're saying"*). The 🔎 check, 🪏 more
+    /// and the 🧐 review may run one command besides WebSearch/WebFetch:
+    /// `helpers/yt-transcript` (`search "<query>"` lists videos through yt-dlp,
+    /// `<url>` prints the transcript in ~20 s lines stamped `[m:ss = Ns]`), copied
+    /// to `~/.walkie-talkie/tools/`, read-only and outside the workers' own folder
+    /// (a path with no space, for the permission rule), and allowed as `Bash(<that path>:*)` — any other command is refused,
+    /// `-p` having no one to ask. A video is cited at its moment (`&t=Ns`).
+    /// Measured on *"who said delete half of your markdowns once you switch to
+    /// Opus 5.5"*: the web alone found a blog's paraphrase; the review, reading
+    /// the transcript, found Boris Cherny in the YC interview at 6:58.
+    /// No yt-dlp → the tools and prompts are the web's alone, as before.
+    static let youTube: String? = {
+        let fm = FileManager.default
+        guard ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"].contains(where: fm.isExecutableFile(atPath:)) else {
+            Log.info("⚡ ▶️ no yt-dlp — the checks search the web without YouTube")
+            return nil
+        }
+        var sources: [URL] = []
+        if let res = Bundle.main.resourcePath { sources.append(URL(fileURLWithPath: res).appendingPathComponent("yt-transcript")) }
+        var dir = URL(fileURLWithPath: CommandLine.arguments[0],
+                      relativeTo: URL(fileURLWithPath: fm.currentDirectoryPath)).standardizedFileURL.resolvingSymlinksInPath()
+        for _ in 0..<5 {
+            dir = dir.deletingLastPathComponent()
+            sources.append(dir.appendingPathComponent("helpers/yt-transcript"))
+        }
+        let bin = Outbox.home.appendingPathComponent("tools")
+        let dest = bin.appendingPathComponent("yt-transcript")
+        guard let source = sources.first(where: { fm.fileExists(atPath: $0.path) }),
+              !dest.path.contains(" ") else {
+            Log.error("⚡ ▶️ yt-transcript not found beside the binary (or a home with a space) — no YouTube in the checks")
+            return nil
+        }
+        do {
+            try fm.createDirectory(at: bin, withIntermediateDirectories: true)
+            try? fm.removeItem(at: dest)
+            try fm.copyItem(at: source, to: dest)
+            try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dest.path)
+        } catch {
+            Log.error("⚡ ▶️ could not install yt-transcript: \(error)")
+            return nil
+        }
+        return dest.path
+    }()
+    private static var videoHint: String {
+        guard let yt = youTube else { return "" }
+        return " " + """
+            Videos are sources too: what people say on camera (talks, interviews, \
+            podcasts, launch streams) is often written nowhere else, so whenever the \
+            answer may lie in what someone said, look on YouTube as well, with this \
+            command only: `\(yt) search "<query>"` lists videos, `\(yt) <video url>` \
+            prints its transcript with timestamps a page at a time (`… from <seconds>` \
+            for the next page), and `\(yt) <video url> find "<words>"` only the moments \
+            that say them. Cite a video by its watch URL with \
+            &t=<seconds>s at the moment the words are said; the quote is words from \
+            the transcript.
+            """
+    }
+    /// A YouTube page: no text fragment on its link (the moment is in `&t=`).
+    static func isVideo(_ url: URL) -> Bool {
+        let host = (url.host ?? "").lowercased()
+        return host == "youtu.be" || host == "youtube.com" || host.hasSuffix(".youtube.com")
+    }
     /// **🌐 More: one more round on the web** (2026-10-22, Victor: *"un buton mic …
     /// more, prin care să mai solicit mai mult research pe internet … mai multe
     /// dovezi și alte surse"*). Given the answer already checked and the sources it
@@ -105,7 +172,7 @@ final class QuickAsk {
     /// să dig deeper … nu doar să îmi susții sau să-mi infirmi … ci să cauți cumva
     /// mai profund, mai multe surse, nu doar cu scopul de a valida informația, ci
     /// de a mai aduna alte informații noi"*) — at `digCiteFormat`'s length.
-    static let morePrompt = """
+    static var morePrompt: String { """
         You get a spoken question by Victor and an answer to it already checked on \
         the web, with the sources it used. He wants to know more: dig deeper, in \
         sources other than the ones listed (other sites, primary sources, \
@@ -115,7 +182,7 @@ final class QuickAsk {
         the new sources contradict. Write nothing before your searches are done, \
         then write the answer again with the new information, the old sources \
         included where they still hold.
-        """ + " " + digCiteFormat
+        """ + videoHint + " " + digCiteFormat }
     /// A question with no answer by then is given up.
     static let timeout: TimeInterval = 45
     /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
@@ -153,7 +220,7 @@ final class QuickAsk {
             // **Just a blue ↗** (same day, Victor: *"doar o iconiță care să arate
             // o săgeată … pe un albastru, fără subliniere"*): the site's name is
             // the hover's, with the rest of the URL.
-            out += " " + ReplyPanel.link("↗", quote.isEmpty ? url : fragment(url, quote: quote))
+            out += " " + ReplyPanel.link("↗", quote.isEmpty || isVideo(url) ? url : fragment(url, quote: quote))
         }
         out += ns.substring(from: at)
         text = out.replacingOccurrences(of: " +([.,;:])", with: "$1", options: .regularExpression)
@@ -178,9 +245,17 @@ final class QuickAsk {
         return URL(string: s) ?? url
     }
 
-    /// The web check and the review, each.
+    /// The web check (and a 🪏 more round).
     static let checkTimeout: TimeInterval = 120
-    static let webTools = "WebSearch,WebFetch"
+    /// **The review is Fable's, and it takes longer** (2026-11-19, Victor:
+    /// *"Adversarial review this with the Fable is super important for me"*):
+    /// `WT_QUICK_REVIEW_MODEL` (`fable`) at `WT_QUICK_REVIEW_EFFORT` (`medium`) —
+    /// a better model at a higher effort than the Opus-low it checks. Measured on
+    /// one question with a transcript to read: 106 s, so 120 s would cut it.
+    static let reviewTimeout: TimeInterval = 240
+    /// The tools a check has, and the ones it may use without asking.
+    static var webTools: String { youTube == nil ? "WebSearch,WebFetch" : "WebSearch,WebFetch,Bash" }
+    static var webAllowed: String { youTube.map { "WebSearch,WebFetch,Bash(\($0):*)" } ?? "WebSearch,WebFetch" }
 
     /// **One turn of a conversation** (2026-10-15): what was asked — the whole
     /// envelope — the pictures that came with it, and the best answer it got
@@ -323,6 +398,8 @@ final class QuickAsk {
 
     var model: String { Self.setting("WT_QUICK_MODEL") ?? "opus" }
     var effort: String { Self.setting("WT_QUICK_EFFORT") ?? "low" }
+    var reviewModel: String { Self.setting("WT_QUICK_REVIEW_MODEL") ?? "fable" }
+    var reviewEffort: String { Self.setting("WT_QUICK_REVIEW_EFFORT") ?? "medium" }
 
     private static func setting(_ key: String) -> String? {
         let v = ProcessInfo.processInfo.environment[key] ?? ElevenLabsSource.fileValue(key)
@@ -556,7 +633,7 @@ final class QuickAsk {
             return endLocked(run)
         }
         // The reviewer starts while the web is searched.
-        let reviewer = start(run, prompt: review, tools: Self.webTools)
+        let reviewer = start(run, prompt: review, tools: Self.webTools, model: reviewModel, effort: reviewEffort)
         let asked = webInput ?? "Question: \(question)\n\nQuick answer, from memory: \(answer)"
         stage(run, web, Self.content(asked, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
             DispatchQueue.main.async { checks.web(text, false) }
@@ -572,7 +649,8 @@ final class QuickAsk {
             // search failed, the quick one.
             let all = found.map { "Question: \(question)\n\nAnswer, checked on the web:\n\($0)" }
                 ?? asked + "\n\n(The web check failed: \(error ?? "?"). Search yourself.)"
-            self.stage(run, reviewer, Self.content(all, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
+            Log.info("⚡ 😠 the review goes to \(reviewer.servedModel ?? self.reviewModel) at \(self.reviewEffort) effort")
+            self.stage(run, reviewer, Self.content(all, pictures: pictures), timeout: Self.reviewTimeout, onText: { text in
                 DispatchQueue.main.async { checks.review(text, false) }
             }, onStep: { step in
                 DispatchQueue.main.async { checks.step(.review, step) }
@@ -584,8 +662,9 @@ final class QuickAsk {
     }
 
     /// A process for a later stage of `run`, started now; nil when it could not be.
-    private func start(_ run: Run, prompt: String, tools: String) -> Worker? {
-        guard let w = try? Worker(model: model, effort: effort, prompt: prompt, tools: tools) else { return nil }
+    private func start(_ run: Run, prompt: String, tools: String, model: String? = nil, effort: String? = nil) -> Worker? {
+        guard let w = try? Worker(model: model ?? self.model, effort: effort ?? self.effort, prompt: prompt,
+                                  tools: tools, allowed: tools == Self.webTools ? Self.webAllowed : nil) else { return nil }
         run.workers.append(w)
         return w
     }
@@ -661,7 +740,8 @@ final class QuickAsk {
             return t.isEmpty ? "no stderr" : String(t.suffix(200))
         }
 
-        init(model: String, effort: String, prompt: String, tools: String = "") throws {
+        /// `allowed`: what runs without asking, when narrower than `tools` (`Bash(<path>:*)`).
+        init(model: String, effort: String, prompt: String, tools: String = "", allowed: String? = nil) throws {
             guard let claude = QuickAsk.claudePath else {
                 throw NSError(domain: "QuickAsk", code: 1, userInfo: [NSLocalizedDescriptionKey: "claude not found"])
             }
@@ -675,7 +755,7 @@ final class QuickAsk {
                                  "--tools", tools, "--strict-mcp-config", "--setting-sources", "",
                                  "--system-prompt", prompt]
             // -p has no one to ask: the tools it is given are allowed.
-            if !tools.isEmpty { process.arguments! += ["--allowedTools", tools] }
+            if !tools.isEmpty { process.arguments! += ["--allowedTools", allowed ?? tools] }
             process.currentDirectoryURL = dir
             var env = ProcessInfo.processInfo.environment
             // Not a session of the terminal this app was started from.
@@ -746,6 +826,15 @@ final class QuickAsk {
                     switch b["name"] as? String {
                     case "WebSearch": if let q = input["query"] as? String { onStep?(.search(q)) }
                     case "WebFetch": if let u = (input["url"] as? String).flatMap(URL.init(string:)) { onStep?(.fetch(u)) }
+                    case "Bash":
+                        // ▶️ a video's transcript read (by URL or bare id) is a page fetched;
+                        // a YouTube search lists nothing in the trail, like a web search.
+                        guard let cmd = input["command"] as? String, cmd.contains("yt-transcript"),
+                              !cmd.contains("yt-transcript search"),
+                              let r = cmd.range(of: #"yt-transcript['"]?\s+['"]?(?:https?://\S*?(?:v=|youtu\.be/|shorts/|live/|embed/))?[A-Za-z0-9_-]{11}"#,
+                                                options: .regularExpression) else { break }
+                        let id = String(cmd[r].suffix(11))
+                        if let u = URL(string: "https://www.youtube.com/watch?v=\(id)") { onStep?(.fetch(u)) }
                     default: break
                     }
                 }

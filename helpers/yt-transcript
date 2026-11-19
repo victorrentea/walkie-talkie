@@ -1,0 +1,145 @@
+#!/usr/bin/env -S python3 -I
+"""YouTube for the ⚡ quick question's web check and review (2026-11-19).
+
+  yt-transcript search "<query>" [n]      videos: url | title | channel | length | views
+  yt-transcript <url or id>               its transcript, one line per ~20 s: [m:ss = Ns] words
+  yt-transcript <url or id> from <secs>   the next page, from that second on
+  yt-transcript <url or id> find "<words>" the lines holding any of the words, with their neighbours
+
+A page stops under PAGE characters: claude -p swaps a longer tool output for a 2 KB
+preview of a file the worker cannot open (Fable's review, 2026-11-19).
+
+Read-only: yt-dlp only lists and reads, nothing is downloaded to disk.
+"""
+import json, re, subprocess, sys, urllib.request
+
+PAGE = 20000
+
+# A web page can steer the model that runs this: only a YouTube watch URL or a bare
+# video id reaches yt-dlp, always after "--", so nothing it is handed becomes an option.
+VIDEO = re.compile(r"^(?:https?://(?:(?:www|m)\.)?(?:youtube\.com/(?:watch\?(?:[^ ]*&)?v=|shorts/|live/|embed/)|youtu\.be/))?([A-Za-z0-9_-]{11})(?:[?&#][^ ]*)?$")
+
+YTDLP = next((p for p in ("/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp") if __import__("os").path.exists(p)), "yt-dlp")
+
+
+def ytdlp(*args):
+    try:
+        r = subprocess.run([YTDLP, "--no-warnings", "--ignore-config", *args], capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        sys.exit("yt-dlp did not answer in 60 s")
+    if r.returncode != 0:
+        sys.exit("yt-dlp failed: " + (r.stderr.strip().splitlines() or ["?"])[-1])
+    return json.loads(r.stdout)
+
+
+def clock(s):
+    s = int(s)
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60}:{s % 60:02d}"
+
+
+def search(query, n):
+    for e in ytdlp("--flat-playlist", "-J", "--", f"ytsearch{min(max(n, 1), 20)}:{query}").get("entries") or []:
+        print(" | ".join([f"https://www.youtube.com/watch?v={e.get('id')}", e.get("title") or "?",
+                          e.get("channel") or e.get("uploader") or "?",
+                          clock(e["duration"]) if e.get("duration") else "?",
+                          f"{e['view_count']:,} views" if e.get("view_count") else "?"]))
+
+
+def pick(info):
+    """Subtitles a human wrote in the video's language, else the speech recognised as said
+    (the -orig track — every other automatic one is a machine translation), else a human
+    English/Romanian track, else whatever automatic English/Romanian there is."""
+    lang = (info.get("language") or "").split("-")[0]
+    subs, auto = info.get("subtitles") or {}, info.get("automatic_captions") or {}
+
+    def base(k):
+        return k.split("-")[0]
+
+    def json3(pool, k):
+        return next((f.get("url") for f in pool.get(k) or [] if f.get("ext") == "json3"), None)
+
+    tries = [(subs, k) for k in subs if lang and base(k) == lang and k != "live_chat"]
+    tries += [(auto, k) for k in auto if k == f"{lang}-orig"] + [(auto, k) for k in auto if k.endswith("-orig")]
+    tries += [(subs, k) for want in ("en", "ro") for k in subs if base(k) == want]
+    tries += [(auto, k) for k in (lang, "en", "ro") if k and k in auto]
+    for pool, k in tries:
+        url = json3(pool, k)
+        if url:
+            return k, url
+    return None, None
+
+
+def transcript(arg, mode=None, value=None):
+    m = VIDEO.match(arg.strip())
+    if not m:
+        sys.exit("not a YouTube video: give its watch URL or its 11-character id")
+    vid = m.group(1)
+    info = ytdlp("-J", "--skip-download", "--no-playlist", "--", f"https://www.youtube.com/watch?v={vid}")
+    date = info.get("upload_date") or ""
+    print(f"{info.get('title')} — {info.get('channel') or info.get('uploader')}"
+          f"{', ' + date[:4] + '-' + date[4:6] + '-' + date[6:] if date else ''}"
+          f"{', ' + clock(info['duration']) if info.get('duration') else ''}")
+    print(f"https://www.youtube.com/watch?v={vid}  (cite a moment as &t=<seconds>s)")
+    lang, sub = pick(info)
+    if not sub:
+        sys.exit("no transcript on this video")
+    try:
+        req = urllib.request.Request(sub, headers={"User-Agent": "Mozilla/5.0"})
+        events = json.load(urllib.request.urlopen(req, timeout=30)).get("events") or []
+    except Exception as e:
+        sys.exit(f"the transcript could not be read: {e}")
+    lines, start, words = [], None, []
+    for ev in events:
+        text = "".join(s.get("utf8", "") for s in ev.get("segs") or []).replace("\n", " ").strip()
+        if not text:
+            continue
+        t = ev.get("tStartMs", 0) / 1000
+        if start is None:
+            start = t
+        words.append(text)
+        if t - start >= 20:
+            lines.append((start, f"[{clock(start)} = {int(start)}s] {' '.join(words)}"))
+            start, words = None, []
+    if words:
+        lines.append((start, f"[{clock(start)} = {int(start)}s] {' '.join(words)}"))
+    me = sys.argv[0]
+    if mode == "find":
+        needles = [w.lower() for w in re.findall(r"\w{3,}", value or "")]
+        hits = [i for i, (_, l) in enumerate(lines) if any(n in l.lower() for n in needles)]
+        keep = sorted({j for i in hits for j in (i - 1, i, i + 1) if 0 <= j < len(lines)})
+        print(f"transcript: {lang}, {len(hits)} line(s) hold one of: {', '.join(needles) or '-'}\n")
+        size, last = 0, None
+        for j in keep:
+            if size > PAGE:
+                print(f"… more matches; narrow the words, or read on with: {me} {vid} from {int(lines[j][0])}")
+                return
+            if last is not None and j != last + 1:
+                print("…")
+            print(lines[j][1])
+            size, last = size + len(lines[j][1]), j
+        return
+    begin = float(value) if mode == "from" else 0
+    print(f"transcript: {lang}\n")
+    size = 0
+    for t, l in lines:
+        if t + 20 < begin:
+            continue
+        if size > PAGE:
+            print(f"\n… the transcript goes on. Next page: {me} {vid} from {int(t)}"
+                  f" — or look for words: {me} {vid} find \"<words>\"")
+            return
+        print(l)
+        size += len(l)
+
+
+if __name__ == "__main__":
+    a = sys.argv[1:]
+    if not a:
+        sys.exit(__doc__)
+    if a[0] == "search" and len(a) >= 2:
+        search(a[1], int(a[2]) if len(a) > 2 and a[2].isdigit() else 8)
+    else:
+        mode = a[1] if len(a) > 2 and a[1] in ("from", "find") else None
+        if mode == "from" and not re.fullmatch(r"\d+(\.\d+)?", a[2]):
+            sys.exit("from takes a number of seconds")
+        transcript(a[0], mode, a[2] if mode else None)

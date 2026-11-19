@@ -563,3 +563,22 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   `ReplyPanel.showHint(lines: true)` — the hint window above the domain, left-aligned, as wide as the
   longest URL, wrapped only past the screen (`LinkedBody.tips`, `ReplyRoot.trailTip`). No click.
   Desk: `POST /test/quick {"link": {"index": i, "trail": true}}` → `tip`, `hint` (its frame). Log `⚡ 🌐 sites (round n): a.com, b.org`.
+
+- **▶️ YouTube is a source, and 😠 is Fable** (2026-11-19, Victor: *"include in your research YouTube
+  transcripts of videos … When someone comes out and speaks in front of a camera, they really mean
+  what they're saying"*; *"Adversarial review this with the Fable is super important for me"*).
+  Supersedes *`--tools/--allowedTools WebSearch,WebFetch` … 120 s each* above. The 🔎, 🪏 and 😠
+  workers get `--tools WebSearch,WebFetch,Bash --allowedTools "WebSearch,WebFetch,Bash(<helper>:*)"`
+  (`QuickAsk.webTools` / `webAllowed`): one command, `helpers/yt-transcript`, installed 0555 at
+  `~/.walkie-talkie/tools/` (`QuickAsk.youTube`, from the bundle's Resources) — `search "<q>"`,
+  `<url>` (pages ≤ 20 KB, `from <s>` for the next), `<url> find "<words>"`. **The page cap is
+  load-bearing**: `claude -p` swaps a tool output over ~30 KB for a 2 KB preview of a file the worker
+  cannot open (Fable's review found a 35-minute talk read only to 1:39). **Only a YouTube URL or an
+  11-character id reaches yt-dlp, after `--`** — a page can steer the model, and `--exec=…` as "the URL"
+  was an option. Any other command (`ls`, a redirect, `&& touch`) is denied, tested. A video is cited
+  `watch?v=…&t=Ns`, its ↗ without a text fragment (`QuickAsk.isVideo`); a transcript read is a
+  `youtube.com` site in the trail. No yt-dlp → web only, as before. **The review runs on
+  `WT_QUICK_REVIEW_MODEL` (`fable`) at `WT_QUICK_REVIEW_EFFORT` (`medium`), 240 s**
+  (`reviewTimeout`; one transcript question took 106 s). Measured on *"who said 'delete half of your
+  markdowns once you switch to Opus 5.5'"*: the web check found a blog's paraphrase, Fable's review the
+  YC interview with Boris Cherny at 6:58 (`&t=418s`).

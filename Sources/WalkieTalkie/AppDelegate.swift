@@ -2391,7 +2391,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 })
             }
             guard wait else { return (200, ["ok": true, "asked": text]) }
-            let limit = QuickAsk.timeout + (waitAll ? 2 * QuickAsk.checkTimeout : 0) + 5
+            let limit = QuickAsk.timeout + (waitAll ? QuickAsk.checkTimeout + QuickAsk.reviewTimeout : 0) + 5
             guard done.wait(timeout: .now() + limit) == .success else {
                 return (504, ["ok": false, "error": "no answer"])
             }

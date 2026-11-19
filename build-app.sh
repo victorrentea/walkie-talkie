@@ -170,6 +170,9 @@ cp "$DIR/helpers/word_onsets.py" "$CONTENTS/Resources/word_onsets.py"
 cp "$DIR/helpers/session_search.py" "$CONTENTS/Resources/session_search.py"
 # 👂 "Hey Claude" (2026-11-12, `WakeWord`): run by its own venv, ~/.walkie-talkie/wake/venv.
 cp "$DIR/helpers/wake_word.py" "$CONTENTS/Resources/wake_word.py"
+# ▶️ YouTube for the ⚡ question's checks (2026-11-19, `QuickAsk.youTube`), copied to
+# ~/.walkie-talkie/quick/bin/ at first use.
+cp "$DIR/helpers/yt-transcript" "$CONTENTS/Resources/yt-transcript"
 
 # The menu bar item's two faces: the device alone at rest, the full icon with its
 # ring once the relay is pointed at a terminal. Copied rather than declared as SPM
