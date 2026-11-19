@@ -476,14 +476,11 @@ def show(open_it=True):
         detail = ""
         if hv:
             badge, cls, when = "🌾 harvested from transcripts", "harvest", hv["promoted"]
-            detail = sightings(hv)
         elif rec:
             who = rec.get("by", "?")
             where = os.path.basename(rec.get("cwd") or "") or "?"
             badge = ("🤖 " + who + " in " + where) if who not in ("shell", "harvest") else ("🌾 harvest" if who == "harvest" else "⌨️ by hand")
             cls, when = ("harvest" if who == "harvest" else "agent"), rec.get("ts")
-            said = clean(prompt_of(rec))
-            detail = f"<div class=said>{marked(said, rec.get('heard'))}</div>" if said else ""
         elif w and w["source"] == "user_edits":
             badge, cls, when = "✏️ Wispr learned it from your corrections", "wispr", w["created"]
         elif w and synced:
@@ -493,20 +490,22 @@ def show(open_it=True):
         else:
             badge, cls, when = "❓ unknown", "seed", ""
         counts[cls] = counts.get(cls, 0) + 1
-        wcol = ""
+        # **Where the word lives** (same day, Victor: *"+ sync to what"*): every entry is in the
+        # ✍️ editor's file; `walkie-dict sync` mirrors it into Wispr Flow's dictionary.
         if w:
-            wcol = f"in Wispr since {esc(local_time(w['created']))}" + (f" · used {w['used']}×" if w["used"] else "")
-        sec = "" if synced else esc(section)
+            wcol = "✍️ editor ⇄ Wispr Flow" + (f" · used {w['used']}× by Wispr" if w["used"] else "")
+        else:
+            wcol = "✍️ editor only"
         term = (f"<s>{esc(heard)}</s> → <b>{esc(written)}</b>" if written else f"<b>{esc(heard)}</b>")
         rows.append((local_time(when), f"<tr class='{cls}'><td class=term>{term}</td><td><span class='badge {cls}'>{esc(badge)}</span>"
-                     f"{detail}</td><td class=when>{esc(local_time(when))}</td><td class=sec>{sec}</td><td class=wis>{wcol}</td></tr>"))
+                     f"</td><td class=when>{esc(local_time(when))}</td><td class=wis>{esc(wcol)}</td></tr>"))
     rows.sort(key=lambda r: r[0], reverse=True)       # newest learned first
 
     pending = sorted((e for e in ledger.values() if not e.get("promoted")),
                      key=lambda e: max(e.get("sightings", {}) or {"": 0}), reverse=True)
     prow = "".join(f"<tr class=pending><td class=term><s>{esc(e['heard'])}</s> → <b>{esc(e['right'])}</b></td>"
-                   f"<td>{sightings(e)}</td><td class=when>{esc(local_time(max(e.get('sightings') or {'': ''})))}</td>"
-                   f"<td class=sec>{len(e.get('sightings', {}))} sighting(s)</td><td></td></tr>" for e in pending)
+                   f"<td class=sec>seen {len(e.get('sightings', {}))}×, last</td><td class=when>{esc(local_time(max(e.get('sightings') or {'': ''})))}</td>"
+                   f"<td class=wis>not synced yet</td></tr>" for e in pending)
     harvest_runs = sorted(f for f in os.listdir(os.path.dirname(LEDGER)) if f.endswith(".md")) if os.path.isdir(os.path.dirname(LEDGER)) else []
     last_run = harvest_runs[-1][:-3] if harvest_runs else "never"
     summary = " · ".join(f"{n} {c}" for c, n in sorted(counts.items(), key=lambda x: -x[1]))
@@ -518,22 +517,23 @@ body{{background:var(--bg);color:var(--fg);font:14px -apple-system,system-ui,san
 h1{{font-size:20px;margin:0 0 4px}} h2{{font-size:16px;margin:28px 0 8px}} .mute{{color:var(--mute)}}
 input{{font:inherit;padding:6px 10px;width:320px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);margin:12px 0}}
 table{{border-collapse:collapse;width:100%}} td{{border-top:1px solid var(--line);padding:6px 8px;vertical-align:top}}
-td.term{{white-space:nowrap}} td.when,td.sec,td.wis{{color:var(--mute);white-space:nowrap;font-size:12px}}
+td.term{{white-space:nowrap}} th{{text-align:left;font-size:12px;color:var(--mute);font-weight:600;padding:6px 8px}} td.when,td.sec,td.wis{{color:var(--mute);white-space:nowrap;font-size:12px}}
 s{{color:var(--mute)}} .badge{{border-radius:6px;padding:1px 6px;font-size:12px;white-space:nowrap}}
 .badge.seed{{background:var(--seed)}} .badge.agent{{background:var(--agent)}} .badge.harvest{{background:var(--harvest)}} .badge.wispr{{background:var(--wispr)}}
 .said{{color:var(--mute);font-size:12px;margin-top:3px;max-width:680px;white-space:pre-wrap;max-height:4.5em;overflow:hidden}}
 .said:hover{{max-height:none}} mark{{background:#ffd60a55;color:inherit;border-radius:3px;padding:0 2px}} ul.sight{{margin:4px 0 0;padding-left:16px;font-size:12px}} .ev{{font-style:italic;color:var(--mute)}}
 </style>
 <h1>✍️ Editor dictionary</h1>
-<div class=mute>{len(rows)} entries in <code>{esc(VOCAB)}</code> — {esc(summary)}. Newest first; hover a dictation to read it whole.
-Harvest last ran {esc(last_run)} (weekly, Saturdays 03:30).</div>
+<div class=mute>{len(rows)} entries in <code>{esc(VOCAB)}</code>, read by the ✍️ editor — {esc(summary)}. Newest first.
+<b>Sync:</b> <code>walkie-dict sync</code> (Victor Addons, every 10 min) mirrors this file both ways with Wispr Flow's own dictionary
+(<code>flow.sqlite</code>, then Wispr's cloud at its next start or Hub sync). Harvest last ran {esc(last_run)} (weekly, Saturdays 03:30).</div>
 <input id=q placeholder="Filter…" autofocus>
-<table id=t>{"".join(r[1] for r in rows)}</table>
+<table id=t><tr class=head><th>Word</th><th>Source</th><th>Added</th><th>Synced to</th></tr>{"".join(r[1] for r in rows)}</table>
 <h2>🌾 Deduced from transcripts, not in the dictionary yet ({len(pending)})</h2>
 <div class=mute>The weekly harvest promotes a pair once it has been seen often enough; until then it is only counted.</div>
-<table id=p>{prow}</table>
+<table id=p><tr class=head><th>Heard → meant</th><th></th><th>Last seen</th><th></th></tr>{prow}</table>
 <script>
-q.oninput=()=>{{const v=q.value.toLowerCase();for(const tr of document.querySelectorAll('tr'))tr.style.display=tr.textContent.toLowerCase().includes(v)?'':'none'}}
+q.oninput=()=>{{const v=q.value.toLowerCase();for(const tr of document.querySelectorAll('tr:not(.head)'))tr.style.display=tr.textContent.toLowerCase().includes(v)?'':'none'}}
 </script>"""
     os.makedirs(os.path.dirname(PAGE), exist_ok=True)
     with open(PAGE, "w", encoding="utf-8") as f:

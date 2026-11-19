@@ -28,10 +28,12 @@ that are right now in engine top level."*
   ideal și cu sursa+timpul când a fost învățat sau dedus"*) runs `~/.local/bin/walkie-dict show`
   with `/usr/bin/python3` (3.9 — keep the script 3.9-clean) and opens
   `~/Library/Caches/ro.victorrentea.wispr-relay/dictionary.html`, generated on the click like the
-  Prompt Log: every `vocabulary.txt` entry, newest first, with who taught it (`vocabulary-log.jsonl`
-  — each `add` since, plus `walkie-dict backfill` from the Claude transcripts — the dictation it was
-  misheard in, the word marked; the harvest's `ledger.json` sightings; Wispr's `createdAt` /
-  `source` / uses; the 2026-10-22 seed), then the pairs the weekly harvest is still counting.
+  Prompt Log: every `vocabulary.txt` entry, newest first — **Word · Source · Added · Synced to**
+  (`vocabulary-log.jsonl` — each `add` since, plus `walkie-dict backfill` from the Claude
+  transcripts —, the harvest's `ledger.json`, Wispr's `createdAt` / `source`, the 2026-10-22 seed;
+  synced = `✍️ editor ⇄ Wispr Flow` or `editor only`), then the pairs the weekly harvest is still
+  counting. **No transcript text on the page** (same day, Victor: *"I don't need the transcript
+  summary. Just the source (session folder + time) + sync to what"*) — the log keeps the session id.
   Greyed with a tooltip when the script is not installed.
 - **Gone:** the legend rows (`Prompt at caret`, `Prompt to bound`, `Prompt to new`, `Dictate (no
   Enter)`, `Transcribe Locally Now`, `Record Screen`, `Take Screenshot`, `Select Screen Area`,
