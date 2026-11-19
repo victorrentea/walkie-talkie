@@ -7274,6 +7274,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// they are when the model fails or is slow. No reply pop-up, no checks.
     private func googleQuestion(_ question: String, prompt: String, images: [String],
                                 open: Bool = true, done: ((String, URL) -> Void)? = nil) {
+        // Abroad, the query is English and about the workshop's country (WorkshopCountry).
+        let place = WorkshopCountry.today()
+        let prompt = place.map { prompt + "\n" + $0.clause } ?? prompt
         QuickAsk.shared.searchQuery(prompt, images: images) { query, error in
             Self.google(query, error: error, said: question, open: open, done: done)
         }
@@ -7286,7 +7289,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let q = query ?? said
         if let error { Log.info("🔎 no query from the model (\(error)) — Googling the words as said") }
         var c = URLComponents(string: "https://www.google.com/search")!
-        c.queryItems = [URLQueryItem(name: "q", value: q)]
+        c.queryItems = [URLQueryItem(name: "q", value: q)] + (WorkshopCountry.today()?.googleItems ?? [])
         guard let url = c.url else { return }
         Log.info("🔎 Google: \"\(q)\"")
         if open { NSWorkspace.shared.open(url) }
@@ -7319,7 +7322,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let token = quickToken
         // A follow-up's header says so: `⚡ ↳ <the question>`.
         let label = ReplyPanel.quickMark + (followUp ? "↳ " : "") + question
-        let asked = prompt ?? question
+        // **Abroad, the question says where and asks for English** (2026-11-19,
+        // `WorkshopCountry`): every stage — answer, 🌐, 😠, 🪏, the Google query — reads it.
+        let place = WorkshopCountry.today()
+        let asked = (prompt ?? question) + (place.map { "\n" + $0.clause } ?? "")
+        if let place { Log.info("⚡ 🌍 workshop in \(place.name) today (Victor Addons' pick) — the question asks for English") }
         let history = followUp ? Array(quickThread.suffix(QuickAsk.turnsKept)) : []
         quickThread = history + [QuickAsk.Turn(question: asked, images: images, answer: "")]
         let turn = quickThread.count - 1

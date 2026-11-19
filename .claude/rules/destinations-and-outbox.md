@@ -582,3 +582,14 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   (`reviewTimeout`; one transcript question took 106 s). Measured on *"who said 'delete half of your
   markdowns once you switch to Opus 5.5'"*: the web check found a blog's paraphrase, Fable's review the
   YC interview with Boris Cherny at 6:58 (`&t=418s`).
+
+- **Abroad, a ⚡ question says where and asks for English** (2026-11-19, Victor, in Portugal:
+  *"Whenever I ask a question during a workshop which is done for a country different than
+  Romania, you can tell the country I've selected in the tool here … answer me in English"*).
+  "The tool" is Victor Addons' ☕️ Break country (`BreakTimer.country.tz` / `.day` in
+  `ro.victorrentea.macos-addons`, today's pick only), read at each question by `WorkshopCountry`
+  (zone → ISO through `/usr/share/zoneinfo/zone.tab`; Romania or no pick today → nothing). Its
+  `clause` rides at the end of the question in `askQuick` and `googleQuestion` — every stage and
+  the Google query read it — and the Google URL gains `hl=en&gl=<iso>` (Google's AI answer came
+  in Romanian, the account's language). Log `⚡ 🌍 workshop in <country> today …`.
+  Checked with `claude -p` (Opus): *"Care e cota de TVA standard?"* + the clause → Portugal's 23 %, in English.
