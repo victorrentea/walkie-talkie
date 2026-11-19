@@ -172,17 +172,54 @@ final class QuickAsk {
     /// să dig deeper … nu doar să îmi susții sau să-mi infirmi … ci să cauți cumva
     /// mai profund, mai multe surse, nu doar cu scopul de a valida informația, ci
     /// de a mai aduna alte informații noi"*) — at `digCiteFormat`'s length.
-    static var morePrompt: String { """
-        You get a spoken question by Victor and an answer to it already checked on \
-        the web, with the sources it used. He wants to know more: dig deeper, in \
-        sources other than the ones listed (other sites, primary sources, \
-        specialised and more recent ones), not to confirm the answer again but to \
-        find what it does not say yet — details, numbers, causes, context, \
-        exceptions, what changed lately, what follows from it. Correct anything \
-        the new sources contradict. Write nothing before your searches are done, \
-        then write the answer again with the new information, the old sources \
-        included where they still hold.
-        """ + videoHint + " " + digCiteFormat }
+    ///
+    /// **A team of Sonnets, then one merge** (2026-11-19, Victor: *"when i click dig
+    /// more, dispatch 4 sonnets agents to research this topic thoroughly then merge
+    /// their results. If I click dig more again, dispatch 8. 3rd time is not
+    /// possible"*): each researcher digs in one direction (`digAngles`, the first
+    /// `diggers(round:)` of them), all at once; the quick model merges what came
+    /// back (`mergePrompt`) and 😠 reviews the merge as before.
+    static func diggerPrompt(_ angle: String) -> String { """
+        You are one of several researchers digging, at the same time, into a spoken \
+        question by Victor that already has an answer checked on the web, with the \
+        sources it used. Each researcher has its own direction; yours is \(angle). \
+        Stay in it — the others cover the rest. Research it thoroughly: several \
+        searches, open the pages, prefer primary, specialised and recent sources \
+        other than the ones already used. The point is not to confirm the answer \
+        again but to find what it does not say yet — details, numbers, causes, \
+        context, exceptions, what changed lately — and what contradicts it. Write \
+        nothing before your research is done.
+        """ + videoHint + " " + cite(length: """
+        Report up to eight short findings, one per line, the most useful first; \
+        say plainly when your direction turned up nothing new.
+        """) }
+    /// One direction per researcher; a 🪏 round of 4 takes the first four.
+    static let digAngles = [
+        "primary and official sources: the makers, the authorities, original documents, specifications, announcements",
+        "what changed lately: news, releases and developments of the last months",
+        "the other side: criticism, limitations, exceptions, controversies, what goes wrong",
+        "what the people involved said in their own words: talks, interviews, podcasts, posts",
+        "numbers: data, statistics, measurements, benchmarks, studies",
+        "practice: forums, Q&A sites, issue trackers, reviews — how it works out for the people who use it",
+        "background: history, causes, how it came to be, how it compares with the alternatives",
+        "depth: academic papers, specialised publications, in-depth documentation, sources in other languages",
+    ]
+    /// How many researchers the n-th round dispatches (round 1 is the first web
+    /// check): 4, then 8, then none — the link is gone after `lastRound`.
+    static func diggers(round: Int) -> Int? {
+        switch round { case 2: return 4; case 3: return 8; default: return nil }
+    }
+    static let lastRound = 3
+    static var mergePrompt: String { """
+        You get a spoken question by Victor, the answer he already has, and the \
+        reports of several researchers who dug in different directions for what it \
+        does not say yet, each citing its own numbered sources. Merge them into one \
+        answer: keep the new findings that matter most, drop repeats and what \
+        nothing in a report supports, and where reports disagree prefer the better \
+        sourced claim. Use only what the reports cite: carry each claim's quote over \
+        exactly as its report gives it, with that report's URL, and number the \
+        sources again from 1.
+        """ + " " + digCiteFormat }
     /// A question with no answer by then is given up.
     static let timeout: TimeInterval = 45
     /// **The answer as shown** (2026-10-10, Victor: *"nu mă interesează să văd
@@ -245,8 +282,12 @@ final class QuickAsk {
         return URL(string: s) ?? url
     }
 
-    /// The web check (and a 🪏 more round).
+    /// The web check.
     static let checkTimeout: TimeInterval = 120
+    /// A 🪏 researcher: told to be thorough, so longer than the check; the ones
+    /// not back by then are merged without.
+    static let digTimeout: TimeInterval = 180
+    static let mergeTimeout: TimeInterval = 90
     /// **The review is Fable's, and it takes longer** (2026-11-19, Victor:
     /// *"Adversarial review this with the Fable is super important for me"*):
     /// `WT_QUICK_REVIEW_MODEL` (`fable`) at `WT_QUICK_REVIEW_EFFORT` (`medium`) —
@@ -325,6 +366,8 @@ final class QuickAsk {
         var end: () -> Void
         /// Each search and page a check took, as it takes them (`WebStep`).
         var step: (_ stage: Stage, _ step: WebStep) -> Void = { _, _ in }
+        /// 🪏 researchers back so far, of how many; `done == of` — the merge runs.
+        var dug: (_ done: Int, _ of: Int) -> Void = { _, _ in }
     }
 
     enum Stage { case web, review }
@@ -400,6 +443,10 @@ final class QuickAsk {
     var effort: String { Self.setting("WT_QUICK_EFFORT") ?? "low" }
     var reviewModel: String { Self.setting("WT_QUICK_REVIEW_MODEL") ?? "fable" }
     var reviewEffort: String { Self.setting("WT_QUICK_REVIEW_EFFORT") ?? "medium" }
+    var digModel: String { Self.setting("WT_DIG_MODEL") ?? "sonnet" }
+    var digEffort: String { Self.setting("WT_DIG_EFFORT") ?? "medium" }
+    /// `Sonnet`, for the footer's `4 × Sonnet`.
+    var digName: String { Self.displayName(digModel) }
 
     private static func setting(_ key: String) -> String? {
         let v = ProcessInfo.processInfo.environment[key] ?? ElevenLabsSource.fileValue(key)
@@ -602,11 +649,13 @@ final class QuickAsk {
         }
     }
 
-    /// **🌐 More** (2026-10-22): another web round on the last answer, from
-    /// sources other than `sources`, then the 🧐 review again — the same
-    /// `checks` callbacks as the first round. Ends whatever is still running.
+    /// **🪏 More** (2026-10-22; a team since 2026-11-19): `agents` researchers
+    /// (`digModel`) dig at once, each in its `digAngles` direction, from sources
+    /// other than `sources`; the quick model merges their reports; then the 🧐
+    /// review — the same `checks` callbacks as the first round, plus `dug` as
+    /// the researchers come back. Ends whatever is still running.
     func more(_ question: String, images: [String] = [], history: [Turn] = [],
-              answer: String, sources: [URL], checks: Checks) {
+              answer: String, sources: [URL], agents: Int, checks: Checks) {
         queue.async {
             self.cancelLocked()
             let run = Run()
@@ -614,50 +663,95 @@ final class QuickAsk {
             self.current = run
             let asked = Self.framed(question, history: history)
             let pictures = Self.pictures(images, history: history)
-            let web = self.start(run, prompt: Self.morePrompt, tools: Self.webTools)
             let used = sources.map { "- \($0.absoluteString)" }.joined(separator: "\n")
-            Log.info("⚡ 🌐 more: another web round, \(sources.count) source(s) to look past")
-            self.check(run, question: asked, pictures: pictures, answer: answer, web: web, checks: checks,
-                       webInput: "Question: \(asked)\n\nAnswer so far, already checked on the web:\n\(answer)"
-                           + (used.isEmpty ? "" : "\n\nSources already used — find others:\n\(used)"),
-                       review: Self.digReviewPrompt)
+            let brief = "Question: \(asked)\n\nAnswer so far, already checked on the web:\n\(answer)"
+                + (used.isEmpty ? "" : "\n\nSources already used — find others:\n\(used)")
+            // Merger and reviewer start now, so neither start-up is waited for.
+            let reviewer = self.start(run, prompt: Self.digReviewPrompt, tools: Self.webTools,
+                                      model: self.reviewModel, effort: self.reviewEffort)
+            let merger = self.start(run, prompt: Self.mergePrompt, tools: "", effort: "medium")
+            let angles = (0..<agents).map { Self.digAngles[$0 % Self.digAngles.count] }
+            Log.info("⚡ 🪏 more: \(agents) × \(self.digModel) at \(self.digEffort) effort, \(sources.count) source(s) to look past")
+            var reports = [String?](repeating: nil, count: agents)
+            var back = 0
+            DispatchQueue.main.async { checks.dug(0, agents) }
+            func merge() {
+                let found = zip(angles, reports).compactMap { a, r in r.map { (a, $0) } }
+                Log.info("⚡ 🪏 \(found.count)/\(agents) researcher(s) reported — merging")
+                guard !found.isEmpty, let merger else {
+                    return self.review(run, reviewer: reviewer, question: asked, pictures: pictures, brief: brief,
+                                       found: nil, error: found.isEmpty ? "no researcher reported" : "the merger did not start",
+                                       checks: checks)
+                }
+                let input = brief + "\n\nThe researchers' reports:\n\n" + found.enumerated().map { i, f in
+                    "=== Report \(i + 1) — direction: \(f.0) ===\n\(f.1)"
+                }.joined(separator: "\n\n")
+                self.stage(run, merger, Self.content(input, pictures: pictures), timeout: Self.mergeTimeout,
+                           onText: { _ in }, onDone: { merged, error in
+                    self.review(run, reviewer: reviewer, question: asked, pictures: pictures, brief: brief,
+                                found: merged, error: error.map { "the merge failed: \($0)" }, checks: checks)
+                })
+            }
+            for (i, angle) in angles.enumerated() {
+                let finished: (String?, String?) -> Void = { report, error in
+                    if let report, !report.isEmpty { reports[i] = report }
+                    else { Log.error("⚡ 🪏 researcher \(i + 1) (\(angle.prefix(30))…) — \(error ?? "empty")") }
+                    back += 1
+                    let done = back
+                    DispatchQueue.main.async { checks.dug(done, agents) }
+                    if done == agents { merge() }
+                }
+                guard let w = self.start(run, prompt: Self.diggerPrompt(angle), tools: Self.webTools,
+                                         model: self.digModel, effort: self.digEffort) else {
+                    finished(nil, "did not start")
+                    continue
+                }
+                self.stage(run, w, Self.content(brief, pictures: pictures), timeout: Self.digTimeout, onText: { _ in },
+                           onStep: { step in DispatchQueue.main.async { checks.step(.web, step) } },
+                           onDone: finished)
+            }
         }
     }
 
-    /// 🔎 then 🧐, on `queue`. `webInput` replaces the web stage's message (🌐 More).
+    /// 🔎 then 🧐, on `queue`.
     private func check(_ run: Run, question: String, pictures: [(label: String, path: String)],
-                       answer: String, web: Worker?, checks: Checks, webInput: String? = nil,
-                       review: String = QuickAsk.reviewPrompt) {
+                       answer: String, web: Worker?, checks: Checks) {
         guard let web else {
             DispatchQueue.main.async { checks.web("⚠️ the web check did not start", true) }
             return endLocked(run)
         }
         // The reviewer starts while the web is searched.
-        let reviewer = start(run, prompt: review, tools: Self.webTools, model: reviewModel, effort: reviewEffort)
-        let asked = webInput ?? "Question: \(question)\n\nQuick answer, from memory: \(answer)"
+        let reviewer = start(run, prompt: Self.reviewPrompt, tools: Self.webTools, model: reviewModel, effort: reviewEffort)
+        let asked = "Question: \(question)\n\nQuick answer, from memory: \(answer)"
         stage(run, web, Self.content(asked, pictures: pictures), timeout: Self.checkTimeout, onText: { text in
             DispatchQueue.main.async { checks.web(text, false) }
         }, onStep: { step in
             DispatchQueue.main.async { checks.step(.web, step) }
         }, onDone: { found, error in
-            DispatchQueue.main.async { checks.web(found ?? "⚠️ \(error ?? "no result")", true) }
-            guard let reviewer else {
-                DispatchQueue.main.async { checks.review("⚠️ the reviewer did not start", true) }
-                return self.endLocked(run)
-            }
-            // The reviewer criticises the searched answer — or, when the
-            // search failed, the quick one.
-            let all = found.map { "Question: \(question)\n\nAnswer, checked on the web:\n\($0)" }
-                ?? asked + "\n\n(The web check failed: \(error ?? "?"). Search yourself.)"
-            Log.info("⚡ 😠 the review goes to \(reviewer.servedModel ?? self.reviewModel) at \(self.reviewEffort) effort")
-            self.stage(run, reviewer, Self.content(all, pictures: pictures), timeout: Self.reviewTimeout, onText: { text in
-                DispatchQueue.main.async { checks.review(text, false) }
-            }, onStep: { step in
-                DispatchQueue.main.async { checks.step(.review, step) }
-            }, onDone: { verdict, error in
-                DispatchQueue.main.async { checks.review(verdict ?? "⚠️ \(error ?? "no review")", true) }
-                self.endLocked(run)
-            })
+            self.review(run, reviewer: reviewer, question: question, pictures: pictures, brief: asked,
+                        found: found, error: error, checks: checks)
+        })
+    }
+
+    /// The web's answer is in (`found`, or why not): shown, then 🧐 reviewed —
+    /// or, when the search failed, `brief` (what the search was given) is. On `queue`.
+    private func review(_ run: Run, reviewer: Worker?, question: String, pictures: [(label: String, path: String)],
+                        brief: String, found: String?, error: String?, checks: Checks) {
+        DispatchQueue.main.async { checks.web(found ?? "⚠️ \(error ?? "no result")", true) }
+        guard let reviewer else {
+            DispatchQueue.main.async { checks.review("⚠️ the reviewer did not start", true) }
+            return endLocked(run)
+        }
+        let all = found.map { "Question: \(question)\n\nAnswer, checked on the web:\n\($0)" }
+            ?? brief + "\n\n(The web check failed: \(error ?? "?"). Search yourself.)"
+        Log.info("⚡ 😠 the review goes to \(reviewer.servedModel ?? reviewModel) at \(reviewEffort) effort")
+        stage(run, reviewer, Self.content(all, pictures: pictures), timeout: Self.reviewTimeout, onText: { text in
+            DispatchQueue.main.async { checks.review(text, false) }
+        }, onStep: { step in
+            DispatchQueue.main.async { checks.step(.review, step) }
+        }, onDone: { verdict, error in
+            DispatchQueue.main.async { checks.review(verdict ?? "⚠️ \(error ?? "no review")", true) }
+            self.endLocked(run)
         })
     }
 

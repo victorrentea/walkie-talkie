@@ -7397,9 +7397,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // more trebuie să apară imediat după ce internet termină, în timp ce
         // reviewer-ul lucrează și să întrerupă reviewer-ul dacă apăs butonul"*) —
         // `QuickAsk.more` ends the round still running. `digOffered` is the link on screen.
+        // **🪏 4 Sonnets, then 8, then no more** (2026-11-19, Victor: *"dispatch 4
+        // sonnets … If I click dig more again, dispatch 8. 3rd time is not possible"*
+        // — `QuickAsk.diggers`): the link is offered while `round < lastRound`; the
+        // footer counts the researchers back (`4 × Sonnet digging 2/4…`), then merging.
         var round = 1, digOffered = false, checkedSent = false
+        var moreLink: String { round < QuickAsk.lastRound ? " " + ReplyPanel.more : "" }
         func internet(_ running: Bool) -> String {
-            "🌐 Internet" + (round > 1 ? " ×\(round)" : "") + (running ? ReplyPanel.dots : " " + ReplyPanel.more)
+            "🌐 Internet" + (round > 1 ? " ×\(round)" : "") + team + (running ? ReplyPanel.dots : moreLink)
+        }
+        var team: String { QuickAsk.diggers(round: round).map { " · \($0) × \(QuickAsk.shared.digName)" } ?? "" }
+        func digging(_ done: Int, _ of: Int) -> String {
+            "🌐 \(of) × \(QuickAsk.shared.digName) " + (done < of ? "digging \(done)/\(of)" : "merging") + ReplyPanel.dots
         }
         func sendChecked() {
             guard !checkedSent else { return }
@@ -7417,7 +7426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("⚡ 🌐 sites (round \(round)): " + ReplyPanel.trailSites(trail).map(\.domain).joined(separator: ", "))
                 }
                 if text.hasPrefix("⚠️") {
-                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + " failed " + ReplyPanel.more,
+                    steps = ["🌐 Internet" + (round > 1 ? " ×\(round)" : "") + team + " failed" + moreLink,
                              ReplyPanel.adversary + " reviewing" + ReplyPanel.dots]
                 } else {
                     let c = QuickAsk.cited(text)
@@ -7452,8 +7461,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // started froze the footer on `reviewing…`), and More is offered after
                 // every round — a failed one most of all.
                 steps = steps.map { $0.hasSuffix(ReplyPanel.dots) ? String($0.dropLast(ReplyPanel.dots.count)) + " stopped" : $0 }
-                if let firstStep = steps.first, firstStep.hasPrefix("🌐 Internet"), !firstStep.contains(ReplyPanel.more) {
-                    steps[0] = firstStep + " " + ReplyPanel.more
+                if let firstStep = steps.first, firstStep.hasPrefix("🌐"), !firstStep.contains(ReplyPanel.more) {
+                    steps[0] = firstStep + moreLink
                 }
                 digOffered = true
                 paint(force: true)
@@ -7462,18 +7471,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }, step: { stage, step in
                 guard mine == round else { return }
                 if stage == .web { webTrail.add(step) }
+            }, dug: { done, of in
+                guard mine == round, !steps.isEmpty else { return }
+                steps[0] = digging(done, of)
+                paint(force: true)
             })
         }
         let checks = makeChecks(first: true)
         ReplyPanel.onMore = { [weak self] in
             guard let self, self.quickToken == token, digOffered,
+                  let agents = QuickAsk.diggers(round: round + 1),
                   ReplyPanel.reopenLive(question: token) else { return }
             if QuickAsk.shared.isAnswering { Log.info("⚡ 🪏 dig more while the reviewer works — the review is stopped") }
             // The first round's desk caller is answered now: its `end` will not come.
             sendChecked()
             digOffered = false
             round += 1
-            steps = [internet(true)]
+            steps = [digging(0, agents)]
             paint(force: true)
             let sources = ReplyPanel.parseLinks(answer).links.map { l -> URL in
                 var c = URLComponents(url: l.url, resolvingAgainstBaseURL: false)
@@ -7482,7 +7496,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             var seen = Set<URL>()
             QuickAsk.shared.more(asked, images: images, history: history, answer: ReplyPanel.plain(answer),
-                                 sources: sources.filter { seen.insert($0).inserted }, checks: makeChecks(first: false))
+                                 sources: sources.filter { seen.insert($0).inserted }, agents: agents,
+                                 checks: makeChecks(first: false))
         }
         // 🔼 ↓ over the question (2026-11-11, `quickGoogleToo`): the browser on
         // its query too, made by a process of its own beside the answer's.

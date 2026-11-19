@@ -313,6 +313,17 @@ me to dismiss it explicitly"*.
   changes) from sources other than the ones used, and both it and the review after it
   (`digReviewPrompt`) write at `digCiteFormat`'s length — the question in one sentence, then the new
   findings, at most six sentences — not the first round's one sentence + one fact.
+- **🪏 more is a team: 4 Sonnets, then 8, then no more** (2026-11-19, Victor: *"when i click dig
+  more, dispatch 4 sonnets agents to research this topic thoroughly then merge their results. If I
+  click dig more again, dispatch 8. 3rd time is not possible"*). `QuickAsk.more(agents:)` starts
+  `diggers(round:)` researchers (`WT_DIG_MODEL` `sonnet` at `WT_DIG_EFFORT` `medium`, ≤ `digTimeout`
+  180 s), each in one `digAngles` direction (official, recent, the other side, own words; then
+  numbers, practice, background, depth), all on the same brief; the quick model (medium effort)
+  merges the reports that came back (`mergePrompt`, renumbering the sources), then 😠 reviews as
+  before. The footer counts them back — `🌐 4 × Sonnet digging 2/4…` → `merging…` → `🌐 Internet ×2 ·
+  4 × Sonnet`; the link is offered only while `round < QuickAsk.lastRound` (3). Measured on the desk
+  (JWST cooling): 4/4 back in 39 s, 8/8 in 60 s, each round reviewed ~50 s later; every researcher's
+  sites join the trail.
 - **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble should be able to show
   images. As much as they fit that window, small, but when clicked, opened up"*):
   `walkie-reply "<answer>" --image <path>` (repeatable, ≤ 8; text optional with a picture) posts
