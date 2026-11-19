@@ -2556,14 +2556,38 @@ final class TerminalBinding {
     }
 
     /// Whether VS Code's keyboard focus is a terminal's input (see above).
+    ///
+    /// **Accessibility first, the window's own report when it is silent**
+    /// (2026-11-19). Victor: *"the dictation at caret doesn't hit the enter in
+    /// the Visual Studio Code terminal anymore"*. Since VS Code 1.146 (installed
+    /// 11-12) its AX tree names no focused element (`-25212`, every caret
+    /// sentence in the log from then on), so this answered false and every
+    /// forward-click prompt into Claude Code there was pasted and left in the
+    /// box — the last Return pressed was 11-10 17:44. `setAXManualAccessibility`
+    /// would build the tree back and put the editor in screen-reader mode, so
+    /// the window says it instead: `IDEBridge.terminalFocused`, reported by the
+    /// workbench patch. Unpatched and silent → false, as before.
     static func caretInVSCodeTerminal(pid: pid_t) -> Bool {
+        if let ax = axCaretInVSCodeTerminal(pid: pid) { return ax }
+        guard let bundleID = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier,
+              let reported = IDEBridge.terminalFocused(bundleID: bundleID)
+        else {
+            Log.info("⌨️ VS Code's caret: Accessibility names no focused element and the window reported nothing — not a terminal")
+            return false
+        }
+        Log.info("⌨️ VS Code's caret: Accessibility names no focused element; the window says \(reported ? "a terminal" : "not a terminal")")
+        return reported
+    }
+
+    /// The AX half: nil when the app names no focused element at all.
+    private static func axCaretInVSCodeTerminal(pid: pid_t) -> Bool? {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.5)
         var focused: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString,
                                             &focused) == .success,
               let element = focused, CFGetTypeID(element) == AXUIElementGetTypeID()
-        else { return false }
+        else { return nil }
         var classes: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element as! AXUIElement, "AXDOMClassList" as CFString,
                                             &classes) == .success,

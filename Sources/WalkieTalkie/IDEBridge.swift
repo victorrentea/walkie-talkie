@@ -257,6 +257,22 @@ enum IDEBridge {
         return TerminalBinding.focusedWindow(pid: app.processIdentifier).title
     }
 
+    /// **Whether the keyboard is in a terminal of the window in front, as the
+    /// window itself reports it** (2026-11-19) — `vscode-patch/workbench.js`
+    /// presses the hidden `termin` / `termout` items on every focus change and
+    /// `/ping` answers `terminalFocused`. Nil: no window answered, or an
+    /// unpatched one that never reported. The fallback for
+    /// `TerminalBinding.caretInVSCodeTerminal` when Accessibility names no
+    /// focused element, which is every time since VS Code 1.146.
+    static func terminalFocused(bundleID: String) -> Bool? {
+        guard let kind = kind(bundleID: bundleID) else { return nil }
+        let candidates = endpoints(kind: kind)
+        let answers = candidates.map { request("GET", "/ping", on: $0) }
+        guard let index = pickWindow(answers: answers, frontTitle: frontWindowTitle(bundleID: bundleID))
+        else { return nil }
+        return answers[index]?["terminalFocused"] as? Bool
+    }
+
     static func focusedTerminalShellPID(bundleID: String) -> pid_t? {
         guard case .bound(let handle) = bind(bundleID: bundleID) else { return nil }
         release(handle)
