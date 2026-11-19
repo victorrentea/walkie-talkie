@@ -5,7 +5,8 @@ import AppKit
 /// from the menu bar. VictorNet should have the icon of the GSM thing. VS Code should
 /// have the icon of the VS Code thingy. Petclinic should have the face of a cat. Human
 /// review, the logo of the favicon in the browser. Gmail dark CSS … the Gmail logo.
-/// Insomnia should have the coffee icon … The rest remain with stars"*).
+/// Insomnia should have the coffee icon … The rest remain with stars"*). Victor
+/// Addons and Victor Effects joined the same evening, with their app icons.
 ///
 /// Keyed by folder name, so a project is recognised in the pinned list and in
 /// *Workspace ›* alike. Each mark is the one he already knows the project by: the
@@ -41,6 +42,11 @@ enum ProjectIcons {
         // Insomnia's menu-bar cup (`InsomniaIcon.cup`).
         case "victor-insomnia": return symbol("cup.and.saucer.fill")
         case "victor-vsc": return app("com.microsoft.VSCode")
+        // Victor's own two menu-bar apps wear their Dock icons (2026-11-19): the V
+        // in a circle for Victor Addons, the ƒx for Victor Effects. Read from the
+        // installed apps, so this public repo carries neither picture.
+        case "victor-macos-addons": return app("ro.victorrentea.macos-addons")
+        case "victor-effects": return app("ro.victorrentea.victor-effects")
         // The review page's favicon (`human-review` `masthead.py`, `FAVICON_EMOJI`).
         case "human-review": return .colour(Glyphs.emoji("👱🏻‍♂️", ink: 18))
         // The Gmail logo (`assets/gmail-logo.png`, the one Victor Addons draws), else Chrome's.
