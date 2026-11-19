@@ -39,7 +39,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
     private struct Uniforms {
         var size = SIMD2<Float>(0, 0)   // the strip, in points
         var time: Float = 0
-        var edge: Float = 0             // 0 top, 1 right
+        var edge: Float = 0             // 0 top, 1 right, 2 left (the ⚡ question's marks)
         var level: Float = 0            // his voice, 0…1
         var intensity: Float = 1        // 1 at rest … 2
         var scale: Float = 2            // pixels per point
@@ -75,7 +75,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
         }
         self.queue = queue
         view = MTKView(frame: strip.bounds, device: device)
-        uniforms.edge = edge == .top ? 0 : 1
+        uniforms.edge = edge == .top ? 0 : edge == .right ? 1 : 2
         uniforms.seed = Float.random(in: 0..<64)
         super.init()
         view.colorPixelFormat = format
@@ -156,7 +156,7 @@ using namespace metal;
 struct V7U {
     float2 size;      // strip, points
     float time;
-    float edge;       // 0 top, 1 right
+    float edge;       // 0 top, 1 right, 2 left: question marks
     float level;      // voice 0..1
     float intensity;  // 1..2
     float scale;      // pixels per point
@@ -207,11 +207,63 @@ static float3 v7_palette(float x) {
     return mix(c[i % 5], c[(i + 1) % 5], f);
 }
 
+static float v7_seg(float2 p, float2 a, float2 b) {
+    float2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+// A question mark standing upright in its own points (x across, y up, the dot's foot
+// near y = 0, ~62 tall): the signed distance to its stroke, negative inside.
+static float v7_qmark(float2 g) {
+    float2 c = float2(0.0, 49.0);
+    const float R = 15.0;
+    const float open = 2.97;   // 170°: the hook's free end, on the left
+    float2 v = g - c;
+    float ang = atan2(v.y, v.x);
+    // The hook: from the left (170°) over the top and down the right side to the bottom (−90°).
+    float arc;
+    if (ang >= -1.5708 && ang <= open) arc = abs(length(v) - R);
+    else arc = min(length(g - (c + R * float2(cos(open), sin(open)))), length(g - (c + float2(0.0, -R))));
+    float stem = v7_seg(g, float2(0.0, 34.0), float2(0.0, 25.0));
+    // The dot well apart from the stem, or the grains run them into one line.
+    float dotd = length(g - float2(0.0, 7.0)) - 4.6;
+    return min(min(arc, stem) - 4.2, dotd);
+}
+
+// **The ⚡ question's edge** (2026-11-19): the left edge, its grains drawing question
+// marks turned 90° clockwise — the dot on the edge, the hook reaching in. One every
+// ~120 pt along the edge, each forming and crumbling back to dust on its own slow clock;
+// the voice makes them a little larger. A thin bed of dust runs along the edge under them.
+static float v7_marks(float a, float d, float t, float level, float k, float seed) {
+    const float S = 120.0;
+    float cellA = floor(a / S);
+    float la = a - (cellA + 0.5) * S + (v7_h(float2(cellA, 3.3)) - 0.5) * 34.0;
+    float sc = (0.92 + 0.3 * v7_h(float2(cellA, 8.1))) * (1.0 + 0.22 * level + 0.25 * k);
+    // Turned 90° clockwise: the glyph's up is away from the edge, its right is down the screen.
+    // 10 pt off the edge, so the dot stands clear of the bed of dust along it.
+    float2 g = float2(la, d - 10.0) / sc;
+    // A little breath in the strokes, so the dots never sit still.
+    g += (float2(v7_n(float2(a / 11.0, t * 0.7)), v7_n(float2(d / 11.0 + 5.0, t * 0.7))) - 0.5) * 3.0;
+    float sd = v7_qmark(g) * sc;
+    float shape = 1.0 - smoothstep(-1.5, 2.0, sd);
+    float near = 1.0 - smoothstep(0.0, 12.0, sd);
+    // Each mark's own clock: formed, then crumbling to loose dust, then formed again.
+    float pres = smoothstep(0.30, 0.62, v7_n(float2(cellA * 1.7 + seed, t * 0.21)));
+    float f = v7_fbm(float2(a / 15.0, (d - 14.0 * t) / 26.0));
+    float formed = shape * (0.80 + 0.30 * f);
+    float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
+    float dens = mix(loose, max(formed, loose * 0.5), pres);
+    float bed = (1.0 - smoothstep(0.0, 14.0, d)) * (0.20 + 0.45 * f) * (0.8 + 0.4 * level);
+    return clamp(max(dens, bed), 0.0, 1.0);
+}
+
 fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]) {
     // Points; origin at the top left of what is seen, y down.
     float2 p = in.pos.xy / u.scale;
     float a, d;                       // along the edge, away from it
-    if (u.edge < 0.5) { a = p.x; d = p.y; } else { a = p.y; d = u.size.x - p.x; }
+    bool marks = u.edge > 1.5;
+    if (u.edge < 0.5) { a = p.x; d = p.y; } else if (!marks) { a = p.y; d = u.size.x - p.x; } else { a = p.y; d = p.x; }
     a += u.seed * 97.0;
     float t = u.time;
     float k = clamp(u.intensity - 1.0, 0.0, 1.5);
@@ -237,10 +289,14 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float stray = smoothstep(0.55, 0.85, f) * (0.3 + 0.7 * tongue) * (1.0 - smoothstep(0.9, 2.4, rel)) * 0.30;
     dens = max(dens, stray);
     dens *= 0.80 + 0.20 * u.level + 0.25 * k;
+    if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed); h = 70.0; }
 
     // Each tongue its own hue; paler at the base, deeper at the tip.
     float hue = v7_n(float2(as / 150.0, t * 0.05 + 11.0)) * 2.0 + u.seed;
     float heat = exp(-d / (0.30 * h + 4.0));
+    // Finer, slower grains for the marks: a 9 pt stroke has to read as a line of dots.
+    float fine = marks ? 0.62 : 1.0;
+    float slow = marks ? 0.25 : 1.0;
 
     float3 sum = float3(0.0);
     const float cell[3]  = { 4.5, 6.2, 8.6 };
@@ -248,7 +304,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     const float gain[3]  = { 1.53, 1.8, 1.44 };
     for (int i = 0; i < 3; i++) {
         float fi = float(i);
-        float2 q = float2(a, d - speed[i] * t) / cell[i] + fi * 31.7;
+        float2 q = float2(a, d - speed[i] * slow * t) / (cell[i] * fine) + fi * 31.7;
         float row = floor(q.y);
         // Each row of grains drifts sideways by a fraction of a cell, at its own pace.
         float r0 = v7_h(float2(row, 5.0 + fi));

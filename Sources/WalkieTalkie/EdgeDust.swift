@@ -31,6 +31,12 @@ import AppKit
 ///   the alpha, taller flames, over `swell`; held `swellHold`; out in
 ///   `sentFade`. A cancel, a flip to the caret, a sentence that went nowhere: out
 ///   in `quietFade`, no swell.
+/// - **The ⚡ question has the left edge** (2026-11-19, Victor: *"create a border
+///   similar animation like the ones for new terminal or bound terminal, but on the
+///   left border … sketch question marks with the animated dots … question marks 90
+///   rotated cw"*): the same grains, drawn by the same shader in its `marks` mode —
+///   question marks lying on their side, the dot on the screen's edge and the hook
+///   reaching in, forming and crumbling back to dust one after another.
 /// - Click-through, `sharingType = .none` (`capturable` for a desk shot), above the
 ///   menu bar — the top edge is the screen's, not the visible frame's.
 ///
@@ -38,7 +44,7 @@ import AppKit
 /// read when the strip is built, so a `defaults write` and the next sentence (or
 /// `POST /test/edge-dust`) show it with no restart.
 final class EdgeDust {
-    enum Edge: String { case top, right }
+    enum Edge: String { case top, right, left }
 
     static var capturable = false
     static weak var current: EdgeDust?
@@ -91,6 +97,7 @@ final class EdgeDust {
         switch edge {
         case .top:   return NSRect(x: screen.minX, y: screen.maxY - 2 * thickness, width: screen.width, height: 2 * thickness)
         case .right: return NSRect(x: screen.maxX - 2 * thickness, y: screen.minY, width: 2 * thickness, height: screen.height)
+        case .left:  return NSRect(x: screen.minX, y: screen.minY, width: 2 * thickness, height: screen.height)
         }
     }
 
@@ -179,7 +186,7 @@ final class EdgeDust {
         picture?.start()
         if feedTimer == nil { startFeeding() }
         p.orderFrontRegardless()
-        Log.info("🌫️ the \(wanted.rawValue) edge is up — \(wanted == .top ? "a prompt to a new session" : "a prompt to the bound terminal")")
+        Log.info("🌫️ the \(wanted.rawValue) edge is up — \(wanted == .top ? "a prompt to a new session" : wanted == .right ? "a prompt to the bound terminal" : "a ⚡ question")")
     }
 
     private func leave(sent: Bool, why: String) {
@@ -270,6 +277,8 @@ final class EdgeDust {
             m = CATransform3DTranslate(m, 0, t, 0); m = CATransform3DScale(m, 1, k, 1); m = CATransform3DTranslate(m, 0, -t, 0)
         case .right:
             m = CATransform3DTranslate(m, t, 0, 0); m = CATransform3DScale(m, k, 1, 1); m = CATransform3DTranslate(m, -t, 0, 0)
+        case .left:
+            m = CATransform3DTranslate(m, -t, 0, 0); m = CATransform3DScale(m, k, 1, 1); m = CATransform3DTranslate(m, t, 0, 0)
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -304,6 +313,7 @@ final class EdgeDust {
         switch edge {
         case .top:   box = NSRect(x: 0, y: thickness, width: frame.width, height: thickness)
         case .right: box = NSRect(x: thickness, y: 0, width: thickness, height: frame.height)
+        case .left:  box = NSRect(x: 0, y: 0, width: thickness, height: frame.height)
         }
         let p = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false
@@ -326,10 +336,12 @@ final class EdgeDust {
         let away = CAGradientLayer()
         away.frame = strip.bounds
         away.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
-        away.locations = [0, 0.3, 1]
+        // The question marks reach further in than the fire: faded only past most of their height.
+        away.locations = edge == .left ? [0, 0.7, 1] : [0, 0.3, 1]
         switch edge {
         case .top:   away.startPoint = CGPoint(x: 0.5, y: 1); away.endPoint = CGPoint(x: 0.5, y: 0)
         case .right: away.startPoint = CGPoint(x: 1, y: 0.5); away.endPoint = CGPoint(x: 0, y: 0.5)
+        case .left:  away.startPoint = CGPoint(x: 0, y: 0.5); away.endPoint = CGPoint(x: 1, y: 0.5)
         }
         strip.layer?.mask = away
         content.addSubview(strip)

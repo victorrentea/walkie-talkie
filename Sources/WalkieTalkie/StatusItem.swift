@@ -597,10 +597,10 @@ final class StatusItem: NSObject, NSMenuDelegate {
             : "No effects are drawn while the Mac runs on battery\(BatteryFx.onBattery ? " (it is on battery now)" : "")."
         haloSubmenu.addItem(battery)
         haloSubmenu.addItem(.separator())
-        // The three prompts all wear the dust for now (`HaloStyle.promptsWearDust`,
-        // 2026-11-16): a row whose pick is not read is not offered.
+        // The three prompts and the ⚡ question all wear the dust for now
+        // (`HaloStyle.promptsWearDust`, 2026-11-16 / -19): a row whose pick is not read is not offered.
         for (destination, pick) in zip(HaloDestination.allCases, picks)
-        where !(HaloStyle.promptsWearDust && destination.isPrompt) {
+        where !(HaloStyle.promptsWearDust && destination.wearsDust) {
             let row = NSMenuItem(title: "\(destination.title): \(pick.menuTitle)", action: nil, keyEquivalent: "")
             let list = NSMenu()
             list.autoenablesItems = false

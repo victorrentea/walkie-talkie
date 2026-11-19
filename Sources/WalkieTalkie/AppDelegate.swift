@@ -9004,9 +9004,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if ringUp { caretHalo.setDestination(destination) }
             // **The prompt's edge** (2026-11-16, `EdgeDust`): the top one for a new
             // session, the right one for the bound terminal, none at the caret —
-            // from the first word; it outlives the microphone by itself.
+            // from the first word; it outlives the microphone by itself. **The ⚡
+            // question has the left one** (2026-11-19), its dust drawing question marks.
             edgeDust.listen(ringUp && listening && HaloStyle.promptsWearDust
-                                ? (destination == .spawn ? .top : destination == .bound ? .right : nil) : nil,
+                                ? (destination == .spawn ? .top : destination == .bound ? .right
+                                   : destination == .quick ? .left : nil) : nil,
                             micOpen: listening)
             // **A plain sentence 🔼 → / 🔼 ↑ made a prompt is a prompt on the
             // corner hints** (2026-10-25, the hint audit): the halo keeps the clean

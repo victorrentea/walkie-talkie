@@ -325,6 +325,8 @@ final class EdgeDustV4: EdgeDustPicture {
         switch edge {
         case .top:   layer.frame = CGRect(x: 0, y: box.maxY - size.height, width: size.width, height: size.height)
         case .right: layer.frame = CGRect(x: box.maxX - size.width, y: box.maxY - size.height, width: size.width, height: size.height)
+        // Out of `EdgeDustPictures.all`: the ⚡ question's left edge is only ever V7's marks.
+        case .left:  layer.frame = CGRect(x: 0, y: box.maxY - size.height, width: size.width, height: size.height)
         }
         layer.contentsGravity = .resize
         layer.magnificationFilter = .linear

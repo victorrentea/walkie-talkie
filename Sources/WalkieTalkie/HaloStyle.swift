@@ -762,7 +762,7 @@ enum HaloStyle: String, CaseIterable {
     static func current(for destination: HaloDestination) -> HaloStyle {
         if let name = ProcessInfo.processInfo.environment["WT_HALO_STYLE"],
            let forced = HaloStyle(rawValue: name) { return forced }
-        if promptsWearDust, destination.isPrompt, dustIsAvailable { return .smoke }
+        if promptsWearDust, destination.wearsDust, dustIsAvailable { return .smoke }
         guard let name = UserDefaults.standard.string(forKey: destination.defaultsKey),
               let saved = HaloStyle(rawValue: name), saved.isOffered else { return destination.fallback }
         return saved
@@ -910,6 +910,11 @@ enum HaloDestination: String, CaseIterable {
 
     /// A prompt to an agent, as against plain words (`wispr`) or a ⚡ question.
     var isPrompt: Bool { self == .caret || self == .bound || self == .spawn }
+    /// **The ⚡ question wears the prompts' dust too** (2026-11-19, Victor: *"the question
+    /// mark animation during asking mode is a bit too distracting … the mouse to keep its
+    /// sand effect in this mode too"*): the full-screen ❓ film and its fly-in are no
+    /// longer drawn; the left edge says it is a question (`EdgeDust`, `.left`).
+    var wearsDust: Bool { isPrompt || self == .quick }
 }
 
 /// **The frame cap for every web view** (Victor, 2026-09-20: *"30 is more

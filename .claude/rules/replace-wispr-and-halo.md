@@ -618,6 +618,22 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `samples()`, which only a web host calls; use the fabricated voice (no `_AUDIO`). It **can** be
   checked with the display asleep: `screencapture -o -l<window id>` of the demo's panel (verified
   2026-10-11: centred, 26–44 % of the screen lit while voiced, 0 % from 6 s of silence).
+- **⚠️ The ⚡ question wears the dust now, and its edge is the left one** (2026-11-19, Victor: *"the
+  question mark animation during asking mode is a bit too distracting … a border similar animation
+  like the ones for new terminal or bound terminal, but on the left border … sketch question marks
+  with the animated dots … question marks 90 rotated cw … the mouse to keep its sand effect in this
+  mode too"*). `HaloDestination.wearsDust` (prompts + `.quick`) → `current(for: .quick)` is Smoke
+  under `promptsWearDust`, so the ❓ film, its fly-in and its 𝓯𝔁 row are not reached (kept in the
+  file; `WT_PROMPT_DUST=0` brings them back). `syncBorrowedGestures` gives `.quick` the **left** edge
+  (`EdgeDust.Edge.left`); `EdgeDustV7` draws it in **marks** mode (`edge` 2): the same grains, finer
+  (×0.62) and slower (×0.25), lit inside `v7_qmark` — a question mark's signed distance (hook R 15 round
+  (0, 49) from 170° to −90°, stem 34→25, dot at 7, half-width 4.2) turned 90° clockwise (its up = away
+  from the edge, its right = down the screen), 10 pt off the edge, one every ~120 pt with jitter, each
+  forming and crumbling to loose dust on its own slow clock (`pres`), larger with the voice; a thin bed
+  of dust along the edge. The mask fades it from 70 % of the depth (30 % for the fire). Checked offline
+  only (`swift tools/render-edge-dust.swift 2 <png> [level] [times…]` — renders the shader from between
+  its markers); the live strip was not photographed (screen locked). Desk: `POST /test/edge-dust
+  {"edge": "left"}`.
 - **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece
   de sub mouse către centrul ecranului când apare. Zoomeze in"*). `flashQuestion` animates `stage`
   (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the
