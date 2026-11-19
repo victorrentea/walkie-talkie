@@ -194,15 +194,22 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
   cat. Human review, the … favicon … Gmail dark CSS … the Gmail logo. Insomnia … the coffee icon …
   The rest remain with stars"*). `ProjectIcons`, keyed by folder name (pinned rows and *Workspace ›*
   alike): walkie-talkie `Glyphs.walkie`, victor-net SF `cellularbars`, victor-insomnia
-  `cup.and.saucer.fill` (template, in the row's ink), victor-vsc VS Code's app icon, petclinic and
+  `cup.and.saucer.fill` (template, in the row's ink), victor-vsc VS Code's ribbon, petclinic and
   `petclinic-*` 🐱, human-review 👱🏻‍♂️ (the review page's favicon), gmail-dark-css
   `assets/gmail-logo.png` (Chrome's icon if missing), training-assistant 🎓 (the participant page's
   favicon). Drawn 20 pt in the width "✨ " measures, so `measure()` is unchanged. `WT_SHOOT_MENU` shows them.
-- **Victor Addons and Victor Effects wear their menu-bar marks bare, as large as the slot allows**
+- **Black and white, all of them; only the ✨ keeps a colour** (same evening, Victor: *"pune-le
+  alb-negru toate, mai puțin workspace care e cu steluțe galbene"*). `ProjectIcons.mark` drains every
+  `.colour` mark to its greys (`grey`, `CIColorControls` saturation 0, alpha kept). victor-vsc is the
+  ribbon alone, no tile: `code-icon.svg` from VS Code's bundle as a template in the row's ink
+  (`letterpress-dark.svg` there is an empty 1×1); the app icon, greyed, only if it is missing.
+- **Victor Addons and Victor Effects wear their menu-bar marks bare, ~~as large as the slot allows~~**
   (same evening, Victor: *"without the blue background and larger to fit as much space as you can"* —
-  their Dock icons, tile and all, lasted an hour): the V in a ring (`ProjectIcons.vInCircle`, drawn —
-  the Addons bundle carries no PNG) and the 𝓯𝔁, both templates in the row's ink, sized
-  `min(row − 4, slot − 2)` (`ProjectIcons.fillsSlot`) instead of `markSize`.
+  their Dock icons, tile and all, lasted an hour): the V in a ring (Addons' own `icon_v.png`, else
+  `ProjectIcons.vInCircle`) and the 𝓯𝔁, both templates in the row's ink. **Sized `markSize − 2`
+  since the same evening** (`ProjectIcons.bare`; Victor: *"ies din rând … mai mari decât celelalte ca
+  lățime"*): the slot's full height made the 𝓯𝔁 wider than every other mark. Having no margin of their
+  own, 2 pt under the emoji's box reads as the same size.
 - **A session told `kamikaze` is offered with a 💀 in the ⏳'s place** (Victor: *"it should show a death
   skull instead of the hourglass … It's about to die"*) — it was hidden from 2026-10-07. It still binds
   on a click. `agentState` scans a transcript for the word **or** the 💀: since 2026-11-12 the mod

@@ -24,7 +24,11 @@ enum ProjectIcons {
 
     static func mark(for folder: String) -> Mark? {
         if let hit = cache[folder] { return hit }
-        let made = make(folder)
+        // **Black and white, every one** (2026-11-19, Victor: *"pune-le alb-negru
+        // toate, mai puțin workspace"*): a coloured mark is drawn in its greys, so
+        // only the ✨ of the rows without a mark keeps a colour.
+        var made = make(folder)
+        if case .colour(let image)? = made { made = .colour(grey(image)) }
         cache[folder] = made
         return made
     }
@@ -41,7 +45,18 @@ enum ProjectIcons {
         case "victor-net": return symbol("cellularbars")
         // Insomnia's menu-bar cup (`InsomniaIcon.cup`).
         case "victor-insomnia": return symbol("cup.and.saucer.fill")
-        case "victor-vsc": return app("com.microsoft.VSCode")
+        // VS Code's ribbon alone, no tile (2026-11-19, Victor: *"nu mai pune culori,
+        // … doar iconița de Visual Studio Code"*): the monochrome logo VS Code itself
+        // ships as `code-icon.svg` (the blue ribbon), drawn by its alpha in the row's ink
+        // — `letterpress-dark.svg` beside it is an empty 1×1 since VS Code 1.10x.
+        case "victor-vsc":
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.VSCode"),
+               let ribbon = NSImage(contentsOf: url.appendingPathComponent(
+                   "Contents/Resources/app/out/media/code-icon.svg")) {
+                ribbon.isTemplate = true
+                return .template(ribbon)
+            }
+            return app("com.microsoft.VSCode")
         // Victor's own two menu-bar apps wore their Dock icons for an hour, then
         // went bare and larger (2026-11-19, Victor: *"without the blue background
         // and larger to fit as much space as you can … the same with no background
@@ -75,10 +90,37 @@ enum ProjectIcons {
         }
     }
 
-    /// The marks that are the whole picture — no tile, no margin of their own — and
-    /// so take the slot's full height rather than `markSize`.
-    static func fillsSlot(_ folder: String) -> Bool {
+    /// The marks that are the whole picture — no margin of their own — and so are
+    /// drawn a little inside `markSize` to look as large as the emoji around them,
+    /// which carry their own margin (2026-11-19, Victor: the V and the 𝓯𝔁 *"ies din
+    /// rând … mai mari decât celelalte ca lățime"* at the slot's full height).
+    static func bare(_ folder: String) -> Bool {
         folder == "victor-macos-addons" || folder == "victor-effects"
+    }
+
+    /// The image in its greys, its alpha kept.
+    private static func grey(_ image: NSImage) -> NSImage {
+        let side: CGFloat = 64
+        let size = image.size.width >= image.size.height
+            ? NSSize(width: side, height: side * image.size.height / max(image.size.width, 1))
+            : NSSize(width: side * image.size.width / max(image.size.height, 1), height: side)
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width),
+                                         pixelsHigh: Int(size.height), bitsPerSample: 8,
+                                         samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)
+        else { return image }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let input = CIImage(bitmapImageRep: rep),
+              let filter = CIFilter(name: "CIColorControls") else { return image }
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(0, forKey: kCIInputSaturationKey)
+        guard let output = filter.outputImage else { return image }
+        let out = NSImage(size: image.size)
+        out.addRepresentation(NSCIImageRep(ciImage: output))
+        return out
     }
 
     /// Victor Addons' menu-bar logo (`icon_v.png` there, a V in a ring), drawn —
