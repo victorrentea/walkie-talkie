@@ -48,7 +48,15 @@ enum ProjectIcons {
         // behind"*): their menu-bar marks, drawn here in the row's ink and filling
         // the slot (`fillsSlot`) — the V in a ring and the 𝓯𝔁. Drawn, so this
         // public repo carries neither picture.
-        case "victor-macos-addons": return .template(vInCircle(side: 24))
+        // The very PNG the Addons menu bar draws, read from the sibling checkout
+        // (Victor: *"exactly the V from the menu bar"*); drawn here if it is missing.
+        case "victor-macos-addons":
+            let png = NSHomeDirectory() + "/workspace/victor-macos-addons/Sources/VictorAddons/Resources/icon_v.png"
+            if let logo = NSImage(contentsOfFile: png) {
+                logo.isTemplate = true
+                return .template(logo)
+            }
+            return .template(vInCircle(side: 24))
         case "victor-effects":
             let fx = Glyphs.emoji("𝓯𝔁", ink: 24, colour: .black)
             fx.isTemplate = true
@@ -73,8 +81,8 @@ enum ProjectIcons {
         folder == "victor-macos-addons" || folder == "victor-effects"
     }
 
-    /// Victor Addons' menu-bar logo (`icon_v.png` there, a V in a ring), drawn
-    /// rather than read: that app's bundle carries no PNG to read.
+    /// Victor Addons' menu-bar logo (`icon_v.png` there, a V in a ring), drawn —
+    /// the fallback when the sibling checkout is not on disk.
     private static func vInCircle(side: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { r in
             let ring = r.width * 0.09
