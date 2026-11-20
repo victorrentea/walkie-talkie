@@ -6,7 +6,8 @@ import AppKit
 /// have the icon of the VS Code thingy. Petclinic should have the face of a cat. Human
 /// review, the logo of the favicon in the browser. Gmail dark CSS … the Gmail logo.
 /// Insomnia should have the coffee icon … The rest remain with stars"*). Victor
-/// Addons and Victor Effects joined the same evening, with their app icons.
+/// Addons and Victor Effects joined the same evening, with their app icons;
+/// victor-chrome (Chrome's icon) replaced gmail-dark-css on 2026-11-20.
 ///
 /// Keyed by folder name, so a project is recognised in the pinned list and in
 /// *Workspace ›* alike. Each mark is the one he already knows the project by: the
@@ -80,12 +81,11 @@ enum ProjectIcons {
         case "training-assistant": return .colour(Glyphs.emoji("🎓", ink: 18))
         // The review page's favicon (`human-review` `masthead.py`, `FAVICON_EMOJI`).
         case "human-review": return .colour(Glyphs.emoji("👱🏻‍♂️", ink: 18))
-        // The Gmail logo (`assets/gmail-logo.png`, the one Victor Addons draws), else Chrome's.
-        case "gmail-dark-css":
-            if let url = RelayWindow.walkieURL("gmail-logo"), let image = NSImage(contentsOf: url) {
-                return .colour(image)
-            }
-            return app("com.google.Chrome")
+        // All his Chrome extensions in one private repo (2026-11-20, Victor: *"să-mi
+        // apară și în Walkie Talkie, în meniu, Victor Chrome, cu iconița de Chrome în
+        // față"*): Chrome's own icon, greyed like the rest. `gmail-dark-css` and its
+        // Gmail logo went into it.
+        case "victor-chrome": return app("com.google.Chrome")
         default: return nil
         }
     }

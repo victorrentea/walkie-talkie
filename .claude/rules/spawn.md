@@ -195,8 +195,10 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
   The rest remain with stars"*). `ProjectIcons`, keyed by folder name (pinned rows and *Workspace ›*
   alike): walkie-talkie `Glyphs.walkie`, victor-net SF `cellularbars`, victor-insomnia
   `cup.and.saucer.fill` (template, in the row's ink), victor-vsc VS Code's ribbon, petclinic and
-  `petclinic-*` 🐱, human-review 👱🏻‍♂️ (the review page's favicon), gmail-dark-css
-  `assets/gmail-logo.png` (Chrome's icon if missing), training-assistant 🎓 (the participant page's
+  `petclinic-*` 🐱, human-review 👱🏻‍♂️ (the review page's favicon), victor-chrome Chrome's app icon
+  (2026-11-20, Victor: *"să-mi apară și în Walkie Talkie, în meniu, Victor Chrome, cu iconița de
+  Chrome în față"* — all his Chrome extensions in one repo; it replaced gmail-dark-css and its
+  `assets/gmail-logo.png`, folded into it), training-assistant 🎓 (the participant page's
   favicon). Drawn 20 pt in the width "✨ " measures, so `measure()` is unchanged. `WT_SHOOT_MENU` shows them.
 - **Black and white, all of them; only the ✨ keeps a colour** (same evening, Victor: *"pune-le
   alb-negru toate, mai puțin workspace care e cu steluțe galbene"*). `ProjectIcons.mark` drains every
