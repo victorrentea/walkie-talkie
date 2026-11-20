@@ -643,6 +643,19 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   neighbouring cell is drawn too, since a tall mark spills past its own. Each bobs ±8 pt and slides (its clocks ×1.15, `pace`, *"mărește viteza cu 15%"*)
   between its axis 10 pt past the edge and as far in as the 110 pt strip allows (`92 − halfW`); the
   left mask fades from 80 % of the depth. No longer turned 90°.
+- **⚠️ The ⚡ marks walk in and lose their grains, gone by ~230 pt; the edge's cancel fades in 0.3 s**
+  (2026-11-20, second pass, Victor: *"din pixelii care apar în partea stângă să se alcătuiască semne de
+  întrebare … și care apoi fac fade out, dispărând punctele lor, pe măsură ce se află pe centru"*, the
+  band marked on the screen ~240 pt wide; *"să dispară cu fade out pe zero trei secunde. Nu e brutal
+  instant"*). Supersedes the in-and-out swing above: each 170 pt cell runs **lives** (4.6–6.8 s, own
+  phase); a life is born a third past the edge out of loose dust, forms over its first quarter while
+  walking in (eased), and from 30 % of its life its density falls, so grains drop out by their own
+  thresholds (never a uniform alpha); a second fade on `d` makes it zero by `gone` 232 pt. Each life
+  is a new mark (cut, size, place hashed on the life index). The left strip is `EdgeDust.leftThickness`
+  240 pt (knob `edgeDust.leftThickness`), mask from 90 %. **`EdgeDust.cut` fades in `cutFade` 0.3 s**
+  (every edge, not only the left) — the rest of the cancel's graphics still vanish at once. The ⚡
+  question's edge ends by `cut` every time (its stop reaches `cancelDictationInFlight`), which is why
+  it read as brutal. Offline: `swift tools/render-edge-dust.swift 2 <png> 0.3 1 2 3 4 5 6` (a 240 pt strip).
 - **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece
   de sub mouse către centrul ecranului când apare. Zoomeze in"*). `flashQuestion` animates `stage`
   (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the

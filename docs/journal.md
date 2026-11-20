@@ -16521,6 +16521,23 @@ fontul. Folosește patru, cinci fonturi diferite, mai gros, mai subțire"*.
 - A tall mark spills out of its cell, so the shader draws the nearer neighbour's mark too.
 - Checked offline with `tools/render-edge-dust.swift 2` at t = 1…24 s.
 
+## ⚡ The question's marks walk in and crumble; the edge fades out on a cancel (2026-11-20)
+
+Victor, an hour after the drifting marks: *"acele semne de întrebare … să intre spre interior, după
+care să-și facă fade out … ies progresiv pe măsură ce vin spre interiorul ecranului"*, then, with a
+box dragged over the left ~240 pt of the screen: *"să dispară până aici undeva, în zona asta, toate"*;
+and *"când dispar animațiile de margine a ecranului, să dispară cu fade out pe zero trei secunde"*.
+
+- The swing in and out (`inout`, a sine) is replaced by a one-way journey per cell: lives of 4.6–6.8 s,
+  born a third past the edge, formed by a quarter of the life, thinned from 30 % on by lowering the
+  density (grains drop out one by one), and zeroed by 232 pt from the edge whatever the life says.
+  A new life hashes a new cut, size and place.
+- The left strip is 240 pt deep (was the shared 110); the mask trims only its last 10 %.
+- The log showed every ⚡ edge ending `is cut — cancelled`: the question's stop goes through the
+  cancel, and `cut` set alpha 0 in the call (2026-11-16's *"dispare brusc"*). `cut` now fades in 0.3 s
+  for every edge; the halo and the corner still vanish at once.
+- Checked offline (six frames, 1 s apart); then live with `POST /test/edge-dust {"edge": "left"}`.
+
 ## 🌀 The dust wheel turns half a lap while it fades (2026-11-20)
 
 Victor: *"când dispare acel loading icon făcut cu dust să facă fade out, să mai facă încă o jumătate

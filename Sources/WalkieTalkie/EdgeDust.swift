@@ -56,6 +56,12 @@ final class EdgeDust {
     /// How deep the strip is, in points; the swell doubles it.
     static var thickness: CGFloat { CGFloat(knob("thickness", 110)) }
     static var restAlpha: CGFloat { CGFloat(knob("alpha", 0.9)) }
+    /// The ⚡ question's strip is deeper: its marks walk in and are gone by ~230 pt
+    /// (2026-11-20, Victor marked the band on the screen: ~240 pt from the left edge).
+    static var leftThickness: CGFloat { CGFloat(knob("leftThickness", 240)) }
+    /// A cancel takes the edge out this fast (2026-11-20: *"să dispară cu fade out pe zero
+    /// trei secunde. Nu e brutal instant"* — it was cut at once since 2026-11-16).
+    static let cutFade: TimeInterval = 0.3
 
     static let swell: TimeInterval = 0.35
     static let swellHold: TimeInterval = 0.45
@@ -137,15 +143,24 @@ final class EdgeDust {
         leave(sent: false, why: why)
     }
 
-    /// A cancel: off the screen in this call, no fade (2026-11-16, *"la cancel
-    /// dispare brusc toată grafica de pe ecran"*).
+    /// A cancel: out in `cutFade`, no swell. It was off the screen in the call
+    /// (2026-11-16, *"la cancel dispare brusc toată grafica de pe ecran"*) until
+    /// 2026-11-20: *"să dispară cu fade out pe zero trei secunde. Nu e brutal instant"*.
     func cut(_ why: String) {
-        guard phase != .down, panel != nil else { return }
+        guard phase != .down, phase != .leaving, let p = panel else { return }
+        phase = .leaving
         turn += 1
+        let mine = turn
         pollTimer?.invalidate(); pollTimer = nil
-        Log.info("🌫️ the \(edge?.rawValue ?? "?") edge is cut — \(why)")
-        panel?.alphaValue = 0
-        settleDown()
+        Log.info("🌫️ the \(edge?.rawValue ?? "?") edge is cut — \(why), out in \(Self.cutFade) s")
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = Self.cutFade
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            p.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            guard let self, self.turn == mine else { return }
+            self.settleDown()
+        })
     }
 
     /// `POST /test/edge-dust {"edge": "top"|"right", "seconds": 4, "sent": true, "capturable": true}`:
@@ -166,7 +181,7 @@ final class EdgeDust {
     private func show(_ wanted: Edge) {
         let mouse = NSEvent.mouseLocation
         guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
-        let thickness = Self.thickness
+        let thickness = wanted == .left ? Self.leftThickness : Self.thickness
         if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness
             || builtVariant != EdgeDustPictures.current { teardown() }
         builtVariant = EdgeDustPictures.current
@@ -336,8 +351,8 @@ final class EdgeDust {
         let away = CAGradientLayer()
         away.frame = strip.bounds
         away.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
-        // The question marks reach further in than the fire: faded only past most of their height.
-        away.locations = edge == .left ? [0, 0.8, 1] : [0, 0.3, 1]
+        // The question marks fade themselves (the shader, by ~230 pt): the mask only trims the last grains.
+        away.locations = edge == .left ? [0, 0.9, 1] : [0, 0.3, 1]
         switch edge {
         case .top:   away.startPoint = CGPoint(x: 0.5, y: 1); away.endPoint = CGPoint(x: 0.5, y: 0)
         case .right: away.startPoint = CGPoint(x: 1, y: 0.5); away.endPoint = CGPoint(x: 0, y: 0.5)

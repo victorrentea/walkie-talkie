@@ -233,11 +233,27 @@ static float v7_qmark(float2 g, float R, float hw, float open) {
 }
 
 // One mark: the one of cell `cell` (S points long), its density at (a, d).
+//
+// **A journey, not a swing** (2026-11-20, second pass — Victor: *"din pixelii care apar în
+// partea stângă să se alcătuiască semne de întrebare … și care apoi fac fade out, dispărând
+// punctele lor, pe măsură ce se află pe centru"*, all gone by ~240 pt in). Each cell runs lives
+// one after another on its own clock (`life` 4.6–6.8 s): a mark is born at the edge, a third of
+// it past it, out of loose dust; it forms while it walks in (first quarter of its life), then
+// loses its grains one by one as it goes on (its density falls, so the grains drop out by their
+// own thresholds, never a uniform alpha), gone before `gone` points in. The next life of the
+// same cell is a new mark: its own cut, size and place along the edge.
 static float v7_mark(float cell, float S, float a, float d, float t, float level, float k, float seed, float f) {
-    float h1 = v7_h(float2(cell, 3.3)), h2 = v7_h(float2(cell, 8.1)), h3 = v7_h(float2(cell, 5.7));
+    const float pace = 1.15;
+    const float gone = 232.0;
+    float c1 = v7_h(float2(cell, 1.9)), c2 = v7_h(float2(cell, 4.4));
+    float life = 4.6 + 2.2 * c2;
+    float clock = t / life + c1 + seed * 0.13;
+    float n = floor(clock), pp = clock - n;          // which life, how far through it
+    float2 id = float2(cell, n * 1.37 + 0.5);
+    float h1 = v7_h(id + float2(0.0, 3.3)), h2 = v7_h(id + float2(0.0, 8.1)), h3 = v7_h(id + float2(0.0, 5.7));
     // Its cut, one of five, like five typefaces: the first one drawn, a heavy round, a
     // hairline, a condensed, a wide light one with the hook open further.
-    int cut = int(floor(v7_h(float2(cell, 2.9)) * 5.0));
+    int cut = int(floor(v7_h(id + float2(0.0, 2.9)) * 5.0));
     const float cR[5]    = { 15.0, 16.5, 14.0, 12.5, 17.0 };
     const float cHw[5]   = { 4.2,  5.8,  2.7,  3.6,  3.1 };
     const float cOpen[5] = { 2.97, 3.05, 2.9,  2.7,  3.3 };
@@ -246,14 +262,11 @@ static float v7_mark(float cell, float S, float a, float d, float t, float level
     float halfW = (R + hw) * sc;
     float top = 34.0 + 2.0 * R + hw;
     float mid = (7.0 - 1.1 * hw + top) * 0.5;
-    // Its clocks run 15 % faster since 2026-11-20 (`pace`).
-    const float pace = 1.15;
     float bob = sin(pace * t * (0.30 + 0.20 * h3) + h1 * 6.2832) * 8.0;
-    // 0: its axis 10 pt past the edge (a third of it hidden or more) … 1: as far in as the
-    // strip lets it, wholly on the screen when it fits.
-    float inout = 0.5 + 0.5 * sin(pace * t * (0.20 + 0.14 * h2) + h3 * 6.2832 + seed);
-    float cx = mix(-10.0, max(-10.0, min(halfW + 6.0, 92.0 - halfW)), inout);
-    float la = a - (cell + 0.5) * S + (h1 - 0.5) * 20.0 + bob;
+    // In from the edge, easing out: its axis from a third of it hidden to `gone` − its half.
+    float walk = 1.0 - (1.0 - pp) * (1.0 - pp) * 0.35 - 0.65 * (1.0 - pp);
+    float cx = mix(-0.35 * halfW, gone - halfW * 0.9, walk);
+    float la = a - (cell + 0.5) * S + (h1 - 0.5) * 30.0 + bob;
     // Upright: the glyph's x runs away from the edge, its y up the screen (a runs down).
     float2 g = float2((d - cx) / sc, mid - la / sc);
     // A little breath in the strokes, so the dots never sit still.
@@ -261,19 +274,20 @@ static float v7_mark(float cell, float S, float a, float d, float t, float level
     float sd = v7_qmark(g, R, hw, open) * sc;
     float shape = 1.0 - smoothstep(-1.5, 2.0, sd);
     float near = 1.0 - smoothstep(0.0, 12.0, sd);
-    // Each mark's own clock: formed, then crumbling to loose dust, then formed again.
-    float pres = smoothstep(0.30, 0.62, v7_n(float2(cell * 1.7 + seed, pace * t * 0.21)));
+    float form = smoothstep(0.0, 0.26, pp);
+    // Its grains go from the middle of its life, the last of them before `gone`.
+    float fade = (1.0 - smoothstep(0.30, 0.92, pp)) * (1.0 - smoothstep(gone - 90.0, gone, d));
     float formed = shape * (0.80 + 0.30 * f);
     float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
-    return mix(loose, max(formed, loose * 0.5), pres);
+    return mix(loose, max(formed, loose * 0.5), form) * fade;
 }
 
-// **The ⚡ question's edge** (2026-11-19; upright, larger, drifting since 2026-11-20): the
+// **The ⚡ question's edge** (2026-11-19; upright, larger, walking in since 2026-11-20): the
 // left edge, its grains drawing question marks standing upright, one every 170 pt along
-// the edge, each in one of five cuts and its own size (~90–175 pt tall). Each floats on its own slow
-// clocks: a little up and down, and in and out of the edge — from a third hidden past it
-// to as far in as the strip allows — while it forms and crumbles back to dust. The voice
-// makes them a little larger. A thin bed of dust runs along the edge under them.
+// the edge, each in one of five cuts and its own size (~90–175 pt tall). Each is born of the
+// dust at the edge, walks in while it forms, and loses its grains on the way, gone by ~230 pt;
+// then the next one. The voice makes them a little larger. A thin bed of dust runs along the
+// edge under them.
 static float v7_marks(float a, float d, float t, float level, float k, float seed) {
     // A tall mark spills past its cell: its neighbour on the nearer side is drawn too.
     const float S = 170.0;
