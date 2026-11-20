@@ -144,7 +144,24 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   `$HOME` on a failed `cd`, the one destination nobody meant.
   → journal: *The folder menu (2026-09-04)*
 
-## Active terminals — the last row (the first until 2026-11-03) (2026-09-23 → 2026-11-03)
+## 🤲 No *Active terminals*: Workspace takes the rest; a 🤲 raises a session (2026-11-20)
+
+Victor: *"vreau să se distrugă aia cu Active Terminals sub meniu. N-are sens. Totul ar trebui să fie
+sub workspace … Tot ce mai rămâne pui în workspace"*, and on the session lines, where the folders
+have stars, *"un pătrat cu colțuri rotunjite, care să mi-l aducă în față dacă apăs pe el"*.
+
+- **The menu is the header, the pinned folders with their session lines, and `✨ Workspace ›` with
+  its own — nothing under it.** `ActiveTerminals.grouped(…, rest: workspacePath)`: a pinned row
+  takes its folder's sessions, `~/workspace` every other one (started in it, in an unpinned project,
+  or elsewhere), named by folder (`ActiveTerminals.items`). `evals/test_active_terminals.py` holds
+  Workspace as the last row, unconditional, and `addActiveRow` gone. The section below is history;
+  its pick → `redirectSpawn` rules hold for every session line.
+- **The 🤲 (`RaiseButton`, a drawn ▢ for its first hours — Victor: *"instead of the box, put a hand
+  offering"*) sits in the star's column of every session line**, dim (alpha 0.55) until hovered: a click brings that
+  terminal forward where it is (`SpawnFolderMenu.onRaise` → `resolve(tty:)` → `bringToFront`),
+  binds nothing, leaves the menu up. The line's own click still binds without raising.
+
+## Active terminals — the last row (the first until 2026-11-03) (2026-09-23 → 2026-11-20, removed)
 
 **Since 2026-11-03** (Victor: *"mută Active Terminals ca Other terminals, în locul Workspace.
 Workspace capătă steluțe în față și vine ca ultima opțiune deasupra liniei, după proiectele marcate
@@ -243,8 +260,13 @@ session to be active right now"*.
   row hidden (no click, no hover) under `GhostView`'s grey bars — a square where the mark goes, a bar
   of varied length, a sheen sweeping across once a second; the header and the line stay.
   `fillActive` (~0.48 s measured, `POST /test/orca {"sessions": true}`) → `reveal`: the real menu
-  once, top-left kept, **the clock starts then**. `ghostCap` 1.5 s: no answer by then shows the last
-  sessions and the late answer relays out as before. Log `✨ the folder menu's rows are up after N ms`.
+  once, top-left kept, **the clock starts then**. `ghostCap` **6 s** (1.5 s until the same afternoon —
+  with 12+ sessions the look took 1.5–2.9 s, every opening hit the cap and the list moved after it
+  showed; Victor: *"should last until the list is fully complete"*): only a look that hangs shows the
+  last sessions and relays out late. The look got cheaper too, 2.9 s → 0.72 s with 22 sessions:
+  `liveTitles` asks every tab's tty and title in two Apple Events (the per-tab loop, ~60 ms a tab,
+  is the fallback), `processStart` is a `sysctl`, not a `ps` per pid, and `sentKamikaze` reads each
+  transcript once, then only its new lines (`kamikazeScan`). **💀 lines sort last** in every group. Log `✨ the folder menu's rows are up after N ms`.
   `WT_SHOOT_GHOST=1` with `WT_SHOOT_MENU` draws it.
 - ~~**A folder row with live sessions grows a chevron (between name and star) and a submenu on
   hover; its click still opens a new session**~~ (2026-10-07 → 2026-10-09).
@@ -303,8 +325,8 @@ star to get them onto the main list"*.
 - **`✨ Workspace` has session lines too: the sessions working in `~/workspace` itself** (2026-11-13,
   Victor: *"the other sessions that I've started with no folder … so I can continue a session which
   is not started in any folder of a project"*). `ActiveTerminals.grouped(…, exactly:)` — the root
-  claims only its own folder, never a subfolder: a session in an unpinned project stays under
-  *Active terminals*. Drawn by the same `addSessionLines` as a pinned folder's.
+  claimed only its own folder until 2026-11-20; since then it takes every session no pinned row
+  claims (`rest:`). Drawn by the same `addSessionLines` as a pinned folder's.
 
 ## The star
 
@@ -474,7 +496,7 @@ star to get them onto the main list"*.
 - Do not reintroduce `activate` in `SpawnTerminal`, `reversed:` in a spawn flight, or a picture on
   the send flight to an existing terminal.
 - Do not scan `~/workspace` at the gesture or on the main thread, and do not put the recent half back.
-- Do not hide *Active terminals* when nothing is running, move it off the last row, or let a
-  pick's words out before its bind lands.
+- Do not bring *Active terminals* back (2026-11-20), hide *✨ Workspace* when it is empty, move it
+  off the last row, or let a session pick's words out before its bind lands.
 - Do not make a folder row's click do anything but start a new session, and do not put the folder submenus back.
 - Do not hide a session that was sent `kamikaze` — it is offered with a 💀 (below).

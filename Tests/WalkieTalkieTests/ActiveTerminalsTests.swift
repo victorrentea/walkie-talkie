@@ -1,7 +1,8 @@
 import XCTest
 @testable import WalkieTalkie
 
-/// The spawn menu's *Active Terminals* submenu, the pure half (2026-09-23):
+/// The spawn menu's session lines, the pure half (2026-09-23; under *✨ Workspace*
+/// since 2026-11-20, when *Active terminals* went):
 /// sessions → rows, the disambiguation of two sessions in one folder, the tick
 /// on the bound one, and the empty state.
 final class ActiveTerminalsTests: XCTestCase {
@@ -20,15 +21,20 @@ final class ActiveTerminalsTests: XCTestCase {
         XCTAssertEqual(item?.busy, true)
     }
 
-    func testNoSessionsIsNoRows() {
-        XCTAssertEqual(ActiveTerminals.items([], boundTTY: "ttys004"), [])
+    func testAKamikazeLineComesLast() {
+        // 2026-11-20: a 💀 line goes under the others, whatever its name.
+        var dying = session("ttys001", "/Users/v/workspace/assistant")
+        dying.kamikazed = true
+        let rows = ActiveTerminals.items([dying, session("ttys002", "/Users/v/workspace/petclinic"),
+                                          session("ttys003", "/Users/v/workspace/code-city")], boundTTY: nil)
+        XCTAssertEqual(rows.map(\.name), ["code-city", "petclinic", "assistant"])
+        let folder = ActiveTerminals.folderItems([dying, session("ttys004", "/Users/v/workspace/zeta")],
+                                                 folder: "/Users/v/workspace", boundTTY: nil)
+        XCTAssertEqual(folder.last?.kamikazed, true)
     }
 
-    func testEmptyStateIsDrawnNotHidden() {
-        // The row keeps its place and says why it opens nothing.
-        XCTAssertEqual(ActiveTerminals.label, "Active terminals")
-        XCTAssertTrue(ActiveTerminals.emptyLabel.hasPrefix(ActiveTerminals.label))
-        XCTAssertTrue(ActiveTerminals.emptyLabel.hasSuffix("none"))
+    func testNoSessionsIsNoRows() {
+        XCTAssertEqual(ActiveTerminals.items([], boundTTY: "ttys004"), [])
     }
 
     func testUniqueFoldersShowTheFolderAloneAlphabetically() {
@@ -102,19 +108,20 @@ final class ActiveTerminalsTests: XCTestCase {
                        ["ttys003", "ttys004", "ttys005"])
     }
 
-    /// 2026-11-13: `~/workspace` claims the sessions started in it — and only those.
-    func testTheWorkspaceRowClaimsOnlySessionsInTheRootItself() {
+    /// 2026-11-20: `~/workspace` claims every session no pinned row does —
+    /// *Active terminals* is gone.
+    func testTheWorkspaceRowTakesEverySessionNoPinnedRowClaims() {
         let sessions = [
             session("ttys001", "/w"),
             session("ttys002", "/w/"),
-            session("ttys003", "/w/walkie-talkie"),           // a project, not pinned: stays
+            session("ttys003", "/w/walkie-talkie"),           // a project, not pinned: Workspace's
             session("ttys004", "/w/petclinic"),               // pinned: its own row wins
             session("ttys005", "/elsewhere"),
         ]
-        let split = ActiveTerminals.grouped(sessions, under: ["/w/petclinic"], exactly: "/w")
-        XCTAssertEqual(split.byFolder["/w"]?.map(\.tty), ["ttys001", "ttys002"])
+        let split = ActiveTerminals.grouped(sessions, under: ["/w/petclinic"], rest: "/w")
+        XCTAssertEqual(split.byFolder["/w"]?.map(\.tty), ["ttys001", "ttys002", "ttys003", "ttys005"])
         XCTAssertEqual(split.byFolder["/w/petclinic"]?.map(\.tty), ["ttys004"])
-        XCTAssertEqual(split.rest.map(\.tty), ["ttys003", "ttys005"])
+        XCTAssertEqual(split.rest, [])
     }
 
     func testAFolderSubmenuNamesTheTaskThenTheSubfolderThenTheFolder() {

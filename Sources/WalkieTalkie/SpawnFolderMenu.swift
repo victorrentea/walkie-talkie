@@ -126,6 +126,23 @@ import AppKit
 /// look finds them changed — rows appearing under the hand is the price, paid
 /// once, on the opening after a session starts or ends.
 ///
+/// # *Active terminals* is gone; *✨ Workspace* takes the rest (2026-11-20)
+///
+/// ```
+///   ✨ walkie-talkie                 ★
+///    ✓ [T] ⏳ owners grid paging   🤲     ← 🤲 brings that terminal to the front
+///   ✨ Workspace                     ›
+///      [T] victor-net              🤲     ← a session no pinned row claims
+///      [T] workspace — invoice run 🤲
+/// ```
+///
+/// Victor: *"vreau să se distrugă aia cu Active Terminals sub meniu. N-are sens.
+/// Totul ar trebui să fie sub workspace … Tot ce mai rămâne pui în workspace"*,
+/// and on every session line, where a folder row has its star, *"un simbol … ca
+/// un pătrat cu colțuri rotunjite, care să mi-l aducă în față dacă apăs pe el"*.
+/// The line's own click still binds (`redirectSpawn`, not raised); the 🤲 raises
+/// the terminal where it is and binds nothing, and the menu stays up.
+///
 /// # Workspace, instead of the recent half (2026-10-15)
 ///
 /// ```
@@ -223,7 +240,7 @@ enum SpawnFolderMenu {
     static let starSize: CGFloat = 16
     /// The gap between the longest name and the star column, so a row that fills
     /// its width does not run into the glyph.
-    private static let starGap: CGFloat = 12
+    static let starGap: CGFloat = 12
     /// The line itself: a hairline, inset to the rows' own edges so it reads as
     /// dividing the list rather than crossing the panel.
     private static let separatorHeight: CGFloat = 9
@@ -294,16 +311,10 @@ enum SpawnFolderMenu {
     /// The last row, kept so a scan landing can restyle it and the submenu
     /// knows where to hang.
     private static weak var workspaceRow: ActiveRow?
-    /// **The sessions behind the *Active Terminals* row**, nil until they have
-    /// been looked for. Finding them is an `osascript` and a `ps`
-    /// (`TerminalBinding.activeAgentSessions`), so it runs **after** the menu is
-    /// up (`fillActive`) and never delays it: the menu's clock is his reading
-    /// time and starts at the press. Nothing moves when the answer lands — the
-    /// row is measured for its longest label up front and only its text and the
-    /// submenu change.
-    private static var active: [Choice]?
     /// Every live session found, before `regroup` shares them out between the
-    /// folder rows (`children`) and *Active Terminals* (`active`).
+    /// folder rows and *✨ Workspace* (`children`). Finding them is an
+    /// `osascript` and a `ps` (`TerminalBinding.activeAgentSessions`), so it
+    /// runs **after** the menu is up (`fillActive`).
     private static var allSessions: [ActiveTerminals.Session]?
     /// The sessions the last opening found — drawn straight away by the next
     /// one, so the lines under the folders are there from the first frame.
@@ -319,8 +330,12 @@ enum SpawnFolderMenu {
     private static var ghosting = false
     /// A look that never answers does not hold the menu for ever: past this the
     /// last opening's sessions are shown and the fresh look relays out if it
-    /// differs, as before.
-    static let ghostCap: TimeInterval = 1.5
+    /// differs, as before. **6 s, not 1.5** (2026-11-20, Victor: *"the loading
+    /// icons … should last until the list is fully complete, so there is no
+    /// change in the list after it's displayed"*): with 12+ sessions the look
+    /// took 1.5–2.9 s and every opening from 11:33 on hit the cap, showed the
+    /// old list, then moved it. The cap is for a look that hangs, not a slow one.
+    static let ghostCap: TimeInterval = 6
     private static var ghostCapWork: DispatchWorkItem?
     private static var ghostSince = Date()
     /// The sessions drawn under a folder row, by the row's path.
@@ -332,9 +347,6 @@ enum SpawnFolderMenu {
     private static weak var submenuOwner: NSView?
     /// The terminal bound when the menu opened, for the tick.
     private static var boundTTY: String?
-    /// The first row, kept so the answer landing can restyle it in place and
-    /// the submenu knows where to hang.
-    private static weak var activeRow: ActiveRow?
     private static var subpanel: NSPanel?
     /// A pending close of the submenu — see `submenuGrace`.
     private static var submenuClose: DispatchWorkItem?
@@ -457,13 +469,16 @@ enum SpawnFolderMenu {
     /// the rest under *Active Terminals* (`ActiveTerminals.grouped`). Run when
     /// they land and again when a star moves the rows.
     private static func regroup() {
-        guard let all = allSessions else { active = nil; children = [:]; return }
-        // `~/workspace` itself claims the sessions started in no project — the
-        // lines under *✨ Workspace* (2026-11-13).
-        let split = ActiveTerminals.grouped(all, under: rendered.map(\.path), exactly: workspacePath)
-        active = ActiveTerminals.items(split.rest, boundTTY: boundTTY).map(choice)
+        guard let all = allSessions else { children = [:]; return }
+        // **`~/workspace` claims every session no pinned row does** (2026-11-20,
+        // Victor: *"tot ce mai rămâne pui în workspace"*) — the lines under
+        // *✨ Workspace*, named by their folder (`items`) since they are not all
+        // in one; *Active terminals* is gone.
+        let split = ActiveTerminals.grouped(all, under: rendered.map(\.path), rest: workspacePath)
         children = split.byFolder.reduce(into: [:]) { out, group in
-            out[group.key] = ActiveTerminals.folderItems(group.value, folder: group.key, boundTTY: boundTTY).map(choice)
+            out[group.key] = group.key == workspacePath
+                ? ActiveTerminals.items(group.value, boundTTY: boundTTY).map(choice)
+                : ActiveTerminals.folderItems(group.value, folder: group.key, boundTTY: boundTTY).map(choice)
         }
     }
 
@@ -541,12 +556,9 @@ enum SpawnFolderMenu {
 
     /// The sessions as they now stand: the lines under the folders laid out
     /// again when they changed (the top-left corner kept, the clock not
-    /// restarted), *Active Terminals* restyled, its submenu rebuilt where it
-    /// hangs (or closed, when nothing is left).
+    /// restarted).
     private static func showSessions(relayout changed: Bool) {
         if changed { relayout(restartClock: false) }
-        activeRow?.update(items: active)
-        if subpanel != nil, let owner = submenuOwner, owner === activeRow { openSubmenu(for: owner) }
     }
 
     /// **The pointer arriving on the menu — or on its submenu — stops the fade;
@@ -704,23 +716,22 @@ enum SpawnFolderMenu {
             .max() ?? 0
         let sessionWidth = sessions
             .map { (sessionText($0) as NSString).size(withAttributes: [.font: sessionFont]).width
-                   + sessionIndent + checkGutter + iconSize + iconGap - starGap - starSize }
+                   + sessionIndent + checkGutter + iconSize + iconGap }
             .max() ?? 0
         let widest = min(maxNameWidth, max(folderWidth, sessionWidth))
         let headerWidth = (header as NSString).size(withAttributes: [.font: headerFont]).width
         // **Measured for its longest label**, so the answer arriving
         // (`fillActive`) rewrites the row without resizing the panel under the
         // hand. Its chevron sits in the star column.
-        let activeWidth = [ActiveTerminals.label, ActiveTerminals.emptyLabel, workspaceLabel, workspaceEmptyLabel]
+        let activeWidth = [workspaceLabel, workspaceEmptyLabel]
             .map { ($0 as NSString).size(withAttributes: [.font: rowFont]).width }
             .max() ?? 0
         // The star sits inside every row, so the rows have to be wide enough for
         // the longest name *and* the glyph; the header has no star and is
         // measured on its own.
         let width = max(max(widest, activeWidth) + starGap + starSize, headerWidth) + 2 * (pad + rowInset)
-        // *Workspace* under the pinned folders, then the line and *Other
-        // terminals* (2026-11-03).
-        let bottom = rowHeight + separatorHeight + rowHeight
+        // *✨ Workspace* under the pinned folders, the last row (2026-11-20).
+        let bottom = rowHeight
         let height = 2 * pad + headerHeight + CGFloat(all.count) * rowHeight + bottom
             + CGFloat(sessions.count) * sessionHeight
         return NSSize(width: ceil(width), height: ceil(height))
@@ -735,15 +746,14 @@ enum SpawnFolderMenu {
         // **Since 2026-11-03** (Victor: *"mută Active Terminals ca Other
         // terminals, în locul Workspace. Workspace capătă steluțe în față și
         // vine ca ultima opțiune deasupra liniei, după proiectele marcate
-        // favorite"*): *Active terminals* at the bottom, the line, *✨ Workspace*,
-        // the pinned folders, and the header on top.
+        // favorite"*), then 2026-11-20 (*"să se distrugă aia cu Active
+        // Terminals"*): *✨ Workspace* at the bottom with every session no pinned
+        // row claims, the pinned folders, and the header on top.
         folderRows = [:]
         var y = pad
-        // **Last, always** — with nothing behind it, dimmed rather than hidden
-        // (see `ActiveTerminals.emptyLabel`). `evals/test_active_terminals.py`
-        // holds this line to being the first row added, i.e. the bottom one.
-        y = addActiveRow(at: y, size: size, to: root)
-        y = addSeparator(at: y, size: size, to: root)
+        // **Last, always** — dimmed rather than hidden with nothing behind it.
+        // `evals/test_active_terminals.py` holds this line to being the first
+        // row added, i.e. the bottom one.
         y = addWorkspaceRow(at: y, size: size, to: root)
         for choice in rendered.reversed() { y = add(choice, at: y, size: size, to: root) }
         _ = addHeader(header, at: y, size: size, to: root)
@@ -765,22 +775,13 @@ enum SpawnFolderMenu {
         root.addSubview(blur)
     }
 
-    private static func addActiveRow(at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
-        let row = ActiveRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: rowHeight),
-                            font: rowFont)
-        row.update(items: active)
-        row.onEnter = { [weak row] in if let row { SpawnFolderMenu.openSubmenu(for: row) } }
-        root.addSubview(row)
-        activeRow = row
-        return y + rowHeight
-    }
-
-    /// The last folder row: *✨ Workspace ›*, drawn like *Active terminals* —
+    /// The last folder row: *✨ Workspace ›* —
     /// dimmed `✨ Workspace — none` when the scan found nothing unpinned this
     /// month. A click opens a session in `~/workspace` (the ✨'s promise).
     /// **Under it, the sessions working in `~/workspace` itself** (2026-11-13) —
-    /// started in no project, lines like a pinned folder's, so one can be
-    /// continued from here instead of from *Active terminals*.
+    /// started in no project, lines like a pinned folder's — **and since
+    /// 2026-11-20 every other session no pinned row claims** (*Active terminals*
+    /// is gone).
     private static func addWorkspaceRow(at y: CGFloat, size: NSSize, to root: NSView) -> CGFloat {
         let y = addSessionLines(children[workspacePath] ?? [], at: y, size: size, to: root)
         let row = ActiveRow(frame: NSRect(x: pad, y: y, width: size.width - 2 * pad, height: rowHeight),
@@ -845,12 +846,27 @@ enum SpawnFolderMenu {
                                  choice: session, font: sessionFont)
             line.indent = sessionIndent
             line.onClick = { take($0) }
+            line.onRaise = { raise($0) }
             line.onEnter = { [weak line] in if let line { SpawnFolderMenu.entered(line) } }
             root.addSubview(line)
             y += sessionHeight
         }
         return y
     }
+
+    /// **The 🤲 on a session line: that terminal to the front, nothing bound**
+    /// (2026-11-20, Victor: *"un pătrat cu colțuri rotunjite, care să mi-l aducă
+    /// în față dacă apăs pe el"*). The menu stays up and the sentence keeps its
+    /// destination — looking at a session is not choosing it; the line's own
+    /// click is.
+    private static func raise(_ choice: Choice) {
+        guard let tty = choice.tty, !tty.isEmpty else { return }
+        Log.info("🪟 \(tty) — the folder menu's 🤲 clicked")
+        onRaise?(tty)
+    }
+
+    /// Brings the terminal on a tty forward — `AppDelegate`'s, which can resolve it.
+    static var onRaise: ((String) -> Void)?
 
     /// `~/workspace` — the *✨ Workspace* row's folder, and the key its
     /// session lines sit under in `children`.
@@ -867,21 +883,18 @@ enum SpawnFolderMenu {
         submenuClose?.cancel()
         submenuClose = nil
         guard let p = panel, let window = owner.window else { return }
-        // Only *Active Terminals* and *Workspace* have one since 2026-10-09 — a
-        // folder's sessions are lines under it.
-        guard owner is ActiveRow else { closeSubmenu(); return }
-        let isWorkspace = owner === workspaceRow
+        // Only *Workspace* has one since 2026-11-20 (*Active terminals* is gone;
+        // a folder's sessions are lines under it since 2026-10-09).
+        guard owner is ActiveRow, owner === workspaceRow else { closeSubmenu(); return }
         // Nothing to offer: the row says so and opens nothing.
-        if isWorkspace, let sections = workspace, sections.isEmpty { closeSubmenu(); return }
-        if !isWorkspace, let found = active, found.isEmpty { closeSubmenu(); return }
+        if let sections = workspace, sections.isEmpty { closeSubmenu(); return }
         if submenuOwner !== owner { setOpen(submenuOwner, false) }
         submenuOwner = owner
         setOpen(owner, true)
         let row = owner
         let screen = NSScreen.screens.first { $0.frame.intersects(p.frame) } ?? NSScreen.main
         let visible = screen?.visibleFrame ?? p.frame
-        let content = isWorkspace ? buildWorkspaceSubmenu(workspace, maxHeight: visible.height)
-                                  : buildSubmenu(active)
+        let content = buildWorkspaceSubmenu(workspace, maxHeight: visible.height)
         let size = content.frame.size
         let rowTop = window.convertToScreen(row.convert(row.bounds, to: nil)).maxY
         var x = p.frame.maxX - 2
@@ -1121,7 +1134,6 @@ enum SpawnFolderMenu {
         closeSubmenu()
         let size = measure()
         p.contentView = build(size: size)
-        activeRow?.update(items: active)
         workspaceRow?.update(items: workspace.map { $0.flatMap(\.rows) })
         p.setFrame(NSRect(x: anchor.x, y: anchor.y - size.height,
                           width: size.width, height: size.height),
@@ -1255,6 +1267,10 @@ final class FolderRow: NSView {
     var enabled = true
     var onClick: ((SpawnFolderMenu.Choice) -> Void)?
     var onStar: ((SpawnFolderMenu.Choice) -> Void)?
+    /// A session line's 🤲: that terminal to the front (2026-11-20).
+    var onRaise: ((SpawnFolderMenu.Choice) -> Void)?
+    /// A running session's line — it wears the 🤲 where a folder has its star.
+    private var raises: Bool { !(choice.tty ?? "").isEmpty }
     /// The pointer arriving on this row — the menu's cue that the hand has left
     /// *Active Terminals* for another row.
     var onEnter: (() -> Void)?
@@ -1263,11 +1279,20 @@ final class FolderRow: NSView {
         self.choice = choice
         self.font = font
         super.init(frame: frame)
-        // A terminal row has nothing to pin — it is not a folder.
-        guard choice.tty == nil else { return }
         let box = NSRect(x: frame.width - SpawnFolderMenu.rowInset - SpawnFolderMenu.starSize,
                          y: (frame.height - SpawnFolderMenu.starSize) / 2,
                          width: SpawnFolderMenu.starSize, height: SpawnFolderMenu.starSize)
+        // **A terminal row has nothing to pin — it is not a folder; it has a 🤲
+        // in the star's place instead** (2026-11-20), bringing it to the front.
+        if raises {
+            let button = RaiseButton(frame: box)
+            button.onClick = { [weak self] in
+                guard let self else { return }
+                self.onRaise?(self.choice)
+            }
+            addSubview(button)
+        }
+        guard choice.tty == nil else { return }
         let star = StarButton(frame: box, pinned: choice.pinned)
         star.onClick = { [weak self] in
             guard let self else { return }
@@ -1330,7 +1355,7 @@ final class FolderRow: NSView {
                                                    .paragraphStyle: style])
         let size = text.size()
         let width = bounds.width - x - SpawnFolderMenu.rowInset
-            - (choice.tty == nil ? SpawnFolderMenu.starSize : 0)
+            - (choice.tty == nil ? SpawnFolderMenu.starSize : raises ? SpawnFolderMenu.starSize + SpawnFolderMenu.starGap : 0)
         text.draw(with: NSRect(x: x, y: (bounds.height - size.height) / 2,
                                width: width, height: size.height),
                   options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
@@ -1362,7 +1387,7 @@ final class FolderRow: NSView {
     override func mouseExited(with event: NSEvent) { hot = false; setStarHot(false); needsDisplay = true }
 
     private func setStarHot(_ on: Bool) {
-        for v in subviews { (v as? StarButton)?.rowHot = on }
+        for v in subviews { (v as? StarButton)?.rowHot = on; (v as? RaiseButton)?.rowHot = on }
     }
 
     // The app is `.accessory` and never active, so *every* click here is a first
@@ -1382,7 +1407,7 @@ final class FolderRow: NSView {
 /// when there is nothing running to offer.
 final class ActiveRow: NSView {
     private let font: NSFont
-    /// *Active Terminals* by default; *Workspace* reuses the row (2026-10-15).
+    /// *✨ Workspace*'s — the row *Active terminals* drew until 2026-11-20.
     private let label: String
     private let emptyLabel: String
     private var hot = false
@@ -1396,8 +1421,7 @@ final class ActiveRow: NSView {
 
     private var enabled: Bool { items.map { !$0.isEmpty } ?? true }
 
-    init(frame: NSRect, font: NSFont,
-         label: String = ActiveTerminals.label, emptyLabel: String = ActiveTerminals.emptyLabel) {
+    init(frame: NSRect, font: NSFont, label: String, emptyLabel: String) {
         self.font = font
         self.label = label
         self.emptyLabel = emptyLabel
@@ -1571,6 +1595,51 @@ private final class StarButton: NSView {
     override func mouseUp(with event: NSEvent) { onClick?() }
 }
 
+// MARK: - The 🤲 on a session line (2026-11-20)
+
+/// **A 🤲 (a rounded square until the same afternoon) where a folder row has its star: a click brings that
+/// terminal to the front** (Victor: *"un simbol … să fie ca un pătrat cu colțuri
+/// rotunjite, care să mi-l aducă în față dacă apăs pe el"*). Drawn, a subview of
+/// the row for the star's reason (two clicks that mean different things never
+/// share one hit test), dim like the hollow star until the row or it is under
+/// the hand.
+final class RaiseButton: NSView {
+    var onClick: (() -> Void)?
+    var rowHot = false { didSet { if rowHot != oldValue { needsDisplay = true } } }
+    private var hot = false
+
+    /// **🤲, not a drawn ▢** (same day, Victor: *"instead of the box, put a hand
+    /// offering"*) — the session held out to him. An emoji keeps its own colours,
+    /// so the dim-until-hovered of the star is an alpha, not an ink.
+    static let glyph = "🤲"
+
+    override func draw(_ dirtyRect: NSRect) {
+        let side = min(bounds.width, bounds.height)
+        let text = NSAttributedString(string: Self.glyph,
+                                      attributes: [.font: NSFont.systemFont(ofSize: side * 0.78)])
+        let size = text.size()
+        let origin = NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2)
+        guard let cg = NSGraphicsContext.current?.cgContext else { return }
+        cg.saveGState()
+        cg.setAlpha(hot || rowHot ? 1 : 0.55)
+        text.draw(at: origin)
+        cg.restoreGState()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hot = true; needsDisplay = true }
+    override func mouseExited(with event: NSEvent) { hot = false; needsDisplay = true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) { onClick?() }
+}
+
 // MARK: - Looking at it
 
 /// **Draw the menu into a PNG and quit** — `WT_SHOOT_MENU=/tmp/menu.png`.
@@ -1609,17 +1678,13 @@ extension SpawnFolderMenu {
         // `WT_SHOOT_GHOST=1`: the menu as it opens, before the sessions land.
         let showGhost = ProcessInfo.processInfo.environment["WT_SHOOT_GHOST"] == "1"
         if showGhost { ghost(menu) }
-        // The sessions under the folders are lines of the menu itself; only
-        // *Active Terminals* still opens a submenu, drawn open when it has any.
-        // `WT_SHOOT_WORKSPACE=1` draws *Workspace ›* open instead.
+        // The sessions are lines of the menu itself (*Active terminals* is
+        // gone, 2026-11-20); `WT_SHOOT_WORKSPACE=1` draws *Workspace ›* open.
         let showWorkspace = ProcessInfo.processInfo.environment["WT_SHOOT_WORKSPACE"] == "1"
-        let owner: NSView? = showGhost ? nil
-            : showWorkspace ? workspaceRow : ((active ?? []).isEmpty ? nil : activeRow)
+        let owner: NSView? = showGhost || !showWorkspace ? nil : workspaceRow
         if let row = owner {
             setOpen(row, true)
-            let sub = showWorkspace
-                ? buildWorkspaceSubmenu(workspace, maxHeight: NSScreen.main?.visibleFrame.height ?? 1000)
-                : buildSubmenu(active)
+            let sub = buildWorkspaceSubmenu(workspace, maxHeight: NSScreen.main?.visibleFrame.height ?? 1000)
             // Right of the menu, its first row level with *Active Terminals* —
             // `openSubmenu`'s geometry, in the menu's own coordinates.
             let top = row.frame.maxY + pad

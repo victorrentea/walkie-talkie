@@ -1198,7 +1198,30 @@ final class TerminalBinding {
     /// is per window: a window being torn down while the script walks it throws,
     /// and without the guard one closing tab would cost the whole list.
     static func liveTitles() -> [String: String] {
-        let script = """
+        // **Two Apple Events for every tab, not two per tab** (2026-11-20): the loop
+        // costs ~60 ms a tab — 1.55 s for 25 tabs, most of the folder menu's look —
+        // where asking every tab's tty and title at once took 0.47 s for the same
+        // answer. The lists are checked to line up (a tab opened between the two
+        // events throws); a throw falls back to the loop, which also survives one
+        // window that will not answer.
+        let bulk = """
+        tell application "Terminal"
+            set ttys to tty of every tab of every window
+            set titles to custom title of every tab of every window
+        end tell
+        set out to ""
+        if (count of ttys) is not (count of titles) then error "windows changed"
+        repeat with i from 1 to count of ttys
+            set wt to item i of ttys
+            set wn to item i of titles
+            if (count of wt) is not (count of wn) then error "tabs changed"
+            repeat with j from 1 to count of wt
+                set out to out & (item j of wt) & tab & (item j of wn) & linefeed
+            end repeat
+        end repeat
+        return out
+        """
+        let loop = """
         tell application "Terminal"
             set out to ""
             repeat with w in windows
@@ -1215,7 +1238,7 @@ final class TerminalBinding {
             return out
         end tell
         """
-        guard let out = osascript(script) else { return [:] }
+        guard let out = osascript(bulk) ?? osascript(loop) else { return [:] }
         var titles: [String: String] = [:]
         for line in out.components(separatedBy: "\n") {
             let parts = line.components(separatedBy: "\t")
@@ -1295,8 +1318,32 @@ final class TerminalBinding {
     /// and only the lines carrying both it and a user record reach the JSON
     /// parser; a tool result is a user record too, so only `text` is read
     /// (a string `content`, or the `text` blocks of an array).
+    ///
+    /// **Read once, then only what was appended** (2026-11-20): a transcript only
+    /// grows, and once kamikazed it stays so — so `kamikazeScan` keeps, per file,
+    /// the offset past the last whole line read and the answer. Reading every
+    /// live transcript whole each time the folder menu opened took the look to
+    /// 2.9 s with a dozen sessions (the walkie-talkie ones all *say* kamikaze, so
+    /// the byte test never short-cut them), past the ghost's cap.
     private static func sentKamikaze(transcript: URL) -> Bool {
+        let key = transcript.path
+        kamikazeLock.lock(); let known = kamikazeScan[key]; kamikazeLock.unlock()
+        if known?.yes == true { return true }
         guard let data = try? Data(contentsOf: transcript, options: .mappedIfSafe) else { return false }
+        // A file shorter than what was read is another file (rewritten): start over.
+        let start = known.map { $0.offset <= data.count ? $0.offset : 0 } ?? 0
+        guard start < data.count,
+              let lastNewline = data[start...].lastIndex(of: UInt8(ascii: "\n")) else { return false }
+        let end = lastNewline + 1
+        let yes = kamikazeIn(data[start..<end])
+        kamikazeLock.lock(); kamikazeScan[key] = (end, yes); kamikazeLock.unlock()
+        return yes
+    }
+
+    private static let kamikazeLock = NSLock()
+    private static var kamikazeScan: [String: (offset: Int, yes: Bool)] = [:]
+
+    private static func kamikazeIn(_ data: Data) -> Bool {
         // **The word or the skull** (2026-11-19): since 2026-11-12 the mod leaves
         // only `· 💀` in the prompt and moves `kamikaze` into the hook's context,
         // a record of its own — a scan for the word alone never saw a 🔼 ↓ again.
@@ -2849,7 +2896,19 @@ final class TerminalBinding {
     /// — and pads a single-digit day with a *second* space, which is why the run
     /// of spaces is collapsed before parsing rather than trusted to a format
     /// string.
+    ///
+    /// **Asked of the kernel, not of `ps`** (2026-11-20): the folder menu's look
+    /// ran one `ps` per session's pid — 22 subprocesses on a busy machine.
+    /// `sysctl(KERN_PROC_PID)`'s `p_starttime` is the same instant, to the
+    /// microsecond; `ps` stays only as the fallback.
     private static func processStart(_ pid: Int32) -> Date? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        if sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 {
+            let t = info.kp_proc.p_un.__p_starttime
+            if t.tv_sec > 0 { return Date(timeIntervalSince1970: Double(t.tv_sec) + Double(t.tv_usec) / 1_000_000) }
+        }
         guard let out = run("/bin/ps", ["-o", "lstart=", "-p", String(pid)]) else { return nil }
         let normalized = out.split(separator: " ", omittingEmptySubsequences: true)
             .joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)

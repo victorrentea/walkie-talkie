@@ -1597,6 +1597,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 TerminalBinding.bringToFront(target)
             }
         }
+        // The folder menu's ▢ on a session line (2026-11-20): that terminal to
+        // the front where it is, nothing bound.
+        SpawnFolderMenu.onRaise = { [weak self] tty in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let target = self?.terminal.resolve(tty: tty) else {
+                    Log.error("🪟 no terminal on \(tty) — nothing brought forward")
+                    return
+                }
+                TerminalBinding.bringToFront(target)
+            }
+        }
         ReplyPanel.agentRunning = { TerminalBinding.agentRunning(onTTY: $0) }
         ReplyPanel.onKamikaze = { [weak self] tty in
             DispatchQueue.global(qos: .userInitiated).async {
@@ -7057,7 +7068,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // `spawnPending` as it takes the words, so a click after that
             // belongs to a sentence already delivered.
             guard let self = self, self.spawnPending else { return }
-            // **A row from *Active Terminals* is not a folder: it is the session
+            // **A session line is not a folder: it is the session
             // he wants, already running** (2026-09-23, *"a submenu opens that
             // lets me bind this prompt to that terminal"*).
             if let tty = choice.tty {
@@ -7105,7 +7116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// he had picked if he had — rather than into the terminal bound before, or
     /// into a five-minute hold whose release the 10 s poll would aim there.
     private func redirectSpawn(toTTY tty: String) {
-        Log.info("🖥️ spawn → \(tty), picked from Active Terminals (\(listening ? "mid-sentence" : "during the settle"))")
+        Log.info("🖥️ spawn → \(tty), picked from the folder menu (\(listening ? "mid-sentence" : "during the settle"))")
         let folder = spawnFolder
         clearSpawn()
         spawnPickInFlight = tty
@@ -7120,7 +7131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.spawnAfterFailedPick(tty: tty, folder: folder, held: held)
                     return
                 }
-                Log.info("📍 re-bound to \(bound.address) from Active Terminals")
+                Log.info("📍 re-bound to \(bound.address) from the folder menu")
                 // **Bound, not raised** (Victor, 2026-10-08: *"the terminal
                 // application pops in front. It should not … I usually don't
                 // care where it is"*). The words reach it wherever it sits.

@@ -23,15 +23,10 @@ import Foundation
 /// its word (`Tests/WalkieTalkieTests/ActiveTerminalsTests.swift`).
 enum ActiveTerminals {
 
-    /// The row that opens the submenu — always drawn, last in the menu, under
-    /// the line (2026-11-03: *Active Terminals* at the top until then).
-    static let label = "Active terminals"
-    /// **The same row with nothing behind it: drawn, dimmed, not hidden.** A row
-    /// that comes and goes moves every folder under it by a row's height between
-    /// two openings, and the menu's whole promise is that the row he reached for
-    /// last time is where he left it.
-    static let emptyLabel = "Active terminals — none"
-    /// The submenu's one row while the answer is still coming (an `osascript`
+    // The *Active terminals* row (2026-09-23 → 2026-11-20) is gone: what no
+    // pinned row claims sits under *✨ Workspace* (`grouped(…, rest:)`).
+
+    /// A submenu's one row while the answer is still coming (an `osascript`
     /// plus one `ps`, ~100 ms) — reached only by a hand faster than that.
     static let loadingLabel = "Looking…"
 
@@ -100,7 +95,10 @@ enum ActiveTerminals {
             .map { Item(tty: short(sessions[$0].tty), name: names[$0],
                         bound: short(sessions[$0].tty) == bound, busy: sessions[$0].busy,
                         kamikazed: sessions[$0].kamikazed) }
+            // **A 💀 line comes last** (2026-11-20, Victor: *"the Kamikaze line should
+            // come always the last"*) — a session on its way out is the least likely pick.
             .sorted {
+                if $0.kamikazed != $1.kamikazed { return $1.kamikazed }
                 let order = $0.name.localizedStandardCompare($1.name)
                 return order == .orderedSame ? $0.tty < $1.tty : order == .orderedAscending
             }
@@ -117,14 +115,12 @@ enum ActiveTerminals {
     /// rollup the old `recent_projects.py` made); with two rows nested, the deeper one
     /// wins. Keys are the rows' paths as given.
     ///
-    /// **`exactly` is a row that claims only its own folder, never one inside
-    /// it** (2026-11-13, Victor: *"under workspace to have the other sessions
-    /// that I've started with no folder … so I can continue a session which is
-    /// not started in any folder of a project"*). `~/workspace` is that row: a
-    /// session working *in* it was started in no project; one in
-    /// `~/workspace/x` belongs to `x`, and stays under *Active terminals* when
-    /// `x` is not pinned. A pinned row still wins on its own folder.
-    static func grouped(_ sessions: [Session], under folders: [String], exactly: String? = nil)
+    /// **`rest` is the row that takes every session no folder row claims**
+    /// (2026-11-20, Victor: *"tot ce mai rămâne pui în workspace"*) —
+    /// `~/workspace`, since *Active terminals* is gone. From 2026-11-13 until then
+    /// it claimed only the sessions started in `~/workspace` itself. A pinned
+    /// row still wins on its own folder; with `rest` given, `rest` comes back empty.
+    static func grouped(_ sessions: [Session], under folders: [String], rest catchAll: String? = nil)
         -> (byFolder: [String: [Session]], rest: [Session]) {
         var byFolder: [String: [Session]] = [:], rest: [Session] = []
         for s in sessions {
@@ -133,7 +129,7 @@ enum ActiveTerminals {
                 .filter { let f = trimmed($0); return dir == f || dir.hasPrefix(f + "/") }
                 .max { trimmed($0).count < trimmed($1).count }
             if let owner { byFolder[owner, default: []].append(s) }
-            else if let exactly, dir == trimmed(exactly) { byFolder[exactly, default: []].append(s) }
+            else if let catchAll { byFolder[catchAll, default: []].append(s) }
             else { rest.append(s) }
         }
         return (byFolder, rest)

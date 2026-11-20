@@ -14,6 +14,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 ## Superseded on the way
 
 - *Picking elements in Chrome*, *The music pauses for the length of a dictation* and every later ⌘⇧-pick / music-bridge section — retired 2026-11-20: the *Walkie Talkie Inspector* extension, `MusicBridge` and the picks are deleted (*The Chrome extension is gone*)
+- *Active terminals* as the folder menu's last row (2026-11-03, first row since 2026-09-23) — removed 2026-11-20: every session no pinned row claims is a line under *✨ Workspace* (*▢ Active terminals goes*)
 - *The whole panel rests at 30 %* (2026-11-05) — superseded 2026-11-06: the panel is not on screen at rest, an atom stands in the corner and the dialog comes under the hand (*The prompt at rest is an atom*).
 The journal contradicts itself over time, because it was written as things changed. The
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
@@ -16563,6 +16564,34 @@ does the same for its own Dust (the tunnel keeps 0.25 s).
   signals weighed: the echo above `❯` (still ≥ 0.85 s later), the session's transcript `"type":"user"`
   line (later still — after the Return). Rules: `replace-wispr-and-halo.md`, *📍 The pin stays…*.
 
+## ▢ Active terminals goes; Workspace takes the rest; a ▢ raises a session (2026-11-20)
+
+Victor, dictated over the folder menu: *"în terminalele deja deschise … un loc unde or fi steluțe
+aici. Vreau să am un simbol, să fie ca un pătrat cu colțuri rotunjite, care să mi-l aducă în față
+dacă apăs pe el … și vreau să se distrugă aia cu Active Terminals sub meniu. N-are sens. Totul ar
+trebui să fie sub workspace … Tot ce mai rămâne pui în workspace."*
+
+- **The *Active terminals* row and its submenu are deleted.** `ActiveTerminals.grouped(…, rest:)`
+  replaces `exactly:`: a pinned row still takes the sessions in its folder, and `~/workspace` takes
+  *every* other one — started in it, in an unpinned project, or anywhere else. Those lines are named
+  by their folder (`ActiveTerminals.items`, the old submenu's naming: `victor-net`, `workspace —
+  invoice run` on a tie), not by `folderItems`, since they are not all in one folder.
+  `✨ Workspace` is the menu's last row now; the line above *Active terminals* went with it.
+- **A ▢ on every session line, in the star's column** (`RaiseButton`, a stroked rounded square, dim
+  like the hollow star, white on a lit row, filled faintly under the hand). A click →
+  `SpawnFolderMenu.onRaise` → `terminal.resolve(tty:)` → `TerminalBinding.bringToFront` — the
+  window comes forward *where it is*, nothing is bound, the menu stays up and the sentence keeps its
+  destination. The line's own click still binds without raising (2026-10-08's rule). Log
+  `🪟 ttysNNN — the folder menu's ▢ clicked`, then `bringToFront`'s own line.
+- **The ▢ became 🤲 the same afternoon** (Victor: *"instead of the box, put a hand offering"*): the
+  session held out to him rather than a shape. `RaiseButton.glyph`, drawn centred at 78 % of the
+  star's box; an emoji keeps its colours, so *dim until hovered* is alpha 0.55 → 1, not an ink.
+- Not the reply pop-up's *to the pointer* (`presentAtPointer`, 2026-10-29): he said *în față*, and
+  a menu row has no pointer position worth moving a window to.
+- `evals/test_active_terminals.py` now holds Workspace as the last row, *Active terminals* absent,
+  and the leftovers handed to Workspace (`--self-test` catches all five breakages).
+  `WT_SHOOT_MENU` shows it.
+
 ## The Chrome extension is gone (2026-11-20)
 
 Victor, dictated: *"Extensia de Walkie Talkie nu e, nu se justifică. O să o dezinstalăm din Chrome
@@ -16585,3 +16614,24 @@ this one does not go with them.
 - The spawn menu's `gmail-dark-css` mark (`assets/gmail-logo.png`) became `victor-chrome`'s:
   Chrome's own icon, greyed like the rest (Victor: *"să-mi apară și în Walkie Talkie, în meniu,
   Victor Chrome, cu iconița de Chrome în față"*).
+
+## 2026-11-20 — The ghost waits for the whole list; 💀 lines last
+
+Victor: *"I still see the rows floating up or down … The loading icons … should last until the list is
+fully complete, so there is no change in the list after it's displayed"*, then *"the Kamikaze line should
+come always the last"*.
+
+- **Cause, from `relay.log`**: every opening from 11:33 on logged *rows are up after ~1505 ms — no answer
+  in 1.5 s*. The look (`activeAgentSessions`) had grown from 0.48 s to 2.9 s (`POST /test/orca
+  {"sessions": true}`): osascript 0.44 s, `ps` 0.48 s, and the rest re-reading every live transcript
+  whole for `kamikaze` — the walkie-talkie sessions all mention the word, so the byte test never
+  short-cut them. The cap then showed the last opening's list and the answer moved it.
+- **`ghostCap` 1.5 → 6 s**: the cap is for a look that hangs, not a slow one.
+- **The look, 2.9 s → 0.72 s (22 sessions, same route)**. Timed step by step: `liveTitles`' per-tab
+  AppleScript loop 1.55 s for 25 tabs (two Apple Events a tab) → `tty of every tab of every window` +
+  `custom title of …`, 0.47 s, same 25 lines; the lists must line up or it throws and the loop runs.
+  `processStart` ran `ps -o lstart` once per session's pid → `sysctl(KERN_PROC_PID)`. `sentKamikaze` is
+  incremental: per transcript, the offset past the last whole line read and the answer
+  (`kamikazeScan`); a yes is final, a shorter file starts over. (Each alone measured 1.85 → 1.7 s; the
+  AppleScript was the bulk.)
+- **💀 last**: `ActiveTerminals.rows` sorts kamikazed lines after the rest, then by name.
