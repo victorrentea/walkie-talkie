@@ -122,20 +122,34 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
+    /// **The smile's two bars, from his own face** (2026-11-20 human-eval, the
+    /// `ruler` line on his takes). Corners were +0.06 and missed every real
+    /// smile: three in a row, the one measured at +0.027 over his usual lift
+    /// with the mouth 1.27× — while his talking, not smiling, read −0.019 …
+    /// −0.073 on six takes (mouth 1.05–1.23×). +0.01 sits between the two.
+    /// The mouth bar stays: talking alone reaches 1.23×, so width says little
+    /// and the corners carry the verdict. One smile measured — thin evidence.
+    static let smileMouth = 1.12
+    static let smileCorners = 0.01
+
+    static func smiling(_ f: Frame, base: Baseline) -> Bool {
+        f.mouthWide >= smileMouth * base.mouthWide && f.cornerLift >= base.cornerLift + smileCorners
+    }
+
     /// **How far this take was from each bar** (2026-11-20, Victor's human-eval:
     /// two real smiles read as `no tag`, and the log could not say which half
     /// of the smile rule missed or by how much). The take's medians against
     /// the baseline it was judged on, plus how many face frames met the smile
-    /// rule, e.g. `mouth 1.04× (bar 1.12) · corners +0.03 (bar +0.06) ·
+    /// rule, e.g. `mouth 1.04× (bar 1.12) · corners +0.03 (bar +0.01) ·
     /// eyes 0.92× · face 1.01× · smiling 2/13 (need 35%)`. Empty with no faces.
     static func ruler(_ frames: [Frame], base: Baseline) -> String {
         let faces = frames.filter(\.face)
         guard !faces.isEmpty, base.mouthWide > 0, base.eye > 0, base.size > 0 else { return "" }
         func median(_ xs: [Double]) -> Double { let s = xs.sorted(); return s[s.count / 2] }
-        let smiling = faces.filter { $0.mouthWide >= 1.12 * base.mouthWide && $0.cornerLift >= base.cornerLift + 0.06 }
-        return String(format: "mouth %.2f× (bar 1.12) · corners %+.3f (bar +0.06) · eyes %.2f× · face %.2f× · smiling %d/%d (need 35%%)",
-                      median(faces.map(\.mouthWide)) / base.mouthWide,
-                      median(faces.map(\.cornerLift)) - base.cornerLift,
+        let smiling = faces.filter { Self.smiling($0, base: base) }
+        return String(format: "mouth %.2f× (bar %.2f) · corners %+.3f (bar %+.2f) · eyes %.2f× · face %.2f× · smiling %d/%d (need 35%%)",
+                      median(faces.map(\.mouthWide)) / base.mouthWide, smileMouth,
+                      median(faces.map(\.cornerLift)) - base.cornerLift, smileCorners,
                       median(faces.map(\.eye)) / base.eye,
                       median(faces.map(\.size)) / base.size,
                       smiling.count, faces.count)
@@ -143,8 +157,9 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
     /// **The verdict on one take's frames** — pure, `FaceReadTests` is its spec.
     /// Thresholds, each a ratio to `base`:
-    /// - smiled: ≥ 35 % of the face frames with the mouth ≥ 1.12 × his usual
-    ///   width **and** the corners ≥ 0.06 mouth-widths above his usual lift;
+    /// - smiled: ≥ 35 % of the face frames with the mouth ≥ `smileMouth` × his
+    ///   usual width **and** the corners ≥ `smileCorners` mouth-widths above his
+    ///   usual lift;
     /// - tired: eyes under 0.55 × his usual opening in ≥ 30 % of the face
     ///   frames, or a yawn — the mouth open ≥ 3 × his usual (and ≥ 0.35 of its
     ///   width) in two frames running;
@@ -165,7 +180,7 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             r.away = true
             r.why.append(String(format: "face %.2f of the frame (usual %.2f)", size, base.size))
         }
-        let smiling = faces.filter { $0.mouthWide >= 1.12 * base.mouthWide && $0.cornerLift >= base.cornerLift + 0.06 }
+        let smiling = faces.filter { Self.smiling($0, base: base) }
         if Double(smiling.count) >= 0.35 * Double(faces.count) {
             r.smiled = true
             r.why.append("smiling in \(smiling.count) of \(faces.count) face frames")

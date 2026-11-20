@@ -26,7 +26,7 @@ final class FaceReadTests: XCTestCase {
         var frames = (0..<10).map { usual(Double($0) / 2) }
         for i in 0..<3 { frames[i].mouthWide = 0.48; frames[i].cornerLift = 0.08 }
         let line = FaceRead.ruler(frames, base: learned)
-        XCTAssertTrue(line.hasPrefix("mouth 1.00× (bar 1.12) · corners +0.000"), line)
+        XCTAssertTrue(line.hasPrefix("mouth 1.00× (bar 1.12) · corners +0.000 (bar +0.01)"), line)
         XCTAssertTrue(line.hasSuffix("smiling 3/10 (need 35%)"), line)
         XCTAssertEqual(FaceRead.ruler([FaceRead.Frame(t: 0, face: false)], base: learned), "")
     }
@@ -41,6 +41,20 @@ final class FaceReadTests: XCTestCase {
         let r = FaceRead.judge(frames, base: learned)
         XCTAssertTrue(r.smiled)
         XCTAssertEqual(r.tag, "[face: 🙂 smiled while saying it]")
+    }
+
+    func testHisRealSmileLiftsTheCornersOnlyALittle() {
+        // 2026-11-20: his smile measured +0.027 over his usual lift, mouth 1.27×.
+        var frames = (0..<10).map { usual(Double($0) / 2) }
+        for i in 0..<5 { frames[i].mouthWide = 0.40 * 1.27; frames[i].cornerLift = 0.027 }
+        XCTAssertTrue(FaceRead.judge(frames, base: learned).smiled)
+    }
+
+    func testTalkingWideWithLowCornersIsNotASmile() {
+        // His not-smiling talk: mouth up to 1.23×, corners below his usual.
+        var frames = (0..<10).map { usual(Double($0) / 2) }
+        for i in 0..<10 { frames[i].mouthWide = 0.40 * 1.23; frames[i].cornerLift = -0.02 }
+        XCTAssertFalse(FaceRead.judge(frames, base: learned).smiled)
     }
 
     func testOneWideFrameIsNotASmile() {
