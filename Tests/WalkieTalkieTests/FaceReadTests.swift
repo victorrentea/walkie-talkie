@@ -22,6 +22,15 @@ final class FaceReadTests: XCTestCase {
         XCTAssertNil(FaceRead.judge(away, base: b).tag)
     }
 
+    func testTheRulerSaysHowFarEachBarWas() {
+        var frames = (0..<10).map { usual(Double($0) / 2) }
+        for i in 0..<3 { frames[i].mouthWide = 0.48; frames[i].cornerLift = 0.08 }
+        let line = FaceRead.ruler(frames, base: learned)
+        XCTAssertTrue(line.hasPrefix("mouth 1.00× (bar 1.12) · corners +0.000"), line)
+        XCTAssertTrue(line.hasSuffix("smiling 3/10 (need 35%)"), line)
+        XCTAssertEqual(FaceRead.ruler([FaceRead.Frame(t: 0, face: false)], base: learned), "")
+    }
+
     func testHisUsualFaceGetsNoTag() {
         XCTAssertNil(FaceRead.judge((0..<10).map { usual(Double($0) / 2) }, base: learned).tag)
     }

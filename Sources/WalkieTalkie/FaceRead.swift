@@ -122,6 +122,25 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 
+    /// **How far this take was from each bar** (2026-11-20, Victor's human-eval:
+    /// two real smiles read as `no tag`, and the log could not say which half
+    /// of the smile rule missed or by how much). The take's medians against
+    /// the baseline it was judged on, plus how many face frames met the smile
+    /// rule, e.g. `mouth 1.04× (bar 1.12) · corners +0.03 (bar +0.06) ·
+    /// eyes 0.92× · face 1.01× · smiling 2/13 (need 35%)`. Empty with no faces.
+    static func ruler(_ frames: [Frame], base: Baseline) -> String {
+        let faces = frames.filter(\.face)
+        guard !faces.isEmpty, base.mouthWide > 0, base.eye > 0, base.size > 0 else { return "" }
+        func median(_ xs: [Double]) -> Double { let s = xs.sorted(); return s[s.count / 2] }
+        let smiling = faces.filter { $0.mouthWide >= 1.12 * base.mouthWide && $0.cornerLift >= base.cornerLift + 0.06 }
+        return String(format: "mouth %.2f× (bar 1.12) · corners %+.3f (bar +0.06) · eyes %.2f× · face %.2f× · smiling %d/%d (need 35%%)",
+                      median(faces.map(\.mouthWide)) / base.mouthWide,
+                      median(faces.map(\.cornerLift)) - base.cornerLift,
+                      median(faces.map(\.eye)) / base.eye,
+                      median(faces.map(\.size)) / base.size,
+                      smiling.count, faces.count)
+    }
+
     /// **The verdict on one take's frames** — pure, `FaceReadTests` is its spec.
     /// Thresholds, each a ratio to `base`:
     /// - smiled: ≥ 35 % of the face frames with the mouth ≥ 1.12 × his usual
@@ -242,12 +261,15 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             session?.stopRunning()
             session = nil
             let reading = Self.judge(frames, base: baseline)
+            let judgedOn = baseline
             baseline.learn(frames)
             saveBaseline()
             finished = (reading, CFAbsoluteTimeGetCurrent())
+            let ruler = Self.ruler(frames, base: judgedOn)
             Log.info("🙂 face: \(reading.faces) of \(reading.frames) frames with a face"
                      + (reading.tag.map { " — \($0)" } ?? " — no tag")
                      + (reading.why.isEmpty ? "" : " (\(reading.why.joined(separator: "; ")))")
+                     + (ruler.isEmpty ? "" : " · \(ruler)")
                      + (baseline.takes < Baseline.minTakes ? " · learning his face, take \(baseline.takes) of \(Baseline.minTakes)" : ""))
             frames = []
         }
