@@ -103,6 +103,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   flips to the other side on either axis when the preferred one would hang off, then is clamped
   into the visible frame of the display the pointer is on.
   → journal: *The folder menu (2026-09-04)*
+- **Never taller than the screen: past it the rows scroll, ▲ / ▼ at the ends** (2026-11-20, Victor:
+  *"fit as much as possible into the screen, not just fall down out of the screen … an arrowhead at
+  the top or bottom … the scroll wheel"*). `frame(_:maxHeight:)` caps the panel at the visible
+  height of the screen it opened on; the rows sit in a `MenuScrollView` between two `ScrollArrow`
+  strips — drawn only while there is more that way, hover scrolls, click pages, the wheel scrolls
+  natively. `relayout` keeps the scroll offset and clamps into that screen. `build` returns the bare
+  rows; the surface is `frame`'s. `WT_SHOOT_MAX_HEIGHT` photographs it.
+  → journal: *▲▼ A folder menu taller than the screen scrolls*
 - **One level past `CGWindowLevelForKey(.maximumWindow)`.** The effect panels sit at
   `.maximumWindow` and are created *after* the menu (menu at the press, context shot at the
   release), so `.popUpMenu` lost to them and the ripple played over the choice being read. One level

@@ -257,6 +257,9 @@ enum SpawnFolderMenu {
     /// How far off the pointer the corner sits — `RelayWindow.anchorGap`'s width,
     /// mirrored, since this hangs off the other side of the cursor.
     private static let gap: CGFloat = 10
+    /// The strip at the top and bottom of a menu taller than the screen, where
+    /// the ▲ / ▼ sit (`ScrollArrow`).
+    static let arrowHeight: CGFloat = 18
 
     /// The last row, which opens `WorkspaceFolders`' sections.
     /// **✨ like the folders above it** (2026-11-03): since that day it is the
@@ -359,6 +362,11 @@ enum SpawnFolderMenu {
     /// rows the hand is already over, and it hangs *below* the pointer — so the
     /// top edge is the one that has to stay still.
     private static var anchor: NSPoint = .zero
+    /// The visible frame of the screen the menu opened on — what its height is
+    /// capped to, and what a rebuild is clamped into.
+    private static var visible: NSRect = .zero
+    /// The menu's rows when they are taller than the screen, nil when they fit.
+    private static weak var scroller: NSScrollView?
     private static var chosen: ((Choice) -> Void)?
     /// The hand on the menu, which suspends the fade — see `solidSeconds`.
     private static var hovered = false
@@ -405,9 +413,11 @@ enum SpawnFolderMenu {
         regroup()
         chosen = pick
 
-        let size = measure()
-        let root = build(size: size)
-        ghost(root)
+        visible = screenFrame(at: point)
+        let list = build(size: measure())
+        ghost(list)
+        let root = frame(list, maxHeight: visible.height)
+        let size = root.frame.size
 
         let p = NSPanel(contentRect: NSRect(origin: .zero, size: size),
                         styleMask: [.borderless, .nonactivatingPanel],
@@ -737,10 +747,11 @@ enum SpawnFolderMenu {
         return NSSize(width: ceil(width), height: ceil(height))
     }
 
+    /// The rows, at their full height and with no ground under them —
+    /// `frame` puts them on the menu's surface, in a scroll view if they are
+    /// taller than the screen.
     private static func build(size: NSSize) -> NSView {
-        let root = HoverRoot(frame: NSRect(origin: .zero, size: size))
-        root.onHover = { SpawnFolderMenu.setHovered($0) }
-        addSurface(to: root)
+        let root = NSView(frame: NSRect(origin: .zero, size: size))
 
         // Cocoa's y grows upwards, so the groups are laid out bottom-up.
         // **Since 2026-11-03** (Victor: *"mută Active Terminals ca Other
@@ -759,6 +770,68 @@ enum SpawnFolderMenu {
         _ = addHeader(header, at: y, size: size, to: root)
 
         return root
+    }
+
+    /// **The rows on the menu's surface — scrolled once they are taller than the
+    /// screen** (2026-11-20, Victor: *"in case I have a lot of sessions … it
+    /// should try to fit as much as possible into the screen, not just fall down
+    /// out of the screen … an arrowhead at the top or bottom … and the scroll
+    /// wheel up and down inside the pop-up"*). Capped at `maxHeight` (the
+    /// screen's visible height): the rows go into a scroll view between a ▲ and a
+    /// ▼ strip (`ScrollArrow`), opened at the top. The wheel scrolls it as it
+    /// does the *Workspace ›* list; an arrow is drawn only while there is more
+    /// that way, hovering it scrolls (an `NSMenu`'s arrows do the same), a click
+    /// jumps a page.
+    private static func frame(_ list: NSView, maxHeight: CGFloat) -> NSView {
+        let full = list.frame.size
+        let shown = min(full.height, floor(maxHeight))
+        let root = HoverRoot(frame: NSRect(origin: .zero, size: NSSize(width: full.width, height: shown)))
+        root.onHover = { SpawnFolderMenu.setHovered($0) }
+        addSurface(to: root)
+        scroller = nil
+        guard full.height > shown else {
+            root.addSubview(list)
+            return root
+        }
+        let scroll = MenuScrollView(frame: NSRect(x: 0, y: arrowHeight, width: full.width,
+                                                  height: shown - 2 * arrowHeight))
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = false
+        scroll.hasHorizontalScroller = false
+        scroll.verticalScrollElasticity = .none
+        scroll.horizontalScrollElasticity = .none
+        scroll.documentView = list
+        let down = ScrollArrow(frame: NSRect(x: 0, y: 0, width: full.width, height: arrowHeight),
+                               up: false, scroll: scroll)
+        let up = ScrollArrow(frame: NSRect(x: 0, y: shown - arrowHeight, width: full.width, height: arrowHeight),
+                             up: true, scroll: scroll)
+        scroll.onScroll = { [weak up, weak down] in
+            up?.refresh()
+            down?.refresh()
+            // The submenu hangs level with a row that has just moved.
+            if subpanel != nil { closeSubmenu() }
+        }
+        root.addSubview(scroll)
+        root.addSubview(down)
+        root.addSubview(up)
+        scroller = scroll
+        // Unflipped, so the top of the list is its highest y.
+        setTopOffset(0)
+        return root
+    }
+
+    /// How far the rows are scrolled down from their top; 0 when they fit.
+    private static func topOffset() -> CGFloat {
+        guard let scroll = scroller, let list = scroll.documentView else { return 0 }
+        let clip = scroll.contentView.bounds
+        return list.frame.height - clip.maxY
+    }
+
+    private static func setTopOffset(_ offset: CGFloat) {
+        guard let scroll = scroller, let list = scroll.documentView else { return }
+        let room = list.frame.height - scroll.contentView.bounds.height
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, min(room, room - offset))))
+        scroll.reflectScrolledClipView(scroll.contentView)
     }
 
     /// The menu's ground: rounded, the HUD blur behind it. Shared by the menu
@@ -1132,12 +1205,19 @@ enum SpawnFolderMenu {
         guard let p = panel else { return }
         // The row it hangs off is about to be replaced.
         closeSubmenu()
-        let size = measure()
-        p.contentView = build(size: size)
+        // A star or the sessions landing keep the rows where the hand had
+        // scrolled them.
+        let offset = topOffset()
+        let root = frame(build(size: measure()), maxHeight: visible.height)
+        let size = root.frame.size
+        p.contentView = root
+        setTopOffset(offset)
         workspaceRow?.update(items: workspace.map { $0.flatMap(\.rows) })
-        p.setFrame(NSRect(x: anchor.x, y: anchor.y - size.height,
-                          width: size.width, height: size.height),
-                   display: true)
+        // The top-left corner stays — unless the rows have grown past the
+        // bottom of the screen: then it rises just enough, never off the top.
+        let x = max(visible.minX, min(anchor.x, visible.maxX - size.width))
+        let y = max(visible.minY, min(anchor.y - size.height, visible.maxY - size.height))
+        p.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
         guard restartClock else { return }
         // The hand is on the menu, so an in-flight fade has to be reversed as
         // well as re-timed — the same invalidate-then-reverse `setHovered` does.
@@ -1181,6 +1261,13 @@ enum SpawnFolderMenu {
         }
     }
 
+    /// The visible frame of the screen the pointer is on.
+    private static func screenFrame(at point: CGPoint) -> NSRect {
+        let screen = NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
+            ?? NSScreen.main ?? NSScreen.screens.first
+        return screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1000, height: 1000)
+    }
+
     /// **Down and to the right of the pointer** — Victor's ask, 2026-09-06,
     /// replacing the down-and-*left* he asked for on 09-04. That one was picked
     /// as the quadrant the chip is never in, since the chip hangs below-right
@@ -1197,9 +1284,7 @@ enum SpawnFolderMenu {
     /// corner the clamp can slide it under the pointer; a menu three rows from
     /// the cursor is answerable and one half off the edge is not.
     private static func origin(for size: NSSize, at point: CGPoint) -> NSPoint {
-        let screen = NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
-            ?? NSScreen.main ?? NSScreen.screens.first
-        let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: size.width, height: size.height)
+        let visible = screenFrame(at: point)
 
         // Left edge just right of the pointer; flipped left if it would hang off.
         var x = point.x + gap
@@ -1245,6 +1330,116 @@ private final class HoverRoot: NSView {
     override func mouseMoved(with event: NSEvent) { NSCursor.pointingHand.set() }
     override func mouseEntered(with event: NSEvent) { NSCursor.pointingHand.set(); onHover?(true) }
     override func mouseExited(with event: NSEvent) { onHover?(false) }
+}
+
+// MARK: - Scrolling a menu taller than the screen
+
+/// The menu's rows when they do not fit, telling the menu every time they move
+/// — the wheel, an arrow, a rebuild — so the arrows can come and go.
+final class MenuScrollView: NSScrollView {
+    var onScroll: (() -> Void)?
+
+    override func reflectScrolledClipView(_ clipView: NSClipView) {
+        super.reflectScrolledClipView(clipView)
+        onScroll?()
+    }
+}
+
+/// **The ▲ / ▼ of a menu taller than the screen** (2026-11-20). Drawn only while
+/// there is more of the list that way, so it says *there is more* and nothing
+/// when there is not. Hovering it scrolls (~360 pt/s), the way an `NSMenu`'s
+/// arrows do — the hand is already there, and a click per row would be a click
+/// per row; a click jumps a page. Its strip is always there, so the rows do not
+/// shift as an arrow appears.
+final class ScrollArrow: NSView {
+    private let up: Bool
+    private weak var scroll: NSScrollView?
+    private var timer: Timer?
+    private var hot = false
+
+    init(frame: NSRect, up: Bool, scroll: NSScrollView) {
+        self.up = up
+        self.scroll = scroll
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// Whether there is more of the list beyond this edge.
+    var canScroll: Bool {
+        guard let scroll, let list = scroll.documentView else { return false }
+        let clip = scroll.contentView.bounds
+        // Unflipped: the top of the list is its highest y.
+        return up ? clip.maxY < list.frame.height - 0.5 : clip.minY > 0.5
+    }
+
+    func refresh() {
+        if !canScroll { stop() }
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard canScroll else { return }
+        let w: CGFloat = 14, h: CGFloat = 7
+        let c = NSPoint(x: bounds.midX, y: bounds.midY)
+        let path = NSBezierPath()
+        let tip = up ? c.y + h / 2 : c.y - h / 2
+        let base = up ? c.y - h / 2 : c.y + h / 2
+        path.move(to: NSPoint(x: c.x - w / 2, y: base))
+        path.line(to: NSPoint(x: c.x, y: tip))
+        path.line(to: NSPoint(x: c.x + w / 2, y: base))
+        path.close()
+        NSColor.labelColor.withAlphaComponent(hot ? 0.9 : 0.5).setFill()
+        path.fill()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hot = true
+        needsDisplay = true
+        guard timer == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    override func mouseExited(with event: NSEvent) { stop() }
+
+    /// One frame of the hover scroll — by position, since an exit can go missing.
+    private func tick() {
+        guard let window, bounds.contains(convert(window.mouseLocationOutsideOfEventStream, from: nil)) else {
+            stop()
+            return
+        }
+        step(6)
+    }
+
+    private func stop() {
+        timer?.invalidate()
+        timer = nil
+        if hot { hot = false; needsDisplay = true }
+    }
+
+    private func step(_ points: CGFloat) {
+        guard let scroll, let list = scroll.documentView else { return }
+        let clip = scroll.contentView
+        let room = list.frame.height - clip.bounds.height
+        let y = max(0, min(room, clip.bounds.origin.y + (up ? points : -points)))
+        clip.scroll(to: NSPoint(x: 0, y: y))
+        scroll.reflectScrolledClipView(clip)
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {
+        step(max(SpawnFolderMenu.arrowHeight, (scroll?.contentView.bounds.height ?? 0) - 2 * SpawnFolderMenu.arrowHeight))
+    }
 }
 
 // MARK: - A row
@@ -1671,13 +1866,18 @@ extension SpawnFolderMenu {
         boundTTY = ProcessInfo.processInfo.environment["WT_SHOOT_BOUND"]
         allSessions = TerminalBinding.activeAgentSessions()
         regroup()
-        let size = measure()
-        let menu = build(size: size)
-        var canvas = size
+        let list = build(size: measure())
         var submenu: NSView?
         // `WT_SHOOT_GHOST=1`: the menu as it opens, before the sessions land.
         let showGhost = ProcessInfo.processInfo.environment["WT_SHOOT_GHOST"] == "1"
-        if showGhost { ghost(menu) }
+        if showGhost { ghost(list) }
+        // `WT_SHOOT_MAX_HEIGHT=<pt>`: a screen that short — the rows scrolled,
+        // the ▼ drawn (2026-11-20).
+        let maxHeight = ProcessInfo.processInfo.environment["WT_SHOOT_MAX_HEIGHT"]
+            .flatMap { Double($0) }.map { CGFloat($0) } ?? .greatestFiniteMagnitude
+        let menu = frame(list, maxHeight: maxHeight)
+        let size = menu.frame.size
+        var canvas = size
         // The sessions are lines of the menu itself (*Active terminals* is
         // gone, 2026-11-20); `WT_SHOOT_WORKSPACE=1` draws *Workspace ›* open.
         let showWorkspace = ProcessInfo.processInfo.environment["WT_SHOOT_WORKSPACE"] == "1"
@@ -1687,7 +1887,7 @@ extension SpawnFolderMenu {
             let sub = buildWorkspaceSubmenu(workspace, maxHeight: NSScreen.main?.visibleFrame.height ?? 1000)
             // Right of the menu, its first row level with *Active Terminals* —
             // `openSubmenu`'s geometry, in the menu's own coordinates.
-            let top = row.frame.maxY + pad
+            let top = row.convert(row.bounds, to: menu).maxY + pad
             let origin = NSPoint(x: size.width - 2, y: top - sub.frame.height)
             let low = min(0, origin.y)
             sub.setFrameOrigin(NSPoint(x: origin.x, y: origin.y - low))

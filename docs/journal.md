@@ -16635,3 +16635,27 @@ come always the last"*.
   (`kamikazeScan`); a yes is final, a shorter file starts over. (Each alone measured 1.85 → 1.7 s; the
   AppleScript was the bulk.)
 - **💀 last**: `ActiveTerminals.rows` sorts kamikazed lines after the rest, then by name.
+
+
+## ▲▼ A folder menu taller than the screen scrolls (2026-11-20)
+
+Victor: *"in case I have a lot of sessions, the Walkie Talkie pop-up that should allow me to select in
+what folder I start the session should try to fit as much as possible into the screen, not just fall
+down out of the screen. It should also show … an arrowhead at the top or bottom, to allow me to scroll
+back and forth … and I should be able to use the scroll wheel up and down inside the pop-up."*
+
+- **Why it fell off**: `origin` clamps a menu that fits; one taller than the visible frame (the menu
+  measured 1136 pt with 22 sessions — more than a 1080p screen's ~1050) could not be clamped, and
+  `relayout` kept the top-left corner with no clamp at all, so the sessions landing after the ghost
+  pushed the bottom off the screen.
+- **`SpawnFolderMenu.frame(_:maxHeight:)`**: `build` now returns the bare rows; `frame` puts them on the
+  surface (`HoverRoot` + blur). Taller than the screen's visible height, they go into a
+  `MenuScrollView` between two 18 pt strips (`arrowHeight`) holding a `ScrollArrow` each, opened at
+  the top. The wheel scrolls it natively (as the *Workspace ›* list already did in this non-key panel).
+- **`ScrollArrow`**: a drawn triangle, only while there is more that way; hovering scrolls ~360 pt/s
+  (a 60 Hz `.common` timer that checks the pointer each tick, as an exit can go missing), a click
+  jumps a page. `MenuScrollView.reflectScrolledClipView` tells the arrows on every move, and closes an
+  open submenu (it hangs level with a row that just moved).
+- **A rebuild keeps the scroll** (`topOffset` / `setTopOffset`) and is clamped into the screen the
+  menu opened on (`visible`): the top-left corner stays unless the rows have grown past the bottom.
+- **`WT_SHOOT_MAX_HEIGHT=<pt>`** photographs the scrolled state (`WT_SHOOT_MENU`).
