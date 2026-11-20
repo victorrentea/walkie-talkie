@@ -467,7 +467,7 @@ enum CaptureFlash {
 extension NSColor {
     /// The one colour that means "the relay just photographed this".
     ///
-    /// **Lifted from `victor-macos-addons`, where ⌃P has meant it for years.**
+    /// **Lifted from `victor-mac`, where ⌃P has meant it for years.**
     /// That desktop already draws this exact border around the screen when it
     /// takes a picture, and Victor watches both apps on the same Mac — two
     /// different colours for the same event is a distinction that has to be

@@ -490,7 +490,7 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   `resolve()` walks — a menu whose order disagreed with the automatic pick would teach the wrong
   thing every time he opened it. The `Automatic` row spells it out
   (`Automatic — 🎙️ ▸ 🎤 ▸ 🏛️ ▸ 🎧 ▸ 💻`) rather than asking him to remember it. → journal: same
-- **It is also `victor-macos-addons`' list, row for row** (2026-09-22). That app transcribes the
+- **It is also `victor-mac`' list, row for row** (2026-09-22). That app transcribes the
   room continuously through the same five microphones and shows the same five rows in its own menu;
   `🏛️ Stage` is here only because it was there, and it sits *below* the two lavaliers rather than
   second, where addons used to rank it — a far-field room mic with AGC beats a condenser pointed at
@@ -527,7 +527,7 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
 - **Match on name AND manufacturer.** The receiver's USB product name is `Wireless Mic Rx`; the
   brand is only in the manufacturer string `DJI Technology Co., Ltd.`. Matching both is what keeps
   it working across the Mic 2 / Mic Mini line. → journal: *The DJI receiver is the microphone whenever it is plugged in*
-- **The system default input is kept by Victor Addons, not here** (2026-11-13). Victor wanted the system's input on the microphone the apps listen on (ChatGPT's voice was on the MacBook's with the XLR on the desk); this app did it for an hour (`SystemMic`), then *"vreau ca addons să mențină doar el microfonul sistemului … Nu walkie"* — it is `SystemMicKeeper` in `victor-macos-addons` now, same pick file and ladder. This app's one part: `POST /test/input` touches `~/.walkie-talkie/mic/default-hold`, and Addons stands back for 10 min so the harness keeps the default it set. **Do not set the default from here again.**
+- **The system default input is kept by Victor Addons, not here** (2026-11-13). Victor wanted the system's input on the microphone the apps listen on (ChatGPT's voice was on the MacBook's with the XLR on the desk); this app did it for an hour (`SystemMic`), then *"vreau ca addons să mențină doar el microfonul sistemului … Nu walkie"* — it is `SystemMicKeeper` in `victor-mac` now, same pick file and ladder. This app's one part: `POST /test/input` touches `~/.walkie-talkie/mic/default-hold`, and Addons stands back for 10 min so the harness keeps the default it set. **Do not set the default from here again.**
 - **Never follow the system default input.** This Mac has four virtual inputs (Loopback's `🎙️TO
   Zoom`, Wave Link, Iriun, Teams) plus every headset that ever pairs; any can become the default
   between two dictations and hand back an empty transcript. Same room: peak 16552 through the

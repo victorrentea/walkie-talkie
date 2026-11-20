@@ -907,7 +907,7 @@ recent, fără niciun LLM, fără nicio căutare prin transcripturi"*.
 **Because the answer never needed a model.** The destination he is looking for is
 one he has already spoken to, there are a dozen at most, and each one already
 carries a title its own agent keeps rewriting to say what it is doing — Claude
-Code writes `✳ victor-macos-addons — Copilot logo alternating display` into the
+Code writes `✳ victor-mac — Copilot logo alternating display` into the
 tab, and that *is* the summary. Nothing had to be generated; it only had to stop
 being thrown away.
 
@@ -2051,7 +2051,7 @@ on the mode, so outside it Victor Addons goes on typing Return with it.
 **127.0.0.1:8920** and `chrome-extension/relay.js` pauses every audible tab,
 resuming exactly those. Ported from Victor Addons' `DictationBridge` + its
 `chrome-extension/`, which does the same for its own dictations — read
-`victor-macos-addons/docs/audio-sounds.md` for the CoreAudio half of the story.
+`victor-mac/docs/audio-sounds.md` for the CoreAudio half of the story.
 
 **Why Chrome decides which tab.** CoreAudio funnels every tab through one Chrome
 audio helper process, so from outside the browser "Chrome is making sound" is the
@@ -3458,7 +3458,7 @@ measured before the one that holds:
   clean against a *synthesised* chord and dirty against the real button. While
   the modifiers are live the window server merges the current state back into a
   posted key whatever the event says — the trap
-  `KeySimulator.waitForModifiersReleased` exists for in victor-macos-addons.
+  `KeySimulator.waitForModifiersReleased` exists for in victor-mac.
 - **Asking the system to wait for them is not enough either**, and this is the
   part that is genuinely surprising: `CGEventSource.flagsState` answers *clean*
   through the whole window. **Options+ never presses ⌃⌥⌘ as keys** — it stamps
@@ -3683,7 +3683,7 @@ discoverable route beside it.
 Victor reported the gesture doing *nothing* at rest. Two things were in the way,
 and only the first was in this repo's control:
 
-- **The ChatGPT bar was eating it.** `victor-macos-addons` had its own
+- **The ChatGPT bar was eating it.** `victor-mac` had its own
   double-wheel-click detector, which synthesized ⌃⌥Space — the ChatGPT desktop
   app's `toggleLauncher` shortcut. Two event taps cannot share one gesture, and
   that one fired visibly. It was removed there (`caa3ffe`), taking
@@ -4184,7 +4184,7 @@ he has actually been working in most over the last fortnight.**
   human-review              ★
   petclinic                 ★
   training-assistant        ★     ← PinnedProjects — his decision
-  victor-macos-addons       ★
+  victor-mac       ★
   victor-vsc                ★
   walkie-talkie             ★
   ─────────────────────────
@@ -9739,7 +9739,7 @@ is that the guarantee must not lapse silently, and the answer to that is a test,
 `evals/test_capture_decorations.py` counts the windows each file makes against the `sharingType`
 lines it sets, and its `--self-test` proves it fails on a bare panel.
 
-**What *is* in his frames is the other two apps.** `victor-macos-addons` and `victor-effects`
+**What *is* in his frames is the other two apps.** `victor-mac` and `victor-effects`
 contain no `sharingType` anywhere, so the hands-off 🔒 corners, the amber frame, the bottom-left
 banner and any effect playing from the tablet all land in these pictures — the 14 Sep 06:27 frame
 has the hands-off badge sitting beside the pointer. That is defensible there (a decoration nobody
@@ -11697,7 +11697,7 @@ row with *nothing* in it (row 12814, two seconds of digital silence) and wrong f
 with the ring lit — and then delivered **whatever was on the pasteboard**:
 
 ```
-18:24:22  🗣️ wispr transcript via copy_last_text —  1 chars → spawn:…/victor-macos-addons
+18:24:22  🗣️ wispr transcript via copy_last_text —  1 chars → spawn:…/victor-mac
 18:27:01  🗣️ wispr transcript via copy_last_text — 25 chars → caret
 ```
 
@@ -15037,7 +15037,7 @@ README; not applied tonight. Rig traps the run paid for:
 
 On the host the same evening, Victor Addons' From Walkie watchdog turned the device off under a
 running Walkie twice (stale `NSRunningApplication` from a background queue). It was fixed in
-victor-macos-addons `2965a09`.
+victor-mac `2965a09`.
 
 ## The bridge may not kill the relay (2026-09-30)
 
@@ -16421,7 +16421,7 @@ Victor: *"Îmi plăcea foarte mult la terminal că am arătat titlul cu tot cu, 
 Orca îmi apare doar proiectul în care este."* Two causes. The spawn passed `--title <folder>`, a custom title,
 which Orca never overrides. And Orca never uses the program's OSC title for a tab anyway: the custom title wins,
 else a title Orca generates **once** from the first prompt (`agent-generated-tab-title-rules.ts`); a reset
-showed *macOS addon walk animation* where the pane said `✳ victor-macos-addons — Gândac pe ⌘⌃9 gata`. There
+showed *macOS addon walk animation* where the pane said `✳ victor-mac — Gândac pe ⌘⌃9 gata`. There
 is no setting for it. So `OrcaBridge.syncTabTitles` (every 10 s while the switch is on, from launch) copies
 each Claude-shaped pane title onto its tab, leading glyph dropped. First tick: 22 tabs renamed in 3 s; the next
 ticks renamed none.

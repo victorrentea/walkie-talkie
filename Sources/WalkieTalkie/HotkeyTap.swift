@@ -3966,7 +3966,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             //   (`KeySimulator`), and those mean Enter and must be left alone. So the
             //   one Return that is a disguised button carries `backButtonStamp` in
             //   `eventSourceUserData` and nothing else does. **The constant is
-            //   duplicated in `BackButtonEnter.swift` in the victor-macos-addons
+            //   duplicated in `BackButtonEnter.swift` in the victor-mac
             //   repo; the two must not drift.**
             // - **The source pid**, kept for LinearMouse, which owned this until
             //   2026-09-07 and is matched by process name. A key pressed on real
@@ -4456,7 +4456,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
 
         // ⌃⌥P is not this app's (2026-09-29): it was the +1 shot, and it
-        // swallowed the 🪂 that victor-macos-addons types on the same chord.
+        // swallowed the 🪂 that victor-mac types on the same chord.
         // The shutter lives on the mouse's back button, which is where Victor
         // reaches for it.
         trace("passed", type, event)
@@ -4487,7 +4487,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// button, `mods=CTRL+OPT+CMD` on the wire (2026-09-09, listen-only tap).
     /// While the modifier keys are genuinely down, the window server merges the
     /// live state back into a posted key whatever the event says; the same trap
-    /// `KeySimulator.waitForModifiersReleased` exists for in victor-macos-addons.
+    /// `KeySimulator.waitForModifiersReleased` exists for in victor-mac.
     /// So the only fix is to let go of the moment: off the tap thread, poll
     /// until the keyboard comes clean, then type. Measured on this Mac, Options+
     /// releases 11 ms after the F6 — far below anything a finger notices.

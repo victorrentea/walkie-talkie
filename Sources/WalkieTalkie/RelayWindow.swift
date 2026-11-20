@@ -1866,7 +1866,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     private func startFollowingMouse() {
         // Was a 60 Hz `Timer` polling `NSEvent.mouseLocation`, which trailed a
         // fast-moving pointer by up to a whole tick plus a window-move round
-        // trip — the same lag `CursorGlow` (victor-macos-addons) had chasing the
+        // trip — the same lag `CursorGlow` (victor-mac) had chasing the
         // cursor the same way, fixed there the same day by switching to the
         // events themselves. Global catches every other app the pointer moves
         // over; local catches this app's own (non-activating) panel, which

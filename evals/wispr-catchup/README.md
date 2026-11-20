@@ -218,7 +218,7 @@ now. Neither the crash nor `could not aim` has been seen on the host's log.
 - A `pkill` of the guest relay is **deferred up to 600 s by the QuitGate** while sentences are
   held for a bind. `open` then only brings the old instance forward, and it quits later, mid-run.
 
-## Host incident found on the way (fixed in victor-macos-addons `2965a09`)
+## Host incident found on the way (fixed in victor-mac `2965a09`)
 
 Victor Addons' From Walkie watchdog switched the device off under a running Walkie on his Mac, at
 19:50:09 and 20:18:49, so Wispr fell back to the Elgato with no bridge. The watchdog read

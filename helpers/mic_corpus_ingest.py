@@ -4,7 +4,7 @@
 Two processes, one corpus, and the line between them is ownership:
 **Victor Addons produces files, Walkie Talkie owns the database.**
 
-`victor-macos-addons/whisper-transcribe/corpus_recorder.py` runs inside the live
+`victor-mac/whisper-transcribe/corpus_recorder.py` runs inside the live
 transcription process, on a Mac in front of a room, and writes utterance WAVs
 plus one JSONL line each into `<corpus>/mic/`. It does not touch `corpus.db` —
 a realtime audio process should not be a second writer on a SQLite file that a

@@ -65,8 +65,8 @@ enum ProjectIcons {
         // public repo carries neither picture.
         // The very PNG the Addons menu bar draws, read from the sibling checkout
         // (Victor: *"exactly the V from the menu bar"*); drawn here if it is missing.
-        case "victor-macos-addons":
-            let png = NSHomeDirectory() + "/workspace/victor-macos-addons/Sources/VictorAddons/Resources/icon_v.png"
+        case "victor-mac":
+            let png = NSHomeDirectory() + "/workspace/victor-mac/Sources/VictorAddons/Resources/icon_v.png"
             if let logo = NSImage(contentsOfFile: png) {
                 logo.isTemplate = true
                 return .template(logo)
@@ -95,7 +95,7 @@ enum ProjectIcons {
     /// which carry their own margin (2026-11-19, Victor: the V and the 𝓯𝔁 *"ies din
     /// rând … mai mari decât celelalte ca lățime"* at the slot's full height).
     static func bare(_ folder: String) -> Bool {
-        folder == "victor-macos-addons" || folder == "victor-effects"
+        folder == "victor-mac" || folder == "victor-effects"
     }
 
     /// The image in its greys, its alpha kept.

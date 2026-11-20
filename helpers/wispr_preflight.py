@@ -459,7 +459,7 @@ def checks(device_name: str | None = None, speaker: bool = False,
                     "🔒 hands-off at ~/bin/hands-off" if hands_off else "~/bin/hands-off is missing",
                     fatal=True, key="hands-off",
                     remedy="The run posts keystrokes and steals focus. Without the locks Victor cannot\n"
-                           "see that his Mac is busy. `victor-macos-addons/hands-off.sh` → ~/bin/hands-off."))
+                           "see that his Mac is busy. `victor-mac/hands-off.sh` → ~/bin/hands-off."))
 
     for route in (require_routes or []):
         present = route_exists(port, route)

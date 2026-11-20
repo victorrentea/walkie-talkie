@@ -2771,7 +2771,7 @@ final class TerminalBinding {
         // Reading the published file blindly was wrong because `ttysNNN` is a
         // number macOS hands to the next tab that opens, so a tab on a recycled
         // number read back the folder of a session that ended hours ago
-        // (measured: a fresh zsh in `petclinic` bound as `victor-macos-addons`).
+        // (measured: a fresh zsh in `petclinic` bound as `victor-mac`).
         //
         // Preferring the live process's `cwd` was wrong because of the claim it
         // rested on — that the two are equal, "because Claude Code's own
@@ -2780,9 +2780,9 @@ final class TerminalBinding {
         // *process* directory that never leaves the launch folder. Measured on
         // this Mac: **9 of the 20 live ttys disagreed**, every one of them a
         // session whose agent had moved — `~/.claude/cwd/ttys003` said
-        // `victor-macos-addons` while `lsof` on its pid still said `~/workspace`.
+        // `victor-mac` while `lsof` on its pid still said `~/workspace`.
         // That is exactly the chip saying `workspace` beside a terminal whose
-        // status line reads `victor-macos-addons`.
+        // status line reads `victor-mac`.
         //
         // So: ask for the published value **keyed by the pid**, not by the tty.
         // The status line writes `~/.claude/cwd/.last-<its parent pid>` beside

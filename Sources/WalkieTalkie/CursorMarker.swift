@@ -25,7 +25,7 @@ import AppKit
 /// screen border says *this was photographed*, the reticle says *from here* —
 /// and they used to disagree, red mark inside a red border only by coincidence.
 /// Both are now `NSColor.captureAccent`, which is the amber ⌃P has drawn in
-/// `victor-macos-addons` for years.
+/// `victor-mac` for years.
 enum CursorMarker {
 
     /// Ratios lifted from `makeSniperReticle`, where they are expressed against a

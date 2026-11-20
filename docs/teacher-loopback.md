@@ -34,7 +34,7 @@ Two halves, in two repos:
 
 | | where | what |
 |---|---|---|
-| **collection** | `victor-macos-addons` — `whisper-transcribe/corpus_recorder.py` | utterance WAVs of Victor's voice, all workday, gated on speech and on his voiceprint. See that repo's `docs/transcription.md`, *🎓 Voice corpus* |
+| **collection** | `victor-mac` — `whisper-transcribe/corpus_recorder.py` | utterance WAVs of Victor's voice, all workday, gated on speech and on his voiceprint. See that repo's `docs/transcription.md`, *🎓 Voice corpus* |
 | **labelling** | here — `helpers/wispr_loopback.py`, `wispr_probe.py`, `teacher_label.py` | plays each WAV into Wispr and reads back what it heard |
 | **the seam** | here — `helpers/mic_corpus_ingest.py` | the addons app writes files; this side owns `corpus.db` |
 

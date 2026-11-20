@@ -447,4 +447,4 @@ his fonts, signed into his Microsoft account, for `slides_seen.py` in
 `victor-skills-private/skills/training-summarizer/`. That script boots it headless with `--no-audio`,
 exports and shuts it down; when the VM is already running it leaves it alone and uses LibreOffice, so a
 lab run is never disturbed. **`vm-lab.sh reset` would lose PowerPoint and the Microsoft sign-in.**
-Details: `victor-macos-addons/docs/activity-monitors.md`.
+Details: `victor-mac/docs/activity-monitors.md`.

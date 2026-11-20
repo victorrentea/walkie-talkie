@@ -41,7 +41,7 @@ requested afterwards, including months afterwards.
 3. **It synthesises keystrokes**, which means Accessibility permission for the
    interpreter running it *and* the 🔒 hands-off locks up while it runs — Victor
    must not touch the keyboard mid-batch, and the only way he learns that is the
-   locks (see `victor-macos-addons/docs/hands-off.md`). `teacher_label.py` raises
+   locks (see `victor-mac/docs/hands-off.md`). `teacher_label.py` raises
    them; this module refuses to guess on his behalf.
 
 ## The one-time setup this cannot do for itself

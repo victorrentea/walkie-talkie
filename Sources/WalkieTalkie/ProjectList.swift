@@ -190,7 +190,7 @@ enum PinnedProjects {
     /// this list is the folders the menu has named for days, and the first
     /// spawn after an update should show him the menu he knows, with a star
     /// beside each row explaining how it got that way.
-    private static let seed = ["victor-macos-addons", "training-assistant",
+    private static let seed = ["victor-mac", "training-assistant",
                               "walkie-talkie", "victor-vsc", "petclinic", "human-review",
                               "victor-effects"]
 

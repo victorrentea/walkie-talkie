@@ -41,7 +41,7 @@ configs, 3212 decodes).
 sample dictations fell into repetition loops — "nu știu, nu știu, nu știu…" for
 forty words — and because every looped word is an insertion, those three alone
 moved pooled WER from 37% to 50%. The flag is right *here* and would be wrong in
-victor-macos-addons, which streams short chunks and genuinely needs the previous
+victor-mac, which streams short chunks and genuinely needs the previous
 one for continuity.
 """
 import contextlib
@@ -199,7 +199,7 @@ except Exception as e:  # noqa: BLE001 — any import failure is the same answer
 # as the daemon lives and is never returned to the system. Measured on 2026-09-17
 # over 40 corpus clips: weights held a flat 1543 MB while the cache climbed
 # 1159 -> 1396 -> 1541 -> 1711 MB and was still rising when the run ended. After
-# three hours of real use this process and its sibling in victor-macos-addons
+# three hours of real use this process and its sibling in victor-mac
 # were holding 5.7 GB and 3.5 GB, ~95% of it this pool, 3.5 GB of it pushed out
 # to swap.
 #
@@ -603,7 +603,7 @@ def coverage(res):
 
 # Warm up on a second of silence so the weights are resident before Victor's
 # first sentence, rather than his first sentence paying for them. Same reason
-# victor-macos-addons warms up before its GUI starts.
+# victor-mac warms up before its GUI starts.
 #
 # **Never next to this file** (2026-09-26, batch 6): installed, this script lives
 # inside the signed app bundle, and a file written there breaks

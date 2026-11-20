@@ -27,7 +27,7 @@ import Foundation
 /// also keeps the dependency one-directional in the only way that matters —
 /// this app writes and reads its own home folder and does not care whether
 /// anything else on the Mac has ever heard of it, which is the standing rule
-/// that Walkie Talkie must stay usable without `victor-macos-addons` (that repo
+/// that Walkie Talkie must stay usable without `victor-mac` (that repo
 /// is private; this one is not).
 ///
 /// ## Why its own subfolder
