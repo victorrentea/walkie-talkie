@@ -16,7 +16,7 @@ import AppKit
 /// it read back (−1440, 270) — the centre clamped so the 960×540 view stays on
 /// the 1920×1080 display. At rest it answers factor 1 and the display's centre.
 ///
-/// Victor Addons' own zoom (`ShareZoom`) needs none of this: it is an ordinary
+/// Victor Mac' own zoom (`ShareZoom`) needs none of this: it is an ordinary
 /// window over the display, so `screencapture` already takes the magnified picture.
 enum MagnifierViewport {
 

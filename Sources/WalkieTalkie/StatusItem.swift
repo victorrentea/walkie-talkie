@@ -395,7 +395,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     }
 
     /// The row's title alone — what `DjiBattery`'s answer repaints. The DJI's
-    /// transmitter battery rides after its name, as in Victor Addons' menu
+    /// transmitter battery rides after its name, as in Victor Mac' menu
     /// (2026-10-07): `Mic: 🎤 DJI 80 %`.
     private func applyMicTitle() {
         var title = "Mic: \(micCurrentLabel?() ?? "—")"
@@ -1206,7 +1206,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
             engineSubmenu.addItem(row)
         }
         // **🧾 What the account has left, under a line of its own** (2026-09-28,
-        // moved here from Victor Addons the same morning — *"quota lui 11labs
+        // moved here from Victor Mac the same morning — *"quota lui 11labs
         // are sens doar in walkie"*). Below the rows he picks from, because it
         // is a readout, not a choice. Since 2026-09-28 it is the only money in
         // the list — the `$x.xx` the ElevenLabs rows carried went (*"îmi ajunge
@@ -1797,7 +1797,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// When this binary was put in place, for the Version row.
     ///
     /// **Taken from the executable's own mtime, not from a constant stamped into
-    /// the source.** Victor Addons seds a `BUILD_TIME` literal into its Swift file
+    /// the source.** Victor Mac seds a `BUILD_TIME` literal into its Swift file
     /// on every build, which works but dirties a tracked file on each run and
     /// lands in commits as noise. The file date says the same thing for free and
     /// cannot go stale: `build-app.sh` copies the binary into the bundle with a
@@ -2015,7 +2015,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // 🧾 cached for 5 min; a stale one refreshes in the background and the
         // row repaints while the menu is still open.
         ElevenLabsQuota.shared.refreshIfStale()
-        // 🎤 the DJI's battery, asked of Victor Addons; the row repaints in the open menu.
+        // 🎤 the DJI's battery, asked of Victor Mac; the row repaints in the open menu.
         DjiBattery.refresh { [weak self] _ in self?.applyMicTitle() }
         applyEngineRow()
         applyLastUsedRow()

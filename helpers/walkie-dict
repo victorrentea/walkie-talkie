@@ -2,7 +2,7 @@
 """walkie-dict — one dictionary for both engines (2026-11-09).
 
     walkie-dict add "<right>" [--heard "<as it came out>"]   # both dictionaries, then sync
-    walkie-dict sync [--dry-run]                             # merge both ways (Victor Addons, every 10 min)
+    walkie-dict sync [--dry-run]                             # merge both ways (Victor Mac, every 10 min)
     walkie-dict show [--no-open]                             # the dictionary as a page: who taught each word, when
     walkie-dict backfill                                     # the adds agents made before the log, from their transcripts
 
@@ -525,7 +525,7 @@ s{{color:var(--mute)}} .badge{{border-radius:6px;padding:1px 6px;font-size:12px;
 </style>
 <h1>✍️ Editor dictionary</h1>
 <div class=mute>{len(rows)} entries in <code>{esc(VOCAB)}</code>, read by the ✍️ editor — {esc(summary)}. Newest first.
-<b>Sync:</b> <code>walkie-dict sync</code> (Victor Addons, every 10 min) mirrors this file both ways with Wispr Flow's own dictionary
+<b>Sync:</b> <code>walkie-dict sync</code> (Victor Mac, every 10 min) mirrors this file both ways with Wispr Flow's own dictionary
 (<code>flow.sqlite</code>, then Wispr's cloud at its next start or Hub sync). Harvest last ran {esc(last_run)} (weekly, Saturdays 03:30).</div>
 <input id=q placeholder="Filter…" autofocus>
 <table id=t><tr class=head><th>Word</th><th>Source</th><th>Added</th><th>Synced to</th></tr>{"".join(r[1] for r in rows)}</table>

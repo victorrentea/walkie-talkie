@@ -790,7 +790,7 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
 `FromWalkieDevice` turns the BlackHole-built device **"From Walkie"** (`../from-walkie`, box UID
 `FromWalkie_UID`) on at launch and off in `applicationWillTerminate` — **not** when a restart is
 replacing the instance (the newcomer turns it on; an off/on blip bounces Wispr to its next mic and
-back). A crash is covered by Victor Addons' watchdog (5 s poll, device off when the relay is gone).
+back). A crash is covered by Victor Mac' watchdog (5 s poll, device off when the relay is gone).
 The switch is `kAudioBoxPropertyAcquired` — no GUI, no sudo. The device reports **USB**, because
 Wispr's microphone list hides every Virtual device.
 

@@ -7,7 +7,7 @@
 // it sits beside, because at equal width a disc reads as the larger object.
 // Measured on this Mac rather than taken from the document: Finder's and
 // Chrome's bodies are 80.5% of their canvas to the pixel (the 83.6% an alpha
-// bounding box reports is their drop shadow bleeding), and Victor Addons —
+// bounding box reports is their drop shadow bleeding), and Victor Mac —
 // circular, like this one — is 77.0–78.1%.
 //
 // `walkie-bound.png` fills its canvas corner to corner (measured: 100%), because

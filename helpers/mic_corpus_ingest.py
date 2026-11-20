@@ -2,7 +2,7 @@
 """Adopt the addons app's microphone samples into `corpus.db`.
 
 Two processes, one corpus, and the line between them is ownership:
-**Victor Addons produces files, Walkie Talkie owns the database.**
+**Victor Mac produces files, Walkie Talkie owns the database.**
 
 `victor-mac/whisper-transcribe/corpus_recorder.py` runs inside the live
 transcription process, on a Mac in front of a room, and writes utterance WAVs

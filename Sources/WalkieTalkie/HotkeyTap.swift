@@ -92,7 +92,7 @@ final class HotkeyTap {
     /// **⌘⌃X — the local model, now** (2026-09-28): the take being recorded, or
     /// the one whose words are still on their way, is transcribed on this Mac
     /// instead of waiting for the cloud. X for *exit* — Victor's *"quick exit"*;
-    /// ⌘⌃L (for *local*) is Victor Addons' Google Calendar and ⌘⌃W is Wispr
+    /// ⌘⌃L (for *local*) is Victor Mac' Google Calendar and ⌘⌃W is Wispr
     /// Flow's *paste last transcript*.
     var onLocalNow: (() -> Void)?
 
@@ -296,7 +296,7 @@ final class HotkeyTap {
 
     /// **`~/.walkie-talkie/prompting` exists, holding this pid, while a prompt
     /// records** (2026-10-20) — **and while a plain one does** (2026-10-22: ⌃P
-    /// is the switch to a prompt there, `onPlainToPrompt`) — Victor Addons reads it on ⌃P and lets the key
+    /// is the switch to a prompt there, `onPlainToPrompt`) — Victor Mac reads it on ⌃P and lets the key
     /// through instead of taking its own screenshot (Victor: *"take over the
     /// shortcut and block the addon … If I am dictating, it's I'm telling you
     /// first"*). The pid lets a file left by a crash be told from a live prompt.
@@ -1154,7 +1154,7 @@ final class HotkeyTap {
     /// ⌘⌃D before that: D is now the key that dictates.
     ///
     /// Owned here since 2026-08-26; it used to live in
-    /// Victor Addons, which had to launch this app before it could ask it to
+    /// Victor Mac, which had to launch this app before it could ask it to
     /// bind. Now that the relay starts at login there is nothing to launch, and
     /// the key belongs to the app it acts on.
     var onBindHotkey: (() -> Void)?
@@ -2123,7 +2123,7 @@ final class HotkeyTap {
     ///
     /// ⚠️ **And this tap must have seen the press itself** (`wheelPressSeen`).
     /// The window server's word alone is not enough: a release eaten by any
-    /// other app's tap (Victor Addons' wheel crop, ScreenBrush, an agent's
+    /// other app's tap (Victor Mac' wheel crop, ScreenBrush, an agent's
     /// unpaired click) leaves it believing the wheel is down for hours —
     /// `area-crop.md` measured seven — and every dictation then ate every
     /// scroll on the Mac (2026-10-31, from a scan of every app's scroll hooks).
@@ -3604,7 +3604,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // Victor: *"să pot să apăs și de două ori repede tasta Option din
             // partea dreaptă, ca să tot comute dictarea on și off"* — moved to
             // right ⌘ on 2026-10-20: *"instead of right opt-opt, right cmd-cmd
-            // should open clean dictation"*, right ⌥ ×2 going to Victor Addons'
+            // should open clean dictation"*, right ⌥ ×2 going to Victor Mac'
             // emoji picker). Only the right ⌘ with nothing else held counts — the
             // left ⌘ included; any other modifier, a key in between (keyDown below,
             // any key at all) or a slow press breaks the pair. The
@@ -3960,7 +3960,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // discriminator has two forms, because the remapper changed identity on
             // 2026-09-07:
             //
-            // - **The stamp**, which is the live one. Victor Addons took the button
+            // - **The stamp**, which is the live one. Victor Mac took the button
             //   over when LinearMouse was uninstalled, and it is not a remapper — it
             //   is a general-purpose app that also posts Returns for its own reasons
             //   (`KeySimulator`), and those mean Enter and must be left alone. So the
@@ -3976,7 +3976,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // Why this was worth a fix rather than a note: for a day the answer was
             // "neither", and the failure is silent — no shot, and the Enter it would
             // have been lands in whatever is in front. See *Tap order is what makes
-            // this work* in CLAUDE.md: the order flipped because Victor Addons is
+            // this work* in CLAUDE.md: the order flipped because Victor Mac is
             // rebuilt and restarted after every change to it, i.e. routinely later
             // than the relay.
             if (keyCode == VK_RETURN || keyCode == VK_KEYPAD_ENTER) && dictating
@@ -4028,7 +4028,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // ⌃P — **the shutter while a prompt records** (2026-10-20, Victor: *"when
         // I'm prompting with trackpad, also allow control P as a way to take the
         // screenshot, just as if I would [make the 🔽 click]"*). Bare ⌃ only, the
-        // 🔽 click's own gate; Victor Addons owns ⌃P at every other moment and
+        // 🔽 click's own gate; Victor Mac owns ⌃P at every other moment and
         // steps aside while `promptingMark` names a live Walkie. Its release and
         // autorepeat go with it — a held ⌃P is not Addons' crop mid-prompt.
         if keyCode == VK_P, ctrl, !cmd, !opt, !flags.contains(.maskShift),
@@ -5616,7 +5616,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     ///
     /// Matched by process name and nothing else. Swallowing a Return is only
     /// acceptable because it is provably not a keystroke: any *other* process
-    /// posting one (a script, an automation, Victor Addons' own key simulator)
+    /// posting one (a script, an automation, Victor Mac' own key simulator)
     /// meant it as an Enter and must be left alone.
     ///
     /// Answers are cached per pid: this runs on the event tap, once per Return
@@ -5639,7 +5639,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// `~/.config/linearmouse/linearmouse.json` is where the button → Return
     /// mapping lives; this is the process that acts on it.
     ///
-    /// **Uninstalled on 2026-09-07** — Victor Addons does this natively now, and
+    /// **Uninstalled on 2026-09-07** — Victor Mac does this natively now, and
     /// is recognised by `backButtonStamp` instead, since a name cannot separate
     /// its disguised button from the Returns it posts for other reasons. Kept so
     /// that a reinstall keeps working, and because it costs one string.
@@ -5649,7 +5649,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// The mark this app puts on the Return it posts for the back button's
     /// click, so its own tap can tell that Return from one Victor typed.
     ///
-    /// It began life in Victor Addons' `BackButtonEnter.swift`, which used to
+    /// It began life in Victor Mac' `BackButtonEnter.swift`, which used to
     /// make the Return; the value is kept rather than reinvented so that a
     /// version of that app still running against the old wiring is recognised
     /// rather than fought.

@@ -10,7 +10,7 @@ import QuartzCore
 /// nothing connecting them. A blink over the window would confirm the capture
 /// but leave the chip unexplained; a blink at the cursor would confirm the chip
 /// but never say which window. The travel is the sentence: *that* window is now
-/// *this* chip. It is the same argument Victor Addons' break timer makes when it
+/// *this* chip. It is the same argument Victor Mac' break timer makes when it
 /// flies in from the coffee that started it.
 ///
 /// **The thing that flies is the window itself, not a chenar around it.** An
@@ -23,7 +23,7 @@ import QuartzCore
 /// went away between the bind and the frame) — a flight with no picture still
 /// answers *where from*, which is most of what it is for.
 ///
-/// **White, not blue, and not a signal colour at all.** Victor Addons flashes
+/// **White, not blue, and not a signal colour at all.** Victor Mac flashes
 /// **yellow** for "I captured this" and the relay flashes **red** for "it went to
 /// the agent" (`CaptureFlash`) — both of those are events being announced. This
 /// is not an announcement, it is a thing being *moved*, and a screenshot in

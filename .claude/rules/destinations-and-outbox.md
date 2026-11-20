@@ -280,7 +280,7 @@ me to dismiss it explicitly"*.
   at Wispr's start or a Hub dictionary action, and only then does the running Wispr use it. `walkie-dict
   sync` is a three-way merge against `~/.walkie-talkie/vocabulary-sync.json` (adds and deletes travel
   both ways; Wispr's auto-learned `user_edits` rows and snippets are never pulled);
-  Victor Addons runs it every 10 min (`WalkieDictSync`, its `docs/walkie-dict-sync.md`; a LaunchAgent for one hour before that) — the dependency points that way only. Writing that table is not
+  Victor Mac runs it every 10 min (`WalkieDictSync`, its `docs/walkie-dict-sync.md`; a LaunchAgent for one hour before that) — the dependency points that way only. Writing that table is not
   the forbidden *Wispr database as a recogniser* (`whisper-and-corpus.md`): nothing is read back as
   words. The ⚡ quick question drops the hint with `questionHint` (no tools there).
 - **Not when the sender is the terminal in front** (2026-10-13, Victor: *"if I'm focusing the window,
@@ -478,7 +478,7 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   `POST /test/quick {"images": [path], "followUp": true}`; log `⚡ asking with N picture(s) and M
   earlier turn(s)`. → journal: *2026-10-15 — ⚡ the question is a prompt*
 
-- **Under Victor Addons' ⌥⇧ zoom the reply pop-up is magnified with the rest** (2026-10-15, Victor:
+- **Under Victor Mac' ⌥⇧ zoom the reply pop-up is magnified with the rest** (2026-10-15, Victor:
   *"You shouldn't keep the small one … I should zoom in it. The top most basically has to
   disappear."*). `ShareZoom` is an opaque `.screenSaver` window that films the display; at
   `maximumWindow + 1` the pop-up was drawn twice — flat above the glass, magnified in the film.
@@ -597,7 +597,7 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
 - **Abroad, a ⚡ question says where and asks for English** (2026-11-19, Victor, in Portugal:
   *"Whenever I ask a question during a workshop which is done for a country different than
   Romania, you can tell the country I've selected in the tool here … answer me in English"*).
-  "The tool" is Victor Addons' ☕️ Break country (`BreakTimer.country.tz` / `.day` in
+  "The tool" is Victor Mac' ☕️ Break country (`BreakTimer.country.tz` / `.day` in
   `ro.victorrentea.macos-addons`, today's pick only), read at each question by `WorkshopCountry`
   (zone → ISO through `/usr/share/zoneinfo/zone.tab`; Romania or no pick today → nothing). Its
   `clause` rides at the end of the question in `askQuick` and `googleQuestion` — every stage and

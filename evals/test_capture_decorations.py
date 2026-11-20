@@ -32,7 +32,7 @@ A ternary is allowed — `CaretHalo` and `DropArrow` become capturable for a dem
 path a dictation can take — but a window with no `sharingType` line at all is a
 decoration one screenshot away from being in Victor's prompt.
 
-What it cannot check: what any *other* app draws on his screen. Victor Addons and
+What it cannot check: what any *other* app draws on his screen. Victor Mac and
 Victor Effects set no sharing type anywhere, so their overlays — the hands-off
 🔒 corners, the amber frame, a banner, an effect playing from the tablet — do
 land in these frames. That is deliberate there (an effect nobody can screen-share

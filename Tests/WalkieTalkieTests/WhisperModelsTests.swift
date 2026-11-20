@@ -122,7 +122,7 @@ final class WhisperModelsTests: XCTestCase {
     }
 }
 
-/// The DJI battery on the `Mic:` row, worded as Victor Addons words it (2026-10-07).
+/// The DJI battery on the `Mic:` row, worded as Victor Mac words it (2026-10-07).
 final class DjiBatteryTests: XCTestCase {
     private func suffix(_ json: String) -> String? { DjiBattery.menuSuffix(json: Data(json.utf8)) }
 

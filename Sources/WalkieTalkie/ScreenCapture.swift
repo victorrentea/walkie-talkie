@@ -508,7 +508,7 @@ enum ScreenCapture {
     /// real case — but "almost" is doing work there: dictate twice without moving
     /// the mouse and both context shots are `shot-00:00(mouse-at-800x900px)`.
     /// Overwriting would destroy a picture an outbox line still points at, which
-    /// is the same trap `ScreenshotManager.uniqueURL` exists for in Victor Addons.
+    /// is the same trap `ScreenshotManager.uniqueURL` exists for in Victor Mac.
     private static func unique(_ url: URL) -> URL {
         guard FileManager.default.fileExists(atPath: url.path) else { return url }
         let stem = url.deletingPathExtension().lastPathComponent

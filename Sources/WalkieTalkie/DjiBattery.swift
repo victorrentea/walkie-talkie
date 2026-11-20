@@ -1,11 +1,11 @@
 import Foundation
 
-/// **The DJI transmitter's battery on the `Mic:` row, as Victor Addons shows it**
+/// **The DJI transmitter's battery on the `Mic:` row, as Victor Mac shows it**
 /// (2026-10-07, Victor: *"should display also the battery … of my DJI the same
 /// way macOS add-ons does it"*) — `Mic: 🎤 DJI 80 %`, or `— no TX` when no
 /// transmitter is linked; nothing when the receiver's status is not live.
 ///
-/// **Asked of Victor Addons, never read off the receiver.** The status comes over
+/// **Asked of Victor Mac, never read off the receiver.** The status comes over
 /// the receiver's vendor USB interface, which is exclusive — Addons holds it
 /// (`DjiReceiverMonitor`), and a second reader would take it away from Addons'
 /// own low-battery banner. So this asks Addons' `GET /test/dji/state` on 55123

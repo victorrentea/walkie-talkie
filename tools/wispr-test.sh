@@ -20,7 +20,7 @@
 # chord through the mechanism the forward button already uses is the one input
 # this script is allowed to cause.
 #
-# The 🔒 hands-off locks go up for the run: Victor Addons watches for synthetic
+# The 🔒 hands-off locks go up for the run: Victor Mac watches for synthetic
 # input and would raise them anyway, and a run he types into is a run whose
 # result means nothing.
 set -uo pipefail

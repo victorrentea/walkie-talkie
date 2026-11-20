@@ -107,14 +107,14 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
 
 - **Keys:** ⌘⌃B bind (again = unbind), ⌘⌃D is not this app's (since 2026-10-25 — passes through, starts and stops nothing), **⌘⌃X = the local model now** (recording or
   waiting on the cloud: this Mac transcribes the take, `via: local-forced`; 2026-09-28). All three
-  swallowed. ⌘⌃⌥D and ⌘⌃L belong to Victor Addons, ⌘⌃W to Wispr Flow.
-  **Right ⌘ ×2 = the plain dictation's toggle — the only keyboard way; no key held dictates** (2026-10-23: the right ⌘⌥ hold, `54+61`, and the one-day right ⌘ hold are gone; the toggle was right ⌥ ×2 until 2026-10-20, Victor Addons' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
+  swallowed. ⌘⌃⌥D and ⌘⌃L belong to Victor Mac, ⌘⌃W to Wispr Flow.
+  **Right ⌘ ×2 = the plain dictation's toggle — the only keyboard way; no key held dictates** (2026-10-23: the right ⌘⌥ hold, `54+61`, and the one-day right ⌘ hold are gone; the toggle was right ⌥ ×2 until 2026-10-20, Victor Mac' emoji picker now); right ⌥⇧ opens nothing (Wispr's ptt removed 2026-10-19); **bare F5 is macOS Dictation's** (2026-10-19).
 - **Trackpad, under left ⌃⌥⌘** (2026-10-20): one finger (its travel, its click) is 🔼, two fingers
   (scroll, secondary click) are 🔽 — the same F-key branches; held 0.3 s, the corner bar shows both
   crosses with ☝️ / ✌️ in the corner and `⌘⌘` / `⌃P` in the badges — and with no Logitech mouse
   attached, every sentence's bar is that one; the pointer stands still under the chord
   (`mouse-gestures.md`, *The trackpad*). **⌃P is the shutter while a prompt records**, and **over a plain dictation it makes it
-  a prompt first** (2026-10-22; Victor Addons' ⌃P steps aside on `~/.walkie-talkie/prompting`).
+  a prompt first** (2026-10-22; Victor Mac' ⌃P steps aside on `~/.walkie-talkie/prompting`).
 - **The clipboard always holds the finished sentence** (Q17, 2026-09-28): the envelope for a prompt,
   the clean words for a plain one, whatever the engine or destination; never restored. ⌘V re-pastes.
 - **Side buttons** (Options+ → ⌃⌥⌘F3…F12, duplicated in `HotkeyTap`, must not drift;

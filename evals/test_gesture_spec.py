@@ -549,7 +549,7 @@ def spec(src: dict):
         {
             # Victor, 2026-09-28: "a local fallback that I can access during the
             # dictation, at any point, through a key combination displayed in the
-            # tooltip". ⌘⌃L is Victor Addons' calendar, ⌘⌃W Wispr Flow's paste.
+            # tooltip". ⌘⌃L is Victor Mac' calendar, ⌘⌃W Wispr Flow's paste.
             "row": ("⌨️ ⌘⌃X", "keyboard, while recording or waiting"),
             "does": "the take goes to the local model now (via local-forced); idle: a flash; always swallowed",
             "checks": [

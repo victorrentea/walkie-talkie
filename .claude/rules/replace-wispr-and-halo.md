@@ -669,7 +669,7 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the
   Retina) to the whole screen over `questionFly` 0.4 s at `questionLoud`; the 0.3 s fade starts when
   it lands (`questionFlashUntil` covers both). `show`, `hide` and `dock` remove the animation.
-- **Under Victor Addons' ⌥⇧ zoom an anchored dress goes above the glass** (2026-10-28, Victor: the ❓
+- **Under Victor Mac' ⌥⇧ zoom an anchored dress goes above the glass** (2026-10-28, Victor: the ❓
   never showed while zoomed). The zoom is an opaque window at `.maximumWindow + 3` filming the display,
   and the halo is `sharingType = .none` — not filmed and under the glass. `CaretHalo.restLevel`:
   zoom on (`ReplyPanel.shareZoomOn`, its watcher's `shareZoomChanged` re-levels a ring already up) and

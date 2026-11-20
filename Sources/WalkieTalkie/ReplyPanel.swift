@@ -415,7 +415,7 @@ enum ReplyPanel {
     private static var liveToken = 0, dismissedLive = -1
     private static var openLabel: String?
 
-    /// **Under Victor Addons' ⌥⇧ zoom, the pop-up is zoomed with the rest**
+    /// **Under Victor Mac' ⌥⇧ zoom, the pop-up is zoomed with the rest**
     /// (2026-10-15, Victor: *"You shouldn't keep the small one … I should zoom in
     /// it. The top most basically has to disappear."*). That zoom (`ShareZoom`)
     /// is an opaque window at `.screenSaver` that films the display and shows it

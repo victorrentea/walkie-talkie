@@ -123,7 +123,7 @@ enum ProjectIcons {
         return out
     }
 
-    /// Victor Addons' menu-bar logo (`icon_v.png` there, a V in a ring), drawn —
+    /// Victor Mac' menu-bar logo (`icon_v.png` there, a V in a ring), drawn —
     /// the fallback when the sibling checkout is not on disk.
     private static func vInCircle(side: CGFloat) -> NSImage {
         let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { r in

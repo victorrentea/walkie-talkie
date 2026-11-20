@@ -57,7 +57,7 @@ The journal contradicts itself over time, because it was written as things chang
 - *`DropArrow`: three dashes and a head, pointing down at the cursor* (2026-09-11) — superseded 2026-09-12 by *Six heads closing in, instead of one arrow hanging above*; the shaft, the dashes and the march are gone, and since 2026-09-22 the heads are **twice the size** while the words are in flight (*The arrows double while the words are in flight*)
 - *The chip says which microphone, and the menu picks it* (2026-09-19) — the mark `Listening(🎙️/E)...` is superseded 2026-09-22 by *The chip says what is hearing him and what is reading it*: no brackets, no slash, no letter — the device is on `Listening to 🎤...` and the recogniser's **logo** is one row down on `Transcribing via ⬮...`
 - *The wheel is the relay's*, *Double-clicking the wheel turns the dictation into a spawn*, *The right chord…*, *⌘ + the wheel* — live only with *Use Logi Gestures* unticked; the default since 2026-09-09 is *The side buttons speak in function keys*; the ~18 ms side-button measurement in *Double-clicking the wheel* is corrected there
-- *Mouse 4 is the shutter* (LinearMouse / Victor Addons Return) — LinearMouse uninstalled 2026-09-07; in Logi mode the app posts the Return itself (*Use Logi Gestures*)
+- *Mouse 4 is the shutter* (LinearMouse / Victor Mac Return) — LinearMouse uninstalled 2026-09-07; in Logi mode the app posts the Return itself (*Use Logi Gestures*)
 - *⌘⌃D is this app's own key* (since 2026-08-26) — the bind key is ⌘⌃B since 2026-09-01 (*⌘⌃B binds, ⌘⌃D dictates*)
 - *One line, always* (folded into *The words, a blank line, then one clause per line*) — replaced 2026-09-07
 - *The shell guard is the load-bearing part* — “`.keystroke` targets cannot be guarded” — IDE targets are guarded since 2026-09-10 through the extension's shell pid; only the `.keystroke` fallback is not
@@ -670,7 +670,7 @@ sentence**: that window is now this chip.
   Not `screencapture`, which everything else here uses — a subprocess waited on
   is ~200ms, a fifth of the flight, spent before the first frame. Falls back to
   the old hollow rectangle if the grab returns nothing.
-- **White, not blue, and not a signal colour.** Victor Addons flashes yellow for
+- **White, not blue, and not a signal colour.** Victor Mac flashes yellow for
   "I captured this", `CaptureFlash` flashes red for "it went to the agent" —
   both *announce an event*. This one **moves a thing**, and the thing now carries
   its own colours; white frames it without claiming a third meaning, and it is
@@ -1255,7 +1255,7 @@ two rows is ever enabled, so the shared key reads as the toggle it is.
 `HotkeyTap.onBindHotkey` → `AppDelegate.bindFrontmostTerminal`, the same call the
 loopback `POST /bind` makes.
 
-It lived in **Victor Addons** (`WalkieTalkieBinder.swift`) until then, and the
+It lived in **Victor Mac** (`WalkieTalkieBinder.swift`) until then, and the
 reason was real at the time: the relay was started per session and was down most
 of the time, while Addons is a login item, so a cold press had to *launch* the
 relay (`open -g`) before it could ask it to bind. That whole apparatus is gone
@@ -2045,13 +2045,13 @@ worth in a terminal. See *Replace Wispr* for what the paste then carries.
 mode it gave Return (*"pe butonul de Back să dea Enter"*) because nothing was
 borrowing it. It is the shutter now, for the length of a sentence — the same
 narrow window every other dictation borrows it in, keyed on `listening` and not
-on the mode, so outside it Victor Addons goes on typing Return with it.
+on the mode, so outside it Victor Mac goes on typing Return with it.
 
 ## The music pauses for the length of a dictation
 
 `MusicBridge` pushes `{type:"dictation", active, seq}` over a WebSocket on
 **127.0.0.1:8920** and `chrome-extension/relay.js` pauses every audible tab,
-resuming exactly those. Ported from Victor Addons' `DictationBridge` + its
+resuming exactly those. Ported from Victor Mac' `DictationBridge` + its
 `chrome-extension/`, which does the same for its own dictations — read
 `victor-mac/docs/audio-sounds.md` for the CoreAudio half of the story.
 
@@ -2070,7 +2070,7 @@ worker is torn down after ~30 s idle and socket traffic resets that timer, and i
 replays the state on connect, so a worker that *was* torn down mid-dictation
 comes back knowing it still owes a resume.
 
-**8920, not 8766.** Victor Addons holds 8766 for its own bridge. Both may be
+**8920, not 8766.** Victor Mac holds 8766 for its own bridge. Both may be
 installed and both may pause, which is harmless — each extension marks what it
 stopped (`data-wt-dictation-paused` here, `data-va-dictation-paused` there) and
 resumes only its own marks, and an element the other already stopped is skipped
@@ -2092,7 +2092,7 @@ timer scheduled by a worker that is then torn down never fires. A ⌘⇧ hold th
 finds the picker alive reconnects immediately, for free. This is why the
 extension also asks for the **`alarms`** permission.
 
-**A dead socket resumes**, which is a deliberate departure from Victor Addons.
+**A dead socket resumes**, which is a deliberate departure from Victor Mac.
 That app runs from login and is rarely killed; the relay is started and killed
 *per agent session*, so a relay that goes away mid-sentence would otherwise leave
 the music off with nothing alive to turn it back on. A blip that is only a blip
@@ -2143,7 +2143,7 @@ use `.cgSessionEventTap` at `.headInsertEventTap`, where the most recently
 installed tap sees events first, so whoever restarted last is ahead. That used to
 be the relay, because LinearMouse started at login and the relay started per
 session. It stopped being true on **2026-09-07**, when LinearMouse was
-uninstalled and **Victor Addons** took the mapping over natively
+uninstalled and **Victor Mac** took the mapping over natively
 (`BackButtonEnter.swift`): that app is rebuilt and restarted after every change to
 it, which is often, so it is routinely the newer tap. On 2026-09-08 it was —
 relay up since 22:14, addons since 22:37 — and every press became a Return before
@@ -2152,7 +2152,7 @@ whatever was in front (in Chrome, it scrolled the page).
 
 The branch that catches the Return was already there; what it could not do was
 tell *that* Return apart. It matched the source pid's process name against
-`LinearMouse`, and a name cannot work for Victor Addons, which posts Returns for
+`LinearMouse`, and a name cannot work for Victor Mac, which posts Returns for
 its own reasons too (`KeySimulator`) and those genuinely mean Enter. So the one
 Return that is a button in disguise now carries a stamp in
 `eventSourceUserData` — `backButtonStamp`, `0x7774_4241_434B_0000` — set by
@@ -2165,7 +2165,7 @@ first, the shot is taken exactly once.
 **While a dictation is running — bound, unbound, or headed for the caret — the
 wheel held down and dragged selects a rectangle of the screen, and that
 rectangle is what joins the pictures.** The dimming, the box, ⌘ to move it whole,
-⌥ to draw it from its middle, Esc to call it off: all of it is **Victor Addons'
+⌥ to draw it from its middle, Esc to call it off: all of it is **Victor Mac'
 crop**, because it is now literally the same code in both apps
 (`victor-mac-kit`).
 
@@ -2199,7 +2199,7 @@ resolve — and both apps are only ever built on this Mac, from local.
 
 **The two apps disagree about exactly two things**, and both are parameters:
 
-- **The words**, `CropSelectionStyle`. Victor Addons speaks Romanian on screen;
+- **The words**, `CropSelectionStyle`. Victor Mac speaks Romanian on screen;
   this overlay is English, per *UI language: English only* — it goes on a
   projector in front of an international room.
 - **Which button is being dragged with**, `begin(button:from:)`. Addons holds
@@ -2270,7 +2270,7 @@ through — which is the orphan bug written a third time.
 
 The overlay ends the selection when the driving button comes up, and it reads the
 button the only way a panel with no key window can — `CGEventSource.buttonState`.
-That is right for Victor Addons' left-button drag, which nothing intercepts, and
+That is right for Victor Mac' left-button drag, which nothing intercepts, and
 it is wrong here **in both directions at once**, one per gesture mode:
 
 - **A swallowed release never reaches that state**, so the selection never ends.
@@ -2354,7 +2354,7 @@ is where you were pointing* about something that happened in a millisecond with
 nothing on screen to show for it. This one he watched himself draw, at the pixels
 he drew it around. A mark lit over them afterwards is the same news, later, on top
 of the thing he framed — which is also the argument that took
-`ScreenCaptureFlash.flash(around:)` out of **Victor Addons** in the same change,
+`ScreenCaptureFlash.flash(around:)` out of **Victor Mac** in the same change,
 on Victor's instruction. The full-screen flash stays there: one keypress, no
 gesture, nothing else to say it happened.
 
@@ -2484,7 +2484,7 @@ the shot is **named provisionally and renamed afterwards** — the file has to
 exist before it can be measured. A failed rename leaves the provisional name: a
 shot with no pointer in its name is still a shot.
 
-**Victor Addons is not the same reading, despite the similar words.** Its
+**Victor Mac is not the same reading, despite the similar words.** Its
 `2026-08-14_00-34-42_at1200x500.jpg` is in **global CG points** — y down from the
 primary display's top, negatives normal on a screen to its left — because it
 answers "where on the desk was the pointer". This one is in **pixels of that
@@ -2846,7 +2846,7 @@ turn that reads it. Caches is the one folder that emptying the Trash, Storage
 Management and every cleaner tool actually reach, and macOS may purge it under
 disk pressure — all welcome. `/tmp` was the other candidate and is worse for the
 stated requirement: it clears on reboot and on a 3-day sweep, neither of which is
-"when the disk is full". Same call `ScreenshotManager` makes in Victor Addons.
+"when the disk is full". Same call `ScreenshotManager` makes in Victor Mac.
 
 **The outbox stays put**, in `~/.walkie-talkie`. It is the log of what Victor said,
 the record that outlives the session, and a log the system may delete under
@@ -3549,7 +3549,7 @@ Three details that are easy to get wrong:
   against the wider of the two sets so the column cannot resize under the pointer.
 
 **The back button's Return is posted by this app now — in Logi mode.** It used to be typed
-upstream — LinearMouse, then Victor Addons' `BackButtonEnter` — and this tap's
+upstream — LinearMouse, then Victor Mac' `BackButtonEnter` — and this tap's
 only job was to *withhold* it mid-dictation and take the picture instead. Options+
 owns the button, so nothing upstream types anything: `HotkeyTap.postReturn` makes
 it, stamped with `backButtonStamp` so the tap can tell it from a Return Victor
@@ -4689,7 +4689,7 @@ drawn round is the thing he has to move.
   10%, in the corner of his eye. Blue at a tenth is the first thing to vanish
   against a dark editor; gold is the most luminous of the signal colours and
   survives being that faint, which for a warning is the property that decides
-  it. It crosses Victor Addons' capture yellow and that costs nothing — that one
+  it. It crosses Victor Mac' capture yellow and that costs nothing — that one
   is a full-screen vignette lasting a second, this is a halo round the pointer
   lasting a sentence.
 - **One colour, and symmetric — the reference picture was of a picture.** It
@@ -7108,7 +7108,7 @@ One cause: `/Applications/Walkie Talkie.app` predated three commits
 the working tree was clean and at HEAD. Nothing on screen says which build is
 installed, so each symptom looked like its own regression, and the ⌘⌃D one looks
 exactly like an OS shortcut winning a fight — it isn't; **nobody was claiming the
-key**, because Victor Addons had already given it up (see *⌘⌃D is this app's own
+key**, because Victor Mac had already given it up (see *⌘⌃D is this app's own
 key*) and the installed relay had not yet taken it.
 
 **Read the bundle, not the repo, when a fix "did not take".**
@@ -7207,7 +7207,7 @@ Talkie-ul care arată ca terminalul … să apară doar aplicația asta odată."
   canvas Finder's and Chrome's bodies are **824** across to the pixel (80.5% —
   the 83.6% an alpha bounding box reports is their drop shadow bleeding), and a
   **circle** gets the smaller slot, **790** (77.1%), because at equal width a
-  disc reads as the larger object. Victor Addons, circular like this one, sits at
+  disc reads as the larger object. Victor Mac, circular like this one, sits at
   77.0–78.1%. This icon is now 790/1024, verified in the built `.icns`.
 
   **The padding cannot live in the artwork**, which is the whole reason there is
@@ -7218,7 +7218,7 @@ Talkie-ul care arată ca terminalul … să apară doar aplicația asta odată."
   there needs PyObjC, which `/usr/bin/python3` does not have — while the Swift
   toolchain is already a hard dependency of `build-app.sh`. (It shows in Finder, Spotlight, Get Info — and, since 2026-09-07,
   in the Dock: see *The Dock tile is the escape hatch* below.)
-- **`Quit — built Aug 28, 17:48`**, one row, the way Victor Addons does it: read
+- **`Quit — built Aug 28, 17:48`**, one row, the way Victor Mac does it: read
   once a session, and read while reaching for Quit anyway, since the answer to
   "no, that's the old build" is to quit and relaunch. The date is the
   **executable's own mtime**, not a constant stamped into the source: Addons seds
@@ -10742,7 +10742,7 @@ its pixels, 0 changed regions**: the frame taken with everything up is the frame
 nothing up. The film frames differ in 0.03–0.07%, 8–10 regions, every one the menu-bar clock, a
 menu-bar extra or a tab favicon, none within 600 px of the pointer.
 
-**The thing that *is* in the frames belongs to Victor Addons.** hands-off draws four 🔒, an
+**The thing that *is* in the frames belongs to Victor Mac.** hands-off draws four 🔒, an
 amber frame and a cursor badge, and sets no sharing type, so anything shot while the locks are
 up carries them — and a reader would file them under Walkie. The harness therefore takes its
 control frame five seconds after the last release, and the only input it synthesises is the
@@ -14118,7 +14118,7 @@ tooltip: if I press it, the local transcription is used for this recorded sound.
 ElevenLabs takes a lot to transcribe and I want this quick exit. I know it automatically falls back
 to local, but I'd like to have this faster whenever I want."*
 
-**The key is ⌘⌃X, not ⌘⌃L.** L (for *local*) was the first pick and is taken: Victor Addons'
+**The key is ⌘⌃X, not ⌘⌃L.** L (for *local*) was the first pick and is taken: Victor Mac'
 `EventTapManager` opens Google Calendar on ⌘⌃L (the cheat-sheet's 📅). The fallback named in the
 brief, ⌘⌃W, is taken too — Wispr Flow's `config.json` binds `[13, 55, 59]` (W + ⌘ + ⌃) to
 `paste_last_text`, and the Addons sheet lists it display-only for that reason; swallowing it here
@@ -15037,7 +15037,7 @@ README; not applied tonight. Rig traps the run paid for:
 - the `forward-right` gesture is a toggle;
 - killing the host runner leaves `guest.py` running in the guest.
 
-On the host the same evening, Victor Addons' From Walkie watchdog turned the device off under a
+On the host the same evening, Victor Mac' From Walkie watchdog turned the device off under a
 running Walkie twice (stale `NSRunningApplication` from a background queue). It was fixed in
 victor-mac `2965a09`.
 
@@ -15757,7 +15757,7 @@ tooltip-urile din dreapta … shortcut-urile … Ctrl-C … Ctrl-P."*
 - **The key: ⌃P.** Over a plain dictation it turns the sentence into the caret prompt (the turn
   `aimAtCaret` already makes for a plain sentence with attachments — it was going to the caret, so it
   stays there) and then takes the shot. ⌃P is already a prompt's shutter, so the key he reaches for
-  when he wants a picture is the switch, and nothing has to be refused. Victor Addons owns ⌃P outside
+  when he wants a picture is the switch, and nothing has to be refused. Victor Mac owns ⌃P outside
   a prompt; the `prompting` mark is now up for a plain sentence too, so it steps aside.
 - **The warning**: `⚠️ Plain dictation — ⌃P makes it a prompt`, at most once per 3 s, from every
   attachment door except the highlight watcher, and from a wheel drag the tap used to pass silently.
@@ -15850,7 +15850,7 @@ end), which is under every NSMenu, popover and sheet: a shot taken with a dialog
 *behind* that dialog, as if it had not caught it. Victor: *"să vină deasupra la absolut orice … orice
 dialog ar fi fost deschis, menu, orice"*. The panel is now at `CGWindowLevelForKey(.maximumWindow)`
 (+ `.transient`) for the flight and drops to `.statusBar − 1` only for the last fifth, at the glyph,
-so the slide beneath the counter is kept. Victor Addons' ⌃P flash (`ScreenCaptureFlash`) was already
+so the slide beneath the counter is kept. Victor Mac' ⌃P flash (`ScreenCaptureFlash`) was already
 at `maximumWindow` on all three panels — nothing to change there.
 
 ## 2026-10-26 — the strip says which microphone, and the panel's words scroll
@@ -16602,7 +16602,7 @@ this one does not go with them.
   element pick end to end (`ElementPick`, `/pick`, `/ping`, `/up`, `/chrome/reload`, the
   `dictating`/`listening`/`bound`/`plain` flags, `pendingPicks`, the envelope's element rows and
   the outbox's `elements`, the chip's Chrome row, the Gesture Guide's *Pick from a web page* card),
-  `MusicBridge` (the 8920 socket; Victor Addons' own extension already pauses the music while he
+  `MusicBridge` (the 8920 socket; Victor Mac' own extension already pauses the music while he
   dictates), `relay-restart.sh --extension` and its `chrome-extension.sha` stamp, and
   `.claude/rules/chrome-extension.md`.
 - **Kept:** `ElementPicker` itself — it has been the loopback control surface (`/bind`, `/target`,

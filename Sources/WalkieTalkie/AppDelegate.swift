@@ -1503,7 +1503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that has just been stood down being the likeliest poster of the last
         // event — is behind it as well. See `clearStaleModifiersAtLaunch`.
         HotkeyTap.clearStaleModifiersAtLaunch()
-        // A prompt mark left by the last instance is not a prompt (Victor Addons' ⌃P).
+        // A prompt mark left by the last instance is not a prompt (Victor Mac' ⌃P).
         HotkeyTap.markPrompting(false)
         Self.startAtLogin()
         FromWalkieDevice.set(true, reason: "launch")
@@ -1560,7 +1560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.micCurrentLabel = { InputDevice.currentShortLabel() }
         status.onPickMic = { [weak self] id in self?.setMicrophone(id) }
         status.setMic(InputDevice.chosenId)
-        // **The other app picked a microphone.** Victor Addons writes the same
+        // **The other app picked a microphone.** Victor Mac writes the same
         // file (`MicChoice`), and a pick made in its menu has to land here
         // without a restart — one microphone, two menus, and they must not be
         // able to disagree. The adopt is silent: no flash, because he is
@@ -2190,12 +2190,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestInputDevice = { name in
             let was = InputDevice.systemDefaultName() ?? ""
             guard !name.isEmpty else { return ["input": was, "inputs": InputDevice.inputNames()] }
-            // The harness owns the default for its run: Victor Addons keeps the
+            // The harness owns the default for its run: Victor Mac keeps the
             // system input on the roster's microphone (`SystemMicKeeper`,
             // 2026-11-13) and stands back while this file is under 10 min old.
             let hold = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".walkie-talkie/mic/default-hold")
             try? FileManager.default.createDirectory(at: hold.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if !FileManager.default.createFile(atPath: hold.path, contents: nil) { Log.error("input: could not touch \(hold.path) — Victor Addons may move the default back") }
+            if !FileManager.default.createFile(atPath: hold.path, contents: nil) { Log.error("input: could not touch \(hold.path) — Victor Mac may move the default back") }
             guard let now = InputDevice.setSystemDefault(matching: name) else {
                 return ["input": was, "changed": false, "inputs": InputDevice.inputNames()]
             }
@@ -7286,7 +7286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `WorkshopCountry`): every stage — answer, 🌐, 😠, 🪏, the Google query — reads it.
         let place = WorkshopCountry.today()
         let asked = (prompt ?? question) + (place.map { "\n" + $0.clause } ?? "")
-        if let place { Log.info("⚡ 🌍 workshop in \(place.name) today (Victor Addons' pick) — the question asks for English") }
+        if let place { Log.info("⚡ 🌍 workshop in \(place.name) today (Victor Mac' pick) — the question asks for English") }
         let history = followUp ? Array(quickThread.suffix(QuickAsk.turnsKept)) : []
         quickThread = history + [QuickAsk.Turn(question: asked, images: images, answer: "")]
         let turn = quickThread.count - 1
@@ -8688,7 +8688,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Enter"*) because nothing was borrowing it; now it is the shutter for
         // the length of a sentence, exactly as it is in every other dictation.
         // The window is the same narrow one — `listening`, not the mode — so
-        // outside it LinearMouse and Victor Addons go on typing Return with it.
+        // outside it LinearMouse and Victor Mac go on typing Return with it.
         hotkeys.dictating = live
         // A ⇧-locked box parked waiting for its destination belongs to this
         // sentence; with the sentence over there is nothing left to attach it to.
@@ -8959,7 +8959,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - The bound terminal
 
-    /// ⌘⌃B, arriving over loopback from Victor Addons: point the relay at the
+    /// ⌘⌃B, arriving over loopback from Victor Mac: point the relay at the
     /// terminal in front and type every later dictation straight into it.
     ///
     /// **Runs on the listener queue** — `TerminalBinding.bind` spends a couple
@@ -12562,7 +12562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// The words on the selection overlay. **English**, like every other string
     /// this app renders — the chip and everything near it go on a projector in
-    /// front of an international room. Victor Addons draws the same overlay in
+    /// front of an international room. Victor Mac draws the same overlay in
     /// Romanian, which is exactly why the strings are a parameter of
     /// `CropSelectionStyle` rather than a constant inside the shared module.
     ///
@@ -12606,7 +12606,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// millisecond with nothing on screen to show for it. This one he watched
     /// himself draw, at the pixels he drew it around; a flash lit over them
     /// afterwards would be the same news, later, on top of the thing he framed.
-    /// It is the same call Victor made in Victor Addons, where the crop's yellow
+    /// It is the same call Victor made in Victor Mac, where the crop's yellow
     /// border went the same day.
     ///
     /// `takenAt` is the **press**, not the release: the shot is named by where

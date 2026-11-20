@@ -7,7 +7,7 @@ import Foundation
 /// twice, `HotkeyTap.onDjiDouble`).
 ///
 /// It is the device every app listens through that goes quiet
-/// (`InputDevice.resolve()`, which Victor Addons keeps as the system default
+/// (`InputDevice.resolve()`, which Victor Mac keeps as the system default
 /// too) — a call, the room's transcription and the voice panel alike, not only
 /// this app's takes. CoreAudio's own mute where the device has one; a device
 /// without it is turned down to 0 and its level kept to go back to, and

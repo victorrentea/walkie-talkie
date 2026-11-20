@@ -1344,7 +1344,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         root.owner = self
     }
 
-    /// **Filmed while Victor Addons' ⌥⇧ zoom is on** (2026-10-30, Victor: *"să pot
+    /// **Filmed while Victor Mac' ⌥⇧ zoom is on** (2026-10-30, Victor: *"să pot
     /// să fac zoom sintetic și pe dialogul de prompturi … el dispare cumva, că faci
     /// zoom pe ce e sub"*). That zoom is an opaque glass at `.maximumWindow + 3` that
     /// films the display with ScreenCaptureKit and shows it magnified; this panel, at

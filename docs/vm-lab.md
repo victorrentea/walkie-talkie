@@ -229,7 +229,7 @@ The app needs, in the guest, exactly what it holds on the host (host `TCC.db`, 2
 **Accessibility**, **Screen Recording**, **Microphone**, and **Automation → Terminal**
 (`kTCCServiceAppleEvents`, target `com.apple.Terminal`). None of these can be granted from the
 command line on a SIP-on guest. The grants key on the designated requirement — `identifier
-"ro.victorrentea.wispr-relay" and certificate leaf = H"70d7d521…"` (the local "Victor Addons Local
+"ro.victorrentea.wispr-relay" and certificate leaf = H"70d7d521…"` (the local "Victor Mac Local
 Code Signing" cert) — so they survive rebuilds signed with the same cert, and `deploy`'s `tar`
 keeps the signature (no quarantine xattr, so Gatekeeper does not interfere).
 

@@ -288,11 +288,11 @@ enum ChatGPTVoice {
     }
 
     /// Size, position, size again, with `AXEnhancedUserInterface` off for the
-    /// duration — Victor Addons' `AXWindows.setFrame`, where both halves were
+    /// duration — Victor Mac' `AXWindows.setFrame`, where both halves were
     /// paid for (2026-10-05: a resize is clamped to the room below the current
     /// origin; 2026-10-16: a Chromium app with the flag on answers each write
     /// against the frame before the batch). Copied, not imported: this app
-    /// does not depend on Victor Addons.
+    /// does not depend on Victor Mac.
     private static func setFrame(_ window: AXUIElement, _ rect: CGRect) {
         var size = rect.size, origin = rect.origin
         guard let sizeValue = AXValueCreate(.cgSize, &size), let originValue = AXValueCreate(.cgPoint, &origin) else { return }

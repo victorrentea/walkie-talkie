@@ -1,6 +1,6 @@
 import Foundation
 
-/// **Hold Victor Addons' desktop effects still while a crop is being drawn.**
+/// **Hold Victor Mac' desktop effects still while a crop is being drawn.**
 ///
 /// The wheel-held crop is the one capture in this rig that takes *seconds*
 /// rather than a millisecond: Victor frames the box while still talking, and the
@@ -9,7 +9,7 @@ import Foundation
 /// here is instantaneous and needs none of this.
 ///
 /// `GET /effect/suspend/<seconds>` clears the screen and keeps it clear;
-/// `GET /effect/resume` lifts it. Both go to **55123**, Victor Addons' port —
+/// `GET /effect/resume` lifts it. Both go to **55123**, Victor Mac' port —
 /// it proxies `/effect/*` verbatim to the effects app, so this side never needs
 /// to know that there are two apps over there, or which one is up.
 ///

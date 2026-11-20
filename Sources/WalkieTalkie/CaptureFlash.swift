@@ -6,7 +6,7 @@ import QuartzCore
 ///
 /// **The picture goes into the counter, not a border round the screen**
 /// (2026-09-23). It was a yellow vignette — gradient edges fading inward over
-/// the whole display, Victor Addons' capture flash — and it answered *did that
+/// the whole display, Victor Mac' capture flash — and it answered *did that
 /// press land* by lighting up everything except the thing that changed. Victor:
 /// *"there's an effect that takes that photo … and zooms it … into the icon that
 /// shows the number of photos. That can avoid you having to draw a yellow border
@@ -56,7 +56,7 @@ enum CaptureFlash {
     /// just looked at that box while framing it; its pixels shrinking over his
     /// work say nothing he did not already see, and the white edge alone still
     /// says *that box went into the count*.
-    /// **Over Victor Addons' synthetic zoom too** (2026-10-28, Victor: *"draw the
+    /// **Over Victor Mac' synthetic zoom too** (2026-10-28, Victor: *"draw the
     /// frame on top of the entire content of the screen"*). That zoom is an opaque
     /// window at `.maximumWindow + 3` filming the display, and this panel is
     /// `sharingType = .none` — out of the film and under the glass, so a shot taken
@@ -261,7 +261,7 @@ enum CaptureFlash {
     /// the target lands somewhere he did not mean, the sentence is still being
     /// spoken and he can point again with the back button.
     ///
-    /// It is the mark Victor Addons drops after every ⌃P, and deliberately so —
+    /// It is the mark Victor Mac drops after every ⌃P, and deliberately so —
     /// that desktop already means "here" by it, so there is nothing to learn.
     ///
     /// `cursor` is where the gesture happened, passed in for the same reason
@@ -327,7 +327,7 @@ enum CaptureFlash {
 
     /// The red target, on screen, at `point` in global Cocoa coordinates.
     ///
-    /// The animation is Victor Addons' `ScreenCaptureFlash.markCursor`, values
+    /// The animation is Victor Mac' `ScreenCaptureFlash.markCursor`, values
     /// included: it lands at **1.3× and settles to 0.9× over 0.35s**, so it reads
     /// as a scope being brought down onto the spot rather than a badge appearing
     /// beside one, and what stays behind is the smaller, quieter mark. It is at

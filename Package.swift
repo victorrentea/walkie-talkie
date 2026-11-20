@@ -2,7 +2,7 @@
 import Foundation
 import PackageDescription
 
-// The region selector, shared with Victor Addons. On Victor's Mac both apps are
+// The region selector, shared with Victor Mac. On Victor's Mac both apps are
 // built from local with `victor-mac-kit` checked out beside them, and the point
 // of sharing the crop was to edit it and rebuild in one step — no push, no
 // version bump, no resolve. Anyone else's fresh clone has no such sibling

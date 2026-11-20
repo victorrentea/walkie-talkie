@@ -2895,7 +2895,7 @@ final class CaretHalo {
          "delivering": delivering, "atCaret": atCaret]
     }
 
-    /// **Over Victor Addons' ⌥⇧ zoom while it is on, for a dress placed on the
+    /// **Over Victor Mac' ⌥⇧ zoom while it is on, for a dress placed on the
     /// screen rather than on the pointer** (2026-10-28, Victor: *"dacă fac zoom
     /// sintetic și apăs … de ce nu văd semn întrebări?"*). That zoom is an opaque
     /// window at `.maximumWindow + 3` that films the display magnified, and this

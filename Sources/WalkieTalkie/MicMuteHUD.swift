@@ -6,7 +6,7 @@ import AppKit
 /// the 🔇 the first build flashed is a speaker, not a microphone; no emoji is a
 /// crossed microphone, so it is drawn: `mic.slash.fill`).
 ///
-/// Victor Addons' `VolumeHUD` look, reproduced here (this app may not depend on
+/// Victor Mac' `VolumeHUD` look, reproduced here (this app may not depend on
 /// it): a 200 pt square of dark frosted glass, 140 pt above the bottom edge,
 /// centred on the screen the pointer is on. Up for as long as the device the
 /// apps listen through is muted — by Link ×2 (`MicMute`) or by anything else

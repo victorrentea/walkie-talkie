@@ -92,7 +92,7 @@ enum InputDevice {
         Known(id: "rx",   glyph: "🎤", short: "DJI", label: "DJI",
               needles: ["wireless mic rx", "wireless mic", "dji technology"]),
         // **The room's own microphone** (2026-09-22). It was only ever in
-        // Victor Addons' list, which is how the two menus came to disagree:
+        // Victor Mac' list, which is how the two menus came to disagree:
         // addons ranked it *second*, above the XLR, because in a hall a
         // far-field speakerphone with AGC beats a condenser pointed at one
         // chair. That reasoning survives, the rank does not — Victor's order is
@@ -183,7 +183,7 @@ enum InputDevice {
     /// **A device named by the harness, for this process only** (2026-09-26,
     /// test-plan gap G1): `POST /test/mic {"device": "<CoreAudio name
     /// substring>"}`. Checked before the choice file and the ladder, never
-    /// written to `mic/choice` (which Victor Addons shares), gone at the next
+    /// written to `mic/choice` (which Victor Mac shares), gone at the next
     /// launch. It exists because the built-in microphone is always on the
     /// ladder, so without it the relay's own recorder could never be pointed at
     /// a Loopback device carrying a corpus WAV — every real-audio test had to go

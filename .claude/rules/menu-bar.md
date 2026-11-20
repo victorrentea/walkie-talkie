@@ -118,7 +118,7 @@ that are right now in engine top level."*
 | `Pick from Chrome` (`Pick Element in Chrome` until 2026-09-22) | ✋ | `⌘⇧ + ⬅️` |
 | `Engine: <what is listening>` | `waveform` | `>` — a two-row submenu |
 | `Last used: <engine>` (2026-10-29, readout — disabled) | `clock.arrow.circlepath` | none — the engine that wrote the last delivered sentence (`AppDelegate.engineName(via:)`, so a local fallback / ⌘⌃X shows); `—` before the first one this run; `GET /test/state.lastEngineUsed` |
-| `Mic: <glyph> <device>` (`Microphone` until 2026-09-22, shortened for width) | `mic` | `>` — automatic + the six devices; the same six rows Victor Addons shows, and the same shared preference file |
+| `Mic: <glyph> <device>` (`Microphone` until 2026-09-22, shortened for width) | `mic` | `>` — automatic + the six devices; the same six rows Victor Mac shows, and the same shared preference file |
 | `Gestures: Logi` / `: Wheel` (`Mouse Gestures` until 2026-09-22) | `computermouse` | `>` — a two-row submenu |
 | `𝓯𝔁` (`Halo 𝓯𝔁 when…` until 2026-09-28 — *"no ellipses, no other words, just the FX stylish font"*; plain `Halo fx` until 2026-09-22; destination rows `Prompt at caret` / `Prompt to bounded` / `Prompt to new Claude` / `Plain dictation`, pre-process `Bass (kick per syllable)` → `Syllable beat`) | `sparkles` | `>` — the lightning ring, a line, the ported effects, the presets (greyed `— engine not bundled` until `butterchurn.min.js` is in `assets/milkdrop/`), then a row per destination with the same list, then `Engine: projectM｜Web` and `Pre-process: <chain>` (`Fx engine` / `Fx voice` until 2026-09-22 — *"doar «projectM», că deja știu cine e"*, and the parentheses shortened so the open list fits at the right edge of the screen) |
 | `Autosend` | the same pair — a `checkmark` when on, **nothing** when off | |
@@ -314,7 +314,7 @@ that are right now in engine top level."*
 - **🧾 The account's quota is the last row of the list, under a separator (2026-09-28)** —
   `🧾 ElevenLabs −33 / 10k / ?` = remaining / total in k / reset `Mon d`, **red** once remaining
   ≤ 0; words, sources and the `user_read` hint on the tooltip; click → elevenlabs.io (API keys
-  while the key lacks `user_read`, subscription otherwise). It was built into Victor Addons first
+  while the key lacks `user_read`, subscription otherwise). It was built into Victor Mac first
   and moved here the same morning — *"quota lui 11labs are sens doar in walkie - addons nu
   foloseste eleven labs de loc."* `ElevenLabsQuota`: `GET /v1/user/subscription` (needs
   `user_read`; the key answered `401 missing_permissions` on 2026-09-28), else used =
@@ -462,7 +462,7 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   `<model> — loading…` in the menu. `AppDelegate.setEngineLoading` is a one-liner into
   `StatusItem`; ⏳ is the only badge that claims the glyph.
   → journal: *The recogniser*
-- **The DJI transmitter's battery rides after `Mic: 🎤 DJI`, as in Victor Addons' menu** (2026-10-07:
+- **The DJI transmitter's battery rides after `Mic: 🎤 DJI`, as in Victor Mac' menu** (2026-10-07:
   *"display also the battery … of my DJI the same way macOS add-ons does it"*): `80 %`, `— no TX`,
   nothing when not live. **Asked of Addons (`GET 127.0.0.1:55123/test/dji/state`), never read off the
   receiver** — its vendor USB interface is exclusive and Addons holds it for its low-battery banner.
@@ -504,7 +504,7 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   → journal: *The menu says what the model costs*
 - **The build stamp is a `Version: <build>` row one above Quit (2026-09-13)** — formerly the
   clickable About row `Victor's Walkie Talkie (<build>)`, before that `Quit — built Aug 28,
-  17:48`. Same plain readout in Victor Addons and Victor Effects. The stamp **is the executable's
+  17:48`. Same plain readout in Victor Mac and Victor Effects. The stamp **is the executable's
   own mtime**, never a sed'ed constant.
   → journal: *The menu bar item*, *Version row and ⌘Q (2026-09-13)*
 - **It is clickable again since 2026-09-22 and opens `AboutWindow`** — a native

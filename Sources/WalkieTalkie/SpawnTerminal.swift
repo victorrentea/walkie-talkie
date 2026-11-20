@@ -374,7 +374,7 @@ enum SpawnTerminal {
     /// **Where this window goes so that it covers as little as possible of what
     /// is already open.**
     ///
-    /// **Each display is cut into Victor Addons' four quadrants** (2026-10-04,
+    /// **Each display is cut into Victor Mac' four quadrants** (2026-10-04,
     /// Victor: *"să le așezi în modul de tile pe care îl pune default Mac OS
     /// addons. Nu rulat tile efectiv, dar … în colțuri"*) — the same rectangles
     /// as its `TerminalTileLayout.quadrants`: halves of the visible frame, 2 pt
@@ -420,7 +420,7 @@ enum SpawnTerminal {
         return best?.box ?? window
     }
 
-    /// Victor Addons' `TerminalTileLayout.margin` — kept equal by hand, the
+    /// Victor Mac' `TerminalTileLayout.margin` — kept equal by hand, the
     /// two apps share no code for it.
     private static let quadrantMargin = 2
 

@@ -13,7 +13,7 @@ import AppKit
 /// the sentence is still being spoken and a mis-aimed shot can still be
 /// retaken), and the position still travels in the file name.
 ///
-/// **The look is Victor Addons'**, deliberately: `EmojiAnimator.makeSniperReticle`
+/// **The look is Victor Mac'**, deliberately: `EmojiAnimator.makeSniperReticle`
 /// is already what that desktop draws to say "here", and it is drawn on screen
 /// right after every ⌃P capture. A second, differently-shaped mark for the same
 /// idea would be one to learn for nothing. Hence a ring, four arms with an empty

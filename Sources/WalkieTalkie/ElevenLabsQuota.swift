@@ -3,7 +3,7 @@ import Foundation
 
 /// 🧾 **How much of the ElevenLabs plan is left** — the last row under `Engine`
 /// (2026-09-28). Victor: *"Eleven labs should show remaining/total and reset
-/// date"*, first built into Victor Addons and moved here the same morning —
+/// date"*, first built into Victor Mac and moved here the same morning —
 /// *"quota lui 11labs are sens doar in walkie - addons nu foloseste eleven labs
 /// de loc."* The plan runs out silently; the first sign used to be a dictation
 /// that came back empty.

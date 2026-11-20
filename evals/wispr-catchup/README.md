@@ -220,7 +220,7 @@ now. Neither the crash nor `could not aim` has been seen on the host's log.
 
 ## Host incident found on the way (fixed in victor-mac `2965a09`)
 
-Victor Addons' From Walkie watchdog switched the device off under a running Walkie on his Mac, at
+Victor Mac' From Walkie watchdog switched the device off under a running Walkie on his Mac, at
 19:50:09 and 20:18:49, so Wispr fell back to the Elgato with no bridge. The watchdog read
 `NSRunningApplication` from a background queue, where that list can be stale. It also fired
 inside a restart's ~1 s gap. It now reads the process table too, and waits for two misses in a row.

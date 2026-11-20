@@ -5,7 +5,7 @@ import Foundation
 /// workshop which is done for a country different than Romania, you can tell
 /// the country I've selected in the tool here … Please answer me in English"*).
 ///
-/// "The tool" is Victor Addons' ☕️ Break country (🌍 in its menu, the flag under
+/// "The tool" is Victor Mac' ☕️ Break country (🌍 in its menu, the flag under
 /// the menu bar clock): `BreakTimer.country.tz` + `BreakTimer.country.day` in
 /// its defaults (`ro.victorrentea.macos-addons`), a pick that holds for one day
 /// only. Walkie reads it and never writes it; the zone becomes a country through

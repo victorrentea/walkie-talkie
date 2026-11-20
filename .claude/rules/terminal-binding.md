@@ -146,7 +146,7 @@ this way. Log `📍 a plain dictation over Claude Code on ttysNNN — …`.
 - **It unbinds, it does not quit** (since 2026-08-28) — quitting undid a binding **plus a login item**. → journal: *⌘⌃B again on the same target lets go of it — the chord does not*
 - **No `session_end` goes out on unbind.** It is the Disconnect route; a second ⌘⌃B can point back. Quitting (✕, menu **Quit**) still announces itself. → journal: *⌘⌃B again on the same target lets go of it — the chord does not*
 - **Swallow autorepeat on both keys** (`HotkeyTap`): a held key would bind and immediately end the session it started. The left-plus-wheel chord is exempt from the toggle (`bindFrontmostTerminal(toggle:)`, since 2026-09-01); ⌘⌃B and `POST /bind` keep it. → journal: *⌘⌃B binds, ⌘⌃D dictates (since 2026-09-01)*
-- **This app is the only owner of ⌘⌃B/⌘⌃D**; nothing about the bind key remains in Victor Addons. ⌘⌃⌥D is Addons' dark-mode toggle, told apart by ⌥. → journal: *⌘⌃D is this app's own key (since 2026-08-26)*
+- **This app is the only owner of ⌘⌃B/⌘⌃D**; nothing about the bind key remains in Victor Mac. ⌘⌃⌥D is Addons' dark-mode toggle, told apart by ⌥. → journal: *⌘⌃D is this app's own key (since 2026-08-26)*
 
 ## Rebind to… (`RebindHistory.swift`, `RebindPanel.swift`, `SessionSearch.swift`, `UnbindPop.swift`)
 

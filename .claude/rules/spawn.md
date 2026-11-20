@@ -230,7 +230,7 @@ recently bound terminals under the folders, `RebindHistory.openTerminals` — de
   `.colour` mark to its greys (`grey`, `CIColorControls` saturation 0, alpha kept). victor-vsc is the
   ribbon alone, no tile: `code-icon.svg` from VS Code's bundle as a template in the row's ink
   (`letterpress-dark.svg` there is an empty 1×1); the app icon, greyed, only if it is missing.
-- **Victor Addons and Victor Effects wear their menu-bar marks bare, ~~as large as the slot allows~~**
+- **Victor Mac and Victor Effects wear their menu-bar marks bare, ~~as large as the slot allows~~**
   (same evening, Victor: *"without the blue background and larger to fit as much space as you can"* —
   their Dock icons, tile and all, lasted an hour): the V in a ring (Addons' own `icon_v.png`, else
   `ProjectIcons.vInCircle`) and the 𝓯𝔁, both templates in the row's ink. **Sized `markSize − 2`
@@ -431,7 +431,7 @@ star to get them onto the main list"*.
   the one case that still steals it — a Terminal launched from cold by `do script`. It gives back
   focus only; raised windows stay raised, which is why `activate` had to go rather than be undone.
   → journal: *Where a spawned window opens (2026-09-04)*
-- **Victor Addons' four quadrants, scored not filtered** (2026-10-04, *"să le așezi în modul de
+- **Victor Mac' four quadrants, scored not filtered** (2026-10-04, *"să le așezi în modul de
   tile pe care îl pune default Mac OS addons. Nu rulat tile efectiv, dar … în colțuri"*). Each
   screen's visible frame is cut like `TerminalTileLayout.quadrants` (halves, `quadrantMargin` 2 pt
   at the outer edges only) and the window **takes the quadrant's size**; the other windows are not

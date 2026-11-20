@@ -24,7 +24,7 @@ import QuartzCore
 /// the wave's own clock, so the picture goes under the crest instead of fading
 /// everywhere at once.
 ///
-/// Click-through, on every Space, over Victor Addons' zoom
+/// Click-through, on every Space, over Victor Mac' zoom
 /// (`CaptureFlash.flightLevel`), and `sharingType = .none`, so a shot a moment
 /// later cannot photograph it. Which is why `shoot` and the `capturable` flag of
 /// `POST /test/stop-wave` exist. Main thread only.

@@ -20,10 +20,10 @@ import CoreAudio
 /// asked once when it expires; a burst that ends where it began says nothing.
 /// **Never at launch**: the device present then is the baseline. The system
 /// default input is deliberately **not** a trigger: it is not what this app
-/// records through, and Victor Addons now moves it off the WH-1000XM3 on its
+/// records through, and Victor Mac now moves it off the WH-1000XM3 on its
 /// own, which would otherwise raise a second tab about a device nobody records.
 ///
-/// **The look is Victor Addons' `BottomTabBanner`, reproduced** — green, flush
+/// **The look is Victor Mac' `BottomTabBanner`, reproduced** — green, flush
 /// on the bottom edge, top corners rounded, click-through, non-activating.
 /// Reproduced rather than shared because this app must not depend on that
 /// private one; the ~100 lines here are the accepted price.
@@ -155,7 +155,7 @@ final class MicAnnouncer {
     }
 }
 
-/// Victor Addons' `BottomTabBanner`, cut down to what the announcer uses: one
+/// Victor Mac' `BottomTabBanner`, cut down to what the announcer uses: one
 /// panel on the screen under the mouse, nailed to its bottom edge, with the
 /// tab sliding *inside* it so no pixel of the motion lands on a display below.
 private final class BottomTab {
