@@ -16528,3 +16528,19 @@ de tur, și apoi să se piardă, practic, nu să dispară brusc."* `CaretHalo.co
 eased in-out (a third of a lap, most of the drop in the middle) and read as a cut. Now it is
 `CornerTunnel.dustLap / 2` = 0.8 s, linear, while the stamp keeps going round; `CornerTunnel.hide`
 does the same for its own Dust (the tunnel keeps 0.25 s).
+
+## 2026-11-20 — The folder menu opens as a ghost; the caret pin goes when the words are typed
+
+- **Ghost.** Victor: *"pot să tolerez jumătate de secundă de așteptare ca să-mi apară lista să nu se
+  mai modifice după aceea … deschizi modal la cât ar fi cu proiectele … loading ghost text, cum face
+  Facebook-ul … să așteptăm până când rezolvi sigur sesiunile active"*. Finding the sessions measured
+  0.47–0.49 s (four calls of `/test/orca {"sessions": true}`, Orca titles included). The menu opens at
+  once with its rows hidden under grey bars (`GhostView`) and comes up for real once, when they land;
+  the 3.5 s clock starts there. Cap 1.5 s. Rules: `spawn.md`, *Sessions under their folders*.
+- **Pin.** Victor, same morning: *"mai rămâne o secundă în terminal pinul, chiar dacă deja textul a fost
+  trimis și injectat … ce alte soluții ai, ca să poți totuși să detectezi mai repede"*. The pin waited for
+  `submitPrompt` to return, i.e. text + 0.5 s + Return + 0.35 s + the read-back watch (one more look
+  0.4 s after the echo, up to 4 s). The earliest true signal is `do script` returning with the words:
+  the text and the Return are now two `osascript`s (~0.1 s each) and the pin goes between them. Other
+  signals weighed: the echo above `❯` (still ≥ 0.85 s later), the session's transcript `"type":"user"`
+  line (later still — after the Return). Rules: `replace-wispr-and-halo.md`, *📍 The pin stays…*.

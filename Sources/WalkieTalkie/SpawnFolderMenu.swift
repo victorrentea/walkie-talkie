@@ -308,6 +308,21 @@ enum SpawnFolderMenu {
     /// The sessions the last opening found — drawn straight away by the next
     /// one, so the lines under the folders are there from the first frame.
     private static var lastSessions: [ActiveTerminals.Session]?
+    /// **The rows wait under a ghost until the sessions are found** (2026-11-20,
+    /// Victor: *"pot să tolerez jumătate de secundă de așteptare ca să-mi apară
+    /// lista să nu se mai modifice după aceea … un fel de loading ghost text, cum
+    /// face Facebook-ul"*). Supersedes *drawn from the first frame with the last
+    /// opening's sessions*: lines appearing under the hand were the price of that.
+    /// The panel opens at once, sized by `lastSessions`, its rows hidden behind
+    /// grey bars (`GhostView`); `fillActive` (~0.5 s, measured) puts up the
+    /// real list once, and the clock starts then — it is his reading time.
+    private static var ghosting = false
+    /// A look that never answers does not hold the menu for ever: past this the
+    /// last opening's sessions are shown and the fresh look relays out if it
+    /// differs, as before.
+    static let ghostCap: TimeInterval = 1.5
+    private static var ghostCapWork: DispatchWorkItem?
+    private static var ghostSince = Date()
     /// The sessions drawn under a folder row, by the row's path.
     private static var children: [String: [Choice]] = [:]
     /// The folder rows as drawn, by path, so the sessions landing can give
@@ -380,6 +395,7 @@ enum SpawnFolderMenu {
 
         let size = measure()
         let root = build(size: size)
+        ghost(root)
 
         let p = NSPanel(contentRect: NSRect(origin: .zero, size: size),
                         styleMask: [.borderless, .nonactivatingPanel],
@@ -418,7 +434,12 @@ enum SpawnFolderMenu {
         hoveredMain = false
         hoveredSub = false
         generation += 1
-        startClock()
+        // No clock yet: it starts when the real rows are up (`reveal`).
+        ghosting = true
+        ghostSince = Date()
+        let cap = DispatchWorkItem { reveal(p, why: "no answer in \(ghostCap) s — the last opening's sessions") }
+        ghostCapWork = cap
+        DispatchQueue.main.asyncAfter(deadline: .now() + ghostCap, execute: cap)
         startHand()
         fillActive(for: p)
         // **A fresh scan on the way past, if the last is stale** — never waited
@@ -466,9 +487,56 @@ enum SpawnFolderMenu {
                 let drawn = children
                 allSessions = found
                 regroup()
-                showSessions(relayout: children != drawn)
+                if ghosting {
+                    reveal(p, why: "\(found.count) session(s) found")
+                } else {
+                    showSessions(relayout: children != drawn)
+                }
             }
         }
+    }
+
+    /// **The ghost goes and the real rows come up**, laid out around the same
+    /// top-left corner, and the clock starts.
+    private static func reveal(_ p: NSPanel, why: String) {
+        guard panel === p, ghosting else { return }
+        ghosting = false
+        ghostCapWork?.cancel()
+        ghostCapWork = nil
+        Log.info("✨ the folder menu's rows are up after \(Int(Date().timeIntervalSince(ghostSince) * 1000)) ms — \(why)")
+        relayout(restartClock: true)
+    }
+
+    /// **Hide every row and lay a grey bar where its words will be** — the
+    /// header and the line stay, so the menu says what it is from the first
+    /// frame. Hidden views take no clicks and no hover, so nothing can be
+    /// picked from a list that may still change.
+    private static func ghost(_ root: NSView) {
+        var bars: [GhostView.Bar] = []
+        var n = 0
+        for view in root.subviews {
+            let f = view.frame
+            let session = (view as? FolderRow)?.indent ?? 0 > 0
+            guard view is FolderRow || view is ActiveRow else { continue }
+            view.isHidden = true
+            // Varied lengths, the same every time: a column of equal bars reads
+            // as a table, not as names about to appear.
+            let fractions: [CGFloat] = [0.62, 0.45, 0.74, 0.53, 0.68, 0.41, 0.58, 0.49]
+            let fraction = fractions[n % fractions.count]
+            n += 1
+            let height: CGFloat = session ? 9 : 11
+            var x = f.minX + rowInset + (session ? sessionIndent + checkGutter : 0)
+            if view is FolderRow || view === workspaceRow {
+                // The mark's (or Terminal's icon's) place, as a rounded square.
+                let side: CGFloat = session ? iconSize - 4 : markSize - 4
+                bars.append(.init(rect: NSRect(x: x, y: f.midY - side / 2, width: side, height: side), radius: 4))
+                x += side + iconGap + 2
+            }
+            let room = f.maxX - rowInset - starSize - starGap - x
+            bars.append(.init(rect: NSRect(x: x, y: f.midY - height / 2, width: max(40, room * fraction), height: height),
+                              radius: height / 2))
+        }
+        root.addSubview(GhostView(frame: root.bounds, bars: bars))
     }
 
     /// The sessions as they now stand: the lines under the folders laid out
@@ -581,6 +649,9 @@ enum SpawnFolderMenu {
 
     /// Take it down now — a pick, a cancelled dictation, a second menu.
     static func hide() {
+        ghosting = false
+        ghostCapWork?.cancel()
+        ghostCapWork = nil
         timer?.invalidate()
         timer = nil
         watch?.invalidate()
@@ -1383,6 +1454,66 @@ final class ActiveRow: NSView {
     override func mouseUp(with event: NSEvent) { if let onClick { onClick() } else { onEnter?() } }
 }
 
+// MARK: - The ghost
+
+/// **The rows before the sessions are known** (2026-11-20): grey rounded bars
+/// where the names will be, a lighter sheen sweeping across them left to right
+/// — the loading skeleton a feed draws. `draw` paints the bars (so
+/// `WT_SHOOT_MENU`'s `cacheDisplay` sees them); the sheen is a gradient layer
+/// masked to the same shapes. Never hit: the menu's hover still lands on its root.
+final class GhostView: NSView {
+    struct Bar { let rect: NSRect; let radius: CGFloat }
+    private let bars: [Bar]
+    private let sheen = CAGradientLayer()
+
+    init(frame: NSRect, bars: [Bar]) {
+        self.bars = bars
+        super.init(frame: frame)
+        wantsLayer = true
+        autoresizingMask = [.width, .height]
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.labelColor.withAlphaComponent(0.12).setFill()
+        for bar in bars {
+            NSBezierPath(roundedRect: bar.rect, xRadius: bar.radius, yRadius: bar.radius).fill()
+        }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard window != nil, let layer, sheen.superlayer == nil else { return }
+        var light = NSColor.white.cgColor
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            light = NSColor.labelColor.withAlphaComponent(0.16).cgColor
+        }
+        let clear = light.copy(alpha: 0) ?? light
+        sheen.frame = bounds
+        sheen.colors = [clear, light, clear]
+        sheen.startPoint = CGPoint(x: 0, y: 0.5)
+        sheen.endPoint = CGPoint(x: 1, y: 0.5)
+        let path = CGMutablePath()
+        for bar in bars {
+            path.addRoundedRect(in: bar.rect, cornerWidth: bar.radius, cornerHeight: bar.radius)
+        }
+        let mask = CAShapeLayer()
+        mask.frame = bounds
+        mask.path = path
+        sheen.mask = mask
+        layer.addSublayer(sheen)
+        let sweep = CABasicAnimation(keyPath: "locations")
+        sweep.fromValue = [-0.35, -0.175, 0]
+        sweep.toValue = [1, 1.175, 1.35]
+        sweep.duration = 1.0
+        sweep.repeatCount = .infinity
+        sheen.add(sweep, forKey: "sweep")
+    }
+}
+
 // MARK: - The star
 
 /// **The pin, as a thing to click.** A subview rather than a region tested
@@ -1475,11 +1606,15 @@ extension SpawnFolderMenu {
         let menu = build(size: size)
         var canvas = size
         var submenu: NSView?
+        // `WT_SHOOT_GHOST=1`: the menu as it opens, before the sessions land.
+        let showGhost = ProcessInfo.processInfo.environment["WT_SHOOT_GHOST"] == "1"
+        if showGhost { ghost(menu) }
         // The sessions under the folders are lines of the menu itself; only
         // *Active Terminals* still opens a submenu, drawn open when it has any.
         // `WT_SHOOT_WORKSPACE=1` draws *Workspace ›* open instead.
         let showWorkspace = ProcessInfo.processInfo.environment["WT_SHOOT_WORKSPACE"] == "1"
-        let owner: NSView? = showWorkspace ? workspaceRow : ((active ?? []).isEmpty ? nil : activeRow)
+        let owner: NSView? = showGhost ? nil
+            : showWorkspace ? workspaceRow : ((active ?? []).isEmpty ? nil : activeRow)
         if let row = owner {
             setOpen(row, true)
             let sub = showWorkspace

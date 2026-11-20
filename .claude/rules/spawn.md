@@ -234,9 +234,16 @@ session to be active right now"*.
   under its folder: the ✓ in the indent, Terminal's icon, ⏳ when busy, the name; no star. A click
   binds it (`redirectSpawn`), exactly as an *Active Terminals* pick. The folder row's click still
   opens a new session. **Only *Active Terminals* keeps a submenu.**
-- **Drawn from the first frame: the last opening's sessions** (`lastSessions`), then `fillActive`'s
-  fresh look relays the menu out (top-left kept, clock not restarted) only when `children` changed —
-  so lines appear under the hand only on the opening after a session started or ended.
+- ~~**Drawn from the first frame: the last opening's sessions**~~ (→ 2026-11-20, the ghost below).
+- **The rows wait under a ghost until the sessions are found** (2026-11-20, Victor: *"pot să tolerez
+  jumătate de secundă de așteptare ca să-mi apară lista să nu se mai modifice după aceea … loading
+  ghost text, cum face Facebook-ul"*). The panel opens at the press, sized by `lastSessions`, every
+  row hidden (no click, no hover) under `GhostView`'s grey bars — a square where the mark goes, a bar
+  of varied length, a sheen sweeping across once a second; the header and the line stay.
+  `fillActive` (~0.48 s measured, `POST /test/orca {"sessions": true}`) → `reveal`: the real menu
+  once, top-left kept, **the clock starts then**. `ghostCap` 1.5 s: no answer by then shows the last
+  sessions and the late answer relays out as before. Log `✨ the folder menu's rows are up after N ms`.
+  `WT_SHOOT_GHOST=1` with `WT_SHOOT_MENU` draws it.
 - ~~**A folder row with live sessions grows a chevron (between name and star) and a submenu on
   hover; its click still opens a new session**~~ (2026-10-07 → 2026-10-09).
 - **`ActiveTerminals.grouped`**: a session belongs to the deepest row whose path is its directory
