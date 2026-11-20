@@ -364,8 +364,9 @@ star to get them onto the main list"*.
 ## `WT_SHOOT_MENU`
 
 - **Review layout changes with `WT_SHOOT_MENU=/tmp/menu.png ./.build/debug/WalkieTalkie`**
-  (`SpawnFolderMenu.shoot`), never by eye during a 3.5 s dictation. The panel is
-  `sharingType = .none` like everything near the pointer, so this is the only picture of it.
+  (`SpawnFolderMenu.shoot`), never by eye during a 3.5 s dictation. Since 2026-11-20 the menu is in
+  a Teams/Zoom share and in an outside `screencapture` (`RoomShare`, *"too mysterious otherwise"*),
+  out of the shutter's own frames only.
   → journal: *`WT_SHOOT_MENU` — because this panel cannot be photographed either*
 - **Template tint must happen inside an `NSImage(size:flipped:)` of its own.** Drawing a template
   `NSImage` and then `fill(using: .sourceAtop)` over the same rectangle paints the whole box — it

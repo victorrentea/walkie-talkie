@@ -294,8 +294,13 @@ final class ScreenFilm {
     ///
     /// It returns nil without the Screen Recording grant rather than trapping,
     /// and `stop()` turns a recording of nothing into a refusal.
+    ///
+    /// **Out of the share-visible windows' way** (2026-11-20): the folder menu, the
+    /// edge dust and the reply pop-up are `.readOnly` so a Teams/Zoom share shows
+    /// them, and `CGDisplayCreateImage` would see them too — `outOfShot` takes them
+    /// out for the length of the grab, as for the shutter's `screencapture`.
     private func grab() -> CGImage? {
-        CGDisplayCreateImage(displayID)
+        ReplyPanel.outOfShot { CGDisplayCreateImage(displayID) }
     }
 
     /// **Normalised to 8-bit sRGB before it is written.**

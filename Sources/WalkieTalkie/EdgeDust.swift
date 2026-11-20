@@ -37,7 +37,10 @@ import AppKit
 ///   rotated cw"*): the same grains, drawn by the same shader in its `marks` mode —
 ///   question marks lying on their side, the dot on the screen's edge and the hook
 ///   reaching in, forming and crumbling back to dust one after another.
-/// - Click-through, `sharingType = .none` (`capturable` for a desk shot), above the
+/// - Click-through, **in a Teams/Zoom share since 2026-11-20** (Victor: *"make sure
+///   the dust is also visible and the edge effect. We worked so hard … and they
+///   don't see it"*): `.readOnly`, dropped to `.none` only while the shutter takes
+///   its own picture (`ReplyPanel.outOfShot` → `inShotChanged`). Above the
 ///   menu bar — the top edge is the screen's, not the visible frame's.
 ///
 /// Knobs, in the defaults (`edgeDust.alpha|thickness`):
@@ -48,7 +51,12 @@ final class EdgeDust {
 
     static var capturable = false
     static weak var current: EdgeDust?
-    init() { Self.current = self }
+    init() {
+        Self.current = self
+        ReplyPanel.inShotChanged.append { [weak self] in
+            self?.panel?.sharingType = !Self.capturable && ReplyPanel.inShot ? .none : .readOnly
+        }
+    }
 
     private static func knob(_ key: String, _ standard: Double) -> Double {
         UserDefaults.standard.object(forKey: "edgeDust.\(key)") as? Double ?? standard
@@ -205,7 +213,7 @@ final class EdgeDust {
         pollTimer?.invalidate(); pollTimer = nil
         picture?.setIntensity(1)
         setSwell(1, animated: false)
-        p.sharingType = Self.capturable ? .readOnly : .none
+        p.sharingType = !Self.capturable && ReplyPanel.inShot ? .none : .readOnly
         if !p.isVisible { p.alphaValue = 0 }
         NSAnimationContext.runAnimationGroup { ctx in
             ctx.duration = 0.5

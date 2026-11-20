@@ -146,6 +146,8 @@ if let spec = ProcessInfo.processInfo.environment["WT_HALO_DEMO"] {
 
 // The states catalogue is shot with every window off the displays — `Offstage`.
 if ProcessInfo.processInfo.environment["RELAY_SHOOT"] != nil { Offstage.install() }
+// Every window in a Teams/Zoom share, out of the shutter's own frames — `RoomShare`.
+RoomShare.install()
 
 let app = NSApplication.shared
 // **`.regular`, so it is in the Dock with a running dot under it** (Victor,

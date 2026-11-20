@@ -440,10 +440,15 @@ enum SpawnFolderMenu {
         // `INT32_MAX - 16`, so there is room above it.
         p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 1)
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        // The relay photographs the screen during the very dictation this menu
-        // opens — the automatic frame and every back-button shot. Same rule `CaptureFlash`,
-        // `RecordingBeacon` and the chip itself follow.
-        p.sharingType = .none
+        // **In a Teams/Zoom share, never in the shutter's own frames** (2026-11-20,
+        // Victor: *"make sure that your … dialog that you display when I start you in
+        // a new terminal is captured by Zoom screen or Teams screen capture, because
+        // it's too mysterious otherwise"*). `.readOnly`, like the reply pop-up; the
+        // relay photographs the screen during the very dictation this menu opens (the
+        // automatic frame, every back-button shot, the film), and `ReplyPanel.outOfShot`
+        // drops it to `.none` for each of those pictures (`joinsTheShare`).
+        _ = joinsTheShare
+        p.sharingType = ReplyPanel.inShot ? .none : .readOnly
         p.contentView = root
         let where_ = origin(for: size, at: point)
         p.setFrameOrigin(where_)
@@ -1159,9 +1164,20 @@ enum SpawnFolderMenu {
         p.hasShadow = true
         p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 1)
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        p.sharingType = .none
+        _ = joinsTheShare
+        p.sharingType = ReplyPanel.inShot ? .none : .readOnly
         return p
     }
+
+    /// The menu and its submenu leave the share only for the shutter's own
+    /// picture (`ReplyPanel.outOfShot` → `inShotChanged`), once registered.
+    private static let joinsTheShare: Void = {
+        ReplyPanel.inShotChanged.append {
+            let type: NSWindow.SharingType = ReplyPanel.inShot ? .none : .readOnly
+            panel?.sharingType = type
+            subpanel?.sharingType = type
+        }
+    }()
 
     // MARK: - The star
 
@@ -1839,8 +1855,8 @@ final class RaiseButton: NSView {
 
 /// **Draw the menu into a PNG and quit** — `WT_SHOOT_MENU=/tmp/menu.png`.
 ///
-/// This panel is `sharingType = .none`, like everything else this app puts near
-/// the pointer, so **no screen capture can contain it**: the one route to seeing
+/// This panel was `sharingType = .none` until 2026-11-20 (it is `.readOnly` now,
+/// out of the shutter's frames only), so **no screen capture could contain it**: the one route to seeing
 /// a layout change was to make a spawn dictation and look with your own eyes,
 /// inside three and a half seconds, at a menu that then faded. That is the same
 /// problem `docs/overlay-states.html` was built to solve for the chip, and the

@@ -164,6 +164,15 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
 
 ## Nothing this app draws is in the picture, and a test says so (2026-09-14)
 
+- **…but all of it is in a Teams/Zoom share since 2026-11-20** (Victor: *"every thing that Walkie
+  Talkie draws should be visible in Zoom and Teams screen share"*). `RoomShare` swizzles
+  `setSharingType:` so a `.none` outside a shot is `.readOnly`; **every capture this app takes of
+  the screen must run inside `ReplyPanel.outOfShot`**, which flips every window to `.none` for its
+  length (`screencapture`, the film's `CGDisplayCreateImage`, the ripple's frame, the ChatGPT bar
+  probe). A new capture path outside it puts the chip into his pictures. The bullets below describe
+  `.none` as it was — today it means *out of my own pictures*. → journal: *📺 Everything Walkie
+  Talkie draws is in a Teams/Zoom share*
+
 - **The lightning ring, the drop arrow and the tap ripple are already invisible to every capture**
   — `sharingType = .none` on every panel, re-measured the day Victor asked for them to be hidden
   during the shutter: a control panel at `.readOnly` comes back in the frame and the same panel at

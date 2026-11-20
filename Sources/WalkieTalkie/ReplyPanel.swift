@@ -95,9 +95,11 @@ enum ReplyPanel {
     static func outOfShot<T>(_ body: () throws -> T) rethrows -> T {
         func share(_ type: NSWindow.SharingType, inShot: Bool) {
             let apply = {
+                // First, so `RoomShare`'s setter lets a `.none` through for the shot.
+                self.inShot = inShot
+                RoomShare.shot(inShot)
                 panel?.sharingType = type
                 panel?.childWindows?.forEach { $0.sharingType = type }
-                self.inShot = inShot
                 inShotChanged.forEach { $0() }
             }
             if Thread.isMainThread { apply() } else { DispatchQueue.main.sync(execute: apply) }

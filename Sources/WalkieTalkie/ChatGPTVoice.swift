@@ -538,8 +538,8 @@ enum ChatGPTVoice {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         p.arguments = ["-x", "-R", "\(Int(band.minX)),\(Int(band.minY)),\(Int(band.width)),\(Int(band.height))", file.path]
-        do { try p.run() } catch { return nil }
-        p.waitUntilExit()
+        // This app's windows are in the share (`RoomShare`), not in this probe.
+        do { try ReplyPanel.outOfShot { try p.run(); p.waitUntilExit() } } catch { return nil }
         guard let data = try? Data(contentsOf: file), let bitmap = NSBitmapImageRep(data: data) else { return nil }
         let scale = Double(bitmap.pixelsWide) / Double(band.width)
         func column(_ pt: Double) -> Double {

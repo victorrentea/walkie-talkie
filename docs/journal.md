@@ -16659,3 +16659,29 @@ back and forth … and I should be able to use the scroll wheel up and down insi
 - **A rebuild keeps the scroll** (`topOffset` / `setTopOffset`) and is clamped into the screen the
   menu opened on (`visible`): the top-left corner stays unless the rows have grown past the bottom.
 - **`WT_SHOOT_MAX_HEIGHT=<pt>`** photographs the scrolled state (`WT_SHOOT_MENU`).
+
+
+## 📺 Everything Walkie Talkie draws is in a Teams/Zoom share (2026-11-20)
+
+Victor, about the folder menu of a new session: *"make sure that your … dialog that you display when I
+start you in a new terminal is captured by Zoom screen or Teams screen capture, because it's too
+mysterious otherwise"*; then *"make sure the dust is also visible and the edge effect. We worked so
+hard … and they don't see it"*; then *"every thing that Walkie Talkie draws should be visible in Zoom
+and Teams screen share"*.
+
+- **Why nobody in the room saw anything**: nearly every window was `sharingType = .none`, which hides
+  it from *every* capture — the shutter's `screencapture`, and equally ScreenCaptureKit, i.e. Zoom
+  and Teams. Only the reply pop-up (2026-10-12) and the chip under the ⌥⇧ zoom had been let out.
+- **`RoomShare` (one file, installed from `main.swift`)** swizzles `NSWindow.setSharingType:`: a
+  `.none` asked for outside a shot is written `.readOnly`. The forty call sites stay as they were;
+  `.none` now reads *out of my own pictures*. `WT_SHARE_ALL=0` gives the old behaviour back.
+- **The shutter's frames stay clean through `ReplyPanel.outOfShot`**, which now flips **every**
+  window of the process (`RoomShare.shot`) to `.none` for the picture and back — `inShot` is set
+  first so the swizzled setter lets the `.none` through. Wrapped in it now as well: the film's
+  5 fps `CGDisplayCreateImage` (`ScreenFilm.grab`), the ripple's frame
+  (`CaptureEffects.captureScreenImage`) and the ChatGPT voice bar probe. The video (`FilmVideo`)
+  already excludes this app by its SCK filter.
+- **The price**: a viewer of the share sees this app's windows blink out for the ~0.2 s of each shot
+  — and during a 🎦 film, 5 times a second for ~20 ms each (the REC badges and border included).
+- The folder menu (`SpawnFolderMenu.joinsTheShare`) and `EdgeDust` also set `.readOnly` and
+  register on `inShotChanged` explicitly — written before the general rule; harmless beside it.

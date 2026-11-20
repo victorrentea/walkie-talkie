@@ -340,7 +340,8 @@ enum CaptureEffect: String, CaseIterable {
         guard let displayID = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value else {
             return nil
         }
-        return CGDisplayCreateImage(CGDirectDisplayID(displayID))
+        // This app's windows are in the share (`RoomShare`), not in this frame.
+        return ReplyPanel.outOfShot { CGDisplayCreateImage(CGDirectDisplayID(displayID)) }
     }
 
     /// The fallback (and the original prototype): rings launched a beat
