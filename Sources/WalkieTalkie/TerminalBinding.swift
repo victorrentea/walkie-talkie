@@ -1971,20 +1971,45 @@ final class TerminalBinding {
     /// on an empty Claude Code prompt is not provably nothing (prompt
     /// suggestions sit there as ghost text), and because a tab that did not
     /// ask must not be pressed again.
-    private static func writeToTerminalApp(_ text: String, tty: String) -> Bool {
-        let script = """
+    private static func writeToTerminalApp(_ text: String, tty: String,
+                                           typed: (() -> Void)? = nil) -> Bool {
+        // **The text and the Return are two scripts since 2026-11-20**, so the
+        // caller hears *the words are in the box* the moment they are
+        // (`typed`) — the caret pin went only when the whole Return watch below
+        // had finished, ~1–1.5 s after the words were plainly on screen (Victor:
+        // *"mai rămâne o secundă … chiar dacă deja textul a fost trimis și
+        // injectat"*). The 0.5 s from the text to the Return is kept, counted
+        // from the first script's return (an `osascript` launch is ~0.1 s).
+        let type = """
         tell application "Terminal"
             repeat with w in windows
                 repeat with t in tabs of w
                     try
                         if tty of t is "\(escape(tty))" then
                             do script "\(escape(text))" in t
-                            -- 0.5 s, not 0.12 (2026-09-28): Claude Code folds a
-                            -- key that arrives within ~150 ms of a large chunk
-                            -- into the paste, and a Return inside a paste is a
-                            -- newline. Both Returns became blank lines under the
-                            -- sentence, which sat unsent (Victor's screenshot).
-                            delay 0.5
+                            return "ok"
+                        end if
+                    end try
+                end repeat
+            end repeat
+            return "gone"
+        end tell
+        """
+        guard osascript(type) == "ok" else { return false }
+        let typedAt = Date()
+        typed?()
+        // 0.5 s, not 0.12 (2026-09-28): Claude Code folds a key that arrives
+        // within ~150 ms of a large chunk into the paste, and a Return inside a
+        // paste is a newline. Both Returns became blank lines under the
+        // sentence, which sat unsent (Victor's screenshot).
+        let gap = 0.5 - Date().timeIntervalSince(typedAt)
+        if gap > 0 { usleep(UInt32(gap * 1_000_000)) }
+        let script = """
+        tell application "Terminal"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    try
+                        if tty of t is "\(escape(tty))" then
                             do script "" in t
                             delay 0.35
                             -- Its own try: the text is already in the tab, and a
@@ -2611,10 +2636,12 @@ final class TerminalBinding {
     /// delivery (`writeToTerminalApp`: text, a bare Return, and the third Return
     /// when Claude Code asks to review a paste), aimed at a tty instead of the
     /// binding.
-    static func submitPrompt(_ text: String, toTTY tty: String) -> Bool {
+    /// `typed` runs (on this thread) once the words are in the box, before
+    /// the Return — the caret pin's cue (2026-11-20).
+    static func submitPrompt(_ text: String, toTTY tty: String, typed: (() -> Void)? = nil) -> Bool {
         let line = singleLine(text)
         guard !line.isEmpty else { return false }
-        return writeToTerminalApp(line, tty: tty)
+        return writeToTerminalApp(line, tty: tty, typed: typed)
     }
 
     /// Would typing here run a command rather than talk to a program?

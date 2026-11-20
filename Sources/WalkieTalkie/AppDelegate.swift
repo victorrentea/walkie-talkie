@@ -10810,7 +10810,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if rulesKnown {
                 Log.info("📜 short envelope at the caret — \(rulesTTY ?? "?") holds agent rules v\(needs)+")
             }
-            let submitted = tty.map { TerminalBinding.submitPrompt(line, toTTY: $0) } ?? false
+            // The pin goes when the words are in the box, not when the Return
+            // watch after them ends (2026-11-20) — that was ~1–1.5 s later.
+            let submitted = tty.map { into in
+                TerminalBinding.submitPrompt(line, toTTY: into, typed: {
+                    DispatchQueue.main.async { self?.pinLanded(landing, "typed into Claude Code on \(into) — the Return follows") }
+                })
+            } ?? false
             let vscodeTTY = submitted ? nil : vscodeClaude
             DispatchQueue.main.async {
                 guard let self else { return }

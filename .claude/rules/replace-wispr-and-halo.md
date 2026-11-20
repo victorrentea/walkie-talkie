@@ -901,6 +901,11 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `endSettling`) keeps `setDelivering` on and `FocusFrame` reading the caret, outline off, until
   `pinLanded`: `submitPrompt` returned, VS Code's paste, the ⌘V (edited or not), or the fallback
   paste; a new dictation drops it, 12 s is the ceiling (`caretLandingCeiling`). Log `📍 the pin goes — …`.
+  **A Claude Code tab's pin goes when the words are in the box, not after the Return watch**
+  (2026-11-20, Victor: *"mai rămâne o secundă … chiar dacă deja textul a fost trimis și injectat"*):
+  `writeToTerminalApp` types in one `osascript` and calls `typed` (`submitPrompt(_:toTTY:typed:)`),
+  then the Return + read-back in a second one, 0.5 s after the first returned — the pin had waited
+  0.85 s of delays plus up to 4 s of watch. Log `📍 the pin goes — typed into Claude Code on … — the Return follows`.
 - **The circling dust fades out still circling** (2026-10-09, Victor: *"când dustul dispare din
   mișcarea ei de rotație să se facă fade, nu să dispară brusc când transcrierea este terminată și
   injectată"*). At the words' landing a flying dress with a trail (`hasTrail`, page engine) sets
