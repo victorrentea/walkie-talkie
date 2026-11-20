@@ -1532,6 +1532,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         SingleInstance.enforce()
+        // 💸 The turn-cost watches the last run left, armed again (never in a states shoot).
+        if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { TurnCost.resume() }
+        }
         _ = BackgroundCursor.allow
         // **Whatever the session was left holding while no tap was running.**
         // After `SingleInstance.enforce`, so the relaunch path — the instance
@@ -9923,6 +9927,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   (`releaseWhenSessionStarts`); nil releases it behind the flight, as before.
     private func adoptSpawnedWindow(tty: String, session: (directory: String, since: Date)? = nil,
                                     adopted: ((TerminalBinding.Target?) -> Void)? = nil) {
+        // 💸 A spawn's first turn is a prompt Walkie fired too (2026-11-19).
+        if let since = session?.since {
+            DispatchQueue.main.async { TurnCost.watch(tty: tty, since: since, why: "spawn") }
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             // Off the main thread: this is `osascript` and `ps` subprocesses all
@@ -10315,6 +10323,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.writeOutbox(m, line: line, delivery: delivery)
                     // The right edge swells and goes: the message is in (2026-11-16).
                     if m.kind == "dictation" { self.edgeDust.sent() }
+                    // 💸 Its turn's cost rises from the pointer when it ends (2026-11-19).
+                    if m.kind == "dictation", let tty = target.handle.tty {
+                        TurnCost.watch(tty: tty, why: "bound")
+                    }
                     if let serial {
                         self.offerKamikaze(already: Self.endsInKamikaze(m.text), at: to, serial: serial) { [weak self] in
                             self?.sendKamikaze(to: target)
@@ -10802,6 +10814,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let vscodeTTY = submitted ? nil : vscodeClaude
             DispatchQueue.main.async {
                 guard let self else { return }
+                // 💸 The turn this caret prompt starts in Claude Code (2026-11-19).
+                if let into = submitted ? tty : vscodeTTY { TurnCost.watch(tty: into, why: "caret") }
                 let already = line.contains("\n\nkamikaze")
                 if let vscodeTTY, let frontPid {
                     self.pasteText(line, to: pid, settles: false)

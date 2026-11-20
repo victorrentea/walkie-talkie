@@ -1089,6 +1089,53 @@ final class ElementPicker {
             }
             respond(conn, 200, ["ok": true])
 
+        // 💸 The turn-cost float with no turn behind it, or a transcript's last turn priced
+        // (2026-11-19, `TurnCost`). `{"transcript": path}` answers the sums and shows nothing
+        // unless `show`; `{"amount", "rest"}` floats that text; `png` renders the pill instead;
+        // `{"state": true}` only reads the floats on screen (frame, alpha, travelled, hovered).
+        case ("POST", "/test/turn-cost"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            var answer: [String: Any] = ["ok": true]
+            // `{"watch": "ttysNNN"}`: arm the real watcher on that tty, as a delivery would.
+            if let tty = body["watch"] as? String {
+                let since = (body["since"] as? Double).map { Date(timeIntervalSince1970: $0) } ?? Date()
+                DispatchQueue.main.sync { TurnCost.watch(tty: tty, since: since, why: "desk") }
+                answer["session"] = TurnCost.session(onTTY: (tty as NSString).lastPathComponent) ?? NSNull()
+                respond(conn, 200, answer); return
+            }
+            if body["state"] as? Bool == true {
+                DispatchQueue.main.sync { answer["floats"] = CostFloat.state }
+                respond(conn, 200, answer); return
+            }
+            var amount = body["amount"] as? String ?? "$1.40"
+            var rest = body["rest"] as? String ?? " · Opus 5.5 in walkie-talkie — Turn cost float"
+            if let path = body["transcript"] as? String {
+                guard let turn = TurnCost.lastTurn(of: URL(fileURLWithPath: path)) else {
+                    respond(conn, 404, ["ok": false, "error": "no finished turn"]); return
+                }
+                let place = TurnCost.place(short: body["tty"] as? String ?? "", cwd: turn.cwd)
+                (amount, rest) = TurnCost.text(turn, place: place)
+                answer.merge(["usd": turn.usd, "subagentUSD": turn.subagentUSD, "responses": turn.responses,
+                              "model": turn.model ?? NSNull(), "start": turn.start ?? NSNull(),
+                              "end": turn.end ?? NSNull(), "seconds": turn.seconds ?? NSNull(),
+                              "text": amount + rest]) { _, new in new }
+                if body["show"] as? Bool != true { respond(conn, 200, answer); return }
+            }
+            if let png = body["png"] as? String {
+                var wrote = false
+                DispatchQueue.main.sync { wrote = CostFloat.png(amount: amount, rest: rest, to: png) }
+                answer["png"] = wrote ? png : NSNull()
+                respond(conn, 200, answer); return
+            }
+            let capturable = body["capturable"] as? Bool ?? false
+            let x = body["x"] as? Double, y = body["y"] as? Double
+            DispatchQueue.main.sync {
+                let at = x.flatMap { x in y.map { NSPoint(x: x, y: $0) } }
+                CostFloat.show(amount: amount, rest: rest, at: at, capturable: capturable)
+                answer["floats"] = CostFloat.state
+            }
+            respond(conn, 200, answer)
+
         // Reverse tunnel in the atom's corner (2026-11-10, `CornerTunnel.demo`).
         case ("POST", "/test/corner-tunnel"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]

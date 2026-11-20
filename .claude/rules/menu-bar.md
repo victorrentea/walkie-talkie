@@ -23,7 +23,7 @@ that are right now in engine top level."*
   Prompt History ▸ / Recover Dictation / Replay Last Dictation · End Dictation / Cancel Dictation ·
   Mic ▸ / Engine ▸ / Last used / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
   **the five engine switches** (Backup Local Pre-Transcribe, Live captions (local), ✍️ Edit plain
-  dictation, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Orca (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed) · **Gesture Guide** · **Editor Dictionary** · `Built …` · Quit.
+  dictation, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Orca (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed, 💸 Turn cost since 2026-11-20 — `TurnCost.enabled`, on by default) · **Gesture Guide** · **Editor Dictionary** · `Built …` · Quit.
 - **`Editor Dictionary`** (2026-11-19, Victor: *"un mode în care să văd și dicționarul redactorului,
   ideal și cu sursa+timpul când a fost învățat sau dedus"*) runs `~/.local/bin/walkie-dict show`
   with `/usr/bin/python3` (3.9 — keep the script 3.9-clean) and opens

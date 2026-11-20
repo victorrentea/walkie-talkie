@@ -16436,3 +16436,70 @@ global `skipCloseTerminalWithRunningProcessConfirm` (*Confirm before closing act
 the runtime's `settings.update` RPC does not accept and no plugin hook reaches. The one way left was Walkie
 taking ⌘W in Orca and closing a done session's tab itself through the CLI (CLI closes skip the guard); Victor
 chose to leave it: Orca keeps never asking.
+
+
+## 💸 The turn's cost rises from the pointer when it ends (2026-11-19)
+
+Victor: *"I'd like to see the amount of money that the last turn costed. When I use Walkie Talkie,
+when I fire a prompt behind the scenes, I'd like to have a delicate, gentle notification from the
+Walkie Talkie itself … the amount of money paid for the last turn fired by the Walkie Talkie …
+followed by the model name, and then saying in, and the project … or the name of the terminal …
+That should float up from the cursor … If I hover my mouse over it, it stops in its path upwards …
+comes back full opacity … The total time should be like two seconds … for twenty percent of the
+height of the screen should raise up until completely fading out."*
+
+- **Where the end of a turn is read.** Claude Code writes `{"type":"system","subtype":"turn_duration",
+  "durationMs":…}` when a turn ends. On six walkie-talkie transcripts it appeared once per prompt
+  (the one without it was still running). That line is the trigger, and the turn is everything
+  between it and the one before, so a prompt typed into a running turn is priced with that turn,
+  as the status line's `+x.x` does.
+- **Which transcript.** Claude Code's own registry, `~/.claude/sessions/<pid>.json`
+  (`sessionId`, `kind`, `startedAt`) for each process on the tty, newest interactive one; else the
+  `walkie-inbox` mod's `.alive` beat. The beat alone was not enough: a `claude` started from inside a
+  session inherits its tty and its mod writes the same `.alive` (ttys005 alternated between the spawn
+  and an addons session that evening). The transcript is `~/.claude/projects/*/<session>.jsonl`;
+  nothing found (Codex, Copilot) → nothing shown, logged once.
+- **The first real turn was lost to a restart.** A spawn at 20:07:34 ended its turn at 20:11:21;
+  another session's deploy restarted Walkie at 20:10:52 and the in-memory watcher went with it. Since
+  then the watches are written to `~/.walkie-talkie/turn-watch.json` and `TurnCost.resume()` arms
+  them 3 s after launch (not under `RELAY_SHOOT`); a turn that ended more than 90 s before is logged,
+  never floated late.
+- **The price.** The rate table and formula of `victor-statusline/claude/hooks/week-spend.py`
+  (list prices, output 5×, cache writes 1.25×/2×, the model's read multiplier, $0.01 a web search),
+  ported to `TurnCost.rates`. A response is one message id (each content block is its own line
+  carrying the same usage); `<synthetic>` is skipped; `subagents/*.jsonl` responses stamped inside
+  the turn are added. Checked against `week-spend.py`'s own `cost()` on session 4d6ee87e's last turn:
+  **$2.3624532 both, 20 responses**.
+- **Armed by** a bound delivery (`.delivered`, dictation only), a spawn (`adoptSpawnedWindow` with its
+  session, `since` = the launch) and a caret prompt submitted into Claude Code in Terminal or VS
+  Code. One watcher per tty; a second prompt while it watches is folded in, or watched as the next
+  turn if a new typed prompt shows up within 6 s of the first turn's end.
+- **The float** (`CostFloat`): `$2.36 · Opus 5.5 in walkie-talkie — <task>`, white, the amount
+  semibold, on a black 45 % pill; 18 pt above the pointer, centred on it; rises linearly 20 % of the
+  screen's height in 2 s while its alpha goes linearly 1 → 0. Under the pointer it stops and comes
+  back to full; once the pointer leaves, it goes on from where it is, fading from full over the rest
+  of the path (≥ 0.5 s). It ignores the mouse (the hover is geometry, like `PromptAtom`), so it never
+  eats a click, and it is out of screen shares. A pointer near the top starts it lower so the whole
+  rise fits, and it waits for the pointer to have been outside it once (`armed`) before a hover counts.
+  Shown on the desk, 2026-11-19: photographed at 0.2 / 1.0 / 1.7 s rising and fading; started under the
+  pointer, it stopped at 29 % of the rise with alpha back to 1.
+- `WT_TURN_COST=0` turns it off. Desk: `POST /test/turn-cost`.
+
+## 💸 The cost float stands still by the pointer (2026-11-20)
+
+Victor: *"The cost that reported for a certain step … should not float up, but stay next to the mouse
+while fading out so that I can read it. As it goes, as it moves up, it's very hard to read."*
+
+- `CostFloat` no longer rises (the 20 %-of-the-screen climb of 2026-11-19 is gone): it appears 18 pt
+  above the pointer and fades out there. The fade is ease-in, `alpha = 1 − u²` (½ the time in, it is
+  still at 75 %), so the text is legible for most of its life instead of half-gone midway.
+- Hover unchanged: held at full opacity, the fade resumes from full over what is left (≥ 0.5 s).
+- Several at once: they no longer climb apart, so a new one goes under every float still showing.
+- `POST /test/turn-cost {"state"}` reports `faded` (the share of the fade done) instead of `travelled`.
+- Then: *"să aibă fundalul negru complet, să aibă fontul mai mic cu 20%. Și să facă fade out mai lent,
+  de două ori mai lent."* → the pill is solid black (was 45 %), the type 13/12 pt (was 16/15) with the
+  padding scaled to match, and the fade takes 4 s (was 2).
+- Then: *"Și cost tracking-ul trebuie să fie o opțiune pe care o pot activa sau dezactiva … din meniu."*
+  → a top-level tick **💸 Turn cost** after 🐋 Orca (`UserDefaults` `turnCost`, on by default);
+  `WT_TURN_COST` still overrides it for a test.
+- Then: *"Pune acest emoji [💰] înainte de cifre în … badge-urile care zic costul."* → `💰 $1.40 · …`.

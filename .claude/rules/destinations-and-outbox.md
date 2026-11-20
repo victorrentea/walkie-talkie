@@ -604,3 +604,31 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   the Google query read it — and the Google URL gains `hl=en&gl=<iso>` (Google's AI answer came
   in Romanian, the account's language). Log `⚡ 🌍 workshop in <country> today …`.
   Checked with `claude -p` (Opus): *"Care e cota de TVA standard?"* + the clause → Portugal's 23 %, in English.
+
+
+## 💸 The turn's cost by the pointer (2026-11-19, still since 2026-11-20, `TurnCost`)
+
+Victor: *"the amount of money paid for the last turn fired by the Walkie Talkie … followed by the
+model name … in … the project … float up from the cursor … hover … stops … two seconds … twenty
+percent of the height of the screen"*.
+
+- **Every prompt Walkie puts into a Claude Code session arms `TurnCost.watch(tty:)`**: the bound
+  delivery (`deliverToTerminal` on `.delivered`, dictation only), the spawn (`adoptSpawnedWindow`,
+  `since` = launch), the caret prompt submitted into Claude Code (Terminal or VS Code). The session
+  is Claude Code's own registry, `~/.claude/sessions/<pid>.json` of the processes on that tty (newest
+  `kind: interactive` — a `claude -p` run from Bash shares the tty), else the mod's `.alive` beat;
+  neither → nothing, one log line. **The watches survive a restart**: `~/.walkie-talkie/turn-watch.json`
+  while one runs, `TurnCost.resume()` 3 s after launch; a turn that ended over 90 s before is logged only.
+- **The trigger is Claude Code's `turn_duration` line**; the turn is everything since the previous
+  one, so a prompt folded into a running turn is priced with it. Responses once per message id, at
+  `week-spend.py`'s rates (`TurnCost.rates`, kept in step by hand), plus `subagents/*.jsonl` inside
+  the turn. Log `💸 ttysNNN: the turn cost $x — N responses, S s · Model in folder — task`.
+- **`CostFloat`**: `💰 $x · Opus 5.5 in <folder> — <task from the tab title>`; 18 pt above the pointer;
+  **it does not move** (2026-11-20, Victor: *"it should not float up, but stay next to the mouse while
+  fading out so that I can read it"* — the 20 %-of-the-screen rise made it unreadable); fades out in
+  4 s since 2026-11-20 (*"de două ori mai lent"*; on solid black, the type 13/12 pt — *"fundalul negru
+  complet … fontul mai mic cu 20%"*), ease-in (`1 − u²`); the pointer over it holds it at full opacity, leaving resumes the fade from
+  full over what is left (≥ 0.5 s). A second float while one shows goes under it. `ignoresMouseEvents`,
+  `sharingType = .none`. Not part of the chip, so not on the states page; `POST /test/turn-cost
+  {"png"}` renders the pill, `{"capturable": true}` lets a screenshot see a live one.
+- **The menu's `💸 Turn cost` tick turns it on/off** (2026-11-20, Victor: *"o opțiune pe care o pot activa sau dezactiva … din meniu"*): `UserDefaults` `turnCost`, default on, last of the top-level switch rows (`StatusItem.turnCostRow`); off stops new watches and drops the float of a turn already watched. `WT_TURN_COST=0|1` (env → `elevenlabs.env`) still wins for a test.

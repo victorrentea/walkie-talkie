@@ -864,6 +864,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let wakeRow = NSMenuItem(title: WakeWord.menuTitle, action: nil, keyEquivalent: "")
     private let gepettoRow = NSMenuItem(title: WakeWord.gepettoMenuTitle, action: nil, keyEquivalent: "")
     private let faceRow = NSMenuItem(title: FaceRead.menuTitle, action: nil, keyEquivalent: "")
+    /// **💸 Turn cost** (2026-11-20): the cost float when a prompted turn ends (`TurnCost.enabled`).
+    private let turnCostRow = NSMenuItem(title: "💸 Turn cost", action: nil, keyEquivalent: "")
     /// **🐋 Orca (experimental)** (2026-11-19): new sessions open as Orca tabs,
     /// ⌘⌃B binds Orca's front pane, the spawn menu lists Orca's sessions.
     private let orcaRow = NSMenuItem(title: OrcaBridge.menuTitle, action: nil, keyEquivalent: "")
@@ -1068,7 +1070,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // top level"*). The Engine list is the engines and the quota again;
         // these are ticks like Autosend, drawn the same way, re-read at every
         // open (`applySwitchRows`).
-        for row in [autoLocalRow, liveRow, editorRow, wakeRow, gepettoRow, faceRow, orcaRow] {
+        for row in [autoLocalRow, liveRow, editorRow, wakeRow, gepettoRow, faceRow, orcaRow, turnCostRow] {
             row.target = self
             menu.addItem(row)
         }
@@ -1079,6 +1081,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         gepettoRow.action = #selector(gepettoClicked)
         faceRow.action = #selector(faceClicked)
         orcaRow.action = #selector(orcaClicked)
+        turnCostRow.action = #selector(turnCostClicked)
         applySwitchRows()
 
         menu.addItem(.separator())
@@ -1366,6 +1369,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "A second copy of the model runs it (~2 GB more), so the final transcription never waits: "
             + "a window still decoding when you stop is killed."
         editorRow.image = Self.tick(DictationEditor.enabled)
+        turnCostRow.image = Self.tick(TurnCost.enabled)
+        turnCostRow.toolTip = "When a prompt you sent ends its turn in Claude Code, what that turn would cost "
+            + "at API prices shows by the pointer for a few seconds: amount, model, project."
         editorRow.toolTip = "A plain dictation from ElevenLabs or a local model is read once more by Haiku "
             + "before it is pasted, with what is on screen: the app, the text around the caret, the names in the window. "
             + "It fixes misheard words and names, drops fillers and keeps only a self-correction.\n"
@@ -1433,6 +1439,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
         FaceRead.enabled.toggle()
         applySwitchRows()
         Log.info("🙂 face reading \(FaceRead.enabled ? "on" : "off") from the menu")
+    }
+
+    @objc private func turnCostClicked() {
+        TurnCost.enabled.toggle()
+        applySwitchRows()
+        Log.info("💸 turn cost \(TurnCost.enabled ? "on" : "off") from the menu")
     }
 
     @objc private func editorClicked() {
