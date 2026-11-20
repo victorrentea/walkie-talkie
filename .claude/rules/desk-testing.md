@@ -7,8 +7,8 @@ paths:
 ---
 # Testing at a desk — the loopback control surface
 
-`ElementPicker` listens on the first free port of 8917–8919 (the Chrome extension posts to all three;
-`MusicBridge` is a WebSocket on 8920). `/bind`, `/unbind`, `/target` are not gated on `dictating`.
+`ElementPicker` (the name outlived the Chrome extension, removed 2026-11-20) listens on the first free
+port of 8917–8919; a caller tries all three. `/bind`, `/unbind`, `/target` work at rest.
 Real Wispr dictations end to end: `tools/wispr-loop.sh <scenario>` (scenarios, preconditions and
 timings in `docs/loopback.md`; it takes `~/.walkie-talkie/wispr-loop.lock` — never run two).
 The whole suite runs **inside the Tart guest, on demand only** (2026-09-29, Victor: *"I will only

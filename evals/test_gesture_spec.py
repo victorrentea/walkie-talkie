@@ -502,13 +502,13 @@ def spec(src: dict):
                                  r"cleanSentence = false.*?caretPrompt = true.*?syncBorrowedGestures\(\).*?plusOneShot\(")),
                 ("…nor does the area shot", "AppDelegate `areaShot`",
                  lambda: has(function(src, ad, "areaShot"), r"refusesAttachment\(")),
-                ("no ⌘⇧ pick, no highlight, no film, no typing box", "AppDelegate `record` / `fileSelection` / `toggleFilm` / `openTypeIn`",
+                ("no highlight, no film, no typing box", "AppDelegate `fileSelection` / `toggleFilm` / `openTypeIn`",
                  lambda: all(has(function(src, ad, f), r"refusesAttachment\(")
-                             for f in ("record", "fileSelection", "toggleFilm", "openTypeIn"))),
-                ("the picker and the highlight watcher ride `attachable`, not `live`", "AppDelegate `syncBorrowedGestures`",
+                             for f in ("fileSelection", "toggleFilm", "openTypeIn"))),
+                ("the highlight watcher rides `attachable`, not `live`", "AppDelegate `syncBorrowedGestures`",
                  lambda: all(has(function(src, ad, "syncBorrowedGestures"), p)
                              for p in (r"let attachable = live && !hotkeys\.cleanSentenceOpen",
-                                       r"picker\.dictating = attachable", r"syncSelectionWatch\(attachable[ )]"))),
+                                       r"syncSelectionWatch\(attachable[ )]"))),
                 ("🔼 → / 🔼 ↑ turn it into a prompt: the tap is told", "AppDelegate `syncBorrowedGestures`",
                  lambda: before(function(src, ad, "syncBorrowedGestures"),
                                 r"hotkeys\.relayPromptOpen = listening && !plainToTheHand",

@@ -79,7 +79,7 @@ def single(name: str) -> None:
 if __name__ == "__main__":
     OUT.mkdir(exist_ok=True)
     strip(["listening-everything", "prompt-shots", "flash-sent"], "hero")
-    for n in ["listening", "listening-selection", "listening-picks",
+    for n in ["listening", "listening-selection",
               "prompt-shots", "spawn-folder", "bind-to-send"]:
         single(n)
     print(f"→ {OUT.relative_to(DOCS.parent)}/")

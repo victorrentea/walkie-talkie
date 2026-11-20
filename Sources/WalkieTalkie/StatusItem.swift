@@ -91,7 +91,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     var onStopRecording: (() -> Void)?
 
     /// Picked from **Cancel Dictation** — end the open dictation and throw it
-    /// away: no transcript, nothing delivered, and the shots and picks it had
+    /// away: no transcript, nothing delivered, and the shots it had
     /// gathered go with it. The counterpart of Stop, for the sentence that came
     /// out wrong before it was ever worth transcribing.
     var onCancelDictation: (() -> Void)?

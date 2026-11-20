@@ -12,11 +12,14 @@ final class BrowserGateTests: XCTestCase {
         XCTAssertFalse(BrowserGate.refuses(host: nil, origin: nil, fetchSite: nil))
     }
 
-    func testTheExtensionPassesHoweverChromeLabelsIt() {
+    /// The Walkie Talkie Inspector extension was the one browser caller with a pass;
+    /// it is gone (2026-11-20), so an extension's worker is refused like a page.
+    func testAnExtensionIsRefused() {
         let origin = "chrome-extension://abcdefghijklmnop"
-        XCTAssertFalse(BrowserGate.refuses(host: host, origin: origin, fetchSite: "none"))
-        XCTAssertFalse(BrowserGate.refuses(host: host, origin: origin, fetchSite: "cross-site"))
-        XCTAssertFalse(BrowserGate.refuses(host: host, origin: origin, fetchSite: nil))
+        XCTAssertTrue(BrowserGate.refuses(host: host, origin: origin, fetchSite: "none"))
+        XCTAssertTrue(BrowserGate.refuses(host: host, origin: origin, fetchSite: "cross-site"))
+        XCTAssertTrue(BrowserGate.refuses(host: host, origin: origin, fetchSite: nil))
+        // A typed URL in the address bar: no Origin, `Sec-Fetch-Site: none`.
         XCTAssertFalse(BrowserGate.refuses(host: host, origin: nil, fetchSite: "none"))
     }
 

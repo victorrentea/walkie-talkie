@@ -5,9 +5,9 @@
 
 `variants.py` next door measures what the *shots* clause costs in tokens against
 real frames. This one is about **shape**: that the three things the envelope
-enumerates — the frames, the highlights, the picked elements — all say when in
-the dictation they happened, in the same clock, in the same `- ` list style, and
-that a picked element carries what it said.
+enumerates — the frames and the highlights (the Chrome picks went with the
+extension, 2026-11-20) — all say when in the dictation they happened, in the
+same clock, in the same `- ` list style.
 
 It runs against the **installed relay**, through the loopback routes, because
 the clauses are private statics inside an AppKit app with no test target and the
@@ -149,7 +149,7 @@ BASE = _find_relay()
 
 @unittest.skipIf(BASE is None, "no relay is listening on 8917-8919")
 class EnvelopeShape(unittest.TestCase):
-    """One fabricated dictation carrying two highlights and two picks."""
+    """One fabricated dictation carrying two highlights."""
 
     @classmethod
     def setUpClass(cls):
@@ -177,20 +177,9 @@ class EnvelopeShape(unittest.TestCase):
     @classmethod
     def _run(cls):
         _post(BASE, "/test/dictation/start")
-        time.sleep(1)
-        _post(BASE, "/pick", {
-            "path": "div#cart > span.price", "tag": "span", "text": "1.299,00 lei",
-            "url": "https://shop.example/cart", "title": "Cart — Shop"})
-        time.sleep(2)
+        time.sleep(3)
         _post(BASE, "/test/selection", {"text": "the twenty-two chars!!"})
-        time.sleep(2)
-        long = "The server returned an error. " * 120
-        _post(BASE, "/pick", {
-            "path": "div.alert > p.message", "tag": "p",
-            "text": long[:2000], "textChars": len(long),
-            "url": "https://shop.example/cart", "title": "Cart — Shop",
-            "move": {"from": {"x": 120, "y": 340}, "to": {"x": 500, "y": 205}}})
-        time.sleep(1)
+        time.sleep(3)
         _post(BASE, "/test/selection", {"text": "a second highlight"})
         _post(BASE, "/bind", {"tty": _nowhere()})
         _post(BASE, "/test/dictation", {"text": cls.marker})
@@ -238,27 +227,6 @@ class EnvelopeShape(unittest.TestCase):
         self.assertEqual(extra["at"], "0:06")        # unchanged, `m:ss`
         self.assertEqual(extra["seconds"], 6)        # added 2026-09-13
 
-    # ── the picks ───────────────────────────────────────────────────────────
-    def test_picks_are_one_row_each_keyed_by_their_token(self):
-        """A pick is `[chrome-selection-N at m:ss: "…" = <selector> at <url>]`."""
-        line = self.line["line"]
-        self.assertIn('[chrome-selection-1 at 0:01: "1.299,00 lei" = '
-                      'div#cart > span.price at https://shop.example/cart]', line)
-        self.assertIn("[chrome-selection-2 at 0:05:", line)
-        self.assertNotIn("elements picked in Chrome during dictation", line)
-
-    def test_pick_carries_the_element_text_and_says_what_it_cut(self):
-        """The row shows the head of it; the outbox keeps what was cut."""
-        self.assertIn("The server returned an error. …", self.line["line"])
-        picked = self.line["elements"][1]
-        self.assertEqual(picked["textChars"], 3600)
-        self.assertGreater(len(picked["text"]), 1900)
-        self.assertLessEqual(len(picked["text"]), 2000)
-
-    def test_pick_offsets_reach_the_outbox_as_numbers(self):
-        """`m:ss` is for reading; anything comparing two picks wants seconds."""
-        self.assertEqual([e["at"] for e in self.line["elements"]], [1, 5])
-
     # ── one clock ───────────────────────────────────────────────────────────
     def test_every_token_in_the_envelope_uses_one_clock(self):
         """One arithmetic for every stamp — `AppDelegate.clock(_:pad:)`.
@@ -267,13 +235,13 @@ class EnvelopeShape(unittest.TestCase):
         names on 2026-09-19, so the `mm:ss` the lists used to match is gone with
         them and there is one form left rather than two.
         """
-        for stamp in ("at 0:03:", "at 0:01:", "at 0:05:", "at 0:06:"):
+        for stamp in ("at 0:03:", "at 0:06:"):
             self.assertIn(stamp, self.line["line"])
 
 
 def _frame_scene(cls, engine=None):
-    """`FrameList`'s sentence: the context frame, two shutter presses, a pick,
-    and words with no timings. `engine` is what `Message.engine` will say —
+    """`FrameList`'s sentence: the context frame, two shutter presses and words
+    with no timings. `engine` is what `Message.engine` will say —
     `"Wispr Flow"` for the envelope of a recogniser that has none (2026-09-30)."""
     state = _get(BASE, "/test/state")
     if any(state.get(k) for k in ("isRecording", "settling", "speculative")):
@@ -289,9 +257,6 @@ def _frame_scene(cls, engine=None):
     for _ in range(2):
         _post(BASE, "/test/gesture", {"name": "back-click"})
         time.sleep(2)
-    _post(BASE, "/pick", {
-        "path": "body > table > th", "tag": "th", "text": "Header1",
-        "url": "https://interact.victorrentea.ro", "title": "Interact"})
     time.sleep(1)
     body = {"text": cls.marker}
     if engine:
@@ -378,15 +343,6 @@ class FrameList(unittest.TestCase):
     def test_what_was_said_twice_is_no_longer_said_at_all(self):
         self.assertNotIn("oldest first", self.line)
         self.assertNotIn("in my words is where I pressed the shutter", self.line)
-
-    def test_a_picked_element_is_one_row_keyed_by_its_token(self):
-        """`[chrome-selection-1 … = <selector> at <url>]`, and nothing else."""
-        self.assertRegex(self.line, r"\[chrome-selection-1[^]]*= body > table > th at "
-                                    r"https://interact\.victorrentea\.ro\]")
-        # (`picked element one` can still be in the *words*: it is the retired
-        # spoken marker's phrase and /test/dictation enters below the recogniser.)
-        self.assertNotIn("element picked in Chrome during dictation", self.line)
-        self.assertNotIn("selected DOM element", self.line)
 
     def test_the_hint_names_the_engine_that_transcribed(self):
         """`[Transcribed in RO or EN by <engine>]` (2026-10-12).

@@ -23,7 +23,6 @@ This file holds only what every session needs. The rest is disclosed on demand:
   | `mouse-gestures.md` | `HotkeyTap` keys and side buttons (the full gesture table) |
   | `area-crop.md` | wheel-drag crop, **the stale-⌘ rule** |
   | `screenshots-and-selection.md` | `ScreenCapture`, `SelectionCapture`, `WindowContext`, evals |
-  | `chrome-extension.md` | `chrome-extension/`, `ElementPicker`, `MusicBridge` |
   | `whisper-and-corpus.md` | `Transcriber`, `MicRecorder`, `InputDevice`, `VoiceCorpus`, `helpers/` |
   | `replace-wispr-and-halo.md` | `CaretHalo`, `DropArrow`, `PasteHint` |
   | `spawn.md` | `SpawnTerminal`, folder menu, `ProjectList` |
@@ -32,9 +31,9 @@ This file holds only what every session needs. The rest is disclosed on demand:
 ## UI language: English only
 
 Every string the app renders is English (projector, international rooms) — chip rows, flashes,
-menus, About, the Chrome extension. Logs, comments and commits are unaffected. Strings live in
-`RelayWindow.swift`, `flash(_:)` / `flashTitle(_:)` in `AppDelegate.swift`, `StatusItem.swift`,
-`GestureGuide.swift`, `chrome-extension/inspect.js` and `relay.js`. Hidden rows count too.
+menus, About. Logs, comments and commits are unaffected. Strings live in
+`RelayWindow.swift`, `flash(_:)` / `flashTitle(_:)` in `AppDelegate.swift`, `StatusItem.swift`
+and `GestureGuide.swift`. Hidden rows count too.
 
 ## Build, install, restart
 
@@ -50,15 +49,14 @@ menus, About, the Chrome extension. Logs, comments and commits are unaffected. S
   after the last insert/dictation edge; an app that does not answer is refused (exit 4), never
   restarted blind.
   `--dry-run` checks the gate; `--force` is a human's only. If it refuses, WAIT — never override.
-- **An edit to `chrome-extension/` is deployed with `./relay-restart.sh --extension`** (any restart also reloads it when it changed) — committing it reaches no browser.
 - **Never launch by the executable path** — `open "/Applications/Walkie Talkie.app"`; a path launch
   is a second app to TCC.
 - **A fix "did not take"? Read the bundle, not the repo** (`find "/Applications/Walkie Talkie.app"
   -type f`); the About row's build stamp is the executable's mtime.
 - **Nothing calls `NSApp.activate`** (only the `WisprSink` test instrument).
-- **Deps:** `mlx_whisper` + `ffmpeg` for the local model; the Chrome extension is loaded unpacked
-  and needs **Reload** after any `manifest.json` permission change; `Package.swift` needs the sibling
-  checkout `../victor-mac-kit`.
+- **Deps:** `mlx_whisper` + `ffmpeg` for the local model; `Package.swift` needs the sibling
+  checkout `../victor-mac-kit`. **No Chrome extension since 2026-11-20** (the ⌘⇧ element pick and
+  the music bridge were removed — `docs/journal.md`).
 
 ## Identity and data
 

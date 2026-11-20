@@ -223,8 +223,8 @@ Ranked by how a sentence is lost. Each has a test in §7.
 
 ### 6.1 Control surface
 
-`http://127.0.0.1:8917` (first of 8917–8919 whose `/up` answers). Full route table with JSON is in
-`.claude/rules/desk-testing.md`; routes it does not list: `/up`, `/chrome/reload`, `POST /engine`,
+`http://127.0.0.1:8917` (first of 8917–8919 whose `/test/state` answers). Full route table with JSON is in
+`.claude/rules/desk-testing.md`; routes it does not list: `POST /engine`,
 `/test/halo`, `/test/local-fallback`, `/test/live-caption {"text","partial"?,"gentle"?,"on"?}`,
 `/test/bridge`, `/test/key-guard`, `/test/ax-insert`, `/test/about`. `GET /test/state` carries
 `liveCaption {open, words, committed, dropped, anchor, lineWidth, shownWidth, velocity, bandWidth,

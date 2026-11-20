@@ -301,7 +301,7 @@ final class WisprFlowSource: DictationSource {
     /// It is deliberately narrower than `didBegin`: a dictation the relay did not
     /// ask for is still Wispr's — no screenshot, no ⌘C probe, no route — and this
     /// says only *he is talking to a microphone right now*, which is the whole of
-    /// what the music has ever needed (`MusicBridge`). Set once at launch, not in
+    /// what the ring round the pointer needs. Set once at launch, not in
     /// `wireDictationSource`, because it does not belong to whichever source is
     /// wired up.
     ///

@@ -13,6 +13,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 
 ## Superseded on the way
 
+- *Picking elements in Chrome*, *The music pauses for the length of a dictation* and every later ⌘⇧-pick / music-bridge section — retired 2026-11-20: the *Walkie Talkie Inspector* extension, `MusicBridge` and the picks are deleted (*The Chrome extension is gone*)
 - *The whole panel rests at 30 %* (2026-11-05) — superseded 2026-11-06: the panel is not on screen at rest, an atom stands in the corner and the dialog comes under the hand (*The prompt at rest is an atom*).
 The journal contradicts itself over time, because it was written as things changed. The
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
@@ -16561,3 +16562,26 @@ does the same for its own Dust (the tunnel keeps 0.25 s).
   the text and the Return are now two `osascript`s (~0.1 s each) and the pin goes between them. Other
   signals weighed: the echo above `❯` (still ≥ 0.85 s later), the session's transcript `"type":"user"`
   line (later still — after the Return). Rules: `replace-wispr-and-halo.md`, *📍 The pin stays…*.
+
+## The Chrome extension is gone (2026-11-20)
+
+Victor, dictated: *"Extensia de Walkie Talkie nu e, nu se justifică. O să o dezinstalăm din Chrome
+și o ștergem de tot."* His other Chrome extensions move into one private repo, `victor-chrome`;
+this one does not go with them.
+
+- **Deleted:** `chrome-extension/` (*Walkie Talkie Inspector*: `inspect.js`, `relay.js`), the ⌘⇧
+  element pick end to end (`ElementPick`, `/pick`, `/ping`, `/up`, `/chrome/reload`, the
+  `dictating`/`listening`/`bound`/`plain` flags, `pendingPicks`, the envelope's element rows and
+  the outbox's `elements`, the chip's Chrome row, the Gesture Guide's *Pick from a web page* card),
+  `MusicBridge` (the 8920 socket; Victor Addons' own extension already pauses the music while he
+  dictates), `relay-restart.sh --extension` and its `chrome-extension.sha` stamp, and
+  `.claude/rules/chrome-extension.md`.
+- **Kept:** `ElementPicker` itself — it has been the loopback control surface (`/bind`, `/target`,
+  `/engine`, `/reply`, `/ask`, every `/test/*`) since its second route; the name is history.
+  `BrowserGate` stays and is stricter: `chrome-extension://` origins are refused like pages, and the
+  CORS headers and the `OPTIONS` preflight are gone. `ShotMarker`'s element token
+  (`chrome-selection-N`) and `AgentRules`' line about it stay, unused — changing the rules' text
+  means a version bump and an eval run.
+- The spawn menu's `gmail-dark-css` mark (`assets/gmail-logo.png`) became `victor-chrome`'s:
+  Chrome's own icon, greyed like the rest (Victor: *"să-mi apară și în Walkie Talkie, în meniu,
+  Victor Chrome, cu iconița de Chrome în față"*).

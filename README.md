@@ -15,7 +15,7 @@ elements you pointed at while talking.
 
 - 👀 **Your eyes stay on the work**: a browser, an IDE, the projector. The terminal can sit behind other windows.
 - 🎙️ **You speak instead of typing**, in Romanian, English or both mixed.
-- 📸 **Context comes along**: screenshots, highlighted text, elements picked in Chrome.
+- 📸 **Context comes along**: screenshots and highlighted text.
 - ⏱️ **You can still cancel**: every prompt waits a few seconds before it is sent.
 - 🛡️ **It never types at a shell prompt**, only into a running agent.
 
@@ -26,7 +26,6 @@ elements you pointed at while talking.
 | **1. Bind** a terminal running Claude Code: <kbd>⌘⌃B</kbd> | the chip by your cursor names the session |
 | **2. Talk**: <kbd>⌘⌃D</kbd> to start, <kbd>⌘⌃D</kbd> again to stop | <img src="docs/readme/listening.png" width="348" alt="Dictating: the session name and one screenshot"> |
 | **3. Show it what you mean**: highlight some text… | <img src="docs/readme/listening-selection.png" width="348" alt="A highlighted line rides along"> |
-| …or <kbd>⌘⇧</kbd>-click an element in Chrome | <img src="docs/readme/listening-picks.png" width="348" alt="Two Chrome elements picked"> |
 | **4. Check it**: the prompt waits ~6 s behind **Cancel**, then goes | <img src="docs/readme/prompt-shots.png" width="409" alt="The held prompt with two screenshots, Send and Cancel"> |
 
 ## More tricks
@@ -63,7 +62,6 @@ wheel. The menu bar icon lists every action next to the gesture that does it.
 - 🔐 Grant **Accessibility**, **Screen Recording** and **Microphone** when asked.
 - 🗣️ Pick a recogniser from the menu: **ElevenLabs Scribe** (key in `~/.walkie-talkie/elevenlabs.env`), a **local Whisper** (`pip install mlx-whisper`, plus `ffmpeg`) or **Wispr Flow**.
 - 📜 **Agent rules — a required step, done by the app at every launch.** Walkie writes its standing instructions (when to run `walkie-reply`, when `walkie-dict`) once, where each agent reads its global instructions, so a dictation carries only data. Nothing to run by hand; what it needs from you is below, under [Agent rules](#agent-rules-the-instructions-live-in-the-agent-not-in-every-prompt).
-- 🧩 Optional, for picking elements in Chrome: `chrome://extensions` → Developer mode → **Load unpacked** → `chrome-extension/`.
 
 👉 Every state the overlay can be in, photographed: [docs/overlay-states.html](docs/overlay-states.html)
 
@@ -193,13 +191,6 @@ carry, areas (`✂️`), Chrome picks, recordings (`🎦`), highlights.
 - **Highlighting is enough.** During a dictation the selection is read every second through Accessibility (never ⌘C, never the clipboard) and filed after three identical reads, plus once more when the microphone closes.
 - The shutter reads it too, falling back to ⌘C with the clipboard restored. That is how a highlight inside a **Chrome page** gets in.
 - The text lands **inside the sentence**, where you said it. If it cannot be placed, it goes in a list under the words, with `mm:ss` and the window it came from.
-
-### Elements in Chrome
-
-- **Hold ⌘⇧ for 400 ms** over a page during a dictation: the element under the cursor is outlined and named. **Click** it to add its selector, its text (up to 2000 chars) and the page URL. **Drag** it to say where to move it; the page itself never changes.
-- Only live during a dictation, and only after the 400 ms hold, so a quick ⌘⇧-click still opens a link in a new tab.
-- A Chrome extension ([`chrome-extension/`](chrome-extension/), loaded unpacked), not CDP: since Chrome 136, remote debugging is refused on the default profile. It talks to the relay on `127.0.0.1:8917–8919`.
-- **Music pauses**: every audible Chrome tab is paused while a microphone is open, and exactly those resume after (WebSocket on `:8920`).
 
 ### Other markers
 

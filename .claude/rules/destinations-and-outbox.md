@@ -28,7 +28,7 @@ Rules for where a dictation goes and when it is written: the held prompt, the ou
   | `captureContext` — flash, selection probe, screen capture | off | **on** |
   | `plusOneShot` — mouse 4 | off | **on** |
   | `areaShot` — the wheel drag | off | **on** |
-  | `syncBorrowedGestures` — mouse 4, ⌘⇧-click, the selection watcher | off | **on** |
+  | `syncBorrowedGestures` — mouse 4, the selection watcher | off | **on** |
   | `syncLocalCapture` — the wheel's claim on the microphone | off | **on** |
   | `StatusItem`'s **Start Dictation** row | greyed | **live** |
   | `send` — the delivery | dropped | **held, then delivered** |

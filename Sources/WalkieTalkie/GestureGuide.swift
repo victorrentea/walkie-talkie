@@ -189,8 +189,6 @@ enum GestureGuide {
         case holdClick(held: Glyphs.Buttons, click: Glyphs.Buttons)
         /// Hold the wheel and drag a box.
         case drag
-        /// Hold keys, click the left button (in Chrome).
-        case keysClick([String])
         /// Keys only: `hold` are held, `tap` pressed in the middle; `twice` taps twice.
         case keys(hold: [String], tap: [String], twice: Bool)
         /// Left ⌃⌥⌘ held, fingers on the trackpad.
@@ -273,9 +271,6 @@ enum GestureGuide {
         Card(section: "pictures", title: "Cut out an area", chord: "Hold the wheel, drag",
              scene: .drag,
              lines: ["Drag a box: only that area is attached."]),
-        Card(section: "pictures", title: "Pick from a web page", chord: "Hold ⌘⇧, click in Chrome",
-             scene: .keysClick(["⌘", "⇧"]),
-             lines: ["The element under the pointer — its text and where it is."]),
 
         Card(section: "keyboard", title: "Plain dictation", chord: "Right ⌘ twice",
              scene: .keys(hold: [], tap: ["right ⌘"], twice: true),
@@ -335,10 +330,6 @@ enum GestureGuide {
             layers = mouse(.wheel, "layer a-hold")
             moveClass = "m-drag"
             extra = "<span class=\"box\" style=\"--sx:\(s.x);--sy:\(s.y)\"></span>"
-        case .keysClick(let keys):
-            layers = mouse(.left, "layer a-click") + ripple(.left, "r-click")
-            extra = "<div class=\"keys over\">" + keys.map { "<kbd class=\"k-hold\">\(esc($0))</kbd>" }.joined() + "</div>"
-                + "<span class=\"element\"></span>"
         default:
             break
         }
@@ -503,19 +494,15 @@ enum GestureGuide {
            width:0; height:0; animation:box 3.2s infinite ease-in-out; }
     @keyframes box { 0%,22% { width:0; height:0; opacity:1 } 56%,74% { width:50px; height:30px; opacity:1 }
                      82% { width:50px; height:30px; opacity:0 } 84%,100% { width:0; height:0; opacity:0 } }
-    .element { position:absolute; left:14px; top:150px; width:70px; height:34px; border:2px solid var(--accent);
-               border-radius:6px; opacity:0; animation:element 3.2s infinite; }
-    @keyframes element { 0%,38% { opacity:0 } 42%,80% { opacity:1 } 86%,100% { opacity:0 } }
 
     /* keys */
     .keys { display:flex; align-items:center; justify-content:center; gap:6px; height:100%; }
-    .keys.over { position:absolute; top:10px; left:0; right:0; height:auto; }
     .keys.small { height:auto; margin-top:12px; }
     .plus { color:var(--mute); font-weight:600; }
     kbd { min-width:38px; height:38px; padding:0 10px; display:inline-flex; align-items:center; justify-content:center;
           font:600 15px -apple-system, sans-serif; color:var(--ink); background:var(--key); border:1px solid var(--keyline);
           border-radius:8px; box-shadow:0 3px 0 var(--keyline); }
-    .keys.over kbd, .keys.small kbd { min-width:30px; height:30px; font-size:13px; }
+    .keys.small kbd { min-width:30px; height:30px; font-size:13px; }
     .k-hold  { animation:khold 3.2s infinite; }
     .k-tap   { animation:ktap 3.2s infinite; }
     .k-twice { animation:ktwice 3.2s infinite; }

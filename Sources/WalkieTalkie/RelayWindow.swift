@@ -242,11 +242,10 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// (2026-10-22, Victor: *"când se modifică vreo valoare, de exemplu o poză
     /// nouă sau un clipboard copiat sau o selecție … pune un fundal flashing …
     /// ceva ce să se vadă că se modifică ceva acolo"*). One per tally row — the
-    /// shots, the quote (highlights and copies), the ⌘⇧ picks. Behind the text,
+    /// shots, the quote (highlights and copies). Behind the text,
     /// like the brick wash, so the words never flicker; never `layoutContent`.
     private let shotsPulse = ChangePulse()
     private let selectionPulse = ChangePulse()
-    private let pickPulse = ChangePulse()
     /// `📻 Ready for more` flashes when it comes up (2026-10-22) — see `readyRow`.
     private let readyPulse = ChangePulse()
     private var changePulseTimer: Timer?
@@ -387,24 +386,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let readyRow = NSView()
     private let readyGlyph = NSImageView()
     private let readyInfo = NSTextField(labelWithString: RelayWindow.readyText)
-    /// Elements ⌘-picked in Chrome and still waiting for the sentence they belong
-    /// to — how many, and what the newest one was.
-    ///
-    /// A glyph and a label in a row, exactly like the recording row above it. Not
-    /// for the animation (nothing pulses here) but for the geometry: a glyph
-    /// measures narrower in the monospaced font than it draws, so inline it stole
-    /// a character's worth of width and AppKit truncated it away. Giving the glyph
-    /// its own box also lines this row's text up with the recording row's, which
-    /// is what makes the two read as one column.
-    ///
-    /// The glyph is **Chrome's own icon**: the gesture exists in Chrome and
-    /// nowhere else, so the browser it works in is the one thing the row can say
-    /// without words. The 🎯 it replaced said "aim at something", which is what
-    /// the words beside it already say.
-    private let pickRow = NSView()
-    private let pickGlyph = NSImageView()
-    private let pickInfo = NSTextField(labelWithString: "")
-
     /// The title, in a row of its own so a glyph can sit beside it.
     ///
     /// It was a bare label until the relay learned to point at a terminal. The
@@ -459,31 +440,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// Shots this dictation is carrying — the automatic context capture included,
     /// since from where Victor sits it is simply the first picture taken.
     private var shotCount = 0
-    /// Elements ⌘-picked in Chrome, waiting on a sentence.
-    private var pickCount = 0
-    private var pickNewest: String?
-    /// **The row has given the newest selector its seconds and collapsed to
-    /// `×N`** — the reading the selection row above it already had, arriving
-    /// here on 2026-09-09 on Victor's ask: *"the Chrome icon should also be
-    /// followed only by the ×2 … I don't want to see the div thing here"*.
-    ///
-    /// The two questions are the same pair, one row apart. At the instant a pick
-    /// lands he is asking *did the click catch the button or the div wrapped
-    /// around it*, and the tail of the selector is the whole answer; once he has
-    /// read it the only open question is whether any of them fell out, which the
-    /// count answers on its own. The selector is the longest string the chip can
-    /// carry, and it was carrying it for the rest of the sentence — a wall of
-    /// punctuation beside the cursor, an inch from what he is reading.
-    private var pickSettled = false
-    private var pickAnnounceWork: DispatchWorkItem?
-    /// Any of the picks waiting on this sentence was **dragged** — ⌘⇧ held, the
-    /// element moved, dropped somewhere else — so the message says where it
-    /// should go as well as what it is.
-    ///
-    /// It is a fact about the whole queue rather than about the newest entry:
-    /// the count is what the row is now, and this is the one thing a count
-    /// cannot say about the things it counted.
-    private var pickMoved = false
     /// The prompt about to be relayed to the agent, shown whole while it is held
     /// back — the seconds during which Cancel can still stop it.
     private var sentPrompt: String?
@@ -1302,52 +1258,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         spawnMarked && spawnIcon == nil
     }
 
-    /// The picked-elements row: nothing until the first pick, then the newest
-    /// thing he picked.
-    ///
-    /// **The invitation moved into the page (2026-10-07).** Until the first pick
-    /// this row was Chrome's icon and `⌘⇧`, shown while dictating with Chrome in
-    /// front; Victor had it drawn by the extension instead — a badge at the
-    /// bottom centre of the page (`inspect.js`, `showBadge`), which hides when
-    /// the pointer reaches it. It is also the proof that the extension is alive,
-    /// which a row drawn by this app could never be, and it is one row fewer
-    /// beside the cursor. The badge rides `MusicBridge.setPickable`.
-    ///
-    /// After the first pick the question changes: he knows the gesture, and what
-    /// he cannot check without a name is whether the click caught the button or
-    /// the div wrapped around it. A count alone (`×3`) only tells him something
-    /// he already believes.
-    private var pickText: NSAttributedString? {
-        guard gathering else { return nil }
-        // The row belongs to the picks and stays whatever app he has switched
-        // to: they are travelling with this dictation, and that is a fact about
-        // the message, not about the window — and it stays for as long as the
-        // message does.
-        guard pickCount > 0 else { return nil }
-        // **The count, then the drag mark, then — for four seconds — the newest
-        // selector.** `⤢` is Victor's *"diagonal 2-sided arrow … next to the
-        // number, to tell whether there is any move element"*: a drag is the one
-        // thing a pick carries that a count cannot describe, and it is drawn as
-        // the arrow every UI on this machine already uses for *this thing moves*.
-        var head = "×\(pickCount)"
-        if pickMoved { head += " " + Self.moveMark }
-        guard !pickSettled, let newest = pickNewest, !newest.isEmpty else { return plain(head) }
-        return plain("\(head) \(Self.fit(newest, 34))")
-    }
-
-    /// U+2921, the northeast-and-southwest arrow. Typed rather than drawn: it is
-    /// a plain arrow in the row's own font, so it reads as punctuation beside the
-    /// number rather than as a fourth picture on a chip that already has one
-    /// glyph per row.
-    private static let moveMark = "⤢"
-
-    /// Keep the tail, drop the head. A selector's last steps are the element; its
-    /// first steps are the page, which he is looking at.
-    private static func fit(_ s: String, _ limit: Int) -> String {
-        s.count <= limit ? s : "…" + String(s.suffix(limit - 1))
-    }
-
-    /// The other way round, for a highlight: what he selected reads forwards, so
+    /// For a highlight: what he selected reads forwards, so
     /// the opening words are the ones that identify it. Cut at a word boundary
     /// when there is a word worth keeping — a phrase that stops between words is
     /// one the eye finishes by itself, one that stops mid-word is one it
@@ -1599,22 +1510,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         // **No green since 2026-10-22** — the ink of every other row, and the
         // yellow flash when it comes up (`setReadyForNext`, `readyPulse`).
         readyRow.addSubview(readyPulse, positioned: .below, relativeTo: nil)
-
-        // Same face as every other row (see `titleFont`): it carries a CSS
-        // selector, which was the argument for monospace here, and that argument
-        // lost to the panel reading as one thing.
-        pickGlyph.image = Self.browserIcon
-        pickGlyph.imageScaling = .scaleProportionallyUpOrDown
-        pickGlyph.imageAlignment = .alignCenter
-        pickInfo.font = hintFont
-        pickInfo.textColor = .secondaryLabelColor
-        pickInfo.lineBreakMode = .byTruncatingHead   // the tail is the element
-        pickInfo.maximumNumberOfLines = 1
-        pickRow.addSubview(pickPulse)
-        pickRow.addSubview(pickGlyph)
-        pickRow.addSubview(pickInfo)
-        pickRow.isHidden = true
-        root.addSubview(pickRow)
 
         // `hintFont` like every other word on the chip — it was 14, the one row
         // set from the old ×1.3 table's bottom rung. See `titleFont`.
@@ -2102,7 +1997,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         if filming || !filmsCarried.isEmpty {
             recordWidth = max(recordWidth, glyphColumn + recordDotGap + ceil(filmAttributed().size().width))
         }
-        let pickWidth = pickText.map { glyphRowWidth($0) } ?? 0
         // The emoji rows (`☠️ Kamikaze`, `📋 Re-paste ⌘⇧P`) ask for their
         // width like the recording row does. The paste row is often the only
         // row on the chip, and a chip measured without it is a chip 0 wide.
@@ -2188,7 +2082,7 @@ private let heardLabel = NSTextField(labelWithString: "")
             : sendButton.frame.width + buttonGap + cancelButton.frame.width
         let natural = ceil(max(titleWidth + reserve,
                                max(buttonsWidth,
-                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(emojiRowsWidth, max(pickWidth, selectionWidth))))))))) + pad * 2
+                                   max(hintWidth, max(idleWidth, max(engineWidth, max(recordWidth, max(emojiRowsWidth, selectionWidth)))))))) + pad * 2
 
         // Only a prompt earns the full half-screen. It has to be read whole, and
         // read *fast*, because the Cancel clock is running.
@@ -2378,19 +2272,10 @@ private let heardLabel = NSTextField(labelWithString: "")
             pasteRow.isHidden = true
         }
 
-        // **The quotation, and then Chrome under it.** They were the other way
-        // round until 2026-09-09, when Victor put the browser at the bottom for
-        // good: *"citatul să apară mereu deasupra Chrome-ului … Chrome trebuie
-        // să fie mereu ultima din listă"*.
-        //
-        // The two rows differ in what they belong to. A highlight is part of
-        // *this* message — it was read at the shutter, it rides out with the
-        // words, and it goes when they do — so it sits with the frames above it.
-        // The ⌘⇧ row is the odd one out: before he has picked anything it is not
-        // a payload at all but an invitation, and after he has, it is the one
-        // row that stays up *between* messages. A thing that outlives the
-        // message belongs at the foot of it, and a row that keeps moving up and
-        // down as a highlight comes and goes is a row he has to find each time.
+        // **The quotation.** A highlight is part of *this* message — it was read
+        // at the shutter, it rides out with the words, and it goes when they do —
+        // so it sits with the frames above it. (The ⌘⇧ pick row under it went
+        // with the Chrome extension, 2026-11-20.)
         if selection != nil {
             // The strings were written with the widths above. **The row is the
             // same 22 as its neighbours**, and the 26pt mark simply overhangs
@@ -2404,16 +2289,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             rows.append((selectionRow, selectionRowHeight))
         } else {
             selectionRow.isHidden = true
-        }
-
-        // Last, always — see the note above the selection row.
-        if let pick = pickText {
-            pickInfo.attributedStringValue = pick
-            layoutPickRow(width: innerWidth)
-            pickRow.isHidden = false
-            rows.append((pickRow, pickRowHeight))
-        } else {
-            pickRow.isHidden = true
         }
 
         // **No title row while nothing is bound.** The line names where the words
@@ -2779,10 +2654,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     // MARK: The recording row
 
     private let recordRowHeight: CGFloat = 22
-    /// Same as the recording row: the two are the same kind of fact about the
-    /// message being assembled, and a row that stood a pixel taller than its
-    /// neighbour would read as a different kind of thing.
-    private let pickRowHeight: CGFloat = 22
     /// **The same as every other row on the chip**, since the quotation mark
     /// moved into the glyph column and stopped lengthening the label's line box.
     /// It stood at 28 while the mark was a run of text inside the row, and those
@@ -3078,24 +2949,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         label.frame = NSRect(x: x, y: ((height - h) / 2).rounded(), width: width, height: h)
     }
 
-    /// Chrome's icon as the system has it, looked up by bundle id so it is found
-    /// wherever the app was installed and stays right when Google restyles it.
-    /// Nothing is shipped alongside the binary, and no version of the logo is
-    /// frozen into this repo.
-    private static let browserIcon: NSImage = {
-        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.google.Chrome") else {
-            return NSImage(named: NSImage.networkName) ?? NSImage()
-        }
-        let icon = NSWorkspace.shared.icon(forFile: app.path)
-        // **A fifth off, on Victor's ask.** The system hands these out at 32,
-        // which is half again the 20pt box every other glyph on the chip is
-        // fitted into — an app icon fills its box corner to corner where an
-        // emoji sits a bearing in from the edge, so at the same nominal size it
-        // reads as the largest thing in the column.
-        icon.size = NSSize(width: (icon.size.width * 0.8).rounded(),
-                           height: (icon.size.height * 0.8).rounded())
-        return icon
-    }()
 
     /// A square the height of the row's text. Fixed rather than measured: an image
     /// has no font metrics to ask, and the row is laid out around whatever this
@@ -3149,22 +3002,6 @@ private let heardLabel = NSTextField(labelWithString: "")
 
 
 
-    /// Same shape as `recordRowWidth`, so the ⌘-pick row and the recording row
-    /// can never disagree about where their text starts — but it asks the **label**
-    /// how wide the text is instead of asking the font.
-    ///
-    /// `measure` is a font metric, and this row is the one place it is not enough:
-    /// `×` is not in the monospaced face, so it falls back to a font those metrics
-    /// know nothing about. The result was a couple of
-    /// characters of underestimate, which is exactly enough for AppKit to
-    /// ellipsize — and since the tail is the part worth keeping, what it ate was
-    /// the count at the front. The rows above tolerate the same error only because
-    /// they do not truncate at all.
-    private func glyphRowWidth(_ text: NSAttributedString) -> CGFloat {
-        pickInfo.attributedStringValue = text
-        pickInfo.sizeToFit()
-        return glyphColumn + recordDotGap + ceil(pickInfo.frame.width)
-    }
 
     /// The pin is vertically centred on the row rather than sat on the baseline:
     /// it is a shape, not a letter, and lining its middle up with the text's is
@@ -3720,14 +3557,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     private static let stampPadY: CGFloat = 1
     private static let stampInset: CGFloat = 3
 
-    private func layoutPickRow(width: CGFloat) {
-        pickRow.frame.size = NSSize(width: width, height: pickRowHeight)
-        centre(pickGlyph, inRowOfHeight: pickRowHeight)
-        centre(pickInfo, x: glyphColumn + recordDotGap,
-               width: max(0, width - glyphColumn - recordDotGap),
-               inRowOfHeight: pickRowHeight)
-    }
-
     /// At rest there is no window — only the text. A blurred, rounded, shadowed
     /// panel riding along beside the cursor all day is a window following him
     /// around; the same words with nothing behind them are a label on his work.
@@ -3790,7 +3619,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         // the halo on their own account — they are not a run inside `engineInfo`.
         elapsedLabel.wantsLayer = true
         shotGlyph.wantsLayer = true
-        pickInfo.wantsLayer = true
         selectionLabel.wantsLayer = true
         // The mark is its own label now, in the icon column, so it needs the
         // halo on its own account — it used to inherit it as a run inside the
@@ -3846,10 +3674,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             engineInfo.textColor = .white
             elapsedLabel.shadow = Self.halo()
             elapsedLabel.textColor = .white
-            // The picked row spends even more of its life on the chip than the
-            // recording one: it is up between messages, which is most of the day.
-            pickInfo.shadow = Self.halo()
-            pickInfo.textColor = .white
             // **The one row that was left out, and it read as the feature not
             // working.** Every other row was turned white for the bare chip and
             // this one kept `secondaryLabelColor` — a half-transparent dark grey
@@ -3907,8 +3731,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             engineInfo.textColor = .secondaryLabelColor
             elapsedLabel.shadow = nil
             elapsedLabel.textColor = .secondaryLabelColor
-            pickInfo.shadow = nil
-            pickInfo.textColor = .secondaryLabelColor
             selectionLabel.shadow = Self.halo()
             selectionLabel.textColor = .secondaryLabelColor
             selectionGlyph.shadow = nil
@@ -4837,7 +4659,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         // part of the label the wash covers; nil, the whole label.
         for (pulse, row, label, lead) in [(shotsPulse, recordRow, recordInfo, nil),
                                           (selectionPulse, selectionRow, selectionLabel, nil),
-                                          (pickPulse, pickRow, pickInfo, nil),
                                           (readyPulse, readyRow, readyInfo, Self.readyLead)] as [(ChangePulse, NSView, NSTextField, String?)] {
             guard let t0 = pulse.startedAt, !row.isHidden else { pulse.isHidden = true; continue }
             let age = now - t0
@@ -4924,13 +4745,13 @@ private let heardLabel = NSTextField(labelWithString: "")
         changePulsePinned = false
         changePulseTimer?.invalidate()
         changePulseTimer = nil
-        for pulse in [shotsPulse, selectionPulse, pickPulse, readyPulse] { pulse.startedAt = nil; pulse.isHidden = true }
+        for pulse in [shotsPulse, selectionPulse, readyPulse] { pulse.startedAt = nil; pulse.isHidden = true }
     }
 
     /// The states page: every tally row on screen wears its flash at full.
     func pinChangePulse() {
         changePulsePinned = true
-        for pulse in [shotsPulse, selectionPulse, pickPulse, readyPulse] { pulse.startedAt = CACurrentMediaTime() }
+        for pulse in [shotsPulse, selectionPulse, readyPulse] { pulse.startedAt = CACurrentMediaTime() }
         placeChangePulses()
     }
 
@@ -5639,54 +5460,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         shotCount = count
         layoutContent()          // the number can widen the row
         if more, CACurrentMediaTime() - listenOpenedAt > Self.changePulseQuiet { flashChange(shotsPulse) }
-    }
-
-    /// How many elements are ⌘-picked and waiting, what the newest one was, and
-    /// whether any of them was dragged.
-    ///
-    /// No `reposition()` here, unlike `setListening`: a pick happens while his
-    /// hand is in Chrome, and yanking the chip back under the cursor mid-gesture
-    /// would move something in the corner of his eye for no reason. The row
-    /// simply appears where the chip already is.
-    ///
-    /// **The selector gets `selectionHold` seconds and then the row is the count
-    /// alone** — see `pickSettled`. The clock restarts on every pick, because
-    /// every pick is a new answer to *did that click catch what I meant*; it is
-    /// the same shape, and the same timer, as the row above.
-    func setPicks(count: Int, newest: String?, moved: Bool = false) {
-        guard pickCount != count || pickNewest != newest || pickMoved != moved else { return }
-        let isNew = pickNewest != newest || count > pickCount
-        pickCount = count
-        pickNewest = newest
-        pickMoved = moved
-
-        if isNew {
-            pickAnnounceWork?.cancel()
-            pickSettled = false
-            if count > 0, newest?.isEmpty == false {
-                let settle = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.pickCount > 0 else { return }
-                    self.pickSettled = true
-                    self.layoutContent()
-                }
-                pickAnnounceWork = settle
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.selectionHold, execute: settle)
-            } else {
-                pickAnnounceWork = nil
-            }
-        }
-        layoutContent()
-        if isNew, count > 0 { flashChange(pickPulse) }
-    }
-
-    /// `OverlayStates` shoots a state in the millisecond it sets it up, so the
-    /// four seconds never pass there — the same reason `pinSelectionSettled`
-    /// exists, for the row underneath it.
-    func pinPickSettled() {
-        pickAnnounceWork?.cancel()
-        pickAnnounceWork = nil
-        pickSettled = pickCount > 0
-        layoutContent()
     }
 
     /// Show the prompt on its way to the agent, whole, so Victor can see exactly

@@ -344,7 +344,7 @@ final class HotkeyTap {
     /// A clean sentence is open, whichever engine is hearing it — and still
     /// plain: one turned into a prompt is not (`relayPromptOpen`). **Every
     /// attachment refuses on this** (2026-10-08): the context frame, the
-    /// shutter, the crop, ⌘⇧ picks, highlights, films, the typing box.
+    /// shutter, the crop, highlights, films, the typing box.
     var cleanSentenceOpen: Bool {
         stateLock.lock()
         let own = ownDictationFlag && ownCleanSentenceFlag

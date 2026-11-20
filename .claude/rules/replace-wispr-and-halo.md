@@ -47,7 +47,7 @@ The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engi
   grace applies. The mode itself is untouched. → journal: *Replace Wispr: the relay as a way to type*
 - **No automatic context shot — and that survives the shutter being live.** The selection probe
   that comes with the frame posts a ⌘C into the field he is about to dictate into, which in this
-  mode is the whole subject (*"nu trebuie să facă poză originală"*). The shutter, the ⌘⇧ pick and
+  mode is the whole subject (*"nu trebuie să facă poză originală"*). The shutter and
   the selection watcher are live; nothing *automatic* is. → journal: *Replace Wispr: the relay as a way to type*
 - **The chip says `at caret` behind the drawn map pin** (`RelayWindow.pinGlyph`, `Glyphs.mapPin`,
   not 📍), in the slot a spawn uses. **It stays up through the decode** and comes down where the
@@ -72,7 +72,7 @@ The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engi
 | clause | terminal | caret |
 |---|---|---|
 | the words | ✓ | ✓ |
-| `screenshots during dictation are in: …` (was `[the shots I took: …]` until 2026-09-13), `[elements I picked in Chrome: …]` | ✓ | ✓ — identical wording |
+| `screenshots during dictation are in: …` (was `[the shots I took: …]` until 2026-09-13) | ✓ | ✓ — identical wording |
 | `[selected: …]` | ✓ | ✓ — identical wording, since 2026-09-09 |
 | the context frame, `[Focused window: …]` | ✓ | — none is taken |
 | `[this text was dictated in RO or EN…]` | ✓ | — |

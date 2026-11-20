@@ -173,8 +173,8 @@ yields to `--label`).
   modifică vreo valoare, de exemplu o poză nouă sau un clipboard copiat sau o selecție … pune un fundal
   flashing … ceva ce să se vadă că se modifică ceva acolo"*). `ChangePulse` (drawn like `OverrunWash`:
   systemYellow 35 % to orange, α 0.6, radius 4) behind the icon and the words of `📸 ×N`
-  (`setShotCount` going up), the quote row (`setSelection` with new text or a higher count — a copy
-  is `📋 …` there) and the ⌘⇧ row (`setPicks`' `isNew`): **one short blink** —
+  (`setShotCount` going up) and the quote row (`setSelection` with new text or a higher count — a copy
+  is `📋 …` there): **one short blink** —
   lit in 90 ms, faded by 0.45 s (`changePulseDuration`; 2026-10-23, *"o singură clipire scurtă, nu
   două"* — it was 2.5 blinks over 1.5 s). **Not the count booked for the automatic first frame** — a
   count rising inside `changePulseQuiet` (1 s) of the microphone opening is not news; **the frame
@@ -471,17 +471,10 @@ yields to `--label`).
 ## The chip teaches nothing
 
 - **`showsGestureHints` is off (2026-08-30) and the rows are still built and measured.**
-  `shotHintText`, `pickHint`, `rebindText` and their glyphs exist; flipping the flag is the way
+  `shotHintText`, `rebindText` and their glyphs exist; flipping the flag is the way
   back, and they must stay English. What is on the chip is *state*: the pulse, `Listening...`,
   `Transcribing...`, the destination, the tally. The model id lives in the menu's engine row
   (`StatusItem.applyWhisperTitle`), not on the chip. → journal: *The chip teaches nothing; the menu does*
-- **The one exception is the `⌘⇧` row, shown while dictating *and* with Chrome in front.**
-  It is on screen only when actionable, and the relay **takes ⌘⇧-click away from Chrome** while it
-  is up. Once something is picked the row belongs to the picks whatever app is in front.
-  `chromeFront` is pushed from `AppDelegate`'s front-app watcher (the one answering
-  `frontIsBindable`): `NSWorkspace` is a main-thread question and this is read from
-  `layoutContent`, which runs while the chip follows the cursor.
-  → journal: *The chip teaches nothing; the menu does*
 
 ## Two shapes, and the pointer is clean
 

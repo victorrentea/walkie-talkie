@@ -2,230 +2,18 @@ import AppKit
 import Foundation
 import Network
 
-/// One element Victor pointed at in a web page — a single ⌘-click in Chrome.
+/// **The relay's loopback control surface**: `/bind`, `/unbind`, `/target`,
+/// `/engine`, `/reply`, `/ask` and every `/test/*` route, on the first free port
+/// of 8917–8919.
 ///
-/// The whole reason this exists: "make *this* button blue" is a sentence the
-/// agent cannot act on. A CSS path is the same sentence with the pronoun
-/// resolved.
-extension ElementPick {
-    /// **The whole of it, for the middle of his sentence** — Victor's own mock,
-    /// 2026-09-14: `(selected DOM element: body > table > th, with text:
-    /// "Header1" in page "https://interact.victorrentea.ro")`.
-    ///
-    /// Three short facts and no lookup: the selector that resolves it, what it
-    /// said, and where. The parentheses are added by `ShotMarker.resolve`, which
-    /// owns the punctuation of every inline marker.
-    var inlineDescription: String {
-        var out = "selected DOM element: \(path)"
-        if let text = text, !text.isEmpty {
-            out += ", with text: \"\(text)\""
-        }
-        if let url = url, !url.isEmpty { out += " in page \"\(url)\"" }
-        return out
-    }
-}
-
-struct ElementPick {
-    /// **Which spoken marker names this one**, when it was picked during a
-    /// dictation and the relay said one out loud — see `ShotMarker`. Nil for a
-    /// pick that arrived before the sentence, past the marker ceiling, or with
-    /// the markers off; those keep their line in the clause underneath instead.
-    var marker: Int?
-
-    /// When he clicked. Absolute, because a pick can happen before the dictation
-    /// it belongs to has even started — see `ElementPicker.stamp`.
-    let at: Date
-    /// The identifying payload: a selector that resolves to exactly this element.
-    let path: String
-    let tag: String
-    /// Its visible text, trimmed — what he would have called it out loud, and
-    /// since 2026-09-13 what it actually **said**: up to `textLimit` characters
-    /// of `innerText` rather than the 160 that were only ever enough to
-    /// recognise a button by.
-    let text: String?
-    /// How long that text was before it was cut off, or nil when nothing was.
-    ///
-    /// Measured in the page, before the slice — the extension is the only place
-    /// that can still see the whole thing. The envelope turns it into
-    /// `(truncated, N chars)`, which is the difference between a quotation that
-    /// ends and one that merely stops.
-    let textChars: Int?
-    /// `aria-label` / `alt` / `title`, for the elements that have no text at all
-    /// (icon buttons are the whole reason this field is here).
-    let label: String?
-    let href: String?
-    let url: String?
-    let title: String?
-    /// The iframe chain, when the element is not in the top document. nil is the
-    /// common case and prints nothing.
-    let frame: String?
-
-    /// **Where he dragged it to**, when the ⌘⇧ gesture ended in a drag rather
-    /// than a click — the element's top-left corner in **page** coordinates,
-    /// before and after.
-    ///
-    /// Nothing in the page moves: the extension drags an outline of the element
-    /// and puts the two corners in the message, which is the whole feature.
-    /// Victor's ask, 2026-09-09: *"să capturăm poziția originală și coordonatele
-    /// … dragul să se ducă translucent, doar chenarul … și să transmită în text
-    /// unde sunt noile coordonate ale acelui element"*.
-    ///
-    /// **Page coordinates and not viewport ones.** A viewport corner is a fact
-    /// about how far the page happened to be scrolled at the instant of the
-    /// drag, which is exactly the thing that has changed by the time an agent
-    /// reads it; a page corner is where the element sits in the document, which
-    /// is what a rule that moves it would be written against.
-    struct Move {
-        let from: (x: Int, y: Int)
-        let to: (x: Int, y: Int)
-    }
-    let move: Move?
-
-    /// What the overlay shows — the last two steps of the path.
-    ///
-    /// The full selector is often a paragraph, and the head of it is the part he
-    /// already knows (it is the page he is looking at). What identifies the thing
-    /// under his finger is the tail.
-    var short: String {
-        let steps = path.components(separatedBy: " > ").filter { !$0.isEmpty }
-        let tail = steps.suffix(2).joined(separator: " > ")
-        return tail.isEmpty ? tag : tail
-    }
-
-    /// The outbox shape. `since` is the moment the dictation opened, and is what
-    /// turns this pick's absolute `at` into `where in the sentence` — negative
-    /// included, which is the ordinary order rather than an oddity: he finds the
-    /// thing first and then says what to do with it.
-    ///
-    /// A number of seconds and not the `m:ss` the line renders: the string is for
-    /// reading, and anything that has to compare two picks would be parsing it
-    /// back. nil `since` (a pick with no dictation behind it) writes no key at
-    /// all rather than a zero that would read as *the instant he started*.
-    func json(since: Date?) -> [String: Any] {
-        var obj = json
-        if let since = since { obj["at"] = Int(at.timeIntervalSince(since).rounded()) }
-        return obj
-    }
-
-    var json: [String: Any] {
-        var obj: [String: Any] = ["path": path, "tag": tag]
-        if let text = text, !text.isEmpty { obj["text"] = text }
-        if let chars = textChars { obj["textChars"] = chars }
-        if let label = label, !label.isEmpty { obj["label"] = label }
-        if let href = href, !href.isEmpty { obj["href"] = href }
-        if let url = url, !url.isEmpty { obj["url"] = url }
-        if let title = title, !title.isEmpty { obj["title"] = title }
-        if let frame = frame, !frame.isEmpty { obj["frame"] = frame }
-        if let move = move {
-            obj["move"] = ["from": ["x": move.from.x, "y": move.from.y],
-                           "to": ["x": move.to.x, "y": move.to.y]]
-        }
-        return obj
-    }
-
-    init(at: Date, path: String, tag: String, text: String? = nil, textChars: Int? = nil,
-         label: String? = nil,
-         href: String? = nil, url: String? = nil, title: String? = nil, frame: String? = nil,
-         move: Move? = nil) {
-        self.at = at; self.path = path; self.tag = tag; self.text = text
-        self.textChars = textChars; self.label = label
-        self.href = href; self.url = url; self.title = title; self.frame = frame
-        self.move = move
-    }
-
-    /// **2000 characters of what the element said** (2026-09-13). It was 160,
-    /// which is a label and not a reading: the thing he ⌘⇧-clicks is as often an
-    /// error box, a table row or a paragraph as it is a button, and those were
-    /// arriving cut off before they said anything. The ceiling is still a
-    /// ceiling, because a `<body>` picked by accident is a whole page, and a
-    /// whole page pasted into a prompt is the failure a cap exists for.
-    /// `chrome-extension/inspect.js` slices at the same number; this is the
-    /// guard, since the page is hostile input and the extension is not the only
-    /// thing that can POST to `/pick`.
-    static let textLimit = 2000
-
-    init?(json: [String: Any]) {
-        guard let path = (json["path"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !path.isEmpty else { return nil }
-        self.at = Date()
-        self.path = path
-        self.tag = (json["tag"] as? String) ?? "?"
-        let text = ElementPick.clamp(json["text"] as? String, ElementPick.textLimit)
-        self.text = text
-        // Believed only when it is bigger than what arrived — a page that claims
-        // its 12-character label was truncated from nine would put
-        // `(truncated, 9 chars)` in the prompt.
-        let claimed = (json["textChars"] as? NSNumber)?.intValue ?? 0
-        self.textChars = claimed > (text?.count ?? 0) ? claimed : nil
-        self.label = ElementPick.clamp(json["label"] as? String, 120)
-        self.href = ElementPick.clamp(json["href"] as? String, 400)
-        self.url = ElementPick.clamp(json["url"] as? String, 400)
-        self.title = ElementPick.clamp(json["title"] as? String, 200)
-        self.frame = ElementPick.clamp(json["frame"] as? String, 200)
-        self.move = ElementPick.move(json["move"])
-    }
-
-    /// The drag, or nil — and nil for anything malformed rather than a corner at
-    /// the origin. The page is hostile input, and a `move` that half-parsed
-    /// would put `0,0` into the message as if he had dropped it there.
-    private static func move(_ raw: Any?) -> Move? {
-        guard let obj = raw as? [String: Any],
-              let from = corner(obj["from"]), let to = corner(obj["to"]) else { return nil }
-        return Move(from: from, to: to)
-    }
-
-    private static func corner(_ raw: Any?) -> (x: Int, y: Int)? {
-        guard let obj = raw as? [String: Any],
-              let x = (obj["x"] as? NSNumber)?.doubleValue,
-              let y = (obj["y"] as? NSNumber)?.doubleValue,
-              x.isFinite, y.isFinite else { return nil }
-        return (Int(x.rounded()), Int(y.rounded()))
-    }
-
-    /// The page is hostile input: a `text` of a megabyte would ride into the
-    /// prompt and into the outbox untouched.
-    private static func clamp(_ s: String?, _ limit: Int) -> String? {
-        guard var s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
-        s = s.split(whereSeparator: { $0.isNewline || $0 == "\t" })
-             .joined(separator: " ")
-        return s.count <= limit ? s : String(s.prefix(limit)) + "…"
-    }
-}
-
-/// The loopback endpoint the Chrome extension hands its picks to.
-///
-/// **Why an extension and not the DevTools protocol.** CDP is the obvious answer
-/// and it is the wrong one here: since Chrome 136 `--remote-debugging-port` is
-/// refused on the default profile, so reaching Victor's actual browser — his
-/// tabs, his logins, the page he is actually looking at — would mean relaunching
-/// it against a throwaway `--user-data-dir`. An extension needs no flags, no
-/// relaunch and no second profile.
-///
-/// It also removes the hardest part of the job. Driving this from macOS means
-/// mapping screen points into the page (window origin, the height of the browser
-/// chrome, page zoom, device pixel ratio) and then mapping the element's box back
-/// out to draw a rectangle around it — arithmetic that is wrong by a few pixels
-/// on a good day and silently wrong after a zoom. Inside the page there is no
-/// mapping at all: `elementFromPoint` and `getBoundingClientRect` are already in
-/// the coordinate system the highlight is drawn in.
-///
-/// So the relay's side of this is only a mailbox. The inspector — the outline,
-/// the label, the ⌘ gate, the swallowed click — all lives in `chrome-extension/`.
+/// The name is history. It began (2026-08-15) as the mailbox of the *Walkie Talkie
+/// Inspector* Chrome extension's ⌘⇧ element picks, and every later route moved in
+/// beside it rather than open a second port scheme. The extension, the picks and
+/// the music bridge were removed on 2026-11-20 (docs/journal.md); the routes stayed.
 final class ElementPicker {
-
-    /// A pick just arrived. Called on the listener queue, never the main thread.
-    var onPick: ((ElementPick) -> Void)?
 
     /// Point the relay at the terminal that is in front **right now**, and
     /// describe what it landed on. Called on the listener queue.
-    ///
-    /// This is the one endpoint that is not about Chrome, and it is here rather
-    /// than behind a listener of its own because there is nothing to gain from a
-    /// second one: a port scheme already exists, several relays already share it
-    /// by taking the first free one, and a second scheme would mean a second set
-    /// of ports for a caller to guess between. What this class actually is, and
-    /// has been since the second endpoint, is the relay's loopback control
-    /// surface; the picker is its first tenant, not its purpose.
     var onBind: (() -> [String: Any]?)?
     /// Bind a **named** tty rather than whatever is in front — `POST /bind`
     /// with `{"tty": "ttys004"}`.
@@ -287,7 +75,7 @@ final class ElementPicker {
     /// `{"text": …}` (2026-09-13).
     ///
     /// The selection is the one attachment with no desk-reachable route into it.
-    /// Everything else on the envelope has one — a shot, a pick, the words
+    /// Everything else on the envelope has one — a shot, the words
     /// themselves — but a highlight is read off the screen with Accessibility or
     /// a ⌘C, so asserting on how the envelope renders one meant genuinely
     /// selecting text in another app by hand, in the middle of a dictation, and
@@ -560,10 +348,6 @@ final class ElementPicker {
     /// is asking.
     var onTestRebindPanel: ((String) -> Void)?
 
-    /// Ask every connected Chrome extension to reload itself; the answer is how
-    /// many were listening. Wired to `MusicBridge.reloadExtensions`.
-    var onReloadExtension: (() -> Int)?
-
     /// `POST /test/about` — put the About panel up and **answer its frame**.
     ///
     /// It exists because of the way that panel shipped broken on 2026-09-22: it
@@ -644,71 +428,14 @@ final class ElementPicker {
     /// `/engine` afterwards, so the caller reads what is actually running.
     var onPickEngine: ((String) -> Void)?
 
-    /// **A dictation is running and forwarding is on** — the only window in which ⌘ in
-    /// Chrome belongs to the relay. Outside it, `/ping` answers with a refusal and
-    /// the extension reads a refusal exactly like no relay at all, so ⌘ goes
-    /// straight back to being Chrome's ⌘.
-    ///
-    /// Gated on the dictation for the same reason mouse 4 is (`HotkeyTap.dictating`)
-    /// and not one of its own: ⌘-click opens a link in a new tab and Victor uses it
-    /// all day. Borrowing a gesture that load-bearing is only defensible while the
-    /// window is narrow and *visible* — the recording row is on screen saying the
-    /// gesture is live, and both appear and disappear together. A picker armed
-    /// around the clock would be a browser that intermittently stopped opening
-    /// links, with nothing on screen to explain why.
-    ///
-    /// Written from the main thread, read on the listener queue, hence the lock —
-    /// the same shape as `HotkeyTap.dictating`, and for the same reason.
-    var dictating: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return dictatingFlag }
-        set { stateLock.lock(); dictatingFlag = newValue; stateLock.unlock() }
-    }
-    private var dictatingFlag = false
-
-    /// The two halves of `dictating`, kept apart for one reason: **so a refusal
-    /// can say which one is missing.** `dictating` is `hasDestination &&
-    /// listening`, and a false read of it used to be reported as the undivided
-    /// "no", which left exactly one question standing — *was the terminal bound,
-    /// or was I simply not recording?* Victor asked it in those words on
-    /// 2026-09-09 (*"nu știu dacă [terminalul] aveam pornit"*), and nothing in
-    /// the app or the extension could answer it.
-    ///
-    /// Under the same lock as `dictating` and written on the same edge, so the
-    /// three can never disagree about the same instant.
-    var listening: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return listeningFlag }
-        set { stateLock.lock(); listeningFlag = newValue; stateLock.unlock() }
-    }
-    private var listeningFlag = false
-
-    /// **A plain dictation is open** (2026-10-08) — the third reason `dictating`
-    /// can be false with both halves true: plain words carry no picks. Only so
-    /// the refusal can say so.
-    var plain: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return plainFlag }
-        set { stateLock.lock(); plainFlag = newValue; stateLock.unlock() }
-    }
-    private var plainFlag = false
-
-    /// Is there anywhere for a dictation to go — a bound terminal, a pending
-    /// spawn, or paste mode (`AppDelegate.hasDestination`).
-    var bound: Bool {
-        get { stateLock.lock(); defer { stateLock.unlock() }; return boundFlag }
-        set { stateLock.lock(); boundFlag = newValue; stateLock.unlock() }
-    }
-    private var boundFlag = false
-
-    private let stateLock = NSLock()
-
     /// The gesture names `POST /test/gesture` accepts, for the refusal to list.
     /// Filled by `AppDelegate` from `HotkeyTap`'s own table, so the two cannot
     /// disagree about what exists.
     var onTestGestureNames: [String] = []
 
     /// Tried in order. Several relays can be up at once (one per agent session),
-    /// each takes the first free port, and the extension posts to all of them —
-    /// which is the same shape as the outbox, where one dictation reaches whoever
-    /// is listening.
+    /// each takes the first free port, and a caller (`relay-restart.sh`, the
+    /// evals) asks each in turn.
     static let ports: [UInt16] = [8917, 8918, 8919]
 
     private(set) var port: UInt16?
@@ -725,7 +452,7 @@ final class ElementPicker {
 
     private func bind(_ index: Int) {
         guard index < Self.ports.count else {
-            Log.error("no free inspect port in \(Self.ports) — ⌘-picking is off for this session")
+            Log.error("no free loopback port in \(Self.ports) — /bind and /test/* are off for this session")
             return
         }
         let candidate = Self.ports[index]
@@ -743,7 +470,7 @@ final class ElementPicker {
             switch state {
             case .ready:
                 self.port = candidate
-                Log.info("inspect endpoint on 127.0.0.1:\(candidate) — ⌘-hold in Chrome to pick elements")
+                Log.info("loopback control on 127.0.0.1:\(candidate)")
             case .failed:
                 // Almost always another relay already holding it.
                 listener.cancel()
@@ -787,50 +514,7 @@ final class ElementPicker {
             return respond(conn, 403, ["ok": false, "error": "not from a web page"])
         }
         switch (request.method, request.path) {
-        // The extension asks this before it arms: with no relay running, ⌘ in
-        // Chrome must go back to meaning exactly what Chrome says it means.
-        case ("GET", "/ping"):
-            guard dictating else { return respond(conn, 503, ["ok": false, "listening": false]) }
-            respond(conn, 200, ["ok": true, "session": SessionLabel.value])
-
-        // **Ungated, unlike `/ping` right above it — and that is the whole point
-        // of it being a second route.** `/ping` answers *may I borrow ⌘⇧*, which
-        // is true only inside a dictation; this one answers *is the app running*,
-        // which the extension needs in order to decide whether opening the music
-        // socket will be a connection or a red line on its Errors page. Asking
-        // `/ping` for that conflated the two, and the socket that carries the
-        // dictation window — and now the reload — was therefore only openable
-        // *during* a dictation, i.e. after the edge it exists to deliver.
-        case ("GET", "/up"):
-            respond(conn, 200, ["ok": true, "session": SessionLabel.value,
-                                "dictating": dictating, "listening": listening, "bound": bound, "plain": plain])
-
-        // Reload the unpacked Chrome extension, from the one place that can:
-        // inside Chrome. `curl -X POST localhost:8917/chrome/reload` after an
-        // edit to `inspect.js`, and the running content scripts are the new
-        // ones on the next page load.
-        case ("POST", "/chrome/reload"):
-            let asked = onReloadExtension?() ?? 0
-            respond(conn, asked > 0 ? 200 : 503,
-                    ["ok": asked > 0, "asked": asked,
-                     "error": asked > 0 ? "" : "no Chrome extension connected to the music bridge"])
-
-        case ("POST", "/pick"):
-            guard dictating else { return respond(conn, 503, ["ok": false, "listening": false]) }
-            guard let body = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
-                  let pick = ElementPick(json: body) else {
-                return respond(conn, 400, ["ok": false, "error": "expected a JSON object with a non-empty `path`"])
-            }
-            Log.info("🎯 picked \(pick.short)")
-            onPick?(pick)
-            respond(conn, 200, ["ok": true, "session": SessionLabel.value])
-
         // Bind / unbind / inspect the terminal a dictation gets typed into.
-        //
-        // **Not gated on `dictating`**, unlike everything above it: pointing the
-        // relay at a terminal is something Victor does at rest, on his way into
-        // a session, and a bind that only worked mid-sentence would be a bind he
-        // could never make.
         case ("POST", "/bind"):
             // A named tty is a different question from "whatever is in front",
             // and it is never a toggle: the caller is restoring a binding, not
@@ -1564,10 +1248,6 @@ final class ElementPicker {
             let (code, answer) = hook(body)
             respond(conn, code, answer)
 
-        // Chrome preflights the POST because the page's origin is not ours.
-        case ("OPTIONS", _):
-            respond(conn, 204, nil)
-
         default:
             respond(conn, 404, ["ok": false])
         }
@@ -1616,12 +1296,6 @@ final class ElementPicker {
         var head = "HTTP/1.1 \(status) \(Self.reason(status))\r\n"
         head += "Content-Type: application/json\r\n"
         head += "Content-Length: \(payload.count)\r\n"
-        // The POST arrives from whatever page Victor happens to be on, so the
-        // browser will not let the extension read the answer without these.
-        head += "Access-Control-Allow-Origin: *\r\n"
-        head += "Access-Control-Allow-Headers: content-type\r\n"
-        head += "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-        head += "Access-Control-Max-Age: 86400\r\n"
         head += "Connection: close\r\n\r\n"
 
         var data = Data(head.utf8)
@@ -1674,7 +1348,7 @@ final class ElementPicker {
             guard body.count >= length else { return nil }
 
             self.method = request[0].uppercased()
-            // Query strings are not used, but a stray `?` must not turn /pick
+            // Query strings are not used, but a stray `?` must not turn a route
             // into a 404.
             self.path = request[1].components(separatedBy: "?")[0]
             self.body = Data(body.prefix(length))
@@ -1689,15 +1363,15 @@ final class ElementPicker {
 /// A token would mean teaching every eval, lab script and `curl` one, so this goes
 /// by what browsers cannot help saying and tools never say. `Origin` is set on
 /// their POSTs, `Sec-Fetch-Site` on everything else (an `<img>` has no `Origin`),
-/// and a page can set neither. The extension talks from its service worker, under
-/// its own `chrome-extension://` origin. `Host` stops DNS rebinding, where a page's
+/// and a page can set neither. An extension's service worker says
+/// `chrome-extension://` and is refused too (2026-11-20: the one extension that
+/// had a reason to call here is gone). `Host` stops DNS rebinding, where a page's
 /// own domain resolves here, and a container coming in on `host.docker.internal`.
 enum BrowserGate {
     private static let localHosts: Set<String> = ["127.0.0.1", "localhost", "[::1]", "::1"]
 
     static func refuses(host: String?, origin: String?, fetchSite: String?) -> Bool {
         if let host, !isLocal(host) { return true }
-        if origin?.lowercased().hasPrefix("chrome-extension://") == true { return false }
         if origin != nil { return true }
         return fetchSite.map { $0.lowercased() != "none" } ?? false
     }

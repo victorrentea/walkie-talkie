@@ -64,10 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeys = HotkeyTap()
     private let picker = ElementPicker()
 
-    /// Pauses whatever Chrome is playing for the length of a dictation, and
-    /// resumes exactly that afterwards. Driven from `syncBorrowedGestures`, the
-    /// one place that already knows when the window opens and closes.
-    private let music = MusicBridge()
     /// **The ring round the pointer for the whole of every dictation**, breathing
     /// on his voice — see `CaretHalo`. Since 2026-09-11 it is also the answer to
     /// *is it still hearing me?*, which the chip gives beside the cursor and
@@ -152,13 +148,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var wisprMic = WisprWatch()
 
     /// **Wispr Flow is hearing him right now, and the relay did not start it** —
-    /// `WisprFlowSource.hearingChanged`, mirrored here for `syncMusic`.
+    /// `WisprFlowSource.hearingChanged`, mirrored here for the ring (`syncBorrowedGestures`).
     ///
     /// Separate from `listening` because it is a different claim. `listening` is
     /// *the relay has a sentence in flight*; this is *a microphone is open in
     /// another app*, which is true of every ⌘⌥ push-to-talk Victor makes with
-    /// the Engine on the local model — the commonest dictation of the day, and
-    /// the one the music went on playing over until 2026-09-18.
+    /// the Engine on the local model — the commonest dictation of the day.
     private var wisprHearing = false
     /// **The sentence in flight is being heard by Wispr's microphone** (2026-09-22,
     /// evening) — set by the `wisprSource` wiring, cleared by the wired engine's.
@@ -170,11 +165,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// gesture lands on the same wiring, and it wears its destination's dress.
     private var wisprMicSentence = false
 
-    /// **The music is never left paused.** The only thing that lowers
+    /// **The ring is never left up.** The only thing that lowers
     /// `wisprHearing` is the state machine leaving `listening`, and that is a
     /// phase driven by Wispr's own `History` rows — so a Wispr that dies
     /// mid-sentence, or a row that never turns terminal, would otherwise leave
-    /// his tabs muted with nothing on screen saying why. Ten minutes is far past
+    /// a ring round his pointer with nothing behind it. Ten minutes is far past
     /// any dictation ever measured (the longest in the corpus is 197 s) and is a
     /// backstop, not a timeout: reaching it is a bug, and it says so in the log.
     private var wisprHearingCap: DispatchWorkItem?
@@ -947,10 +942,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var selectionMarkersInlined: Set<Int> = []
 
-    /// The same, for picked elements: one that went into the sentence does not
-    /// also get a row underneath it. → `picksClause`
-    private var elementMarkersInlined: Set<Int> = []
-
     /// The frozen highlight went in front of the words, so it is not also listed
     /// under them — `resolvingMarkers`. Not a `Set`: there is only one of it.
     private var frozenSelectionInlined = false
@@ -984,24 +975,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// three-minute dictation is *where in the sentence* it was taken, and the
     /// only clock that measures that starts when he starts talking.
     private var pendingShotOffsets: [TimeInterval] = []
-    /// Elements ⌘-clicked in Chrome, waiting for the sentence they belong to.
-    ///
-    /// Taken **during** the dictation, like the deliberate shots — ⌘ in Chrome is
-    /// the relay's only while the recording row is up (`syncBorrowedGestures`), so
-    /// a pick is always something he did mid-sentence, while pointing at what he
-    /// was in the middle of saying.
-    ///
-    /// Unlike shots they are still **not** cleared when a dictation opens, because
-    /// Cancel puts them back: a cancelled prompt leaves the picks in the queue for
-    /// the next attempt, and those legitimately predate the dictation they end up
-    /// riding — which is why the stamps can still come out negative.
-    private var pendingPicks: [ElementPick] = []
-
-    /// A pick nobody ever spoke about is not context, it is litter — a queue left
-    /// behind by a cancelled prompt he never retried. Ten minutes is longer than
-    /// any gap between cancelling and saying it again, and short enough that this
-    /// morning's browsing cannot ride into this afternoon's prompt.
-    private let pickTTL: TimeInterval = 600
 
     /// When the current dictation opened, i.e. the zero of those offsets.
     /// Its edges — set, cleared — are the restart gate's *dictation start/stop*.
@@ -1059,7 +1032,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// elements and the highlights the cancelled dictation had gathered are
     /// cleared at the cancel and stay cleared: those are cheap to take again and
     /// the screen has moved on, which is the same reasoning `releaseHeld` uses
-    /// when it restores picks but not frames.
+    /// when it drops the frames.
     private var cancelledAudio: (url: URL, at: Date, duration: TimeInterval)?
     private var cancelledSweep: DispatchWorkItem?
     private static let cancelledGrace: TimeInterval = 300
@@ -1103,7 +1076,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **There is a destination, so a dictation is the relay's business.**
     ///
     /// Unbound the app does nothing at all: no dictation can be started, mouse 4
-    /// and mouse 5 and ⌘⇧-click stay with the software they belong to, no picture
+    /// and mouse 5 stay with the software they belong to, no picture
     /// is taken, and no line is written. It bails out of `captureContext`,
     /// `plusOneShot`, `send` and `syncBorrowedGestures` — plus `syncLocalCapture`,
     /// which is where the microphone's claim on the wheel lives. **It is the only
@@ -1146,7 +1119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **Replace Wispr — the relay as a way to type, not a way to talk to an
     /// agent.** Ticked in the menu, the forward side button opens the microphone
     /// and closes it, and what was said is pasted at the caret: no outbox line,
-    /// no terminal, no screenshots, no picked elements, no prompt panel. The back
+    /// no terminal, no screenshots, no prompt panel. The back
     /// button is handed back to LinearMouse, which types Return with it.
     ///
     /// It is named after the app it replaces. Victor dictates into chats, commit
@@ -1196,7 +1169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// `caretPrompt` — opened by the forward click (`startDictation(paste:)`):
     /// the context frame at the press, `[Dictated in RO or EN]`, selections,
-    /// picks and pictures, i.e. the terminal's envelope pasted at the caret; and
+    /// and pictures, i.e. the terminal's envelope pasted at the caret; and
     /// **submitted** when the caret is a Claude Code prompt
     /// (`TerminalBinding.frontClaudePromptTTY`).
     ///
@@ -1219,7 +1192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **A prompt since 2026-10-15, not a clean sentence** (Victor: *"all the
     /// features available for prompting should be available as well for
     /// questioning … the outcome is honestly just an answer"*): the context
-    /// frame, the shutter, the crops, the highlights and the picks ride it, and
+    /// frame, the shutter, the crops and the highlights ride it, and
     /// `deliver` hands the envelope and its pictures to `QuickAsk`.
     private var quickAsk = false
     /// **This sentence was opened by "Hey Claude"** (2026-11-12, `WakeWord`):
@@ -1277,7 +1250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// what that rule was and was not. It was written on 2026-08-27 because the
     /// relay had just become a login item: it sat there all day, so every
     /// sentence Victor spoke into a browser, a chat or a commit message was
-    /// costing him a screenshot, mouse 4 and ⌘⇧-click, **with nowhere for the
+    /// costing him a screenshot and mouse 4, **with nowhere for the
     /// words to go**. The premise is the last clause, not the binding: a
     /// destination that arrives two minutes late is still a destination, which
     /// is the same reading that already exempted the spawn (`spawnPending`, a
@@ -1439,8 +1412,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// → `ShotMarker.resolve`, `selectionsClause`
         var inlinedShots: Set<Int> = []
         var inlinedSelections: Set<Int> = []
-        /// The same for picked elements — see `picksClause`.
-        var inlinedElements: Set<Int> = []
         let paths: [String]
         let screen: String?
         /// **The screen recording this sentence carries, if he made one**
@@ -1470,16 +1441,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// no markers. → `ShotMarker`
         var shotNumbers: [String: Int] = [:]
         let app: String?
-        let elements: [ElementPick]
-        /// When the microphone opened, kept so `terminalLine` can stamp each
-        /// picked element with *where in the sentence* he clicked it.
-        ///
-        /// Carried rather than looked up at delivery, for `spawn`'s reason: the
-        /// panel holds every prompt for seconds and the next dictation may have
-        /// started — and `dictationStartedAt` is cleared the moment this message
-        /// is built. It is optional because a `screenshot` message has no
-        /// dictation behind it, and an unstamped pick is better than a wrong one.
-        var startedAt: Date?
         /// This one opens its own terminal instead of being typed into a bound
         /// one. Carried here rather than read off `spawnPending` at delivery,
         /// because the two are seconds apart — the panel holds every prompt — and
@@ -2998,17 +2959,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             guard let self else { return }
             self.overlay.setCropPhase(hint)
-            // The page's `⌘⇧` pill goes too, for the same drag — the page hears
-            // no mouse during a crop either, so its own fade never fires, and it
-            // is in the pixels being cropped. Back after the shutter has fired.
-            if hint != nil {
-                self.music.setPickable(false)
-            } else {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-                    guard let self, self.overlay.cropPhase == nil else { return }
-                    self.music.setPickable(self.picker.dictating)
-                }
-            }
         }
         // ⌘⌃X — the local model, now (2026-09-28). The tap hands it over on main.
         hotkeys.onLocalNow = { [weak self] in self?.transcribeLocallyNow(from: "⌘⌃X") }
@@ -3151,7 +3101,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.endDictation()
             }
         }
-        picker.onPick = { [weak self] pick in self?.record(pick) }
         picker.onBind = { [weak self] in self?.bindFrontmostTerminal() }
         // **Bind a named session** — the restore half of a restart, never a
         // gesture. It skips everything `bindFrontmostTerminal` does *because*
@@ -3288,7 +3237,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.syncBorrowedGestures()
                 self.overlay.setListening(true)
                 self.publishShotCount()
-                self.publishPicks()
             }
         }
         // A highlight, filed against the dictation in flight without one being
@@ -3532,7 +3480,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return box.value
         }
-        picker.onReloadExtension = { [weak self] in self?.music.reloadExtensions() ?? 0 }
         // The Gesture Guide from a desk (`POST /test/about`, the About panel's
         // route — the guide replaced it on 2026-11-12), answering the size it came
         // up at and whether its page loaded. Hops to main: it builds AppKit views.
@@ -3676,7 +3623,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.filmFrames = { [weak self] in self?.film?.frameCount ?? 0 }
 
         picker.start()
-        music.start()
         // The same seam the chip's warmth ramp is fed through one line up, and
         // the same reason: the ring lights on his voice, and which recorder is
         // holding the microphone is this delegate's business, not its own.
@@ -4361,7 +4307,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         syncBorrowedGestures()
         overlay.setListening(true)
         publishShotCount()
-        publishPicks()
     }
 
     /// Open the sentence without taking a picture of it: `dictationInFlight` is
@@ -4603,12 +4548,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             selections[marker] = ShotMarker.Token.selection(
                 Self.clampForTerminal(extra.text), app: Self.appName(of: extra.source))
         }
-        var elements: [Int: String] = [:]
-        for pick in pendingPicks {
-            guard let marker = pick.marker else { continue }
-            elements[marker] = ShotMarker.Token.element(
-                marker, text: pick.text?.isEmpty == false ? pick.text! : pick.path)
-        }
         stateLock.unlock()
 
         // **Which locator runs, and never both** (2026-09-19). A sentence that
@@ -4637,9 +4576,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return ShotMarker.stripping(ours, from: text)
             }
             let strict = ShotMarker.resolveStrict(text: text, asr: asr, said: said, shots: marked,
-                                                  selections: selections, elements: elements,
-                                                  duration: duration)
-            let placed = !strict.shots.isEmpty || !strict.selections.isEmpty || !strict.elements.isEmpty
+                                                  selections: selections, duration: duration)
+            let placed = !strict.shots.isEmpty || !strict.selections.isEmpty
             Log.info("📣 markers \(strict.clean ? "placed" : placed ? "placed, some by the clock" : "NOT placed — the footer carries them"): "
                      + "\(strict.why) (said \(said.map { "\($0.kind.rawValue) \($0.index)" }.joined(separator: ", ")); "
                      + "read from \(asr?.isEmpty == false ? "asrText" : "the delivered words"))")
@@ -4653,15 +4591,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             resolved = (text, [], [], [])
         } else if cues.isEmpty {
             resolved = ShotMarker.resolve(text: text, shots: marked, selections: selections,
-                                          elements: elements, inline: inline)
+                                          inline: inline)
         } else if let words = words, !words.isEmpty {
             // Nothing was put into this audio, so the corpus copy has nothing to
             // have taken out of it. (The spoken path *did* put something in,
             // which is why it still has to be asked.) → `deliver`
             if !inline { return text }
             resolved = ShotMarker.place(words: words, cues: cues, shots: marked,
-                                        selections: selections, elements: elements,
-                                        inline: inline)
+                                        selections: selections, inline: inline)
         } else {
             Log.error("markers: \(cues.count) cue(s) and no word timings from the "
                       + "recogniser — the frames stay listed under the sentence")
@@ -4683,11 +4620,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateLock.lock()
         shotMarkersInlined.formUnion(resolved.shots)
         selectionMarkersInlined.formUnion(resolved.selections)
-        elementMarkersInlined.formUnion(resolved.elements)
-        if !resolved.elements.isEmpty {
-            Log.info("📣 \(resolved.elements.count) element(s) placed in the words at the marker: "
-                     + resolved.elements.map(String.init).joined(separator: ", "))
-        }
         if frozenHead != nil { frozenSelectionInlined = true }
         stateLock.unlock()
         guard let head = frozenHead else { return resolved.text }
@@ -6522,13 +6454,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Anything attached to the open sentence — pictures (taken or on their
-    /// way), a film, highlights, typed notes, picks.
+    /// way), a film, highlights, typed notes.
     private var hasAttachments: Bool {
         if film != nil || !pendingFilms.isEmpty { return true }
         stateLock.lock()
         defer { stateLock.unlock() }
         return picturesTaken > 0 || !pendingShots.isEmpty || pendingScreen != nil
-            || pendingSelection != nil || !pendingExtraSelections.isEmpty || !pendingPicks.isEmpty
+            || pendingSelection != nil || !pendingExtraSelections.isEmpty
     }
 
     /// Point a caret sentence at the terminal the relay was bound to last, and
@@ -7559,7 +7491,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// written out again rather than shared, because a `cancel` that fell through
     /// into the send path by accident is the one bug this must not have.
     ///
-    /// Everything the dictation had gathered goes with it. Shots and picks are
+    /// Everything the dictation had gathered goes with it. Shots are
     /// stamped against `dictationStartedAt`, so leaving them behind would attach
     /// them to the *next* sentence, timed from a clock that no longer exists.
     /// **Throw away whatever is being dictated right now, whoever is hearing
@@ -7573,7 +7505,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// nothing*). Both are `source.cancel()` now, and which of the two it is has
     /// stopped being a question anything outside the source asks.
     ///
-    /// Everything the dictation had gathered goes with it: shots and picks are
+    /// Everything the dictation had gathered goes with it: shots are
     /// stamped against `dictationStartedAt`, so leaving them behind would attach
     /// them to the *next* sentence, timed from a clock that no longer exists.
     /// That clearing happens in `dictationEnded`, on the `.cancelled` the source
@@ -7676,7 +7608,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// did nothing — the panel then sent itself (TG10). Now they take the ✕'s
     /// own path (`RelayWindow.cancelHeldPrompt` → `releaseHeld(send: false)`),
     /// so a cancelled panel is exactly what ✕ / ⎋ leave: nothing written, the
-    /// words still `lastDictation` for ⌘⇧P, the picks back in the queue.
+    /// words still `lastDictation` for ⌘⇧P.
     ///
     /// **Decided here:** a microphone open on a newer sentence outranks the
     /// panel — the flick is made during that sentence, and the panel keeps
@@ -7918,7 +7850,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Everything a cancelled sentence had gathered, put down.
     ///
-    /// Shots and picks are stamped against `dictationStartedAt`, so leaving them
+    /// Shots are stamped against `dictationStartedAt`, so leaving them
     /// behind would attach them to the *next* sentence, timed from a clock that
     /// no longer exists.
     private func clearCancelledDictationState() {
@@ -7942,7 +7874,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingFilms = []
 
         stateLock.lock()
-        pendingPicks = []
         pendingShots = []
         pendingShotOffsets = []
         pendingSelection = nil
@@ -7960,7 +7891,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markerCues = []
         shotMarkersInlined = []
         selectionMarkersInlined = []
-        elementMarkersInlined = []
         frozenSelectionInlined = false
         dictationStartedAt = nil
         pendingScreen = nil
@@ -7971,7 +7901,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         guard !answeringInBackground else { return }
         publishShotCount()
-        publishPicks()
         // **And the highlight comes off the chip with it.** `pendingSelection` is
         // cleared above, but the row showing it is the overlay's own copy and
         // nothing else here puts it down. Reported 2026-09-04: *"once I have a
@@ -8186,24 +8115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func runDemo() {
         Log.info("demo mode — driving the UI with canned content")
         let selection = "public Order placeOrder(Cart cart) {"
-        let opened = Date()
-        let picks = [
-            ElementPick(at: opened.addingTimeInterval(12), path: "main.content > button.buy-button",
-                        tag: "button", text: "Add to cart"),
-            ElementPick(at: opened.addingTimeInterval(21), path: "div#cart > span.price",
-                        tag: "span", text: "100 €"),
-        ]
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.overlay.setSelection(selection)
             self?.overlay.setListening(true)
-        }
-        // Empty first, so the hint gets its moment — that is the state he is in
-        // for the first seconds of every dictation.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.8) { [weak self] in
-            self?.overlay.setPicks(count: 1, newest: picks[0].short)
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.2) { [weak self] in
-            self?.overlay.setPicks(count: 2, newest: picks[1].short)
         }
         // The automatic context shot, then one taken with the back button — the two ways the
         // count moves in a real dictation.
@@ -8215,12 +8129,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak self] in
             self?.overlay.setListening(false)
-            self?.overlay.setPicks(count: 0, newest: nil)
             // Built by the real formatter, so a documentation shot cannot drift
             // from what the panel actually renders.
             let body = Self.promptPreview(text: "extract the tax calculation out of this method",
-                                          selection: selection,
-                                          picks: picks, since: opened) ?? ""
+                                          selection: selection) ?? ""
             self?.overlay.showSentPrompt(body, hold: 25)
         }
     }
@@ -8445,7 +8357,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markerCues = []
         shotMarkersInlined = []
         selectionMarkersInlined = []
-        elementMarkersInlined = []
         frozenSelectionInlined = false
         dictationInFlight = false
         contextShotPending = false
@@ -8657,27 +8568,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             : "Wispr Flow never opened the microphone for that chord")
     }
 
-    /// **Pause the music for every open microphone, whosever it is.**
-    ///
-    /// Two claims, OR'd, and they are two because they come from two places.
-    /// `listening` is the relay's own sentence — it covers the wheel, the forward
-    /// button, Replace Wispr and a Wispr dictation the relay asked for, and it
-    /// has paused the music since 2026-09-03. `wisprHearing` is the other half
-    /// Victor found missing on 2026-09-18: with the Engine on the local model he
-    /// still dictates everywhere by holding ⌘⌥, Wispr's own push-to-talk, and
-    /// none of the five `DictationSource` events are wired to this source then —
-    /// so the relay saw the chord, named it in the log, and let the music play
-    /// straight through the sentence. *"când Wispr e detectat că ascultă … trebuie
-    /// să se pauzeze muzica și apoi să se rezume când încetează transcrierea"*.
-    ///
-    /// **It resumes at the same edge his own dictations do** — the microphone
-    /// closing, not the words landing. `MusicBridge` resumes exactly the tabs it
-    /// stopped, so a repeat of the current state costs nothing and the OR can be
-    /// recomputed from either side at any time.
-    private func syncMusic() {
-        music.setActive(listening || wisprHearing)
-    }
-
     /// `WisprFlowSource.hearingChanged` — Wispr's microphone opened or closed on
     /// a dictation that is none of the relay's business except for this.
     ///
@@ -8690,7 +8580,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if on {
             let cap = DispatchWorkItem { [weak self] in
                 guard let self, self.wisprHearing else { return }
-                Log.error("🎵 Wispr Flow has been listening for \(Int(Self.wisprHearingCeiling)) s — letting the music back on and taking the ring down; its state machine never left `listening`")
+                Log.error("🎵 Wispr Flow has been listening for \(Int(Self.wisprHearingCeiling)) s — taking the ring down; its state machine never left `listening`")
                 // **Back through the front door**, rather than undoing by hand
                 // the things the rising edge did. It was two — the flag and the
                 // music — and since 2026-09-18 it is four; a ceiling that
@@ -8702,14 +8592,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.wisprHearingCeiling, execute: cap)
         }
         // **And the chip says so in colour** (2026-09-18) — a yellow ring where
-        // the relay's own sentence wears an orange one. The music pause and this
-        // are the same fact read twice; see `RelayWindow.walkieWisprGlyph`.
+        // the relay's own sentence wears an orange one. The ring round the pointer and
+        // this are the same fact read twice; see `RelayWindow.walkieWisprGlyph`.
         overlay.setWisprHearing(on)
         pushMicMark()
-        // **…and the ⚡ ring goes up round the pointer, which is the third
-        // reading of the same fact** (2026-09-18) — `syncBorrowedGestures`
-        // rather than `syncMusic`, because the halo hangs off that one switch
-        // and the music is synced from inside it. Nothing else it recomputes has
+        // **…and the ⚡ ring goes up round the pointer** (2026-09-18) —
+        // `syncBorrowedGestures`, because the halo hangs off that one switch.
+        // Nothing else it recomputes has
         // moved, so the rest is a no-op by construction; that is the whole
         // reason every edge of a dictation is made to pass through there.
         syncBorrowedGestures()
@@ -8807,16 +8696,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 🔽 → over a ⚡ question Googles it (2026-10-25, `onQuickGoogle`).
         hotkeys.relayQuickOpen = listening && quickAsk
         let attachable = live && !hotkeys.cleanSentenceOpen
-        picker.dictating = attachable
-        // The in-page badge that says ⌘⇧ is live — the chip's old `⌘⇧` row,
-        // drawn by the extension since 2026-10-07 (`inspect.js`, `showBadge`).
-        music.setPickable(attachable && overlay.cropPhase == nil)
-        // The halves as well as the verdict, so a refused ⌘⇧ can name the one
-        // that was missing rather than saying an undivided no — see
-        // `ElementPicker.listening`.
-        picker.listening = listening
-        picker.bound = hasDestination
-        picker.plain = live && !attachable
         // **The ring round the pointer rides the same switch**, and deliberately
         // on `listening` rather than on `live`: since 2026-09-11 it answers *is
         // it hearing me?*, and the microphone is either open or it is not —
@@ -8882,8 +8761,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sentence, so with the Engine on the local model or on ElevenLabs — and
         // on any dictation Victor opens himself — the microphone was open with
         // nothing round the pointer to say so. `wisprHearing` is the witness
-        // that works in every engine (`WisprState.listening`, wired at launch
-        // beside the music pause), which is why it is the one read here and
+        // that works in every engine (`WisprState.listening`, wired at launch),
+        // which is why it is the one read here and
         // `WisprWatch` is not.
         let foreignMic = wisprHearing && !listening && !speculative
         // **The ring, and nothing else, for a sentence that is not ours.** The
@@ -9032,16 +8911,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // fires only when he starts again straight after a delivery — and then
         // the ring is going up at the same pointer the hint is hanging under.
         if ringWanted { pasteHint.hide() }
-        // **The music pauses for every dictation, and so reads `listening`, not
-        // `live`.** It hung off `live` until 2026-09-03, on the argument that an
-        // unbound dictation is Victor talking into some other app and none of the
-        // relay's business. That argument was about *where the words go*, and the
-        // music is not about where the words go — it is about the microphone
-        // being open. Unbound, forwarding unbound, Replace Wispr, a test
-        // dictation: in all of them he is speaking into this app's microphone
-        // with a track playing over it, which is the one thing the pause exists
-        // to stop. Same switch as the ring, and for the same reason.
-        syncMusic()
         // **The watcher runs in Replace Wispr too, since 2026-09-09.** It was
         // `live && !pasteMode`, on the argument that `caretLine` carried no
         // highlight at all so a watcher there would gather text nothing would
@@ -10592,7 +10461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **`full` is the forward click's caret *prompt*** (2026-09-23) — the whole
     /// terminal envelope, `terminalLine` itself: the context frame as picture
     /// zero with its leading `auto` token, `[Dictated in RO or EN]`, the
-    /// highlights, the picks, the films. Victor: *"The forward click should be
+    /// highlights, the films. Victor: *"The forward click should be
     /// transcribing, basically prompting, at the carrot. There will be those
     /// metadata, the screenshot of the screen, the fact that is dictated, and
     /// any other feature."* The 2026-09-08 line above — *no context frame, no
@@ -10643,12 +10512,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // of rows the clause below must therefore not repeat.
         let inlinedShots = shotMarkersInlined
         let inlined = selectionMarkersInlined
-        let inlinedElements = elementMarkersInlined
         // The frozen highlight, when it went in front of the words instead.
         let frozenInlined = frozenSelectionInlined
         shotMarkersInlined = []
         selectionMarkersInlined = []
-        elementMarkersInlined = []
         frozenSelectionInlined = false
         // **No context frame rides the legacy envelope, and it is cleared rather
         // than ignored** (the full one read it above). None is taken in that mode, so `pendingScreen` is nil
@@ -10660,12 +10527,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // callers.
         pendingScreen = nil
         contextShotPending = false
-        pruneStalePicks()
-        let picks = pendingPicks
-        pendingPicks = []
-        // **Taken, not left behind.** They are cleared here for the reason every
-        // other field on this envelope is: what is not consumed by the sentence
-        // that gathered it rides the next one.
         // Inline *or* listed, never both — when the frozen highlight has gone
         // in front of the words, the clause below must not repeat it.
         let selection = frozenInlined ? nil : pendingSelection
@@ -10678,10 +10539,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingSelectionIn = nil
         pendingSelectionMarker = nil
         pendingExtraSelections = []
-        // Read before it is cleared, and for the reason `Message.startedAt`
-        // exists: it is the zero every pick's stamp is measured from, and one
-        // line later there is nothing left to measure against.
-        let since = dictationStartedAt
         dictationStartedAt = nil
         dictationInFlight = false
         stateLock.unlock()
@@ -10691,7 +10548,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // and drop what that one had gathered.
         DispatchQueue.main.async { [weak self] in self?.orphanFlush?.cancel() }
         publishShotCount()
-        publishPicks()
 
         if full {
             // `send`'s `Message`, field for field, and `terminalLine` to render
@@ -10702,12 +10558,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             extraSelections: extraSelections,
                             inlinedShots: inlinedShots,
                             inlinedSelections: inlined,
-                            inlinedElements: inlinedElements,
                             paths: shots, screen: screen, films: takeFilms(),
                             shotOffsets: fullOffsets,
                             mice: mice, areas: areas, sizes: sizes, sources: sources,
                             shotNumbers: markerNumbers,
-                            app: nil, elements: picks, startedAt: since,
+                            app: nil,
                             via: pendingVia ?? "test",
                             engine: pendingEngine ?? "", mic: Self.mic(inHeard: pendingHeard),
                             affect: affect)
@@ -10732,7 +10587,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let envelope = Message(kind: "dictation", text: words, selection: nil,
                                paths: shots, screen: nil,
                                shotOffsets: offsets, mice: mice, areas: areas, sizes: sizes,
-                               sources: sources, app: nil, elements: picks, startedAt: since)
+                               sources: sources, app: nil)
         parts.append(contentsOf: Self.artifactsClause(envelope))
         guard parts.count > 1 else { return (words, nil, AgentRules.version) }
         // The words, a blank line, then one clause per line — `terminalLine`'s
@@ -10745,7 +10600,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (2026-09-23). Victor: *"a plain voice transcription with no sorts of
     /// prompting tweaks around it. It should be just clean voice that I had."*
     /// Whatever the sentence gathered anyway — a shot through ⌃⌥P before the
-    /// shutter refused it, a pick, a highlight the watcher saw — is drained with
+    /// shutter refused it, a highlight the watcher saw — is drained with
     /// the caret envelope's own bookkeeping and dropped, so it cannot ride the
     /// next sentence either.
     private func cleanLine(words: String) -> String {
@@ -11380,11 +11235,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// `short` (2026-11-12, the destination holds `AgentRules`): a plain frame
     /// under its standard name gets no row — the rules say `📸n` is
     /// `📁/screenshot-n-800px.jpg`, `-original.jpg` beside it. A frame the words
-    /// could not carry keeps its caption row; areas, picks and films are unchanged.
+    /// could not carry keeps its caption row; areas and films are unchanged.
     private static func artifactsClause(_ m: Message, short: Bool = false) -> [String] {
         let frames = ([m.screen].compactMap { $0 } + m.paths)
         let films = m.films.filter { $0.sheet != nil }
-        guard !frames.isEmpty || !films.isEmpty || !m.elements.isEmpty else { return [] }
+        guard !frames.isEmpty || !films.isEmpty else { return [] }
 
         let dir = ((frames.first ?? films.first?.dir.path) as NSString?)?
             .deletingLastPathComponent
@@ -11562,20 +11417,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        for (i, pick) in m.elements.enumerated() {
-            let index = pick.marker ?? (i + 1)
-            let offset = m.startedAt.map { pick.at.timeIntervalSince($0) }
-            let page = (pick.url?.isEmpty == false) ? " at \(pick.url!)" : ""
-            // **The element's text joins the row when the words did not take
-            // it.** Inline, the token already says what it said and the row is
-            // only the address; listed, the address alone would be a selector
-            // nobody can picture.
-            let said = m.inlinedElements.contains(index) || (pick.text ?? "").isEmpty
-                ? "" : ": \"\(clampForTerminal(pick.text!, 120))\""
-            rows.append("[\(ShotMarker.Token.key(element: index))"
-                        + "\(when(index, offset, m.inlinedElements))\(said) = \(pick.path)\(page)]")
-        }
-
         for (i, film) in films.enumerated() {
             guard let sheet = film.sheet else { continue }
             let frames = shotsRootAbbreviated(film.dir.path)
@@ -11623,8 +11464,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   highlighted, the subject arriving late) is exactly the case the old
     ///   shape could not express.
     /// - **`mm:ss`, the shot names' clock**, not the `m:ss` the chip uses. Three
-    ///   lists in one envelope now say when: the frames by their names, these,
-    ///   and the picks. A frame reading `shot-00:05` beside a highlight reading
+    ///   lists in one envelope now say when: the frames by their names and
+    ///   these. A frame reading `shot-00:05` beside a highlight reading
     ///   `0:05` is two clocks to check against each other.
     /// - **`in '…'`**, the same reading and the same quotes `shotsClause` puts
     ///   round a window title, for the same reason: a title is arbitrary text
@@ -11744,8 +11585,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///   why the ⌘C fallback the shutter uses is exactly wrong in a loop. The
     ///   cost is that a highlight in a **Chrome page** is not seen: that is the
     ///   one case AX does not expose and the reason the shutter grew the ⌘C in
-    ///   the first place. Mouse 4 is still the answer there, and so is ⌘⇧-click,
-    ///   which addresses a page element properly rather than as loose text.
+    ///   the first place. Mouse 4 is still the answer there.
     /// - **It has to settle before it is filed: three identical reads in a row.**
     ///   A selection made by dragging grows under the cursor — `Hel`,
     ///   `Hello wor`, `Hello world` — and a poll that filed the first thing it
@@ -12045,7 +11885,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ⌘C fallback was still a keystroke into the app under his hand, and a key
     /// event closes a tooltip, a popover or a hover menu — the very thing he
     /// was photographing. A Chrome page's highlight now rides *Everything I
-    /// Copy* (his own ⌘C, 2026-10-15) or ⌘⇧-click.
+    /// Copy* (his own ⌘C, 2026-10-15).
     private func stashExtraSelection(at offset: TimeInterval) {
         stateLock.lock()
         let opened = dictationStartedAt
@@ -12522,7 +12362,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// **A plain dictation attaches nothing** (2026-10-08) — the one read every
-    /// attachment door asks: the shutter, the crop, a ⌘⇧ pick, a highlight, a
+    /// attachment door asks: the shutter, the crop, a highlight, a
     /// film, the typing box. Victor: *"If I am in plain dictation mode, there
     /// shouldn't be possible to take photos … Nor select text … Just plain
     /// dictation mode."* `HotkeyTap.cleanSentenceOpen` is lock-guarded, so any
@@ -12862,188 +12702,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return path
     }
 
-    // MARK: - Picked elements
-
-    /// A ⌘-click landed in Chrome. Off the main thread — this arrives on the
-    /// listener's queue.
-    ///
-    /// Only reachable while dictating: the endpoint refuses everything else
-    /// (`ElementPicker.dictating`), so by the time one gets here it is a thing he
-    ///
-    /// There is no flash and no panel, deliberately: the outline in the page has
-    /// already turned green under his cursor, at the pixel he clicked, before this
-    /// code ran. A second receipt across the screen would be the same news, later
-    /// and further away. What this adds is the running total, in the chip.
-    private func record(_ pick: ElementPick) {
-        if refusesAttachment("🎯 the ⌘⇧ pick") { return }
-        stateLock.lock()
-        // **A drag amends the press that started it, rather than arriving beside
-        // it.** The extension picks on the *press* — the outline turns green
-        // under his finger before this code has run, which is the receipt — and
-        // it cannot know at that instant whether a drag is about to follow. So a
-        // drag sends the same element again with its two corners on it, and the
-        // one already waiting is replaced: one gesture, one entry, and the
-        // receipt still lands at the press where his hand expects it.
-        //
-        // Matched on the path and only against the newest entry, so two
-        // deliberate picks of two different things can never collapse into one.
-        var amended: Int?
-        if pick.move != nil, pendingPicks.last?.path == pick.path {
-            amended = pendingPicks.last?.marker
-            pendingPicks.removeLast()
-        }
-        // **Inside the lock, like a highlight and for its reason**: a number
-        // taken a lock-release later could be taken by the shutter in between.
-        // A drag that amended the press above keeps the press's marker, because
-        // the relay already said that number out loud.
-        var pick = pick
-        pick.marker = amended ?? reserveMarkerLocked(.element, at: pick.at)
-        pendingPicks.append(pick)
-        pruneStalePicks()
-        let count = pendingPicks.count
-        let last = pendingPicks.last?.short ?? ""
-        let spoke = amended == nil ? pick.marker : nil
-        stateLock.unlock()
-        if let spoke = spoke { speakMarker(.element, spoke) }
-        Log.info("🎯 \(count) element(s) waiting on a sentence — newest \(last)")
-        publishPicks()
-    }
-
-    /// Caller holds `stateLock`.
-    private func pruneStalePicks() {
-        let cutoff = Date().addingTimeInterval(-pickTTL)
-        pendingPicks.removeAll { $0.at < cutoff }
-    }
-
-    /// **Everything he ⌘⇧-clicked in Chrome, in one clause: when, what, and on
-    /// which page** (2026-09-09).
-    ///
-    /// ```
-    /// elements picked in Chrome during dictation, on 'https://shop.example/cart' (Cart — Shop), oldest first:
-    /// - 00:12 div#cart > span.price: "1.299,00 lei"
-    /// - 00:21 button.buy-button, moved from 120,340 to 500,205 (top-left, page coordinates): "Cumpără acum"
-    /// ```
-    ///
-    /// **It became a `- ` list on 2026-09-13**, the shots clause's shape, and
-    /// grew two things with it: the page's *title* beside its URL, and what the
-    /// element actually **said** — up to `ElementPick.textLimit` characters of
-    /// `innerText` instead of the 60 that used to fit in a parenthesis, with
-    /// `(truncated, N chars)` when there was more. A `·`-joined sentence was
-    /// already hard to read back with two picks in it; with a paragraph of page
-    /// copy quoted per pick it is unreadable, and the quotation is the point —
-    /// *"this button"* resolves to a selector, but *"the error it showed me"*
-    /// resolves to nothing unless the words travel.
-    ///
-    /// It read `[pointed at: <path> (<text>)]` until then, and Victor named all
-    /// three things missing from it in one breath: *"dacă se aleg mai multe
-    /// elemente pe parcursul dictării, ele trebuie toate să fie capturate
-    /// împreună cu timpul la care au fost clickate … și nu «pointed at» ca text,
-    /// trebuie să-i spui că picked element in Chrome … și să-i spui și URL-ul
-    /// paginii în care ai făcut pick, nu doar path-ul, că nu e relevant"*.
-    ///
-    /// - **The stamps** are the same calculation the held panel has always shown and
-    ///   the message never did — and they are the half that orders a sentence
-    ///   against its own pointing. `−0:08` is normal and not an edge case:
-    ///   pointing usually comes *before* the words, since he finds the thing and
-    ///   then says what to do with it.
-    /// - **The page, because a selector without one is not an address.**
-    ///   `div#cart > span.price` resolves in any number of documents, and the
-    ///   agent's first move on receiving one is to find out which — a question
-    ///   already answered in `pick.url` and simply never said out loud.
-    /// - **Factored out when they all came from one page**, which is the usual
-    ///   case and the difference between one URL and five copies of one. The same
-    ///   bargain `shotsClause` strikes with the directory, and it says something
-    ///   true besides: these all came from the same page. Mixed, each entry
-    ///   carries its own.
-    /// - **`picked … in Chrome` rather than `pointed at`.** The old wording named
-    ///   the gesture; this one names what arrived, which is a DOM element from a
-    ///   browser and not a direction.
-    /// - **The move is spelled out in words** rather than as a pair of fields,
-    ///   because the clause is read by an agent as a sentence and by Victor as a
-    ///   receipt, and *moved from 120,340 to 500,205* is the same instruction in
-    ///   both readings — his own wording: *"se mută de la XY la XY, coordonata
-    ///   originală cu colțul stânga sus"*.
-    ///
-    /// Shared by `terminalLine` and `caretLine` — the two envelopes name picks
-    /// identically on purpose, and the day they stopped doing so would be the
-    /// day a caret dictation quietly lost half of what it was carrying.
-
-    /// Where in the sentence something happened, as `m:ss` — or `−m:ss` when it
-    /// happened before the microphone opened, which for a pick is the ordinary
-    /// order rather than an oddity. Nil with no dictation to measure against.
-    private static func stamp(_ at: Date, since: Date?) -> String? {
-        guard let since = since else { return nil }
-        return clock(Int(at.timeIntervalSince(since).rounded()), pad: false)
-    }
-
-    /// The same reading, padded, for the envelope — the panel's `stamp` and this
-    /// one are one calculation with two paddings, so the two surfaces can differ
-    /// in how wide a stamp is and never in what it says.
-    private static func envelopeStamp(_ at: Date, since: Date?) -> String? {
-        guard let since = since else { return nil }
-        return clock(Int(at.timeIntervalSince(since).rounded()), pad: true)
-    }
-
-    /// Keep the overlay's `🎯 ×N` honest, and name the newest one — the count says
-    /// the click landed, the name says *what* landed, which is the half he can
-    /// actually check against what he meant to point at.
-    private func publishPicks() {
-        stateLock.lock()
-        pruneStalePicks()
-        let count = pendingPicks.count
-        let newest = pendingPicks.last?.short
-        // **Any of them, not the newest.** The row settles into a bare count, and
-        // *one of these was dragged somewhere* is exactly the thing a count
-        // cannot say about the things it counted.
-        let moved = pendingPicks.contains { $0.move != nil }
-        stateLock.unlock()
-        DispatchQueue.main.async { [weak self] in
-            self?.overlay.setPicks(count: count, newest: newest, moved: moved)
-        }
-    }
-
-    /// The elements line(s): one per thing he pointed at, in the order he pointed
-    /// at them, each with when it happened relative to the dictation.
-    ///
-    /// A selector is not a stamp on a list, it *is* the content — so unlike the
-    /// pictures, these get a line each rather than a row of times. He has to be
-    /// able to read "that is the buy button, not the price next to it" in the
-    /// seconds Cancel is still available, and a comma-separated run of CSS paths
-    /// is not readable at that speed.
-    ///
-    /// **The type, not the selector.** These lines used to carry `pick.short` —
-    /// the last two steps of the path, `div#cart > span.price` — which is the
-    /// right thing to *send* and the wrong thing to show here. Three of them turn
-    /// the panel into a wall of punctuation to be read at the exact moment the
-    /// Cancel clock is running, and the question he is answering is not "which
-    /// selector" but "did my three clicks land". `button`, `div`, `a` answers that
-    /// in a glance. The full selector still travels in the message; nothing is
-    /// lost, it is just not shouted at him. Bulleted for the same reason: a list
-    /// of three is read as a count when it looks like a list.
-    ///
-    /// **Negative stamps are the point, not an edge case.** Pointing usually comes
-    /// *before* the sentence — he finds the thing, then says what to do with it —
-    /// so `−0:08` reads exactly as it should: you pointed at this eight seconds
-    /// before you started talking.
-    private static func pickLines(_ picks: [ElementPick], since: Date?) -> [String] {
-        let shown = picks.prefix(maxPickLines)
-        // The same `stamp` the message uses, so the panel and the envelope can
-        // never disagree about where in the sentence a pick happened.
-        var lines = shown.map { pick -> String in
-            guard let at = stamp(pick.at, since: since) else { return "• \(pick.tag)" }
-            return "• \(at) \(pick.tag)"
-        }
-        if picks.count > shown.count { lines.append("• +\(picks.count - shown.count) more") }
-        return lines
-    }
-
-    /// Enough to check the ones he is likely to still be holding in his head. Past
-    /// that the panel is a list he has to read instead of a prompt he has to
-    /// approve, and the countdown is running.
-    private static let maxPickLines = 3
-
-    /// Same bargain as `maxPickLines`, and the same countdown behind it: past
-    /// two or three the panel is a document rather than a prompt to approve.
+    /// Enough to check the ones he is likely to still be holding in his head:
+    /// past two or three the panel is a document rather than a prompt to approve,
+    /// and the countdown is running.
     private static let maxExtraSelectionLines = 3
 
     /// **When each picture was taken**, as m:ss from the moment he started
@@ -13080,8 +12741,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// for messages with no words in them (a bare screenshot), which fall back
     /// to the one-line flash.
     private static func promptPreview(text: String?, selection: String?,
-                                      extraSelections: [SelectionRecord] = [],
-                                      picks: [ElementPick], since: Date?) -> String? {
+                                      extraSelections: [SelectionRecord] = []) -> String? {
         var parts: [String] = []
         if let text = text, !text.isEmpty { parts.append(text) }
         // **The selection counts as something to show, but is not shown here.**
@@ -13103,7 +12763,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if extraSelections.count > maxExtraSelectionLines {
             parts.append("↪ +\(extraSelections.count - maxExtraSelectionLines) more")
         }
-        parts.append(contentsOf: pickLines(picks, since: since))
         return parts.joined(separator: "\n")
     }
 
@@ -13423,10 +13082,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WakeWord.shared.stop()
         VoiceDialog.shared.stop(why: "quitting")
         DjiButton.release()
-        // Before either branch: a relay that quits mid-sentence must not leave
-        // Chrome silent. The extension also resumes on a dead socket, but that is
-        // the safety net for a crash, not the way an orderly quit should look.
-        music.stop()
         // A marker outliving the process would put a microphone on a status line
         // with nothing behind it — see `Outbox.publishBound`.
         //
@@ -13506,14 +13161,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // words have already been rewritten by the time we get here (`deliver`).
         let inlinedShots = shotMarkersInlined
         let inlined = selectionMarkersInlined
-        let inlinedElements = elementMarkersInlined
         // The frozen highlight, when it went in front of the words instead.
         let frozenInlined = frozenSelectionInlined
         // Inline *or* listed, never both — the highlight's own rule.
         let selection = frozenInlined ? nil : selectionSubject
         shotMarkersInlined = []
         selectionMarkersInlined = []
-        elementMarkersInlined = []
         frozenSelectionInlined = false
         pendingSelection = nil
         pendingSelectionAt = nil
@@ -13534,7 +13187,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         markerCues = []
         shotMarkersInlined = []
         selectionMarkersInlined = []
-        elementMarkersInlined = []
         frozenSelectionInlined = false
         var attached = paths
         var screen: String?
@@ -13543,20 +13195,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `attached` is what keeps this total agreeing with the `📸 ×N` he watched
         // go up while he was speaking, which does include it.
         var offsets: [TimeInterval] = []
-        var picks: [ElementPick] = []
-        var since: Date?
         if kind == "dictation" {
             attached += pendingShots
             screen = pendingScreen
             offsets = (pendingScreen != nil ? [0] : []) + pendingShotOffsets
-            // Everything he pointed at goes with the words, whether he pointed
-            // before or during — the queue exists precisely because those two
-            // orders are equally normal. `since` is what turns the absolute
-            // stamps into "where in this sentence", negatives and all.
-            pruneStalePicks()
-            picks = pendingPicks
-            since = dictationStartedAt
-            pendingPicks = []
             pendingShots = []
             pendingShotOffsets = []
             dictationStartedAt = nil
@@ -13568,7 +13210,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // A parked sentence's delivery (Q12) leaves the live one's chip rows alone.
         let bg = answeringInBackground
-        if kind == "dictation", !bg { publishPicks() }
         // Taken now, not in the hop below: by then a parked sentence's fields
         // (Q12) are the live one's again.
         let warningNow = pendingPromptWarning
@@ -13583,12 +13224,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               extraSelections: extraSelections,
                               inlinedShots: inlinedShots,
                               inlinedSelections: inlined,
-                              inlinedElements: inlinedElements,
                               paths: attached, screen: screen, films: takeFilms(),
                               shotOffsets: offsets,
                               mice: mice, areas: areas, sizes: sizes, sources: sources,
                               shotNumbers: markerNumbers,
-                              app: app, elements: picks, startedAt: since, spawn: spawn,
+                              app: app, spawn: spawn,
                               directory: directory, via: via, engine: engine,
                               mic: Self.mic(inHeard: heard),
                               deliveryKind: deliveryKind, target: spawn ? nil : target,
@@ -13597,8 +13237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
         let shown = Self.promptPreview(text: text, selection: selection,
-                                       extraSelections: extraSelections,
-                                       picks: picks, since: since)
+                                       extraSelections: extraSelections)
 
         // A panel is coming in the hop below: counted now, so an answer run in
         // the same turn waits for it (Q12 — one panel at a time, in order).
@@ -14026,7 +13665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     sources: m.sources.reduce(into: [String: String]()) { out, pair in
                         out[(pair.key as NSString).lastPathComponent] = pair.value
                     },
-                    app: m.app, elements: m.elements.map { $0.json(since: m.startedAt) },
+                    app: m.app,
                     line: line, delivery: delivery, affect: m.affect?.json)
     }
 
@@ -14258,18 +13897,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         heldCancelReason = nil
         guard send else {
             Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay\(cancelledBy.map { " (\($0) while the panel was held — Q6)" } ?? "")")
-            // The picked elements go back in the queue. Cancel means the sentence
-            // was wrong, not that he pointed at the wrong things — and re-taking a
-            // pick means finding the element in the page again, which is the
-            // expensive half of the gesture. (Shots are not restored: he can take
-            // another one blind, and the screen has moved on anyway.)
-            if !m.elements.isEmpty {
-                stateLock.lock()
-                pendingPicks = m.elements + pendingPicks
-                pruneStalePicks()
-                stateLock.unlock()
-                publishPicks()
-            }
             if m.spawn { clearSpawn() }
             overlay.flash("✕ cancelled", duration: 2.0)
             // Q17: the words he just read are finished text — on the clipboard.
@@ -14278,8 +13905,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // Cancelled is not lost: the words are still `lastDictation`, and
             // the difference between *I meant that* and *I did not* is often
-            // one second wide. The picks went back in the queue above for the
-            // same reason. The same three-second showing every delivery gets
+            // one second wide. The same three-second showing every delivery gets
             // since 2026-09-23.
             pasteHint.pulse(reason: "a prompt was cancelled")
             return
@@ -14464,9 +14090,8 @@ extension AppDelegate {
         var markersSpoken: [ShotMarker.Kind: Int] = [:]
         var markerCues: [ShotMarker.Cue] = []
         var shotMarkersInlined: Set<Int> = [], selectionMarkersInlined: Set<Int> = []
-        var elementMarkersInlined: Set<Int> = [], frozenSelectionInlined = false
+        var frozenSelectionInlined = false
         var pendingShotOffsets: [TimeInterval] = []
-        var pendingPicks: [ElementPick] = []
         var dictationStartedAt: Date?
         var dictationInFlight = false, contextShotPending = false
     }
@@ -14516,8 +14141,8 @@ extension AppDelegate {
         e.shotMice = shotMice; e.shotAreas = shotAreas; e.shotSizes = shotSizes
         e.picturesTaken = picturesTaken; e.markersSpoken = markersSpoken; e.markerCues = markerCues
         e.shotMarkersInlined = shotMarkersInlined; e.selectionMarkersInlined = selectionMarkersInlined
-        e.elementMarkersInlined = elementMarkersInlined; e.frozenSelectionInlined = frozenSelectionInlined
-        e.pendingShotOffsets = pendingShotOffsets; e.pendingPicks = pendingPicks
+        e.frozenSelectionInlined = frozenSelectionInlined
+        e.pendingShotOffsets = pendingShotOffsets
         e.dictationStartedAt = dictationStartedAt
         e.dictationInFlight = dictationInFlight; e.contextShotPending = contextShotPending
         contextAtWheelRelease = false
@@ -14526,8 +14151,8 @@ extension AppDelegate {
         pendingScreen = nil; pendingShots = []
         shotSources = [:]; shotMarkerNumbers = [:]; shotMice = [:]; shotAreas = [:]; shotSizes = [:]
         picturesTaken = 0; markersSpoken = [:]; markerCues = []
-        shotMarkersInlined = []; selectionMarkersInlined = []; elementMarkersInlined = []; frozenSelectionInlined = false
-        pendingShotOffsets = []; pendingPicks = []
+        shotMarkersInlined = []; selectionMarkersInlined = []; frozenSelectionInlined = false
+        pendingShotOffsets = []
         dictationStartedAt = nil; dictationInFlight = false; contextShotPending = false
         stateLock.unlock()
         return e
@@ -14562,8 +14187,8 @@ extension AppDelegate {
         shotMice = e.shotMice; shotAreas = e.shotAreas; shotSizes = e.shotSizes
         picturesTaken = e.picturesTaken; markersSpoken = e.markersSpoken; markerCues = e.markerCues
         shotMarkersInlined = e.shotMarkersInlined; selectionMarkersInlined = e.selectionMarkersInlined
-        elementMarkersInlined = e.elementMarkersInlined; frozenSelectionInlined = e.frozenSelectionInlined
-        pendingShotOffsets = e.pendingShotOffsets; pendingPicks = e.pendingPicks
+        frozenSelectionInlined = e.frozenSelectionInlined
+        pendingShotOffsets = e.pendingShotOffsets
         dictationStartedAt = e.dictationStartedAt
         dictationInFlight = e.dictationInFlight; contextShotPending = e.contextShotPending
         stateLock.unlock()
