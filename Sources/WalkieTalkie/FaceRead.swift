@@ -13,8 +13,10 @@ import Vision
 ///   the take, against *his own* resting mouth;
 /// - **🥱 looked tired** — eyes closed in a large share of the frames, or a
 ///   yawn (mouth open far past his usual for two frames in a row);
-/// - **🚶 away from the screen** — no face in most frames, or a face much
-///   smaller than at his desk.
+/// - ~~🚶 away from the screen~~ — **removed 2026-11-20** (Victor: *"faptul că
+///   eu nu mă uit la ecran nu înseamnă că eu nu gândesc … mă uit pe geam în
+///   dreapta"*): looking away is how he thinks, and the tag changed nothing an
+///   agent does. Do not bring it back.
 ///
 /// **Two frames a second from the built-in camera, only between the
 /// microphone opening and closing on a sentence for an agent** (never on a
@@ -64,6 +66,11 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         /// Corners above the lips' middle, in mouth widths (+ = up).
         var cornerLift: Double = 0
         var yaw: Double = 0
+        /// MediaPipe's (`FaceBlink`), nil when its helper did not answer:
+        /// eyes 0 open … 1 shut, the smile and the jaw on the same scale.
+        var blink: Double? = nil
+        var mpSmile: Double? = nil
+        var jaw: Double? = nil
     }
 
     // MARK: - The take's verdict
@@ -73,7 +80,6 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var faces: Int
         var smiled = false
         var tired = false
-        var away = false
         var why: [String] = []
 
         /// The face's own footer line, or nothing. In words as well as the
@@ -82,13 +88,12 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             var parts: [String] = []
             if smiled { parts.append("🙂 smiled while saying it") }
             if tired { parts.append("🥱 looked tired") }
-            if away { parts.append("🚶 away from the screen") }
             return parts.isEmpty ? nil : "[face: " + parts.joined(separator: " · ") + "]"
         }
 
         /// For the outbox.
         var json: [String: Any] {
-            ["frames": frames, "faces": faces, "smiled": smiled, "tired": tired, "away": away, "why": why]
+            ["frames": frames, "faces": faces, "smiled": smiled, "tired": tired, "why": why]
         }
     }
 
@@ -132,6 +137,15 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     static let smileMouth = 1.12
     static let smileCorners = 0.01
 
+    /// **Eyes shut, by MediaPipe** (2026-11-20). Vision's eye outline was the
+    /// first ruler and it does not see the lid: eyes fully closed read 0.92 of
+    /// his usual opening. `eyeBlink` ≥ 0.5 in ≥ 30 % of the frames — starting
+    /// values, to be read off his takes on the `ruler` line.
+    static let blinkShut = 0.5
+    static let eyesShutShare = 0.3
+
+    static func shut(_ f: Frame) -> Bool { (f.blink ?? 0) >= blinkShut }
+
     static func smiling(_ f: Frame, base: Baseline) -> Bool {
         f.mouthWide >= smileMouth * base.mouthWide && f.cornerLift >= base.cornerLift + smileCorners
     }
@@ -153,6 +167,21 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
                       median(faces.map(\.eye)) / base.eye,
                       median(faces.map(\.size)) / base.size,
                       smiling.count, faces.count)
+            + blinkRuler(faces)
+    }
+
+    /// ` · blink 0.12 (bar 0.50, shut 0/13) · mp smile 0.40 · jaw 0.05`, or
+    /// ` · blink n/a` when MediaPipe read no frame.
+    static func blinkRuler(_ faces: [Frame]) -> String {
+        let read = faces.filter { $0.blink != nil }
+        guard !read.isEmpty else { return " · blink n/a" }
+        func median(_ xs: [Double]) -> String {
+            let s = xs.sorted(); return s.isEmpty ? "n/a" : String(format: "%.2f", s[s.count / 2])
+        }
+        let smile = read.compactMap(\.mpSmile), jaw = read.compactMap(\.jaw)
+        return " · blink \(median(read.compactMap(\.blink))) (bar \(String(format: "%.2f", blinkShut)), "
+            + "shut \(read.filter { shut($0) }.count)/\(read.count)) · mp smile \(median(smile))"
+            + (jaw.isEmpty ? "" : " · jaw \(median(jaw))")
     }
 
     /// **The verdict on one take's frames** — pure, `FaceReadTests` is its spec.
@@ -160,35 +189,25 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// - smiled: ≥ 35 % of the face frames with the mouth ≥ `smileMouth` × his
     ///   usual width **and** the corners ≥ `smileCorners` mouth-widths above his
     ///   usual lift;
-    /// - tired: eyes under 0.55 × his usual opening in ≥ 30 % of the face
-    ///   frames, or a yawn — the mouth open ≥ 3 × his usual (and ≥ 0.35 of its
+    /// - tired: eyes shut (`shut`, MediaPipe's blink) in ≥ `eyesShutShare` of
+    ///   the face frames it read, or a yawn — the mouth open ≥ 3 × his usual (and ≥ 0.35 of its
     ///   width) in two frames running;
-    /// - away: ≥ 4 frames and a face in under 30 % of them, or a median face
-    ///   under 0.55 × his usual size.
+    /// A take with under 3 face frames says nothing (he looked away — no tag).
     static func judge(_ frames: [Frame], base: Baseline) -> Reading {
         let faces = frames.filter(\.face)
         var r = Reading(frames: frames.count, faces: faces.count)
         guard frames.count >= 4, base.takes >= Baseline.minTakes else { return r }
-        if Double(faces.count) < 0.3 * Double(frames.count) {
-            r.away = true
-            r.why.append("face in \(faces.count) of \(frames.count) frames")
-            return r
-        }
-        let sizes = faces.map(\.size).sorted()
-        let size = sizes[sizes.count / 2]
-        if base.size > 0, size < 0.55 * base.size {
-            r.away = true
-            r.why.append(String(format: "face %.2f of the frame (usual %.2f)", size, base.size))
-        }
+        guard faces.count >= 3 else { return r }
         let smiling = faces.filter { Self.smiling($0, base: base) }
         if Double(smiling.count) >= 0.35 * Double(faces.count) {
             r.smiled = true
             r.why.append("smiling in \(smiling.count) of \(faces.count) face frames")
         }
-        let closed = faces.filter { base.eye > 0 && $0.eye < 0.55 * base.eye }
-        if Double(closed.count) >= 0.3 * Double(faces.count) {
+        let read = faces.filter { $0.blink != nil }
+        let closed = read.filter { Self.shut($0) }
+        if read.count >= 3, Double(closed.count) >= eyesShutShare * Double(read.count) {
             r.tired = true
-            r.why.append("eyes closed in \(closed.count) of \(faces.count) face frames")
+            r.why.append("eyes closed in \(closed.count) of \(read.count) face frames")
         }
         let yawnBar = max(3 * base.mouthOpen, 0.35)
         var run = 0, yawned = false
@@ -258,6 +277,7 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             out.setSampleBufferDelegate(self, queue: queue)
             guard s.canAddOutput(out) else { return }
             s.addOutput(out)
+            FaceBlink.shared.prepare()
             frames = []
             began = CFAbsoluteTimeGetCurrent()
             lastFrame = 0
@@ -326,6 +346,9 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var frame = Frame(t: now - began, face: false)
         if let face = (request.results ?? []).max(by: { $0.boundingBox.width < $1.boundingBox.width }) {
             frame = Self.measure(face, t: now - began)
+        }
+        if let b = FaceBlink.shared.read(pixels), b.face {
+            frame.blink = b.blink; frame.mpSmile = b.smile; frame.jaw = b.jaw
         }
         if frames.count < 1200 { frames.append(frame) }
     }

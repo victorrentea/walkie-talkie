@@ -27,7 +27,7 @@ final class FaceReadTests: XCTestCase {
         for i in 0..<3 { frames[i].mouthWide = 0.48; frames[i].cornerLift = 0.08 }
         let line = FaceRead.ruler(frames, base: learned)
         XCTAssertTrue(line.hasPrefix("mouth 1.00× (bar 1.12) · corners +0.000 (bar +0.01)"), line)
-        XCTAssertTrue(line.hasSuffix("smiling 3/10 (need 35%)"), line)
+        XCTAssertTrue(line.hasSuffix("smiling 3/10 (need 35%) · blink n/a"), line)
         XCTAssertEqual(FaceRead.ruler([FaceRead.Frame(t: 0, face: false)], base: learned), "")
     }
 
@@ -57,6 +57,20 @@ final class FaceReadTests: XCTestCase {
         XCTAssertFalse(FaceRead.judge(frames, base: learned).smiled)
     }
 
+    func testVisionsEyeOutlineAloneNeverSaysTired() {
+        // 2026-11-20: Vision read his fully closed eyes as 0.92× open; it no longer decides.
+        var frames = (0..<10).map { usual(Double($0) / 2) }
+        for i in 0..<10 { frames[i].eye = 0.05 }
+        XCTAssertFalse(FaceRead.judge(frames, base: learned).tired)
+    }
+
+    func testOpenEyesByMediaPipeAreNotTired() {
+        var frames = (0..<10).map { usual(Double($0) / 2) }
+        for i in 0..<10 { frames[i].blink = i < 2 ? 0.9 : 0.1 }
+        XCTAssertFalse(FaceRead.judge(frames, base: learned).tired)
+        XCTAssertTrue(FaceRead.ruler(frames, base: learned).hasSuffix("blink 0.10 (bar 0.50, shut 2/10) · mp smile n/a"), FaceRead.ruler(frames, base: learned))
+    }
+
     func testOneWideFrameIsNotASmile() {
         var frames = (0..<10).map { usual(Double($0) / 2) }
         frames[3].mouthWide = 0.5; frames[3].cornerLift = 0.1
@@ -65,7 +79,7 @@ final class FaceReadTests: XCTestCase {
 
     func testClosedEyesOrAYawnAreTired() {
         var closed = (0..<10).map { usual(Double($0) / 2) }
-        for i in 0..<4 { closed[i].eye = 0.1 }
+        for i in 0..<10 { closed[i].blink = i < 4 ? 0.8 : 0.05 }
         XCTAssertTrue(FaceRead.judge(closed, base: learned).tired)
 
         var yawn = (0..<10).map { usual(Double($0) / 2) }
@@ -77,15 +91,14 @@ final class FaceReadTests: XCTestCase {
         XCTAssertFalse(FaceRead.judge(blink, base: learned).tired, "one blink is not tiredness")
     }
 
-    func testAwayFromTheScreen() {
+    func testLookingAwayIsNeverATag() {
+        // 2026-11-20: he looks out of the window while he thinks — no 🚶, nothing at all.
         var gone = (0..<10).map { FaceRead.Frame(t: Double($0) / 2, face: false) }
         gone[0] = usual(0)
-        XCTAssertTrue(FaceRead.judge(gone, base: learned).away)
+        XCTAssertNil(FaceRead.judge(gone, base: learned).tag)
 
         let far = (0..<10).map { i -> FaceRead.Frame in var f = usual(Double(i) / 2); f.size = 0.12; return f }
-        let r = FaceRead.judge(far, base: learned)
-        XCTAssertTrue(r.away)
-        XCTAssertEqual(r.tag, "[face: 🚶 away from the screen]")
+        XCTAssertNil(FaceRead.judge(far, base: learned).tag)
     }
 
     func testTooFewFramesSayNothing() {

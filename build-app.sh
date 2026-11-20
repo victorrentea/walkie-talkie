@@ -170,6 +170,8 @@ cp "$DIR/helpers/word_onsets.py" "$CONTENTS/Resources/word_onsets.py"
 cp "$DIR/helpers/session_search.py" "$CONTENTS/Resources/session_search.py"
 # 👂 "Hey Claude" (2026-11-12, `WakeWord`): run by its own venv, ~/.walkie-talkie/wake/venv.
 cp "$DIR/helpers/wake_word.py" "$CONTENTS/Resources/wake_word.py"
+# 🙂 Eyes shut, by MediaPipe (2026-11-20, `FaceBlink`): its own venv, ~/.walkie-talkie/face/venv.
+cp "$DIR/helpers/face_blink.py" "$CONTENTS/Resources/face_blink.py"
 # ▶️ YouTube for the ⚡ question's checks (2026-11-19, `QuickAsk.youTube`), copied to
 # ~/.walkie-talkie/quick/bin/ at first use.
 cp "$DIR/helpers/yt-transcript" "$CONTENTS/Resources/yt-transcript"
