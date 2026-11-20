@@ -634,6 +634,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   only (`swift tools/render-edge-dust.swift 2 <png> [level] [times…]` — renders the shader from between
   its markers); the live strip was not photographed (screen locked). Desk: `POST /test/edge-dust
   {"edge": "left"}`.
+- **The ⚡ marks stand upright, larger, in several cuts, drifting in and out** (2026-11-20, Victor:
+  *"vertical, mai mari, să se plimbe în afară și înăuntru"*, then *"un pic mai mari, eventual și de alte
+  tipuri de fonturi, mai mici, mai mari"*; he likes the multicolour as it is). `v7_qmark(g, R, hw, open)`
+  takes the cut; `v7_mark` draws one per 170 pt cell in **one of five cuts** (`cR`/`cHw`/`cOpen`: the
+  first one, heavy round, hairline, condensed, wide light) — **never slanted** (same morning: *"nu mai
+  de înclinat, doar schimbă fontul. Folosește patru, cinci fonturi diferite"*) —, scale ×1.45–2.35 (~90–175 pt tall); the
+  neighbouring cell is drawn too, since a tall mark spills past its own. Each bobs ±8 pt and slides (its clocks ×1.15, `pace`, *"mărește viteza cu 15%"*)
+  between its axis 10 pt past the edge and as far in as the 110 pt strip allows (`92 − halfW`); the
+  left mask fades from 80 % of the depth. No longer turned 90°.
 - **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece
   de sub mouse către centrul ecranului când apare. Zoomeze in"*). `flashQuestion` animates `stage`
   (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the

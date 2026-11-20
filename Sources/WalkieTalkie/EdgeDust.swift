@@ -337,7 +337,7 @@ final class EdgeDust {
         away.frame = strip.bounds
         away.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         // The question marks reach further in than the fire: faded only past most of their height.
-        away.locations = edge == .left ? [0, 0.7, 1] : [0, 0.3, 1]
+        away.locations = edge == .left ? [0, 0.8, 1] : [0, 0.3, 1]
         switch edge {
         case .top:   away.startPoint = CGPoint(x: 0.5, y: 1); away.endPoint = CGPoint(x: 0.5, y: 0)
         case .right: away.startPoint = CGPoint(x: 1, y: 0.5); away.endPoint = CGPoint(x: 0, y: 0.5)

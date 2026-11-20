@@ -214,46 +214,73 @@ static float v7_seg(float2 p, float2 a, float2 b) {
 }
 
 // A question mark standing upright in its own points (x across, y up, the dot's foot
-// near y = 0, ~62 tall): the signed distance to its stroke, negative inside.
-static float v7_qmark(float2 g) {
-    float2 c = float2(0.0, 49.0);
-    const float R = 15.0;
-    const float open = 2.97;   // 170°: the hook's free end, on the left
+// near y = 0): the signed distance to its stroke, negative inside. Its cut varies like a
+// typeface's (2026-11-20): `R` the hook's radius, `hw` the stroke's half-width, `open`
+// where the hook's free end stops. R 15, hw 4.2, 170° is the first one drawn (2026-11-19),
+// ~62 tall. Never slanted (Victor: *"nu mai de înclinat, doar schimbă fontul"*).
+static float v7_qmark(float2 g, float R, float hw, float open) {
+    float2 c = float2(0.0, 34.0 + R);
     float2 v = g - c;
     float ang = atan2(v.y, v.x);
-    // The hook: from the left (170°) over the top and down the right side to the bottom (−90°).
+    // The hook: from its free end on the left, over the top and down the right side to the bottom (−90°).
     float arc;
     if (ang >= -1.5708 && ang <= open) arc = abs(length(v) - R);
     else arc = min(length(g - (c + R * float2(cos(open), sin(open)))), length(g - (c + float2(0.0, -R))));
     float stem = v7_seg(g, float2(0.0, 34.0), float2(0.0, 25.0));
     // The dot well apart from the stem, or the grains run them into one line.
-    float dotd = length(g - float2(0.0, 7.0)) - 4.6;
-    return min(min(arc, stem) - 4.2, dotd);
+    float dotd = length(g - float2(0.0, 7.0)) - hw * 1.1;
+    return min(min(arc, stem) - hw, dotd);
 }
 
-// **The ⚡ question's edge** (2026-11-19): the left edge, its grains drawing question
-// marks turned 90° clockwise — the dot on the edge, the hook reaching in. One every
-// ~120 pt along the edge, each forming and crumbling back to dust on its own slow clock;
-// the voice makes them a little larger. A thin bed of dust runs along the edge under them.
-static float v7_marks(float a, float d, float t, float level, float k, float seed) {
-    const float S = 120.0;
-    float cellA = floor(a / S);
-    float la = a - (cellA + 0.5) * S + (v7_h(float2(cellA, 3.3)) - 0.5) * 34.0;
-    float sc = (0.92 + 0.3 * v7_h(float2(cellA, 8.1))) * (1.0 + 0.22 * level + 0.25 * k);
-    // Turned 90° clockwise: the glyph's up is away from the edge, its right is down the screen.
-    // 10 pt off the edge, so the dot stands clear of the bed of dust along it.
-    float2 g = float2(la, d - 10.0) / sc;
+// One mark: the one of cell `cell` (S points long), its density at (a, d).
+static float v7_mark(float cell, float S, float a, float d, float t, float level, float k, float seed, float f) {
+    float h1 = v7_h(float2(cell, 3.3)), h2 = v7_h(float2(cell, 8.1)), h3 = v7_h(float2(cell, 5.7));
+    // Its cut, one of five, like five typefaces: the first one drawn, a heavy round, a
+    // hairline, a condensed, a wide light one with the hook open further.
+    int cut = int(floor(v7_h(float2(cell, 2.9)) * 5.0));
+    const float cR[5]    = { 15.0, 16.5, 14.0, 12.5, 17.0 };
+    const float cHw[5]   = { 4.2,  5.8,  2.7,  3.6,  3.1 };
+    const float cOpen[5] = { 2.97, 3.05, 2.9,  2.7,  3.3 };
+    float R = cR[cut], hw = cHw[cut], open = cOpen[cut];
+    float sc = mix(1.45, 2.35, h2) * (1.0 + 0.12 * level + 0.12 * k);
+    float halfW = (R + hw) * sc;
+    float top = 34.0 + 2.0 * R + hw;
+    float mid = (7.0 - 1.1 * hw + top) * 0.5;
+    // Its clocks run 15 % faster since 2026-11-20 (`pace`).
+    const float pace = 1.15;
+    float bob = sin(pace * t * (0.30 + 0.20 * h3) + h1 * 6.2832) * 8.0;
+    // 0: its axis 10 pt past the edge (a third of it hidden or more) … 1: as far in as the
+    // strip lets it, wholly on the screen when it fits.
+    float inout = 0.5 + 0.5 * sin(pace * t * (0.20 + 0.14 * h2) + h3 * 6.2832 + seed);
+    float cx = mix(-10.0, max(-10.0, min(halfW + 6.0, 92.0 - halfW)), inout);
+    float la = a - (cell + 0.5) * S + (h1 - 0.5) * 20.0 + bob;
+    // Upright: the glyph's x runs away from the edge, its y up the screen (a runs down).
+    float2 g = float2((d - cx) / sc, mid - la / sc);
     // A little breath in the strokes, so the dots never sit still.
     g += (float2(v7_n(float2(a / 11.0, t * 0.7)), v7_n(float2(d / 11.0 + 5.0, t * 0.7))) - 0.5) * 3.0;
-    float sd = v7_qmark(g) * sc;
+    float sd = v7_qmark(g, R, hw, open) * sc;
     float shape = 1.0 - smoothstep(-1.5, 2.0, sd);
     float near = 1.0 - smoothstep(0.0, 12.0, sd);
     // Each mark's own clock: formed, then crumbling to loose dust, then formed again.
-    float pres = smoothstep(0.30, 0.62, v7_n(float2(cellA * 1.7 + seed, t * 0.21)));
-    float f = v7_fbm(float2(a / 15.0, (d - 14.0 * t) / 26.0));
+    float pres = smoothstep(0.30, 0.62, v7_n(float2(cell * 1.7 + seed, pace * t * 0.21)));
     float formed = shape * (0.80 + 0.30 * f);
     float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
-    float dens = mix(loose, max(formed, loose * 0.5), pres);
+    return mix(loose, max(formed, loose * 0.5), pres);
+}
+
+// **The ⚡ question's edge** (2026-11-19; upright, larger, drifting since 2026-11-20): the
+// left edge, its grains drawing question marks standing upright, one every 170 pt along
+// the edge, each in one of five cuts and its own size (~90–175 pt tall). Each floats on its own slow
+// clocks: a little up and down, and in and out of the edge — from a third hidden past it
+// to as far in as the strip allows — while it forms and crumbles back to dust. The voice
+// makes them a little larger. A thin bed of dust runs along the edge under them.
+static float v7_marks(float a, float d, float t, float level, float k, float seed) {
+    // A tall mark spills past its cell: its neighbour on the nearer side is drawn too.
+    const float S = 170.0;
+    float cellA = floor(a / S);
+    float other = (a - cellA * S) < S * 0.5 ? cellA - 1.0 : cellA + 1.0;
+    float f = v7_fbm(float2(a / 15.0, (d - 14.0 * t) / 26.0));
+    float dens = max(v7_mark(cellA, S, a, d, t, level, k, seed, f), v7_mark(other, S, a, d, t, level, k, seed, f));
     float bed = (1.0 - smoothstep(0.0, 14.0, d)) * (0.20 + 0.45 * f) * (0.8 + 0.4 * level);
     return clamp(max(dens, bed), 0.0, 1.0);
 }

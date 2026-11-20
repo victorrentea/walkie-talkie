@@ -16503,3 +16503,20 @@ while fading out so that I can read it. As it goes, as it moves up, it's very ha
   → a top-level tick **💸 Turn cost** after 🐋 Orca (`UserDefaults` `turnCost`, on by default);
   `WT_TURN_COST` still overrides it for a test.
 - Then: *"Pune acest emoji [💰] înainte de cifre în … badge-urile care zic costul."* → `💰 $1.40 · …`.
+
+## ⚡ The question's marks: upright, larger, five cuts, drifting in and out (2026-11-20)
+
+Victor, on the left-edge marks of 2026-11-19: *"să fie niște semne de întrebare … care se mișcă vag,
+plutesc un pic, apar, dispar, făcute tot cu același gen de punctulețe … multicolore. Îmi place foarte
+mult cum e. … le vreau verticale, mai mari, și să se plimbe în afară și înăuntru"*; seeing the first
+cut: *"Arată bine … un pic mai mari, eventual și de alte tipuri de fonturi, mai mici, mai mari."*;
+then *"nu vreau să înclini … mărește viteza cu 15% … a mișcărilor. Nu mai de înclinat, doar schimbă
+fontul. Folosește patru, cinci fonturi diferite, mai gros, mai subțire"*.
+
+- Upright instead of turned 90° clockwise; one per 170 pt, each in one of five fixed cuts (the first
+  one, heavy round, hairline, condensed, wide light — hook radius, stroke weight, where the hook
+  ends) and its own size (~90–175 pt tall). An italic lean was tried for one build and removed.
+- Each bobs a little and slides in and out of the edge on its own slow clocks, a third or more hidden
+  at the outer end, while it forms and crumbles; all three clocks ×1.15.
+- A tall mark spills out of its cell, so the shader draws the nearer neighbour's mark too.
+- Checked offline with `tools/render-edge-dust.swift 2` at t = 1…24 s.
