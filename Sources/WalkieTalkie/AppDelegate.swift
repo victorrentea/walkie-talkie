@@ -3655,6 +3655,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.settling || self.panelsComing > 0 || self.deliveriesInFlight > 0 || self.spawnsInFlight > 0
                 || self.spawnPending || self.overlay.sentPromptFrame != nil
         }
+        // **The ⚡ question's edge stays while its reply pop-up does** (2026-11-20): through
+        // the transcription, the answer, 🌐, 😠 and every 🪏 more, until the pop-up is closed.
+        edgeDust.holds = { edge in edge == .left && ReplyPanel.quickShown }
+        ReplyPanel.onClosed = { [weak self] in
+            // A follow-up (🔼 → over it) closes the pop-up and opens the next question at
+            // once — that sentence takes the edge back; only a close with nothing after it ends it.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                guard let self, !self.listening, !self.source.isRecording, !ReplyPanel.quickShown else { return }
+                self.edgeDust.release(.left, why: "the ⚡ reply pop-up is closed")
+            }
+        }
         // The F7/F9 preview listens to the room rather than to a clip — a meter
         // of its own, so it never touches a dictation's recorder.
         caretHalo.previewMic = MicRecorder()

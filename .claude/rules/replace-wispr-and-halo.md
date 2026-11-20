@@ -656,6 +656,14 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   (every edge, not only the left) — the rest of the cancel's graphics still vanish at once. The ⚡
   question's edge ends by `cut` every time (its stop reaches `cancelDictationInFlight`), which is why
   it read as brutal. Offline: `swift tools/render-edge-dust.swift 2 <png> 0.3 1 2 3 4 5 6` (a 240 pt strip).
+- **The ⚡ left edge stays until the reply pop-up is closed** (2026-11-20, Victor: *"the question mark
+  that comes from the left should appear … until I close the answer panel … even if I ask you to dig
+  again … during your transcription process, your searching, your initial response"*). It went ~2 s
+  after the stop (`patience`), before the answer. `EdgeDust.holds` (`edge == .left &&
+  ReplyPanel.quickShown`) keeps the waiting edge's `lastPending` fresh and lifts the 90 s `ceiling`;
+  `ReplyPanel.onClosed` → `EdgeDust.release(.left)` 0.25 s later (`quietFade`) unless a sentence is
+  open — 🔼 → over the pop-up closes it and opens the follow-up, which takes the edge back. 🔼 ← still
+  cuts it. Log `🌫️ the left edge goes — the ⚡ reply pop-up is closed`.
 - **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece
   de sub mouse către centrul ecranului când apare. Zoomeze in"*). `flashQuestion` animates `stage`
   (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the

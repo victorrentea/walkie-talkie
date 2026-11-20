@@ -75,6 +75,12 @@ final class EdgeDust {
     var samples: (() -> [Float]?)?
     /// Something of the sentence is still on its way: transcribing, held, being typed.
     var stillPending: (() -> Bool)?
+    /// **What the sentence put on the screen still stands**, so its edge does too, with
+    /// no ceiling: the ⚡ question's reply pop-up holds the left edge until it is closed
+    /// (2026-11-20, Victor: *"the question mark that comes from the left should appear
+    /// … until I close the answer panel … even if I ask you to dig again … during your
+    /// transcription process, your searching, your initial response"*).
+    var holds: ((Edge) -> Bool)?
 
     private enum Phase: String { case down, listening, waiting, leaving }
     private var phase: Phase = .down
@@ -135,6 +141,13 @@ final class EdgeDust {
     func sent() {
         guard phase == .listening || phase == .waiting else { return }
         leave(sent: true, why: "the message is in")
+    }
+
+    /// What held `edge` is gone (the ⚡ pop-up closed): out now, quietly, rather than
+    /// after the poll's `patience`. Nothing while a sentence is being said on it.
+    func release(_ edge: Edge, why: String) {
+        guard phase == .waiting, self.edge == edge else { return }
+        leave(sent: false, why: why)
     }
 
     /// Battery, a cancel that must not wait for the poll.
@@ -259,7 +272,10 @@ final class EdgeDust {
         let t = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
             guard let self, self.phase == .waiting else { return }
             let now = CFAbsoluteTimeGetCurrent()
-            if self.stillPending?() == true { self.lastPending = now }
+            let held = self.edge.map { self.holds?($0) == true } ?? false
+            if held || self.stillPending?() == true { self.lastPending = now }
+            // The ceiling is for a confirmation that never came; a held edge waits on him.
+            if held { self.waitingFrom = now }
             if now - self.lastPending > Self.patience { self.leave(sent: false, why: "nothing of the sentence is on its way") }
             else if now - self.waitingFrom > Self.ceiling { self.leave(sent: false, why: "no confirmation in \(Int(Self.ceiling)) s") }
         }

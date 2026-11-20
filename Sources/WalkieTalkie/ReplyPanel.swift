@@ -141,6 +141,12 @@ enum ReplyPanel {
         return p.frame.insetBy(dx: -8, dy: -8).contains(NSEvent.mouseLocation)
     }
 
+    /// **A ⚡ quick answer is on the screen**, being written or done — it holds the
+    /// question's left edge (`EdgeDust.holds`, 2026-11-20). Main thread.
+    static var quickShown: Bool { panel != nil && openLabel?.hasPrefix(quickMark) == true }
+    /// After every close of a shown pop-up (✕, a click, 🔼 → over it, ☠️, the desk).
+    static var onClosed: (() -> Void)?
+
     /// **The 📍 binds that terminal** (2026-10-08, Victor: *"the new icon … next
     /// to the death face … would rebind me, but it only displays if I'm not
     /// already bound to that terminal … the [pin] that shows caret"*) —
@@ -1218,6 +1224,8 @@ enum ReplyPanel {
 
     static func close() {
         hideHint()
+        let wasShown = panel != nil
+        defer { if wasShown { onClosed?() } }
         panel?.orderOut(nil)
         panel = nil
         if liveOpen {
