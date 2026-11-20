@@ -375,7 +375,9 @@ final class CornerTunnel {
         let hiding = turn
         Log.info("🌀 the corner tunnel goes")
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = Self.fadeOut
+            // The dust turns on for half a lap while it fades (2026-11-20, as the pointer's own wheel).
+            ctx.duration = self.built == .dust ? Self.dustLap / 2 : Self.fadeOut
+            ctx.timingFunction = CAMediaTimingFunction(name: .linear)
             p.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             guard let self, self.turn == hiding else { return }

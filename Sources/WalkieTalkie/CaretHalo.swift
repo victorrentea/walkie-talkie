@@ -1677,6 +1677,7 @@ final class CaretHalo {
             guard let self, self.closingGeneration == generation, !self.live, self.cornerFlight != nil else { return }
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = Self.cornerFlightFade
+                ctx.timingFunction = CAMediaTimingFunction(name: .linear)
                 panel.animator().alphaValue = 0
             } completionHandler: { [weak self] in
                 guard let self, self.closingGeneration == generation, !self.live else { return }
@@ -1695,7 +1696,10 @@ final class CaretHalo {
         }
     }
     static let cornerFlightTime: TimeInterval = 0.7
-    static let cornerFlightFade: TimeInterval = 0.6
+    /// **Half a lap, fading as it turns** (2026-11-20, Victor: *"când dispare, acel loading icon
+    /// făcut cu dust să facă fade out, să mai facă încă o jumătate de tur, … să se piardă, nu să
+    /// dispară brusc"*): 0.6 s eased in and out read as a cut. Linear over `dustLap` / 2.
+    static let cornerFlightFade: TimeInterval = CornerTunnel.dustLap / 2
     /// How long the arrived dust stays whole over the wheel before it fades.
     static let cornerFlightLinger: TimeInterval = 0.25
     /// The flight has begun; the argument is when the dust is there.

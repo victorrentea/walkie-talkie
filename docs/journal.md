@@ -16520,3 +16520,11 @@ fontul. Folosește patru, cinci fonturi diferite, mai gros, mai subțire"*.
   at the outer end, while it forms and crumbles; all three clocks ×1.15.
 - A tall mark spills out of its cell, so the shader draws the nearer neighbour's mark too.
 - Checked offline with `tools/render-edge-dust.swift 2` at t = 1…24 s.
+
+## 🌀 The dust wheel turns half a lap while it fades (2026-11-20)
+
+Victor: *"când dispare acel loading icon făcut cu dust să facă fade out, să mai facă încă o jumătate
+de tur, și apoi să se piardă, practic, nu să dispară brusc."* `CaretHalo.cornerFlightFade` was 0.6 s
+eased in-out (a third of a lap, most of the drop in the middle) and read as a cut. Now it is
+`CornerTunnel.dustLap / 2` = 0.8 s, linear, while the stamp keeps going round; `CornerTunnel.hide`
+does the same for its own Dust (the tunnel keeps 0.25 s).
