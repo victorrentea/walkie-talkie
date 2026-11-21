@@ -15,8 +15,9 @@ final class WhisperModelsTests: XCTestCase {
     func testTitleIsReadFromTheCard() throws {
         let c = try XCTUnwrap(WhisperModels.Card.parse(Data(card.utf8)))
         let option = WhisperModels.Option(id: "/x/whisper-turbo-victor", card: c)
-        // The card's old `label` / `short` no longer name it (2026-10-07).
-        XCTAssertEqual(StatusItem.localRowTitle(option, loading: false), "💻 Local Turbo LoRA")
+        // The card's old `label` / `short` no longer name it (2026-10-07); the menu spells
+        // the local model `V3 …`, no `Local` after the 💻 (2026-11-21, `StatusItem.menuName`).
+        XCTAssertEqual(StatusItem.localRowTitle(option, loading: false), "💻 V3 Turbo LoRA")
         // An old flat card still renders, in sections (2026-10-21).
         XCTAssertTrue(option.details.hasPrefix("Local Turbo LoRA\n\nWHAT\nBase: openai/whisper-large-v3-turbo\n"))
         XCTAssertTrue(option.details.contains("Method: LoRA r=32"))
@@ -28,7 +29,8 @@ final class WhisperModelsTests: XCTestCase {
     func testOriginalIsNamedAsSuch() {
         XCTAssertEqual(StatusItem.localRowTitle(WhisperModels.Option(id: WhisperModels.original, card: nil),
                                                 loading: false),
-                       "💻 Local Turbo")
+                       "💻 V3 Turbo")
+        // The panel, the tabs and the envelope keep their own name.
         XCTAssertEqual(WhisperModels.displayName(WhisperModels.original), "Local Turbo")
         let noLabel = WhisperModels.Card(name: "x-model")
         XCTAssertEqual(WhisperModels.Option(id: "/m/x", card: noLabel).title, "x-model")

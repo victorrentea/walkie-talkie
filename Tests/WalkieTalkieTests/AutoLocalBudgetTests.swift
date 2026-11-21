@@ -88,7 +88,7 @@ final class AutoLocalBudgetTests: XCTestCase {
         XCTAssertEqual(AutoLocal.rowText(countdown: 0, loading: false, keys: "⌘⌃X"), "local now / ⌘⌃X ...")
         XCTAssertEqual(AutoLocal.rowText(loading: false, keys: "⌘⌃X"), "Local now  ⌘⌃X")
         XCTAssertEqual(AutoLocal.rowText(loading: true, keys: "⌘⌃X"), "Local now (loading)  ⌘⌃X")
-        XCTAssertEqual(AutoLocal.menuTitle, "Backup Local Pre-Transcribe")
+        XCTAssertEqual(AutoLocal.menuTitle, "Fallback ☁️ → 💻 (Pre-Transcribe)")
     }
 
     /// 2026-10-10: a clean sentence on Wispr waits ≥ 5 s for the formatted words; nothing else does.

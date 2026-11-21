@@ -19,12 +19,32 @@ from the image of the Logi mouse I have. The sketch animated … in a window tha
 user clicks the menu entry. You can remove most of those things in there and bring the options
 that are right now in engine top level."*
 
-- **The menu, top to bottom:** header · Bind / Disconnect / Rebind to… · Paste last prompt /
-  Prompt History ▸ / Recover Dictation / Replay Last Dictation · End Dictation / Cancel Dictation ·
-  Mic ▸ / Engine ▸ / Last used / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
-  **the five engine switches** (Backup Local Pre-Transcribe, Live captions (local), ✍️ Edit plain
-  dictation, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Orca (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed, 💸 Turn cost since 2026-11-20 — `TurnCost.enabled`, on by default) · **Gesture Guide** · **Editor Dictionary** · `Built …` · Quit.
-- **`Editor Dictionary`** (2026-11-19, Victor: *"un mode în care să văd și dicționarul redactorului,
+- **The menu, top to bottom (2026-11-21):** header · Paste last prompt ⌘V / Prompt History (opens the
+  Full Log, no submenu) / Recover Dictation / Replay Last Heard Audio · Mic ▸ / Engine ▸ / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
+  **the engine switches** (Live captions (local), 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Orca (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed, 💸 Turn cost since 2026-11-20 — `TurnCost.enabled`, on by default) · **Gesture Guide** · `Built …` · Quit.
+- **Bind / Disconnect / Rebind to… / End / Cancel Dictation are off the menu** (2026-11-21, Victor:
+  *"nu folosesc niciodată … end dictation, cancel dictation … bind terminal, disconnect, rebind to …
+  folosesc din mouse direct"*) — the items are still built and kept in step, only not added; this
+  supersedes *End / Cancel stay as the rescue* below. **`Paste last prompt` shows ⌘V** (*"pune
+  shortcut-ul lângă"* — the clipboard holds the sentence, Q17); **`Prompt History` opens the Full Log
+  on the click** (no submenu); **`Replay Last Dictation` → `Replay Last Heard Audio`**.
+- **`Fallback ☁️ → 💻 (Pre-Transcribe)` is inside `Engine ▸` again, above `Last used`** (2026-11-21,
+  Victor: *"poți să spui pre-transcribe. Nu backup … fall back, remote to local … mută-l în meniul de
+  engine"*) — `AutoLocal.menuTitle`, the top-level `Backup Local Pre-Transcribe` since 2026-11-12.
+  The Engine list now reads: engines · — · Fallback ☁️ → 💻 · Last used · 🧾 quota · — · ✍️ Redactor ·
+  Redactor Dictionary.
+- **`Last used` is inside `Engine ▸`, above the 🧾 quota; the menu names a local model `💻 V3 Large LoRA`**
+  (2026-11-21, Victor: *"pune Last Used înăuntrul meniului de Engine … scoate local … dacă pui laptop în
+  față, nu mai e nevoie de local"*, then *"zi doar Engine: V3 Large LoRA, așa se scrie, fără 3,5 giga"*):
+  `StatusItem.menuName` turns `Local [Whisper] Turbo|Large…` into `V3 …` on the Engine rows, the
+  `Engine:` title and `Last used`; **no GB on the `Engine:` row any more** (the tooltip keeps the RAM).
+  The panel, the tabs and the envelope keep their own names.
+- **`✍️ Redactor` and `Redactor Dictionary` live inside `Engine ▸`, at its foot under a separator**
+  (2026-11-21, Victor: *"hai să-l numim redactor … îl pui sub engine înăuntru … Redactor Dictionary.
+  Tot așa pune-l în Engine"*) — they were the top-level `✍️ Edit plain dictation (Haiku)` tick and
+  `Editor Dictionary` under Gesture Guide. `applyEngineRow` re-adds both items after the 🧾 quota;
+  `engineSubmenu.autoenablesItems = false` so the dictionary row really greys without `walkie-dict`.
+- **`Redactor Dictionary`** (`Editor Dictionary` until 2026-11-21; 2026-11-19, Victor: *"un mode în care să văd și dicționarul redactorului,
   ideal și cu sursa+timpul când a fost învățat sau dedus"*) runs `~/.local/bin/walkie-dict show`
   with `/usr/bin/python3` (3.9 — keep the script 3.9-clean) and opens
   `~/Library/Caches/ro.victorrentea.wispr-relay/dictionary.html`, generated on the click like the
@@ -41,7 +61,7 @@ that are right now in engine top level."*
   `onToggleScreenRecording`, `onLocalNow`, `isFilming`), and the whole one-glyph shortcut column
   (`gestureRows`, `Chord`, `applyGestureColumn`). **No row carries a chord.** End / Cancel stay as
   the rescue for a sentence the mouse can no longer end.
-- **`Engine ▸` is the engines and the 🧾 quota only**; the five switches are top-level ticks
+- **`Engine ▸` is the engines, the 🧾 quota and, since 2026-11-21, ✍️ Redactor + its dictionary**; the other switches are top-level ticks
   (`applySwitchRows`, at every open, `checkmark`/blank like Autosend).
 - **`GestureGuide`**: a `.nonactivatingPanel` holding a `WKWebView` (the page is only a drawing
   surface — nothing fetched, links open in the browser). Each card animates one gesture on
@@ -349,7 +369,9 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   in that same order**, because `InputDevice.known` is the one list that is both the menu and the
   ladder; a menu ordered differently from the automatic pick would teach the wrong preference every
   time he opened it. → journal: same
-- **An absent device is disabled *and says why*** — `🎤 DJI — not connected`. A
+- **An absent device is disabled, and grey is the whole of it** (2026-11-21, Victor: *"e evident că e
+  not connected, că e gri … zi doar DJI"*) — supersedes the bullet's old half: no ` — not connected`
+  after the name, here or in Victor Mac' 🎙️ menu. Until then: `🎤 DJI — not connected`. A
   grey row with no explanation is indistinguishable from a broken one, and the explanation is the
   only thing he can act on: it is a cable. → journal: same
 - **Two names per device, `Engine`'s rule applied here** — the top row gets `short`

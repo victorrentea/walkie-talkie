@@ -51,8 +51,10 @@ enum AutoLocal {
         set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
     }
 
-    /// The Engine submenu's row title.
-    static let menuTitle = "Backup Local Pre-Transcribe"
+    /// The Engine submenu's row title. **`Fallback ☁️ → 💻` since 2026-11-21** (Victor: *"poți să
+    /// spui pre-transcribe. Nu backup, ceva de genul fall back, remote to local … mută-l în
+    /// meniul de engine"*) — it was the top-level `Backup Local Pre-Transcribe`.
+    static let menuTitle = "Fallback ☁️ → 💻 (Pre-Transcribe)"
 
     /// **The chip's ⌘⌃X row.** With a decode ahead armed for this sentence it
     /// counts down to the budget — `💻 local in 3s / ⌘⌃X ...` (2026-10-07,

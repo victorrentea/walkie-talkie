@@ -209,7 +209,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let recoverDictation = NSMenuItem(title: "Recover Dictation",
                                               action: nil, keyEquivalent: "")
     /// One row that renames itself, like `Record Screen`: one verb, one thing playing.
-    private let replayLast = NSMenuItem(title: "Replay Last Dictation",
+    private let replayLast = NSMenuItem(title: "Replay Last Heard Audio",
                                         action: nil, keyEquivalent: "")
     /// The last dictation, again — see `AppDelegate.pasteLastDictation`. Greyed
     /// until there is one, like every other row that cannot act right now.
@@ -432,8 +432,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // **The absent ones say why they are grey.** A disabled row with no
             // explanation is indistinguishable from a broken one, and the
             // explanation is the only thing he can act on — it is a cable.
-            let row = NSMenuItem(title: here ? "\(device.glyph) \(device.label)"
-                                             : "\(device.glyph) \(device.label) — not connected",
+            // **Grey alone says it** (2026-11-21, Victor: *"e evident că e not connected, că e gri …
+            // nu mai zi not connected … zi doar DJI"*) — no `— not connected` after the name.
+            let row = NSMenuItem(title: "\(device.glyph) \(device.label)",
                                  action: #selector(micPicked(_:)), keyEquivalent: "")
             row.target = self
             row.representedObject = device.id
@@ -853,14 +854,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// învățat sau dedus"*): `walkie-dict show` puts it together on the click — who taught each
     /// word (an agent and the dictation it heard wrong, the weekly harvest, Wispr, the seed),
     /// when, and the pairs the harvest is still counting — and opens it in the browser.
-    private let dictionaryRow = NSMenuItem(title: "Editor Dictionary", action: nil, keyEquivalent: "")
+    /// **`Redactor Dictionary`, inside `Engine ▸` under `✍️ Redactor`** (2026-11-21, Victor: *"Redactor
+    /// Dictionary. Tot așa pune-l în Engine"*) — it was `Editor Dictionary`, top level under Gesture Guide.
+    private let dictionaryRow = NSMenuItem(title: "Redactor Dictionary", action: nil, keyEquivalent: "")
     static var walkieDict: String { FileManager.default.homeDirectoryForCurrentUser.path + "/.local/bin/walkie-dict" }
 
     /// **The engine switches, top level since 2026-11-12** — they sat under
     /// `Engine` beside the engines; `applySwitchRows` ticks them at every open.
     private let autoLocalRow = NSMenuItem(title: AutoLocal.menuTitle, action: nil, keyEquivalent: "")
     private let liveRow = NSMenuItem(title: LocalLive.menuTitle, action: nil, keyEquivalent: "")
-    private let editorRow = NSMenuItem(title: "✍️ Edit plain dictation (Haiku)", action: nil, keyEquivalent: "")
+    /// **`✍️ Redactor`, inside `Engine ▸`** (2026-11-21, Victor: *"hai să-l numim redactor … îl pui sub
+    /// engine înăuntru"*) — it was the top-level tick `✍️ Edit plain dictation (Haiku)`; Haiku is on the tooltip.
+    private let editorRow = NSMenuItem(title: "✍️ Redactor", action: nil, keyEquivalent: "")
     private let wakeRow = NSMenuItem(title: WakeWord.menuTitle, action: nil, keyEquivalent: "")
     private let gepettoRow = NSMenuItem(title: WakeWord.gepettoMenuTitle, action: nil, keyEquivalent: "")
     private let faceRow = NSMenuItem(title: FaceRead.menuTitle, action: nil, keyEquivalent: "")
@@ -914,7 +919,9 @@ final class StatusItem: NSObject, NSMenuDelegate {
         bind.image = Self.symbolIcon("link")
         bind.action = #selector(bindClicked)
         bind.target = self
-        menu.addItem(bind)
+        // **Bind / Disconnect / Rebind to… / End / Cancel are off the menu** (2026-11-21, Victor:
+        // *"nu folosesc niciodată … end dictation, cancel dictation … bind terminal, disconnect,
+        // rebind to … folosesc din mouse direct"*): built and kept in step, never added.
 
         // **Directly under Connect, because it is the same question answered the
         // other way.** It stops the words going to *that terminal* and hands them
@@ -928,7 +935,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         disconnect.action = #selector(disconnectClicked)
         disconnect.target = self
         disconnect.isEnabled = false
-        menu.addItem(disconnect)
 
         // **Under Disconnect, because it is the third answer to the same
         // question.** Connect points at what is in front, Disconnect lets go, and
@@ -937,7 +943,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         rebind.image = Self.symbolIcon("clock.arrow.circlepath")
         rebind.action = #selector(rebindListClicked)
         rebind.target = self
-        menu.addItem(rebind)
 
         // **The menu holds commands and settings, not the gestures** (2026-11-12,
         // Victor: *"The Walkie Talkie menu is huge and useless … prefer to have a
@@ -973,24 +978,24 @@ final class StatusItem: NSObject, NSMenuDelegate {
         pasteLast.action = #selector(pasteLastClicked)
         pasteLast.target = self
         pasteLast.isEnabled = false
-        menu.addItem(.separator())
+        // **⌘V beside it** (2026-11-21, Victor: *"Paste last prompt … e chiar Command V … pune
+        // shortcut-ul lângă"*): the clipboard holds the sentence (Q17), so ⌘V is what it does.
+        pasteLast.keyEquivalent = "v"
+        pasteLast.keyEquivalentModifierMask = [.command]
         menu.addItem(pasteLast)
 
         // **Prompt History under Paste last prompt** (2026-09-22, Victor). The
         // row itself does nothing — AppKit gives a parent row's click to its
         // submenu, so `Full Log` inside is the one way to the page. The submenu
         // is filled on hover; see `menuNeedsUpdate`.
+        // **No submenu since 2026-11-21** (Victor: *"în loc de Prompt History cu submeniu, pune doar
+        // Prompt History și se deschide Full Log"*): the click opens the page.
         messageLog.image = Self.symbolIcon("scroll")
-        messageLog.submenu = promptHistorySubmenu
-        promptHistorySubmenu.delegate = self
-        applyPromptHistoryRow()
+        messageLog.action = #selector(messageLogClicked)
+        messageLog.target = self
         menu.addItem(messageLog)
         menu.addItem(recoverDictation)
         menu.addItem(replayLast)
-
-        menu.addItem(.separator())
-        menu.addItem(stopRecording)
-        menu.addItem(cancelDictation)
 
         menu.addItem(.separator())
 
@@ -1019,6 +1024,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         engineItem.image = Self.symbolIcon("waveform")
         engineItem.submenu = engineSubmenu
+        // Off, so `Redactor Dictionary` greys when `walkie-dict` is missing (the mic list's trap).
+        engineSubmenu.autoenablesItems = false
         // 🧾 the account's quota, drawn at the foot of the list — fetched off
         // the main thread; a fetch that lands while the list is open repaints
         // the row in place (`applyQuotaRow`).
@@ -1030,7 +1037,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         lastUsedItem.image = Self.symbolIcon("clock.arrow.circlepath")
         lastUsedItem.isEnabled = false
         applyLastUsedRow()
-        menu.addItem(lastUsedItem)
 
         logiGestures.image = Self.symbolIcon("computermouse")
         logiGestures.submenu = gesturesSubmenu
@@ -1070,10 +1076,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // top level"*). The Engine list is the engines and the quota again;
         // these are ticks like Autosend, drawn the same way, re-read at every
         // open (`applySwitchRows`).
-        for row in [autoLocalRow, liveRow, editorRow, wakeRow, gepettoRow, faceRow, orcaRow, turnCostRow] {
+        for row in [liveRow, wakeRow, gepettoRow, faceRow, orcaRow, turnCostRow] {
             row.target = self
             menu.addItem(row)
         }
+        autoLocalRow.target = self
         autoLocalRow.action = #selector(autoLocalClicked)
         liveRow.action = #selector(localLiveClicked)
         editorRow.action = #selector(editorClicked)
@@ -1096,7 +1103,6 @@ final class StatusItem: NSObject, NSMenuDelegate {
         dictionaryRow.image = Self.symbolIcon("character.book.closed")
         dictionaryRow.action = #selector(dictionaryClicked)
         dictionaryRow.target = self
-        menu.addItem(dictionaryRow)
 
         // The stamp answers "am I looking at what I just built?" without a click;
         // the click opens the guide at its foot, where the build and the
@@ -1217,7 +1223,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         quota.image = Self.blankIcon
         quotaRow = quota
         applyQuotaRow()
+        // **`Fallback ☁️ → 💻 (Pre-Transcribe)` back inside the list** (2026-11-21) — top
+        // level from 2026-11-12 as `Backup Local Pre-Transcribe`; ticked by `applySwitchRows`.
+        engineSubmenu.addItem(autoLocalRow)
+        // **`Last used` under the engines, inside the list** (2026-11-21, Victor: *"pune Last
+        // Used înăuntrul meniului de Engine"*) — a top-level row under `Engine` until then.
+        engineSubmenu.addItem(lastUsedItem)
         engineSubmenu.addItem(quota)
+        // ✍️ The redactor and its dictionary, at the foot of the list (2026-11-21) — what
+        // happens to the words after the engine. The tick is `applySwitchRows`'.
+        engineSubmenu.addItem(.separator())
+        engineSubmenu.addItem(editorRow)
+        engineSubmenu.addItem(dictionaryRow)
     }
 
     /// **Whether the list offers Wispr Flow as a row of its own** — hidden since
@@ -1312,7 +1329,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// the model's name, no `Local`; **the laptop first since 2026-10-09**, see
     /// `cloud`/`local`), with the ⏳ while the picked model loads.
     static func localRowTitle(_ option: WhisperModels.Option, loading: Bool) -> String {
-        "\(local) \(option.title)" + (loading ? " ⏳" : "")
+        "\(local) \(menuName(option.title))" + (loading ? " ⏳" : "")
+    }
+
+    /// **No `Local` after the 💻 in this menu** (2026-11-21, Victor: *"lasă doar Large LoRA.
+    /// Scoate local … dacă pui laptop în față, nu mai e nevoie de local"*): `💻 Large LoRA`,
+    /// `💻 Turbo` — for the Engine rows, the Engine title and `Last used`. **Spelled
+    /// `V3 Large LoRA`** (same minute: *"zi doar Engine: V3 Large LoRA, așa se scrie"*):
+    /// `💻 V3 Turbo`, `💻 V3 Turbo LoRA`, `💻 V3 Large LoRA`.
+    static func menuName(_ s: String) -> String {
+        s.replacingOccurrences(of: "Local (Whisper )?(?=Turbo|Large)", with: "V3 ", options: .regularExpression)
+            .replacingOccurrences(of: "Local Whisper ", with: "")
+            .replacingOccurrences(of: "Local ", with: "")
     }
 
     /// **Every engine name starts with where it runs** (2026-10-09, Victor: *"be
@@ -1727,14 +1755,13 @@ final class StatusItem: NSObject, NSMenuDelegate {
         // `v3-turbo💻 1.5 GB`, `v3-turbo-victor💻 1.5 GB`, `v3-victor💻 2.9 GB`:
         // the same name as everywhere else since 2026-10-07 (`Turbo LoRA Victor`
         // 2026-10-05, `V3t…` 2026-10-04, *"fara ( ) in jurul GB"*).
-        let name = "\(Self.local) " + WhisperModels.displayName(WhisperModels.selected)
-        if engineLoading { return name + " loading…" }
-        guard let bytes = whisperFootprint?() else { return name }
-        return name + String(format: " %.1f GB", Double(bytes) / 1_073_741_824)
+        // **No RAM on the row since 2026-11-21** (Victor: *"fără 3,5 giga"*) — the tooltip keeps it.
+        let name = "\(Self.local) " + Self.menuName(WhisperModels.displayName(WhisperModels.selected))
+        return engineLoading ? name + " loading…" : name
     }
 
     private func applyLastUsedRow() {
-        lastUsedItem.title = "Last used: " + (lastEngineUsed?() ?? "—")
+        lastUsedItem.title = "Last used: " + (lastEngineUsed?().map(Self.menuName) ?? "—")
     }
 
     @objc private func enginePicked(_ sender: NSMenuItem) {
@@ -1765,7 +1792,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         recoverDictation.isEnabled = !recording && (isRecoverable?() ?? false)
         let replaying = isReplaying?() ?? false
         replayLast.isEnabled = replaying || (isReplayable?() ?? false)
-        replayLast.title = replaying ? "Stop Replay" : "Replay Last Dictation"
+        replayLast.title = replaying ? "Stop Replay" : "Replay Last Heard Audio"
         replayLast.image = Self.symbolIcon(replaying ? "stop.circle" : "play.circle")
     }
 
@@ -2008,7 +2035,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         let dictInstalled = FileManager.default.fileExists(atPath: Self.walkieDict)
         dictionaryRow.isEnabled = dictInstalled
         dictionaryRow.toolTip = dictInstalled
-            ? "Every word the ✍️ editor knows: who taught it (an agent, the weekly harvest, Wispr), when, and the dictation it came from."
+            ? "Every word the ✍️ Redactor knows: who taught it (an agent, the weekly harvest, Wispr), when, and the dictation it came from."
             : "walkie-dict is not installed at ~/.local/bin"
         applyHeader()
         applyAutoAttachRows()
