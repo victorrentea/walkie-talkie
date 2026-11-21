@@ -989,6 +989,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 🔼 ↓ was made during this sentence: it goes out with `kamikaze` on a
     /// line of its own, the agent's cue to close its terminal when it is done.
     /// Main-thread state, like `listening` and `settling` it is gated on.
+    /// 🧠 This sentence switches its session's model (🔽 → while it records, 2026-11-21).
+    private var modelPick: ModelPick? {
+        didSet { if modelPick != oldValue { overlay.setModelSwitch(modelPick?.label) } }
+    }
     private var kamikaze = false {
         didSet { if kamikaze != oldValue { overlay.setKamikaze(kamikaze) } }
     }
@@ -1489,6 +1493,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// footer line (`terminalLine`) and the outbox's `affect`. Nil when the
         /// sentence had no word timings, or the feature is off.
         var affect: VoiceAffect.Report? = nil
+        /// **🧠 The model this prompt switches its session to** (2026-11-21, `ModelSwitch`):
+        /// typed as `/model` + `/effort` before the words, or a new session's flags.
+        var modelPick: ModelPick? = nil
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -3099,6 +3106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **🔽 → over a ⚡ question: end it, and Google it** (2026-10-25) — see
         // `quickGoogle`. The stop is 🔼's (`endDictation`); only where the words
         // go changes.
+        hotkeys.onModelToggle = { [weak self] in self?.toggleModelPick() }
         hotkeys.onQuickGoogle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self, self.quickAsk, self.listening || self.source.isRecording else { return }
@@ -4224,6 +4232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A 🔼 ↓ belongs to the sentence it was made in; one whose sentence
         // came back empty must not ride along on the next.
         kamikaze = false
+        modelPick = nil
         speculative = false
         transcriptDisowned = false
         caretLanding = 0
@@ -7879,6 +7888,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// no longer exists.
     private func clearCancelledDictationState() {
         kamikaze = false
+        modelPick = nil
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
@@ -9686,7 +9696,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let launched = Date()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory, near: near)
+            let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory, near: near,
+                                                     flags: m.modelPick?.cliFlags)
             DispatchQueue.main.async {
                 self.clearSpawn()
                 switch outcome {
@@ -9695,6 +9706,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // screen of evidence, and a flash would be a panel thrown over
                 // his work to repeat what it already shows.
                 case .opened(let tty):
+                    if let pick = m.modelPick { ModelSwitch.remember(pick, tty: tty) }
                     self.adoptSpawnedWindow(tty: tty, session: (m.directory, launched)) { [weak self] bound in
                         guard let self = self else { return }
                         if let serial, let bound {
@@ -10201,6 +10213,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let serial = m.kind == "dictation" ? promptLeaves() : nil
         deliveryQueue.async { [weak self] in
             guard let self = self else { return }
+            // 🧠 **The model first, then the words** (2026-11-21, `ModelSwitch`): Claude Code's
+            // own `/model` and `/effort`, each a line of its own, by the same route.
+            if let pick = m.modelPick {
+                var switched = true
+                for command in pick.commands {
+                    guard case .delivered = self.terminal.deliver(command, to: target) else { switched = false; break }
+                }
+                Log.info("🧠 \(switched ? "switched" : "could not switch") \(target.handle.tty ?? target.address) to \(pick.label) before the prompt")
+                if switched, let tty = target.handle.tty {
+                    DispatchQueue.main.async { ModelSwitch.remember(pick, tty: tty) }
+                }
+            }
             let outcome = self.terminal.deliver(line, to: target)
             DispatchQueue.main.async {
                 self.deliveriesInFlight -= 1
@@ -10964,6 +10988,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The word alone to a terminal — the bound one's own delivery (shell guard,
     /// Return, read-back), on the same serial queue, so it can only land after
     /// the prompt it follows.
+    /// **🔽 → while a prompt records** (2026-11-21, `ModelSwitch`): the other of Opus / high
+    /// and Fable / medium than the session has now; again = taken back. A bound or a new
+    /// session only — a caret prompt has none to switch.
+    private func toggleModelPick() {
+        let wordsComing = listening || settling || fallingBack || source.phase.isWaitingForWords
+        let plain = cleanSentence && !cleanRedirected
+        guard wordsComing, !plain, !quickAsk else { return }
+        if modelPick != nil {
+            modelPick = nil
+            Log.info("🧠 model switch taken back")
+            return
+        }
+        guard spawnPending || !(pasteMode || latchedAtCaret) else {
+            Log.info("🧠 no model switch — a caret prompt has no session to switch")
+            overlay.flash("🧠 Only for a bound or a new session", duration: 2)
+            return
+        }
+        let tty = spawnPending ? nil : (latch?.target ?? terminal.target)?.handle.tty
+        let pick = ModelSwitch.current(tty: tty).other
+        modelPick = pick
+        Log.info("🧠 this prompt switches \(spawnPending ? "the new session" : tty ?? "its session") to \(pick.label)")
+    }
+
     private func sendKamikaze(to target: TerminalBinding.Target) {
         deliveriesInFlight += 1
         deliveryQueue.async { [weak self] in
@@ -13161,6 +13208,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // — see `Message.target`. A sentence with no close behind it (the test
         // route, a screenshot) is addressed here, before the panel's seconds.
         let target = latched.map { $0.target } ?? terminal.target
+        // 🧠 Taken with the destination it is for; a caret prompt has no session to switch.
+        let pick = kind == "dictation" ? modelPick : nil
+        if kind == "dictation", modelPick != nil {
+            if Thread.isMainThread { modelPick = nil } else { DispatchQueue.main.async { self.modelPick = nil } }
+        }
         if kind == "dictation" { spawnPending = false; spawnFolder = nil
                                  pendingVia = nil; pendingEngine = nil; pendingHeard = nil
                                  pendingDeliveryKind = nil; pendingAffect = nil }
@@ -13256,7 +13308,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               directory: directory, via: via, engine: engine,
                               mic: Self.mic(inHeard: heard),
                               deliveryKind: deliveryKind, target: spawn ? nil : target,
-                              affect: affect)
+                              affect: affect, modelPick: pick)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -14090,6 +14142,7 @@ extension AppDelegate {
         // the kind and the destination
         var localRecordingApp: String?
         var kamikaze = false, contextAtWheelRelease = false
+        var modelPick: ModelPick?
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
         var quickAsk = false, quickFollowUp = false, quickGoogle = false, quickGoogleToo = false
@@ -14131,6 +14184,7 @@ extension AppDelegate {
         e.transcriptDisowned = transcriptDisowned
         e.localRecordingApp = localRecordingApp
         e.kamikaze = kamikaze
+        e.modelPick = modelPick
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
@@ -14147,6 +14201,7 @@ extension AppDelegate {
         transcriptDisowned = false
         localRecordingApp = nil
         kamikaze = false
+        modelPick = nil
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
         quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false
@@ -14191,6 +14246,7 @@ extension AppDelegate {
         transcriptDisowned = e.transcriptDisowned
         localRecordingApp = e.localRecordingApp
         kamikaze = e.kamikaze
+        modelPick = e.modelPick
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp

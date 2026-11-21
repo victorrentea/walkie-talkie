@@ -14,7 +14,7 @@ final class GestureHintBarTests: XCTestCase {
     func testAPromptIsVictorsSketch() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true)), [
             Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ discard", right: nil),
-            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "🗑️ discard", right: ""),
+            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: "🧠 model"),
         ])
     }
 
@@ -34,7 +34,7 @@ final class GestureHintBarTests: XCTestCase {
     func testAPlainDictationShowsEveryGestureItAnswers() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false)), [
             Cross(click: "⏹️", up: "✨ new", down: "☠️ last", left: "🗑️ discard", right: "💻 terminal"),
-            Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "🗑️ discard", right: "⏹️ ⌘⌘"),
+            Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "", right: "⏹️ ⌘⌘"),
         ])
     }
 
@@ -45,7 +45,7 @@ final class GestureHintBarTests: XCTestCase {
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
             Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: "💻 terminal"),
-            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "🗑️ discard", right: GestureHintBar.google + " Google"),
+            Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "", right: GestureHintBar.google + " Google"),
         ])
     }
 
@@ -73,7 +73,7 @@ final class GestureHintBarTests: XCTestCase {
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
             Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ discard", right: nil, corner: "☝️"),
-            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "🗑️ discard", right: "", corner: "✌️"),
+            Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: "🧠 model", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: false, noMouse: true))[1].right, "⏹️ ⌘⌘")
     }

@@ -54,7 +54,7 @@ enum SpawnTerminal {
     /// moved on.
     ///
     /// Runs subprocesses — call it off the main thread.
-    static func launchClaude(prompt: String, directory: String, near: CGPoint? = nil) -> Outcome {
+    static func launchClaude(prompt: String, directory: String, near: CGPoint? = nil, flags: String? = nil) -> Outcome {
         let stamp = Self.stamp()
         let promptFile = dir.appendingPathComponent("prompt-\(stamp).txt")
         do {
@@ -63,7 +63,7 @@ enum SpawnTerminal {
         } catch {
             return .failed("could not stage the new session — \(error.localizedDescription)")
         }
-        return open(script(prompt: promptFile.path, directory: directory),
+        return open(script(prompt: promptFile.path, directory: directory, flags: flags),
                     stamp: stamp, directory: directory, near: near, what: "new Claude Code")
     }
 
@@ -449,7 +449,8 @@ enum SpawnTerminal {
     /// Bypass stays one shift+tab away; auto is where the session opens.
     private static let claudeFlags = "--allow-dangerously-skip-permissions --permission-mode auto"
 
-    private static func script(prompt: String, directory: String) -> String {
+    /// `flags`: 🧠 a model switched for this prompt (`ModelPick.cliFlags`, 2026-11-21).
+    private static func script(prompt: String, directory: String, flags: String? = nil) -> String {
         """
         #!/bin/zsh
         # Written by Walkie Talkie — shift + wheel, a dictation with no destination yet.
@@ -462,7 +463,7 @@ enum SpawnTerminal {
           echo "$prompt"
           exec /bin/zsh -l
         fi
-        exec claude \(claudeFlags) "$prompt"
+        exec claude \(claudeFlags)\(flags.map { " " + $0 } ?? "") "$prompt"
         """
     }
 

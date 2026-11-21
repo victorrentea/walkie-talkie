@@ -112,6 +112,16 @@ enum OverlayStates {
                 o.setKamikaze(true)
             },
 
+            Shot(slug: "listening-model-switch", group: "Dictating", title: "🧠 The session's model, switched for this prompt",
+                 when: "🔽 → while a prompt records (2026-11-21). Again takes it back.",
+                 note: "**A row under the others**, like kamikaze's: at delivery the bound session is typed `/model fable` and `/effort medium` before the prompt (a new session is launched with them). The next flick on the same session offers the other one, so it alternates Opus / high ⇄ Fable / medium.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(1)
+                o.setModelSwitch("Fable/med")
+            },
+
             Shot(slug: "bound-wispr-hearing", group: "At rest", title: "Wispr Flow is listening — not us",
                  when: "Bound, with a microphone open that this app is not running: he started Wispr with its own chord, or with 🔽 →, while the Engine is the local model or ElevenLabs.",
                  note: "**A yellow ring where our own sentence wears an orange one.** Since the engines became mutually exclusive there is a third thing this glyph has to be able to say, and it is not *recording* — nothing he says now will be routed, booked or filed here. Same disc, same geometry, one colour changed, so the two read as the same object in two states rather than as two icons. The device is drawn onto a filled circle rather than the orange artwork being tinted, which would yellow the screen and the button with it.",
@@ -844,6 +854,7 @@ enum OverlayStates {
         o.setBound(label: nil)
         o.setWisprHearing(false)
         o.setKamikaze(false)
+        o.setModelSwitch(nil)
         o.setLocalNow(false)
         o.setPasteHint(false)
         o.setHeldCount(0)

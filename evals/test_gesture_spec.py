@@ -458,16 +458,17 @@ def spec(src: dict):
             "row": ("🔽 back", "drag left"),
             # 2026-11-13: "vreau back + swipe left … alternativa ChatGPT" — at
             # rest it is ChatGPT's voice conversation; the Return is gone.
-            "does": "a microphone open: CANCEL it, as 🔼 ← (never its ⚡ question); at rest: ChatGPT voice on / off — never a Return",
+            # 2026-11-21: "curăță butonul de Back cu swipe stânga … fac mereu cancel cu forward swipe stânga".
+            "does": "a microphone open: NOTHING (🔼 ← is the cancel); at rest: ChatGPT voice on / off — never a Return",
             "checks": [
                 ("F3 at rest raises ChatGPT voice and is swallowed", "HotkeyTap `case VK_F3`",
                  lambda: has(gesture_case(src, "VK_F3"), r"onChatVoice\?\(\) \}\s*return swallow\(gesture, type, event\)\s*$")),
                 ("…and no longer presses Return", "HotkeyTap `case VK_F3`",
                  lambda: not has(gesture_case(src, "VK_F3"), r"postReturn")),
-                ("…but with any microphone open it raises the cancel first", "HotkeyTap `case VK_F3`",
+                ("…but with any microphone open it is swallowed and does nothing", "HotkeyTap `case VK_F3`",
                  lambda: before(gesture_case(src, "VK_F3"),
-                                r"if relayPromptOpen \|\| relayPlainOpen \|\| ownMicOpen \|\| backStopsWispr\s*\|\| wisprMicIsOpen\?\(\) == true \{.*?onBackCancel\?\(\)",
-                                r"onChatVoice\?\(\)")),
+                                r"if relayPromptOpen \|\| relayPlainOpen \|\| ownMicOpen \|\| backStopsWispr\s*\|\| wisprMicIsOpen\?\(\) == true \{.*?return swallow",
+                                r"onChatVoice\?\(\)") and not has(gesture_case(src, "VK_F3"), r"onBackCancel")),
                 ("…not 🔼 ←'s, which asks a ⚡ question at rest", "HotkeyTap `case VK_F3`",
                  lambda: not has(gesture_case(src, "VK_F3"), r"onLocalCancel")),
                 ("the back cancel cancels, else nothing — never a question, a Return or ChatGPT", "AppDelegate `onBackCancel`",

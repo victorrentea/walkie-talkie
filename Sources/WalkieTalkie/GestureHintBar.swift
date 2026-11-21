@@ -132,7 +132,8 @@ final class GestureHintBar {
         // live"*). Three audits traced each F-key to its handler: 🔽 ← cancels any
         // open microphone (2026-10-21) and 🔼 ↑ makes any sentence a new-session
         // prompt — neither was drawn outside a prompt, 🔽 ← nowhere.
-        back.left = "🗑️ discard"
+        // 🔽 ← does nothing mid-sentence since 2026-11-21 — 🔼 ← is the cancel.
+        back.left = ""
         front.up = s.spawn ? "📂 folder" : "✨ new"
         if s.prompting {
             front.click = "🏁 end"
@@ -149,6 +150,8 @@ final class GestureHintBar {
             // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
             // de taste din colț"*) — `HotkeyTap.onTypeIn`.
             back.down = "⌨️ type"
+            // 🧠 The session's model, Opus / high ⇄ Fable / medium (2026-11-21, `ModelSwitch`).
+            back.right = "🧠 model"
         } else if s.quick {
             // **A question is a prompt** (2026-10-15): 🔼 asks, 🔽 is the
             // shutter and ↓ the typing box, as while prompting; no kamikaze, no

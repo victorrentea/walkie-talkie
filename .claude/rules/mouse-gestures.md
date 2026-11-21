@@ -137,6 +137,35 @@ In this mode the app takes **no mouse button at all**. Every mouse event is hand
 - **The menu legend column carries both legends and picks one.** `restyleGestures` runs on the toggle as well as on every open, and the tab stop is measured against the wider of the two sets so the column cannot resize under the pointer. → journal: *Use Logi Gestures — the tick that chooses between the two sets*
 - **Keep the wheel set compiled in, not commented out.** The Logi gestures live in an Options+ profile on *this* Mac; a fresh install or a training-room machine has no side buttons until that profile is rebuilt, and the wheel path needs nothing but the app. → journal: *Use Logi Gestures — the tick that chooses between the two sets*
 
+## 🔽 ← mid-sentence does nothing (2026-11-21)
+
+Victor: *"curăță butonul de Back cu swipe stânga, pentru că fac mereu cancel cu butonul de forward
+swipe stânga"*. Supersedes *🔽 ← cancels while a microphone is open* (2026-10-21) below: with a
+microphone open F3 is swallowed and does nothing — 🔼 ← is the only cancel. At rest it is still
+ChatGPT's voice. The hint bar's 🔽 ← is an empty box in every stage. `onBackCancel` is left wired,
+unreached.
+
+## 🧠 🔽 → while a prompt records switches the session's model (2026-11-21)
+
+Victor: *"în timpul dictării să dau cu butonul de back și să-mi facă swipe dreapta … să se schimbe
+modelul pentru acea sesiune … voi alterna între Opus High și Fable Medium … în tooltip să-mi scrie un
+creier în față și apoi fable/med. Dacă repet gestul, să bucleze … înapoi la ce am avut înainte"*.
+
+- **F5 with `relayPromptOpen && ownDictation && !relayQuickOpen` → `onModelToggle`** (before
+  `plainToggle`, which refused it there), its own re-fire guard on `lastF5At`. A ⚡ question keeps
+  its Google.
+- **`AppDelegate.toggleModelPick`**: the other of `ModelPick.opusHigh` / `.fableMedium` than the
+  session has now (`ModelSwitch.current(tty:)` — what Walkie last switched that tty to, else Opus /
+  high; a spawn counts as Opus / high); again = taken back. `modelPick` is an `Envelope` field, cleared
+  with `kamikaze` at a new sentence and a cancel; the chip shows `🧠 Fable/med` / `🧠 Opus/high` (`RelayWindow.modelRow`,
+  shot `listening-model-switch`); the hint bar's 🔽 → reads `🧠 model`. A caret prompt has no session
+  to switch: flash `🧠 Only for a bound or a new session`.
+- **Delivery**: `send` moves it onto `Message.modelPick`. `deliverToTerminal` types `/model <alias>`
+  and `/effort <level>` (Claude Code's own, argument form) by `terminal.deliver`, each a line, before
+  the prompt, and remembers the tty's pick; a held sentence carries it to its bind. A spawn launches
+  `claude … --model fable --effort medium "<prompt>"` (`SpawnTerminal.launchClaude(flags:)`).
+  Log `🧠 …`. **Not yet seen on a live session** (written 2026-11-21 evening).
+
 ## The trackpad under left ⌃⌥⌘ (2026-10-20)
 
 Victor: *"intercept the scroll up on trackpad with one [finger] or two … while control option command

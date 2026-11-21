@@ -341,6 +341,11 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let kamikazeRow = NSView()
     private let kamikazeGlyph = NSImageView()
     private let kamikazeInfo = NSTextField(labelWithString: "Kamikaze")
+    /// **`🧠 fable/med`** (2026-11-21, `ModelSwitch`) — 🔽 → while a prompt records switched
+    /// the session's model for this sentence; built like `kamikazeRow`.
+    private let modelRow = NSView()
+    private let modelGlyph = NSImageView()
+    private let modelInfo = NSTextField(labelWithString: "")
     /// **`📋 Re-paste ⌘⇧P`** (2026-09-23) — for five seconds after every
     /// delivered sentence (and a cancelled prompt), the keys that bring the
     /// last text back, whether it went out as a prompt or as a clean dictation.
@@ -1502,6 +1507,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         filmRow.isHidden = true
         root.addSubview(filmRow)
         installEmojiRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, emoji: "☠️")
+        installEmojiRow(modelRow, glyph: modelGlyph, label: modelInfo, emoji: "🧠")
         installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
         installEmojiRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, emoji: "💻")
         installEmojiRow(heldRow, glyph: heldGlyph, label: heldInfo, emoji: "📨")
@@ -2004,7 +2010,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // Written before it is measured, for the selection row's reason below.
         if heldCount > 0 { heldInfo.stringValue = Self.heldText(heldCount) }
         if let text = localNowShown { localNowInfo.stringValue = text }
-        for (on, label) in [(kamikaze, kamikazeInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
+        if let modelSwitch { modelInfo.stringValue = modelSwitch }
+        for (on, label) in [(kamikaze, kamikazeInfo), (modelSwitch != nil, modelInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
                             (heldCount > 0, heldInfo), (readyForNext, readyInfo)] where on {
             label.sizeToFit()
             let lead = glyphColumn + recordDotGap
@@ -2240,6 +2247,15 @@ private let heardLabel = NSTextField(labelWithString: "")
             rows.append((filmRow, recordRowHeight))
         } else {
             filmRow.isHidden = true
+        }
+
+        if modelSwitch != nil {
+            modelInfo.sizeToFit()
+            layoutGlyphRow(modelRow, glyph: modelGlyph, label: modelInfo, width: innerWidth)
+            modelRow.isHidden = false
+            rows.append((modelRow, recordRowHeight))
+        } else {
+            modelRow.isHidden = true
         }
 
         if kamikaze {
@@ -3628,6 +3644,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         filmGlyph.wantsLayer = true
         kamikazeInfo.wantsLayer = true
         kamikazeGlyph.wantsLayer = true
+        modelInfo.wantsLayer = true
+        modelGlyph.wantsLayer = true
         pasteInfo.wantsLayer = true
         pasteGlyph.wantsLayer = true
         localNowInfo.wantsLayer = true
@@ -3658,6 +3676,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             kamikazeInfo.shadow = Self.halo()
             kamikazeInfo.textColor = .white
             kamikazeGlyph.shadow = Self.halo()
+            modelInfo.shadow = Self.halo()
+            modelInfo.textColor = .white
+            modelGlyph.shadow = Self.halo()
             pasteInfo.shadow = Self.halo()
             pasteInfo.textColor = .white
             pasteGlyph.shadow = Self.halo()
@@ -3715,6 +3736,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             kamikazeInfo.shadow = nil
             kamikazeInfo.textColor = .secondaryLabelColor
             kamikazeGlyph.shadow = nil
+            modelInfo.shadow = nil
+            modelInfo.textColor = .secondaryLabelColor
+            modelGlyph.shadow = nil
             pasteInfo.shadow = nil
             pasteInfo.textColor = .secondaryLabelColor
             pasteGlyph.shadow = nil
@@ -5079,6 +5103,15 @@ private let heardLabel = NSTextField(labelWithString: "")
     func setKamikaze(_ on: Bool) {
         guard kamikaze != on else { return }
         kamikaze = on
+        layoutContent()
+    }
+
+    /// `🧠 fable/med` — the model this sentence switches its session to, nil for none.
+    private(set) var modelSwitch: String?
+
+    func setModelSwitch(_ label: String?) {
+        guard modelSwitch != label else { return }
+        modelSwitch = label
         layoutContent()
     }
 

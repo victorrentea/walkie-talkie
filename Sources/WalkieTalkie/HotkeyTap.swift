@@ -144,6 +144,9 @@ final class HotkeyTap {
     /// 🔼 would end it, and its words go to a Google search instead of the reply
     /// pop-up (`AppDelegate.quickGoogle`). Raised on the tap thread.
     var onQuickGoogle: (() -> Void)?
+    /// **🔽 → while a prompt records: 🧠 the session's model, switched for this
+    /// prompt** (2026-11-21, `ModelSwitch`); again = taken back.
+    var onModelToggle: (() -> Void)?
 
     /// **Wispr Flow is probably about to start listening** — its own start
     /// gesture, seen on the wire, ahead of any microphone opening.
@@ -4182,8 +4185,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             case VK_F3:
                 if relayPromptOpen || relayPlainOpen || ownMicOpen || backStopsWispr
                     || wisprMicIsOpen?() == true {
-                    Log.info("🗑️ 🔽 ← back button flicked left with a microphone open — cancel, as 🔼 ←")
-                    DispatchQueue.global().async { [weak self] in self?.onBackCancel?() }
+                    // **Nothing mid-sentence since 2026-11-21** (Victor: *"curăță butonul de
+                    // Back cu swipe stânga, pentru că fac mereu cancel cu butonul de forward
+                    // swipe stânga"*) — the cancel of 2026-10-21 is 🔼 ←'s alone; the flick is
+                    // swallowed so it opens no ChatGPT over a sentence.
+                    Log.info("🔽 ← back button flicked left with a microphone open — nothing (🔼 ← cancels)")
                     return swallow(gesture, type, event)
                 }
                 // At rest: ChatGPT's voice conversation (2026-11-13) — the
@@ -4364,6 +4370,22 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     lastBackToggleAt = lastF5At
                     Log.info("🔎 🔽 → over the ⚡ question — Google it")
                     DispatchQueue.global().async { [weak self] in self?.onQuickGoogle?() }
+                    return swallow(gesture, type, event)
+                }
+                // **🧠 Over a prompt: switch the session's model** (2026-11-21, Victor:
+                // *"în timpul dictării să dau cu butonul de back și să-mi facă swipe
+                // dreapta … să se schimbe modelul pentru acea sesiune"*) — the gesture
+                // a prompt had no use for (the plain toggle refused it).
+                if relayPromptOpen, ownDictation, !relayQuickOpen {
+                    let now = CACurrentMediaTime()
+                    let since = now - lastF5At
+                    lastF5At = now
+                    guard since >= Self.gestureRetriggerSeconds else {
+                        return swallow("\(gesture) — re-fire dropped", type, event)
+                    }
+                    lastBackToggleAt = now
+                    Log.info("🧠 🔽 → over a prompt — switch the session's model")
+                    DispatchQueue.main.async { [weak self] in self?.onModelToggle?() }
                     return swallow(gesture, type, event)
                 }
                 return plainToggle(gesture, type, event)
