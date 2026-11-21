@@ -34,7 +34,7 @@ def judge(e, flip):
     content = ([{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
                 "data": base64.b64encode(open(c["shot"], "rb").read()).decode()}}] if c.get("shot") else []) + \
               [{"type": "text", "text": ask}]
-    p = subprocess.run([os.path.expanduser("~/.local/bin/claude"), "-p", "--model", "opus", "--input-format", "stream-json",
+    p = subprocess.run([os.path.expanduser("~/.local/bin/claude"), "-p", "--model", os.environ.get("JUDGE", "opus"), "--input-format", "stream-json",
         "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config",
         "--setting-sources", ""], input=json.dumps({"type": "user", "message": {"role": "user", "content": content}}) + "\n",
         capture_output=True, text=True, env=env, cwd=os.path.expanduser("~/.walkie-talkie/quick"), timeout=300)

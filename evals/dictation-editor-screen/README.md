@@ -67,3 +67,23 @@ transcrierea continuă … în cursuri vorbesc mult și poate s-ar prinde mai u�
 **Not proven yet.** One run per arm, one judge: a second run of the winning arm should come before a
 switch. In the app the transcript lags (whisper writes a line when its chunk closes), so at delivery the
 last ~10–30 s may be missing — the eval already left out the dictation's own minute, which is close.
+
+## Round 3 — the confirmation run: the talk before does NOT hold (same evening)
+
+Victor: *"run a thorough confirmation run. then implement the sonnet + speech if it proves right"*.
+120 fresh prompts (`SEED=23 EXCLUDE=out/cases-pre.jsonl build_pre.py`, none from round 2), the same arms,
+two blind judges (`JUDGE=fable` for the second).
+
+| comparison (A → B), 120 cases | fixes A / B | harms A / B | better A · B · same |
+|---|---|---|---|
+| Sonnet: none → talk before, judge Opus | 253 / 262 | 27 / 38 | 38 · 30 · 52 |
+| Sonnet: none → talk before, judge Fable | 242 / 257 | 49 / 78 | 44 · 29 · 47 |
+| Haiku → Sonnet, neither with the talk, judge Opus | 140 / 241 | 49 / 35 | 16 · 65 · 39 |
+| Haiku (none) → Sonnet + talk before, judge Opus | 146 / 248 | 48 / 44 | 20 · 64 · 36 |
+
+- **Round 2's win for the talk before was noise** (40 cases, 13 vs 7). On 120, both judges prefer Sonnet
+  *without* it (38 vs 30, 44 vs 29) and both count more harms with it
+  (27 → 38, 49 → 78) for a handful more fixes. **Not implemented.**
+- **Sonnet over Haiku is confirmed**: 65 sentences to 16, latency median
+  0.99 → 1.44 s (p90 1.48 → 2.25 s).
+- 40 cases and one judge is not a measurement here: the same arm pair flipped sign at 120.

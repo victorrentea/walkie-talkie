@@ -35,7 +35,9 @@ for l in open(f"{HOME}/outbox.jsonl"):
     text = " ".join(pre)[-1500:]
     if len(text) >= 300:
         cands.append({"id": r["ts"], "words": w, "pre": text, "kind": "pre"})
-random.seed(7)
+random.seed(int(os.environ.get("SEED", "7")))
+skip = {json.loads(l)["id"] for l in open(os.environ["EXCLUDE"])} if os.environ.get("EXCLUDE") else set()
+cands = [c for c in cands if c["id"] not in skip]
 pick = random.sample(cands, min(N, len(cands)))
 with open(sys.argv[1], "w") as f:
     for c in pick: f.write(json.dumps(c, ensure_ascii=False) + "\n")
