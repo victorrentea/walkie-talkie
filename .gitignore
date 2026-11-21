@@ -20,3 +20,5 @@ docs/projectm/captures/
 evals/audio-affect/out/
 evals/audio-affect/__pycache__/
 evals/agent-rules/out/
+# Every eval round writes its own out-* folder — scratch, like out/.
+evals/agent-rules/out-*/
