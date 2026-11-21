@@ -937,10 +937,21 @@ enum SpawnFolderMenu {
     /// în față dacă apăs pe el"*). The menu stays up and the sentence keeps its
     /// destination — looking at a session is not choosing it; the line's own
     /// click is.
+    ///
+    /// **Under the pointer, focused — not where it is** (2026-11-21, Victor:
+    /// *"ar trebui să aducă focus, să aducă în față sub cursor și focusată. Nu
+    /// pare că merge"*). Raised where it was, the window came forward on another
+    /// display (log: `brought forward (activate=true …)` on every click) and
+    /// nothing changed where he was looking. Now the reply pop-up's click:
+    /// `presentAtPointer` — centred on the pointer, size kept, raised. Not a
+    /// Terminal.app tab (Orca, tmux, an IDE) → `onRaise`, forward where it is.
     private static func raise(_ choice: Choice) {
         guard let tty = choice.tty, !tty.isEmpty else { return }
         Log.info("🪟 \(tty) — the folder menu's 🤲 clicked")
-        onRaise?(tty)
+        DispatchQueue.global(qos: .userInitiated).async {
+            if TerminalBinding.presentAtPointer(tty: tty) { return }
+            onRaise?(tty)
+        }
     }
 
     /// Brings the terminal on a tty forward — `AppDelegate`'s, which can resolve it.

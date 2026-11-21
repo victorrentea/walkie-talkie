@@ -166,8 +166,10 @@ have stars, *"un pătrat cu colțuri rotunjite, care să mi-l aducă în față 
   its pick → `redirectSpawn` rules hold for every session line.
 - **The 🤲 (`RaiseButton`, a drawn ▢ for its first hours — Victor: *"instead of the box, put a hand
   offering"*) sits in the star's column of every session line**, dim (alpha 0.55) until hovered: a click brings that
-  terminal forward where it is (`SpawnFolderMenu.onRaise` → `resolve(tty:)` → `bringToFront`),
-  binds nothing, leaves the menu up. The line's own click still binds without raising.
+  terminal forward **under the pointer, focused** (2026-11-21, Victor: *"să aducă în față sub cursor și
+  focusată"* — raised where it was, it came up on another display and looked like nothing happened):
+  `TerminalBinding.presentAtPointer`, the reply pop-up's click; not a Terminal.app tab →
+  `SpawnFolderMenu.onRaise` → `resolve(tty:)` → `bringToFront` where it is. Binds nothing, leaves the menu up. The line's own click still binds without raising.
 
 ## Active terminals — the last row (the first until 2026-11-03) (2026-09-23 → 2026-11-20, removed)
 
