@@ -253,6 +253,11 @@ yields to `--label`).
   `frameMs`/`drawMs`. The eraser's `eraseFront`/`eraseAfter` and the single `anchor` are gone.
   → journal: *Two lines that roll up (2026-09-28)*
 
+- **The walkie beside the pointer is the menu bar's, monochrome** (2026-11-21, Victor: *"exact iconița
+  din meniu … cu un border negru mic în jurul lui, ca să se vadă și pe alb … vreau una monocromă"*):
+  `walkieIdleGlyph` / `walkieLiveGlyph` are `Glyphs.walkieOutlined` — `Glyphs.walkie` in white with a
+  1 pt black rim (16 offset copies), the slots dark. The PNGs (`walkie-idle`, `walkie-bound`) stay for
+  the Dock tile, the reply pop-up, `MicAnnouncer` and the yellow Wispr ring.
 - **The microphone breathes in front of the word, where the walkie did** (2026-10-04, Victor: *"în
   loc de simbolul de Walkie Talkie care clipește lent când dictez, pune simbolul microfonului"*, *"muta
   simbolul microfonului in fata, inainte de Dictating/Prompting"*, then *"nu trebuie înconjurat cu

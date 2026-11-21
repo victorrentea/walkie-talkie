@@ -2755,8 +2755,12 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// hole. That is not theoretical: the shoot script runs the **debug** binary,
     /// which has no `Resources/`, which is what `walkieURL` walks up to `assets/`
     /// for.
-    private static let walkieIdleGlyph = loadWalkie("walkie-idle")
-    private static let walkieLiveGlyph = loadWalkie("walkie-bound")
+    /// **Monochrome since 2026-11-21** — the menu bar's own drawing, white with a black rim
+    /// (`Glyphs.walkieOutlined`; Victor: *"exact iconița din meniu … un border negru mic …
+    /// vreau una monocromă"*). The PNGs and their orange ring are the Dock tile's and the
+    /// reply pop-up's only; the breathing still says the microphone is open.
+    private static let walkieIdleGlyph: NSImage? = Glyphs.walkieOutlined(height: walkieInk)
+    private static let walkieLiveGlyph: NSImage? = walkieIdleGlyph
 
     /// **A fifth bigger than everything else in the column** (2026-09-18,
     /// Victor: *"iconița fă-o 20% mai mare"*).
@@ -2842,22 +2846,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             dir = dir.deletingLastPathComponent()
         }
         return candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
-    }
-
-    private static func loadWalkie(_ name: String) -> NSImage? {
-        guard let url = walkieURL(name),
-              let image = NSImage(contentsOf: url), image.size.height > 0 else { return nil }
-        // Scaled to `walkieInk` — the one glyph in this column that is not
-        // `iconInk`, and its note says why. Aspect preserved: both files are
-        // square today and neither is promised to stay that way.
-        let h = walkieInk
-        let size = NSSize(width: (image.size.width / image.size.height * h).rounded(), height: h)
-        let scaled = NSImage(size: size)
-        scaled.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(in: NSRect(origin: .zero, size: size))
-        scaled.unlockFocus()
-        return scaled
     }
 
     /// **The mouse is drawn, not typed** — `Glyphs.mouse`, one image per gesture

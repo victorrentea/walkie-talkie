@@ -76,6 +76,31 @@ enum Glyphs {
         return image
     }
 
+    /// **The menu bar's walkie, white with a thin black rim — the one beside the pointer**
+    /// (2026-11-21, Victor: *"exact iconița din meniu … cu un border negru mic în jurul lui, ca
+    /// să se vadă și pe alb … în loc de iconița actuală cu culori, vreau una monocromă"*).
+    /// `height` is the whole picture, rim included; the screen and the speaker slots
+    /// come out dark, because the rim's copies show through them.
+    static func walkieOutlined(height: CGFloat, rim: CGFloat = 1) -> NSImage {
+        let shape = walkie(height: height - 2 * rim)
+        let white = NSImage(size: shape.size, flipped: false) { r in
+            shape.draw(in: r)
+            NSColor.white.set()
+            r.fill(using: .sourceAtop)
+            return true
+        }
+        let size = NSSize(width: shape.size.width + 2 * rim, height: height)
+        return NSImage(size: size, flipped: false) { _ in
+            for i in 0..<16 {
+                let a = CGFloat(i) / 16 * 2 * .pi
+                shape.draw(in: NSRect(x: rim + cos(a) * rim, y: rim + sin(a) * rim,
+                                      width: shape.size.width, height: shape.size.height))
+            }
+            white.draw(in: NSRect(x: rim, y: rim, width: shape.size.width, height: shape.size.height))
+            return true
+        }
+    }
+
     /// **The pin's outline and its hole, as geometry** — shared by `mapPin` and
     /// the pin `DropArrow` stands on the caret (2026-10-14), so the big one is
     /// the chip's own shape and not a second drawing of it. Bottom-left origin,
