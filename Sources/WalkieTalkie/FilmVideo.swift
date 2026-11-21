@@ -36,20 +36,29 @@ final class FilmVideo: NSObject {
     let url: URL
     /// The rate asked of ScreenCaptureKit: the display's maximum refresh rate.
     private(set) var fps: Int = 60
+    /// The part of the display filmed, in its points; nil for all of it.
+    private var crop: CGRect?
 
     private init(url: URL) { self.url = url }
 
     /// Begin recording `displayID` into `url`; returns at once, the stream comes
     /// up ~100–300 ms later. Nil below macOS 15.
-    static func start(displayID: CGDirectDisplayID, screen: NSScreen, to url: URL) -> FilmVideo? {
+    ///
+    /// `crop` (the display's own points, top-left origin) films only that part
+    /// of it (2026-11-21, the wheel-dragged area), at its own pixel size.
+    static func start(displayID: CGDirectDisplayID, screen: NSScreen, crop: CGRect? = nil,
+                      to url: URL) -> FilmVideo? {
         guard #available(macOS 15.0, *) else {
             Log.info("🎞️ no full-rate video below macOS 15 — the frames are the film")
             return nil
         }
         let video = FilmVideo(url: url)
         video.fps = max(30, screen.maximumFramesPerSecond)
-        let pixels = CGSize(width: screen.frame.width * screen.backingScaleFactor,
-                            height: screen.frame.height * screen.backingScaleFactor)
+        let points = crop?.size ?? screen.frame.size
+        // Even sizes: HEVC wants them, and an odd crop is common.
+        let pixels = CGSize(width: (points.width * screen.backingScaleFactor / 2).rounded() * 2,
+                            height: (points.height * screen.backingScaleFactor / 2).rounded() * 2)
+        video.crop = crop
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { content, error in
             guard let content else {
                 Log.error("🎞️ no shareable content — no video: \(error?.localizedDescription ?? "?")")
@@ -80,6 +89,7 @@ final class FilmVideo: NSObject {
         config.width = Int(pixels.width)
         config.height = Int(pixels.height)
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
+        if let crop { config.sourceRect = crop }
         config.showsCursor = true
         config.queueDepth = 8
 

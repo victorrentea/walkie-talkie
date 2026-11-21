@@ -99,8 +99,19 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_SHEET"] {
 if let spec = ProcessInfo.processInfo.environment["WT_SHOOT_FILM"] {
     NSApplication.shared.setActivationPolicy(.accessory)
     let seconds = Double(spec) ?? 3
-    guard let film = ScreenFilm.start() else { exit(1) }
-    Thread.sleep(forTimeInterval: seconds)
+    // `WT_SHOOT_FILM_AREA=x,y,w,h` (AppKit global points) films only that box,
+    // as 🔽 ↑ does after a wheel crop (2026-11-21).
+    var area: NSRect?
+    var areaScreen: NSScreen?
+    if let box = ProcessInfo.processInfo.environment["WT_SHOOT_FILM_AREA"]?
+        .split(separator: ",").compactMap({ Double($0) }), box.count == 4 {
+        let r = NSRect(x: box[0], y: box[1], width: box[2], height: box[3])
+        area = r
+        areaScreen = NSScreen.screens.first { $0.frame.contains(NSPoint(x: r.midX, y: r.midY)) }
+    }
+    guard let film = ScreenFilm.start(area: area, on: areaScreen) else { exit(1) }
+    // The run loop, not `Thread.sleep`: every frame's grab hops to main.
+    RunLoop.main.run(until: Date().addingTimeInterval(seconds))
     guard let out = film.stop() else { exit(1) }
     let achieved = Double(out.frames.count) / max(out.duration, 0.001)
     print(String(format: "%d frames over %.2fs = %.1f fps (asked %.0f), %d dropped",

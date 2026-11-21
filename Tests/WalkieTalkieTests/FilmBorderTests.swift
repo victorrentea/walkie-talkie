@@ -23,6 +23,27 @@ final class FilmBorderTests: XCTestCase {
         }
     }
 
+    /// The ring and the half-size badges round a wheel-dragged area (2026-11-21).
+    func testRenderAreaForReview() throws {
+        let screen = NSRect(x: 0, y: 0, width: 1728, height: 1117)
+        let area = NSRect(x: 500, y: 400, width: 600, height: 300)
+        XCTAssertEqual(FilmBorder.areaBadgeFrames(area: area, badge: FilmBorder.badgeSize(k: 0.5), screen: screen).count, 4)
+        let narrow = NSRect(x: 500, y: 400, width: 120, height: 300)
+        XCTAssertEqual(FilmBorder.areaBadgeFrames(area: narrow, badge: FilmBorder.badgeSize(k: 0.5), screen: screen).count, 2)
+        guard let dir = ProcessInfo.processInfo.environment["FILM_BORDER_PNG"] else { return }
+        let scale: CGFloat = 2
+        let view = FilmBorder.areaContent(area: area, screen: screen, scale: scale)
+        let ctx = CGContext(data: nil, width: Int(screen.width * scale), height: Int(screen.height * scale),
+                            bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue)!
+        ctx.setFillColor(NSColor(white: 0.95, alpha: 1).cgColor)
+        ctx.fill(CGRect(x: 0, y: 0, width: screen.width * scale, height: screen.height * scale))
+        ctx.scaleBy(x: scale, y: scale)
+        view.layer!.render(in: ctx)
+        try NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:])!
+            .write(to: URL(fileURLWithPath: dir).appendingPathComponent("film-area.png"))
+    }
+
     /// A discrete keyframe animation with as many key times as values is ignored
     /// by Core Animation — the badge and border never blinked until 2026-10-16.
     func testBlinkHasOneMoreKeyTimeThanValues() throws {

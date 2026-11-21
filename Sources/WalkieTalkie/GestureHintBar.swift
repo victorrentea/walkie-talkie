@@ -50,6 +50,9 @@ final class GestureHintBar {
         /// A prompt (🔼 / 🔼 → / 🔼 ↑); false for a plain dictation.
         var prompting = false
         var filming = false
+        /// A wheel crop was taken in this sentence: 🔽 ↑ films that area alone
+        /// (2026-11-21).
+        var areaFilm = false
         var kamikaze = false
         /// The sentence already opens a new session — 🔼 ↑ has nothing left to do.
         var spawn = false
@@ -146,7 +149,9 @@ final class GestureHintBar {
             // While a film runs the shutter is its stop (2026-10-23, `onScreenshot`).
             back.click = s.filming ? "⏹️ video" : "📸 shot"
             // Stop is ⏹️, never the word (2026-09-30).
-            back.up = s.filming ? "⏹️ video" : "🔴 video"
+            // After a wheel crop the film is that area alone (2026-11-21, Victor:
+            // *"să mai arăți așa și pe helper tooltips"*) — `✂️` says which.
+            back.up = s.filming ? "⏹️ video" : (s.areaFilm ? "🔴 ✂️ video" : "🔴 video")
             // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
             // de taste din colț"*) — `HotkeyTap.onTypeIn`.
             back.down = "⌨️ type"
@@ -221,7 +226,7 @@ final class GestureHintBar {
             // The keys ride in the badges already (`crosses`, *"suggest [⌃P] in
             // the button … Put command command next to the flag"*).
             c = crosses(for: Stage(listening: true, prompting: s.prompting, filming: s.filming,
-                                   kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
+                                   areaFilm: s.areaFilm, kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
         } else {
             c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
                  Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]

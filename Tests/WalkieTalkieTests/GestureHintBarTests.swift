@@ -118,10 +118,19 @@ final class GestureHintBarTests: XCTestCase {
 
     /// `HINT_BAR_PNG=<dir> swift test --filter GestureHintBarTests` draws each
     /// stage over a dark and a light desktop, to look at.
+    /// After a wheel crop, 🔽 ↑ films the area — and says so (2026-11-21).
+    func testAreaFilmIsNamedOnBackUp() {
+        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true, areaFilm: true))[1].up,
+                       "🔴 ✂️ video")
+        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true, filming: true,
+                                                         areaFilm: true))[1].up, "⏹️ video")
+    }
+
     func testRenderForReview() throws {
         guard let dir = ProcessInfo.processInfo.environment["HINT_BAR_PNG"] else { return }
         let stages: [(String, GestureHintBar.Stage)] = [
             ("prompt", .init(listening: true, prompting: true)),
+            ("prompt-area", .init(listening: true, prompting: true, areaFilm: true)),
             ("prompt-filming", .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true)),
             ("plain", .init(listening: true, prompting: false)),
             ("quick", .init(listening: true, prompting: false, quick: true)),

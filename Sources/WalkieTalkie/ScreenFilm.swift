@@ -67,6 +67,9 @@ final class ScreenFilm {
         /// below macOS 15 or when ScreenCaptureKit refused.
         var video: URL? = nil
         var videoFPS: Int = 0
+        /// **The area filmed, in the display's own pixels** (top-left origin, the
+        /// corners a `📸n✂️` token would carry) — nil for a whole display.
+        var area: CGRect? = nil
         /// Frames the encoder could not keep up with. Reported rather than
         /// hidden: it is the difference between *nothing happened in that second*
         /// and *we did not look*.
@@ -76,6 +79,13 @@ final class ScreenFilm {
     /// The display being filmed — re-resolved every frame from the pointer
     /// (`followPointer`). Touched only on the capture queue.
     private var displayID: CGDirectDisplayID
+    /// **Only this part of the display, in its own points, top-left origin**
+    /// (2026-11-21, Victor: *"dacă am selectat cu wheel-ul o zonă … butonul de back
+    /// și swipe în sus să înregistreze doar secțiunea aceeași"*). Nil films the
+    /// whole display and follows the pointer; an area never moves.
+    private let crop: CGRect?
+    /// `crop` in the display's pixels, for the envelope.
+    private let cropPixels: CGRect?
     private let dir: URL
     private var video: FilmVideo?
     private let startedAt: CFTimeInterval
@@ -99,6 +109,9 @@ final class ScreenFilm {
     private let framesLock = NSLock()
     private var dropped = 0
     private var index = 0
+    /// Set by `stop`/`discard` under `framesLock`: a tick already past the
+    /// timer's cancel drops its frame instead of encoding it.
+    private var ended = false
 
     /// **How many frames are on disk right now**, for the chip's row.
     ///
@@ -113,8 +126,11 @@ final class ScreenFilm {
         return frames.count
     }
 
-    private init(displayID: CGDirectDisplayID, dir: URL) {
+    private init(displayID: CGDirectDisplayID, dir: URL,
+                 crop: CGRect? = nil, cropPixels: CGRect? = nil) {
         self.displayID = displayID
+        self.crop = crop
+        self.cropPixels = cropPixels
         self.dir = dir
         self.startedAt = CACurrentMediaTime()
     }
@@ -129,8 +145,13 @@ final class ScreenFilm {
     /// sheet would be one geometry; now every frame is of the display under the
     /// pointer at that instant, the red border moves with it, and `FilmSheet`
     /// fits each frame into its cell whatever its size.
-    static func start() -> ScreenFilm? {
-        guard let screen = screenUnderPointer(),
+    ///
+    /// **Or only the area he dragged with the wheel** (2026-11-21): `area` in
+    /// AppKit's global points on `areaScreen` — the selection's own rectangle.
+    /// The frames and the video are that box alone, the border rings it, and the
+    /// pointer leaving it changes nothing.
+    static func start(area: NSRect? = nil, on areaScreen: NSScreen? = nil) -> ScreenFilm? {
+        guard let screen = areaScreen ?? screenUnderPointer(),
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
         else {
             Log.error("🎬 no display under the pointer — not recording")
@@ -144,9 +165,22 @@ final class ScreenFilm {
             Log.error("🎬 could not make \(dir.lastPathComponent): \(error)")
             return nil
         }
-        let film = ScreenFilm(displayID: CGDirectDisplayID(number.uint32Value), dir: dir)
-        FilmBorder.show(on: screen)
-        film.video = FilmVideo.start(displayID: film.displayID, screen: screen,
+        // The area in the display's own space: points from its top-left corner,
+        // what `CGDisplayCreateImage(_:rect:)` and `SCStreamConfiguration.sourceRect`
+        // both take. Snapped to whole pixels so the frames are a fixed size.
+        var crop: CGRect?
+        var pixels: CGRect?
+        if let area, let local = displayRect(area, on: screen) {
+            crop = local
+            let s = screen.backingScaleFactor
+            pixels = CGRect(x: (local.minX * s).rounded(), y: (local.minY * s).rounded(),
+                            width: (local.width * s).rounded(), height: (local.height * s).rounded())
+        }
+        let film = ScreenFilm(displayID: CGDirectDisplayID(number.uint32Value), dir: dir,
+                              crop: crop, cropPixels: pixels)
+        if let area, crop != nil { FilmBorder.show(around: area, on: screen) }
+        else { FilmBorder.show(on: screen) }
+        film.video = FilmVideo.start(displayID: film.displayID, screen: screen, crop: crop,
                                      to: dir.appendingPathComponent("video.mov"))
         film.begin()
         return film
@@ -163,7 +197,11 @@ final class ScreenFilm {
         t.setEventHandler { [weak self] in self?.tick() }
         timer = t
         t.resume()
-        Log.info("🎬 recording display \(displayID) at \(Int(Self.fps)) fps → \(dir.lastPathComponent)")
+        if let px = cropPixels {
+            Log.info("🎬 recording the area \(Int(px.minX)),\(Int(px.minY))→\(Int(px.maxX)),\(Int(px.maxY)) px of display \(displayID) at \(Int(Self.fps)) fps → \(dir.lastPathComponent)")
+        } else {
+            Log.info("🎬 recording display \(displayID) at \(Int(Self.fps)) fps → \(dir.lastPathComponent)")
+        }
     }
 
     /// Stop, wait for the encoder to drain, and compose the sheet.
@@ -174,6 +212,7 @@ final class ScreenFilm {
     func stop() -> Result? {
         timer?.cancel()
         timer = nil
+        framesLock.lock(); ended = true; framesLock.unlock()
         FilmBorder.hide()
         let duration = CACurrentMediaTime() - startedAt
         let videoOK = video?.stop() ?? false
@@ -204,7 +243,7 @@ final class ScreenFilm {
                         taken.count, duration, missed > 0 ? ", \(missed) dropped" : ""))
         return Result(dir: dir, frames: sheetFrames, sheet: sheet, poster: poster,
                       duration: duration, video: videoOK ? video?.url : nil,
-                      videoFPS: videoOK ? video?.fps ?? 0 : 0, dropped: missed)
+                      videoFPS: videoOK ? video?.fps ?? 0 : 0, area: cropPixels, dropped: missed)
     }
 
     /// Throw it away — the gesture was a misfire, or the dictation it belonged to
@@ -214,6 +253,7 @@ final class ScreenFilm {
         timer = nil
         // The border goes with the film (2026-10-16, Victor: *"when I canceled the
         // dictation while recording, the rec sign remained on screen"*).
+        framesLock.lock(); ended = true; framesLock.unlock()
         FilmBorder.hide()
         video?.stop()
         slots.wait(); slots.wait()
@@ -238,15 +278,22 @@ final class ScreenFilm {
                 video?.stop(timeout: 0)
                 return
             }
-            // Never wait on the encoder from the capture queue: a late frame is
-            // a gap in the film, a blocked capture queue is a drifting one.
-            guard slots.wait(timeout: .now()) == .success else {
+            // An area stays where he drew it; only a whole display follows the pointer.
+            if crop == nil { followPointer() }
+            // **Grab first, take an encoder slot after** (2026-11-21). `grab` hops to
+            // main (`ReplyPanel.outOfShot`, since 2026-11-20), and `stop()` runs on
+            // main waiting for the slots: a tick holding a slot while it waited for
+            // main was a deadlock — the shoot harness hung on it every time, the app
+            // whenever the stop landed mid-grab.
+            guard let image = grab() else {
                 framesLock.lock(); dropped += 1; framesLock.unlock()
                 return
             }
-            followPointer()
-            guard let image = grab() else {
-                slots.signal()
+            framesLock.lock(); let over = ended; framesLock.unlock()
+            if over { return }
+            // Never wait on the encoder from the capture queue: a late frame is
+            // a gap in the film, a blocked capture queue is a drifting one.
+            guard slots.wait(timeout: .now()) == .success else {
                 framesLock.lock(); dropped += 1; framesLock.unlock()
                 return
             }
@@ -300,7 +347,20 @@ final class ScreenFilm {
     /// them, and `CGDisplayCreateImage` would see them too — `outOfShot` takes them
     /// out for the length of the grab, as for the shutter's `screencapture`.
     private func grab() -> CGImage? {
-        ReplyPanel.outOfShot { CGDisplayCreateImage(displayID) }
+        ReplyPanel.outOfShot {
+            if let crop { return CGDisplayCreateImage(displayID, rect: crop) }
+            return CGDisplayCreateImage(displayID)
+        }
+    }
+
+    /// `rect` (AppKit global points, bottom-left origin) as the display's own
+    /// rectangle: points from its top-left corner, clipped to it. Nil when
+    /// nothing of it is on that display, or it is too small to be a film.
+    static func displayRect(_ rect: NSRect, on screen: NSScreen) -> CGRect? {
+        let r = rect.intersection(screen.frame)
+        guard !r.isNull, r.width >= 8, r.height >= 8 else { return nil }
+        return CGRect(x: r.minX - screen.frame.minX, y: screen.frame.maxY - r.maxY,
+                      width: r.width, height: r.height).integral
     }
 
     /// **Normalised to 8-bit sRGB before it is written.**
@@ -400,6 +460,73 @@ enum FilmBorder {
     static let slowBlink: CFTimeInterval = 2.0
     fileprivate static let ink = NSColor.systemRed
 
+    /// **Around an area, not the display** (2026-11-21, Victor: *"apar recu în
+    /// jurul acelei zone … să atrag atenția pe o anumită zonă"*). The same 5 pt
+    /// border, just outside the box so it never covers what is filmed, and the
+    /// same four `● REC` at half size, outside its corners — the top two above
+    /// it, the bottom two below; only two (top-left, bottom-right) when the box
+    /// is narrower than a pair. Kept on the screen; clickable, like the big ones.
+    static let areaBadgeScale: CGFloat = 0.5
+
+    static func show(around area: NSRect, on screen: NSScreen) {
+        guard Thread.isMainThread else { DispatchQueue.main.async { show(around: area, on: screen) }; return }
+        hide()
+        let ring = area.insetBy(dx: -width, dy: -width)
+        let p = overlayPanel(frame: ring)
+        p.ignoresMouseEvents = true
+        p.contentView = borderView(size: ring.size)
+        p.setFrame(ring, display: true)
+        p.orderFrontRegardless()
+        panel = p
+
+        let k = areaBadgeScale
+        let size = badgeSize(k: k)
+        for frame in areaBadgeFrames(area: area, badge: size, screen: screen.frame) {
+            let b = overlayPanel(frame: frame)
+            b.ignoresMouseEvents = false
+            b.becomesKeyOnlyIfNeeded = true
+            b.contentView = RecBadgeView(frame: NSRect(origin: .zero, size: size),
+                                         scale: screen.backingScaleFactor, k: k)
+            b.setFrame(frame, display: true)
+            b.orderFrontRegardless()
+            badges.append(b)
+        }
+    }
+
+    /// Where the badges round an area go, in global points. Pure, for the test.
+    static func areaBadgeFrames(area: NSRect, badge: CGSize, screen: NSRect) -> [NSRect] {
+        let air: CGFloat = width + 6
+        let above = area.maxY + air, below = area.minY - air - badge.height
+        let left = area.minX, right = area.maxX - badge.width
+        var origins = [CGPoint(x: left, y: above), CGPoint(x: right, y: below)]
+        if area.width >= 2 * badge.width + 12 {
+            origins.insert(CGPoint(x: right, y: above), at: 1)
+            origins.insert(CGPoint(x: left, y: below), at: 2)
+        }
+        return origins.map { o in
+            let x = min(max(o.x, screen.minX), screen.maxX - badge.width)
+            let y = min(max(o.y, screen.minY), screen.maxY - badge.height)
+            return NSRect(origin: CGPoint(x: x, y: y), size: badge)
+        }
+    }
+
+    /// An area's ring and badges, for `FilmBorderTests` — global points made local to `screen`.
+    static func areaContent(area: NSRect, screen: NSRect, scale: CGFloat) -> NSView {
+        let v = NSView(frame: NSRect(origin: .zero, size: screen.size))
+        v.wantsLayer = true
+        let ring = area.insetBy(dx: -width, dy: -width)
+        let border = borderView(size: ring.size).layer!
+        border.frame = ring.offsetBy(dx: -screen.minX, dy: -screen.minY)
+        v.layer?.addSublayer(border)
+        let k = areaBadgeScale
+        for f in areaBadgeFrames(area: area, badge: badgeSize(k: k), screen: screen) {
+            let badge = badgeLayer(scale: scale, k: k)
+            badge.frame.origin = CGPoint(x: f.minX - screen.minX, y: f.minY - screen.minY)
+            v.layer?.addSublayer(badge)
+        }
+        return v
+    }
+
     static func show(on screen: NSScreen) {
         guard Thread.isMainThread else { DispatchQueue.main.async { show(on: screen) }; return }
         hide()
@@ -472,27 +599,28 @@ enum FilmBorder {
         return v
     }
 
-    static func recText() -> NSAttributedString {
+    static func recText(k: CGFloat = 1) -> NSAttributedString {
         NSAttributedString(string: "REC", attributes: [
-            .font: NSFont.monospacedSystemFont(ofSize: textSize, weight: .heavy),
+            .font: NSFont.monospacedSystemFont(ofSize: textSize * k, weight: .heavy),
             .foregroundColor: ink,
         ])
     }
 
     /// `● REC`, with room for the halo.
-    static func badgeSize() -> CGSize {
-        let text = recText().size()
-        return CGSize(width: dot + gap + ceil(text.width), height: max(dot, ceil(text.height)))
+    static func badgeSize(k: CGFloat = 1) -> CGSize {
+        let text = recText(k: k).size()
+        return CGSize(width: dot * k + gap * k + ceil(text.width), height: max(dot * k, ceil(text.height)))
     }
 
     /// One `● REC`: the dot (the first sublayer) blinking slowly, `REC` steady
     /// beside it, a dark halo so the red reads on a white page as well as on a
     /// terminal.
-    static func badgeLayer(scale: CGFloat) -> CALayer {
-        let size = badgeSize()
+    static func badgeLayer(scale: CGFloat, k: CGFloat = 1) -> CALayer {
+        let size = badgeSize(k: k)
+        let dot = self.dot * k
         let badge = CALayer()
         badge.frame = CGRect(origin: .zero, size: size)
-        let text = recText()
+        let text = recText(k: k)
         let textSize = text.size()
         let rec = CATextLayer()
         rec.string = text
@@ -556,8 +684,8 @@ final class RecBadgeView: NSView {
     private let badge: CALayer
     private var dotLayer: CALayer? { badge.sublayers?.first }
 
-    init(frame: NSRect, scale: CGFloat) {
-        badge = FilmBorder.badgeLayer(scale: scale)
+    init(frame: NSRect, scale: CGFloat, k: CGFloat = 1) {
+        badge = FilmBorder.badgeLayer(scale: scale, k: k)
         super.init(frame: frame)
         wantsLayer = true
         layer?.addSublayer(badge)

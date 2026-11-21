@@ -268,6 +268,37 @@ VCR camera"*). One 50 pt red dot (42 → 50 on 2026-10-16, *"20% larger"*), a ha
 on both, under the menu bar. The border blinks on its own layer at its old pace. Review:
 `FILM_BORDER_PNG=<dir> swift test --filter FilmBorderTests`.
 
+## 🔽 ↑ after a wheel crop films that area alone (2026-11-21)
+
+Victor: *"dacă am selectat cu wheel-ul o zonă … butonul de back și swipe în sus să înregistreze doar
+secțiunea aceeași. Apoi apar recu în jurul acelei zone … să atrag atenția pe o anumită zonă și să mai
+scutesc și din pixeli … și pe helper tooltips"*.
+
+- **The last area of this sentence is what 🔽 ↑ films** — `AppDelegate.filmArea` (rect, screen, and the
+  sentence's `dictationStartedAt`, so an earlier sentence's box is never used), set when a crop's
+  selection comes back (the **source** box on a move). No crop in this sentence → the whole display,
+  as before. `ScreenFilm.start(area:on:)`: the frames are `CGDisplayCreateImage(_:rect:)` of the box
+  (the display's own points, top-left origin — `ScreenFilm.displayRect`), the video
+  `SCStreamConfiguration.sourceRect` at the box's pixels (even sizes, HEVC), and **an area does not
+  follow the pointer** to another display. Log `🎬 recording the area x1,y1→x2,y2 px of display N`.
+- **The ring is round the box, not the screen**: `FilmBorder.show(around:on:)` — the same blinking
+  5 pt border just outside the box (never over what is filmed), and the four `● REC` at half size
+  (`areaBadgeScale`) outside its corners, top two above, bottom two below, only top-left and
+  bottom-right when the box is narrower than a pair; kept on the screen; clickable to stop, as ever.
+  `FILM_BORDER_PNG=<dir> swift test --filter FilmBorderTests` writes `film-area.png`.
+- **The corner hints say it**: `GestureHintBar.Stage.areaFilm` (`RelayWindow.setAreaFilm`, cleared by
+  `setListening`) turns 🔽 ↑ `🔴 video` into `🔴 ✂️ video` (render `prompt-area`).
+- **The envelope names the box**: `Result.area` (display pixels); the short row gains `only the area
+  ✂️x1,y1→x2,y2`, the long form a `[The recording is only the area … not the whole display]` row.
+- Checked on the desk: `WT_SHOOT_FILM=2 WT_SHOOT_FILM_AREA=1828,437,400,300` (AppKit global points)
+  on a secondary DELL — frame 5, the video's frame at 0.5 s and `screencapture -D 2` cropped at
+  (100, 380) are the same 400×300 picture.
+- **The film's grab no longer deadlocks its stop** (found the same evening): `grab` hops to main
+  through `ReplyPanel.outOfShot` (2026-11-20) and `stop()` waits on main for the encoder slots, so a
+  tick that took a slot and then waited for main hung both — every `WT_SHOOT_FILM` run, and the app
+  whenever a stop landed mid-grab. The tick grabs first, then takes a slot, and drops its frame once
+  `ended` is set; the harness runs the main run loop instead of `Thread.sleep`.
+
 ## The film's full-rate video (2026-10-27, `FilmVideo.swift`)
 
 Victor: *"besides the frames, five frames per second, I want also to have an actual video recorded at

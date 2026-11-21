@@ -16685,3 +16685,16 @@ and Teams screen share"*.
   — and during a 🎦 film, 5 times a second for ~20 ms each (the REC badges and border included).
 - The folder menu (`SpawnFolderMenu.joinsTheShare`) and `EdgeDust` also set `.readOnly` and
   register on `inShotChanged` explicitly — written before the general rule; harmless beside it.
+
+## 2026-11-21 — 🔽 ↑ after a wheel crop films the area alone
+
+Victor wanted the film to follow the crop: after a box is dragged with the wheel, 🔽 ↑ (the film's
+existing gesture, *"butonul de back și swipe în sus"*) records only that box — to draw the eye and to
+spend fewer pixels. Kept the gesture, made the area the film's scope when one was taken in the same
+sentence; the REC ring and half-size badges go round the box; the corner hint reads `🔴 ✂️ video`.
+The rules are in `.claude/rules/screenshots-and-selection.md`. Open question left to him: a whole-screen
+film after a crop in the same sentence is no longer reachable (no gesture for it).
+
+Along the way: the film's grab/stop deadlock introduced on 2026-11-20 (`outOfShot` hops to main
+while `stop()` holds main waiting for a slot the grabbing tick held) — fixed by grabbing before
+taking the slot.

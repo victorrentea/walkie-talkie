@@ -132,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the first or teach the envelope a new shape. The envelope learned the
     /// shape; replacing what he deliberately captured was never acceptable.
     private var pendingFilms: [ScreenFilm.Result] = []
+    /// **The last area he dragged with the wheel in this sentence** — what 🔽 ↑
+    /// films instead of the whole display (2026-11-21). Keyed by the sentence's
+    /// start, so one from an earlier sentence is never picked up. Main only.
+    private var filmArea: (rect: NSRect, screen: NSScreen, sentence: Date)?
 
 
     /// **Is Wispr Flow's microphone open right now?** — a `WisprWatch` that only
@@ -8476,7 +8480,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.film != nil else { return }
             self.toggleFilm()
         }
-        guard let started = ScreenFilm.start() else {
+        // **After a wheel crop, the film is that area alone** (2026-11-21, Victor:
+        // *"dacă am selectat cu wheel-ul o zonă … butonul de back și swipe în sus
+        // să înregistreze doar secțiunea aceeași … să atrag atenția pe o anumită
+        // zonă și să mai scutesc și din pixeli"*). The last box of this sentence;
+        // none → the whole display, as before.
+        stateLock.lock()
+        let sentence = dictationStartedAt
+        stateLock.unlock()
+        let area = filmArea.flatMap { $0.sentence == sentence ? $0 : nil }
+        guard let started = ScreenFilm.start(area: area?.rect, on: area?.screen) else {
             overlay.flash("⚠️ could not start the recording", duration: 5)
             return
         }
@@ -11199,6 +11212,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **Numbered when there is more than one**, because a sentence may carry
     /// several — *"first I recorded the bug, then the fix"* — and `the recording`
     /// stops being a referring expression the moment there are two.
+    /// **A film of a wheel-dragged area says which area** (2026-11-21): its corners
+    /// in the display's pixels, the notation a `📸n✂️` token uses.
+    static func filmAreaToken(_ a: CGRect) -> String {
+        "only the area ✂️\(Int(a.minX)),\(Int(a.minY))→\(Int(a.maxX)),\(Int(a.maxY))"
+    }
+
+    static func filmAreaNote(_ a: CGRect) -> String {
+        "The recording is \(filmAreaToken(a)) of the screen (its pixels, top-left origin), not the whole display"
+    }
+
     private static func filmClause(_ films: [ScreenFilm.Result]) -> String? {
         let usable = films.filter { $0.sheet != nil }
         guard !usable.isEmpty else { return nil }
@@ -11214,6 +11237,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               + "The full-resolution frames are %@/frame-NNNN.jpg, numbered as on the "
                               + "sheet: open one when the sheet shows something worth reading.]",
                               label, film.duration, ScreenFilm.fps, film.frames.count, dir, name, dir)
+            if let a = film.area {
+                line += "\n[" + Self.filmAreaNote(a) + "]"
+            }
             if let video = film.video {
                 line += "\n" + videoNote(video, fps: film.videoFPS, dir: dir)
             }
@@ -11497,6 +11523,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                  ShotMarker.Token.key(film: i + 1), frames,
                                  (sheet.path as NSString).lastPathComponent,
                                  film.duration, film.frames.count)
+                if let a = film.area { row += ", " + Self.filmAreaToken(a) }
                 if let video = film.video { row += ", video \(video.lastPathComponent)" }
                 rows.append(row + "]")
                 continue
@@ -11506,6 +11533,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                ShotMarker.Token.key(film: i + 1),
                                name(sheet.path), film.duration, ScreenFilm.fps,
                                film.frames.count, frames))
+            if let a = film.area { rows.append("[" + Self.filmAreaNote(a) + "]") }
             if let video = film.video {
                 rows.append(videoNote(video, fps: film.videoFPS, dir: frames))
             }
@@ -12704,6 +12732,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // is the tidy-up-announcement `checkAlive` already refuses.
                     Log.info("✂️ area selection cancelled")
                     return
+                }
+                // 🔽 ↑ now films this box alone (2026-11-21) — the source box on a move.
+                self.stateLock.lock()
+                let sentence = self.dictationStartedAt
+                self.stateLock.unlock()
+                if let sentence {
+                    self.filmArea = (selection.rect, selection.screen, sentence)
+                    self.overlay.setAreaFilm(true)
                 }
                 DispatchQueue.global(qos: .userInitiated).async {
                     self.fileArea(selection.rect, on: selection.screen,

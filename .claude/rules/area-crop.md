@@ -22,6 +22,8 @@ The middle button held and dragged during a dictation selects a rectangle of the
 
 - **A crop moves the corner hint bar out of the way** (2026-10-09). The swallowed drags reach no window, so the bar's pointer dodge never heard them; `HotkeyTap.onAreaMoved` → `RelayWindow.pointerMovedUnseen` feeds it.
 
+- **🔽 ↑ after a crop films that box alone, ringed by `● REC`** (2026-11-21) — `screenshots-and-selection.md`, *🔽 ↑ after a wheel crop films that area alone*.
+
 ## The shared module (`Package.swift`)
 
 - **`CropGeometry`, `CropSelectionOverlay`, `CropCapture` live in `../victor-mac-kit`, as a path dependency.** Both apps declare `.package(path: "../victor-mac-kit")`, so a fresh clone of either needs the sibling checked out beside it. That is the trade for editing the shared gesture and rebuilding in one step — no push, no version bump, no resolve — and both apps are only ever built on this Mac, from local. → journal: *The shared module, and why it is a path dependency*
