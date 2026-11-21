@@ -758,7 +758,10 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
   context there either.
 - **Under 3 words, or no letter/digit, the words go as said** (`minimumWords`) — nothing to fix, and
   the wait is felt most on a short sentence.
-- **One Haiku session kept up for 40 sentences** (`sessionTurns`), then replaced by a spare started
+- **Sonnet at low effort since 2026-11-22** (Victor: *"Treci la Sonnet ca redactor"*; Haiku until
+  then — see *Haiku copies the screen* below). `WT_EDITOR_MODEL` / `WT_EDITOR_EFFORT` (`low`) switch;
+  `WT_EDITOR_EFFORT=` empty for Haiku, which takes none.
+- **One session kept up for 40 sentences** (`sessionTurns`), then replaced by a spare started
   beforehand; a sentence that finds it busy takes the spare once. Measured: 1.3–2.0 s per sentence
   in a kept session vs 1.6–4.9 s with a fresh process each (*"nu vreau să trec pe api key-ul în
   niciun caz"* — the subscription stays). A session silent 30 s is replaced. **Budget 4 s**
@@ -769,7 +772,7 @@ he hesitated**; what the agent does about it lives in CLAUDE.md, not in the tag.
   screen above the caret, the dictation `în ziua doi nu de fapt în ziua trei` came back inverted
   2 runs in 3, even with the rule *never copy words … that were not spoken*; Sonnet (low effort) got it
   right 3/3 at 1.4–3.9 s. **No concrete examples in the prompt** — `marți … miercuri` leaked
-  `miercuri` into an answer. `WT_EDITOR_MODEL=sonnet` switches.
+  `miercuri` into an answer. The default since 2026-11-22.
 
 ## Do not
 

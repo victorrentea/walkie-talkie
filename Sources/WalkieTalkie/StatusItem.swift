@@ -1400,7 +1400,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
         turnCostRow.image = Self.tick(TurnCost.enabled)
         turnCostRow.toolTip = "When a prompt you sent ends its turn in Claude Code, what that turn would cost "
             + "at API prices shows by the pointer for a few seconds: amount, model, project."
-        editorRow.toolTip = "A plain dictation from ElevenLabs or a local model is read once more by Haiku "
+        editorRow.toolTip = "A plain dictation from ElevenLabs or a local model is read once more by Sonnet "
             + "before it is pasted, with what is on screen: the app, the text around the caret, the names in the window. "
             + "It fixes misheard words and names, drops fillers and keeps only a self-correction.\n"
             + "Wispr Flow's words are already edited by Wispr. Waits at most \(Int(DictationEditor.budget)) s, then pastes the raw words."

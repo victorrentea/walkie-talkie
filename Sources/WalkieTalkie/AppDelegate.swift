@@ -1526,7 +1526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ⚡ The quick model's process, started now so the first 🔼 ← question
         // does not pay its ~4 s start-up (`QuickAsk`).
         QuickAsk.shared.warm()
-        // ✍️ And the dictation editor's, Haiku (`DictationEditor`).
+        // ✍️ And the dictation editor's, Sonnet (`DictationEditor`).
         DictationEditor.shared.warm()
         // 👂 "Hey Claude" (2026-11-12, `WakeWord`) — its own helper, its own venv.
         if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil {

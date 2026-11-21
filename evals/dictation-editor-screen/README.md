@@ -87,3 +87,5 @@ two blind judges (`JUDGE=fable` for the second).
 - **Sonnet over Haiku is confirmed**: 65 sentences to 16, latency median
   0.99 → 1.44 s (p90 1.48 → 2.25 s).
 - 40 cases and one judge is not a measurement here: the same arm pair flipped sign at 120.
+- **Shipped 2026-11-22: Sonnet at low effort, without the talk before** (Victor: *"Treci la Sonnet ca
+  redactor"*) — `DictationEditor.model` / `effort`, `WT_EDITOR_MODEL` / `WT_EDITOR_EFFORT` switch back.

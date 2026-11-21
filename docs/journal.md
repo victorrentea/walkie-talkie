@@ -16698,3 +16698,11 @@ film after a crop in the same sentence is no longer reachable (no gesture for it
 Along the way: the film's grab/stop deadlock introduced on 2026-11-20 (`outOfShot` hops to main
 while `stop()` holds main waiting for a slot the grabbing tick held) — fixed by grabbing before
 taking the slot.
+
+## 2026-11-22 — ✍️ The redactor runs on Sonnet
+
+Victor: *"Treci la Sonnet ca redactor."* The plain-dictation editor (`DictationEditor`) moves from
+Haiku to **Sonnet at low effort** (`WT_EDITOR_EFFORT`, new; Haiku had none). The reason was on file
+since 2026-10-22: Haiku inverted a self-correction by copying the words above the caret (2 runs in 3),
+Sonnet low got it right 3/3 at 1.4–3.9 s. The 4 s budget is unchanged — a late Sonnet edit still
+pastes the raw words and is only logged; watch `✍️ editor: … in N ms` for how often that happens.

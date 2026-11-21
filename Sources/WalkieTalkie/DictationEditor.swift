@@ -24,7 +24,7 @@ import ApplicationServices
 ///
 /// **On the subscription, never an API key** (`QuickAsk.Worker`; Victor: *"nu
 /// vreau să trec pe api key-ul în niciun caz"*). **One Haiku session kept up for
-/// many sentences** (same evening, Victor: *"am folosit un haiku într-o sesiune
+/// many sentences** (Sonnet since 2026-11-22 — `model`; same evening, Victor: *"am folosit un haiku într-o sesiune
 /// ținută activă … n-ar strica timp dacă l-am avea deja pornit"*): measured, the
 /// same process answering twelve sentences in a row took 1.3–2.0 s each (median
 /// ~1.45 s), against 1.6–4.9 s (median ~2.4 s) for a fresh — even pre-started —
@@ -55,7 +55,12 @@ final class DictationEditor {
         (ProcessInfo.processInfo.environment["WT_EDITOR_BUDGET"]).flatMap(Double.init) ?? 4.0
     }
 
-    var model: String { ProcessInfo.processInfo.environment["WT_EDITOR_MODEL"] ?? "haiku" }
+    /// **Sonnet at low effort since 2026-11-22** (Victor: *"Treci la Sonnet ca
+    /// redactor"*) — Haiku copied the screen's words into a self-correction
+    /// (2 runs in 3), Sonnet low got it right 3/3 at 1.4–3.9 s (2026-10-22).
+    var model: String { ProcessInfo.processInfo.environment["WT_EDITOR_MODEL"] ?? "sonnet" }
+    /// Empty = the model's own (Haiku takes none).
+    var effort: String { ProcessInfo.processInfo.environment["WT_EDITOR_EFFORT"] ?? "low" }
 
     static let systemPrompt = """
         You are a dictation editor. The user dictated by voice; a speech recogniser wrote <dictation>. \
@@ -424,7 +429,7 @@ final class DictationEditor {
     private func start() -> QuickAsk.Worker? {
         guard failedStarts < 3 else { return nil }
         do {
-            let w = try QuickAsk.Worker(model: model, effort: "", prompt: Self.systemPrompt)
+            let w = try QuickAsk.Worker(model: model, effort: effort, prompt: Self.systemPrompt)
             watch(w)
             return w
         } catch {
