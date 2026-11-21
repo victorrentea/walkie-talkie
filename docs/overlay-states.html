@@ -101,7 +101,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 74 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 73 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -177,7 +177,7 @@
         </header>
         <div class="shot"><img src="states/listening-kamikaze.png" width="308" height="93" style="opacity:0.8" alt="Kamikaze — the agent closes when done"></div>
         <p class="when">🔼 ↓ while a sentence is open or still on its way. Again takes it back.</p>
-        <p class="note"><strong>A row under the others</strong>, like everything the sentence carries. It says the delivered prompt will end with <code>kamikaze</code> on a line of its own — the agent&#x27;s cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.</p>
+        <p class="note"><strong>Always the last row, under the destination too</strong> (2026-11-22, Victor: <em>&quot;Kamikaze în tooltip vine mereu … ultimul&quot;</em>). It says the delivered prompt will end with <code>kamikaze</code> on a line of its own — the agent&#x27;s cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.</p>
         <code class="slug">listening-kamikaze</code>
       </section>
       <section class="card" id="listening-model-switch">
@@ -477,16 +477,6 @@
         <p class="when">The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).</p>
         <p class="note"><strong><code>📻 Ready for more</code> is the top row</strong> (2026-10-21, <code>Ready</code> until 2026-10-22, Victor: <em>&quot;even though it&#x27;s transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready&quot;</em>). The walkie and the row&#x27;s ordinary ink, above the wait — <strong>no green since 2026-10-22</strong>, and the yellow flash of a changed row when it comes up (Victor: <em>&quot;să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare&quot;</em>) — <strong>on the word <code>Ready</code> alone</strong> since 2026-10-23 (<em>&quot;cuvântul ready, nu și ready for more&quot;</em>), shown here at its brightest. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.</p>
         <code class="slug">transcribing-ready</code>
-      </section>
-      <section class="card" id="transcribing-lora">
-        <header>
-          <h3>…on Victor&#x27;s own model</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/transcribing-lora.png" width="308" height="93" style="opacity:0.8" alt="…on Victor&#x27;s own model"></div>
-        <p class="when">The wait, when the local model is the Engine and its weights are the LoRA trained on his voice.</p>
-        <p class="note"><strong>A subscript <code>ᵥ</code> after the local model&#x27;s 💻</strong> (2026-10-04, Victor: <em>&quot;pune un v mic după acel măr … dacă e modelul meu cu Lora&quot;</em>, then <em>&quot;ca indice&quot;</em>, and the apple became the laptop: <em>&quot;ca să se înțeleagă local&quot;</em>) — on <code>Transcribing via</code> and on the listening row&#x27;s arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.</p>
-        <code class="slug">transcribing-lora</code>
       </section>
       <section class="card" id="transcribing-local-now">
         <header>
@@ -896,7 +886,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 221ff1be · 20 Nov 2026 · built 21 Nov 2026, 19:12
+  Generated from <code>OverlayStates.swift</code> · repo at e4ea3839 · 22 Nov 2026 · built 22 Nov 2026, 00:17
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

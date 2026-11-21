@@ -104,7 +104,7 @@ enum OverlayStates {
 
             Shot(slug: "listening-kamikaze", group: "Dictating", title: "Kamikaze — the agent closes when done",
                  when: "🔼 ↓ while a sentence is open or still on its way. Again takes it back.",
-                 note: "**A row under the others**, like everything the sentence carries. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
+                 note: "**Always the last row, under the destination too** (2026-11-22, Victor: *\"Kamikaze în tooltip vine mereu … ultimul\"*). It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setListening(true)
@@ -380,7 +380,7 @@ enum OverlayStates {
                  note: "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and the row's ordinary ink, above the wait — **no green since 2026-10-22**, and the yellow flash of a changed row when it comes up (Victor: *\"să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare\"*) — **on the word `Ready` alone** since 2026-10-23 (*\"cuvântul ready, nu și ready for more\"*), shown here at its brightest. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue) \(Glyphs.loraMark)")
+                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue)")
                 o.setTranscribing(true)
                 o.setReadyForNext(true)
                 o.setShotCount(1)
@@ -388,16 +388,6 @@ enum OverlayStates {
                 o.pinChangePulse()
             },
 
-            Shot(slug: "transcribing-lora", group: "Dictating", title: "…on Victor's own model",
-                 when: "The wait, when the local model is the Engine and its weights are the LoRA trained on his voice.",
-                 note: "**A subscript `ᵥ` after the local model's 💻** (2026-10-04, Victor: *\"pune un v mic după acel măr … dacă e modelul meu cu Lora\"*, then *\"ca indice\"*, and the apple became the laptop: *\"ca să se înțeleagă local\"*) — on `Transcribing via` and on the listening row's arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue) \(Glyphs.loraMark)")
-                o.setTranscribing(true)
-                o.setShotCount(1)
-                o.pinTranscribeWarmth(0.45)
-            },
 
             Shot(slug: "transcribing-local-now", group: "Dictating", title: "⌘⌃X — the local model, now",
                  when: "From one second into the wait for ElevenLabs (or Wispr Flow) with *Fallback ☁️ → 💻 (Pre-Transcribe)* off — never while the microphone is open. With it on, the row is the `💻 local in 3s / ⌘⌃X ...` countdown.",

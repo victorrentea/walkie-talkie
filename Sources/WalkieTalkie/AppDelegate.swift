@@ -326,14 +326,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// this is already a bug somewhere above.
     private static func engineMark(_ id: String) -> String {
         switch id {
-        // **A subscript `ᵥ` after the laptop when the weights are Victor's
-        // LoRA** (2026-10-04, Victor: *"pune un v mic după acel măr … dacă e
-        // modelul meu cu Lora"*). Read from the pick, which the helper loads at
-        // the next idle moment — the same moment this mark is next pushed.
-        // A space between the two (2026-10-04, *"pune un spațiu între laptop
-        // și v"*): flush, the subscript read as part of the laptop.
+        // **The bare laptop, whatever the weights** (2026-11-22, Victor: *"scoate
+        // de după laptop V-ul mic … pune doar laptop, fără V"*) — the subscript
+        // `ᵥ` for his LoRA (2026-10-04) is gone from `Prompting →` and
+        // `Transcribing via` alike.
         case "whisper": return String(Glyphs.Engine.mac.rawValue)
-            + (WhisperModels.selected == WhisperModels.original ? "" : " " + String(Glyphs.loraMark))
         case "eleven", "eleven-live": return String(Glyphs.Engine.eleven.rawValue)
         case "wispr": return String(Glyphs.Engine.wispr.rawValue)
         // The default's logo, like `engine(named:)`'s default source.

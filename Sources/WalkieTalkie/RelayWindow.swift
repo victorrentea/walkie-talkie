@@ -2258,12 +2258,15 @@ private let heardLabel = NSTextField(labelWithString: "")
             modelRow.isHidden = true
         }
 
-        if kamikaze {
+        // ☠️ Kamikaze is the chip's last row (2026-11-22) — placed under the
+        // destination row below; here only on the prompt panel.
+        let kamikazeLast = kamikaze && sentPrompt == nil
+        if kamikaze, !kamikazeLast {
             kamikazeInfo.sizeToFit()
             layoutGlyphRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, width: innerWidth)
             kamikazeRow.isHidden = false
             rows.append((kamikazeRow, recordRowHeight))
-        } else {
+        } else if !kamikaze {
             kamikazeRow.isHidden = true
         }
 
@@ -2362,6 +2365,16 @@ private let heardLabel = NSTextField(labelWithString: "")
             rows.append((heldRow, recordRowHeight))
         } else {
             heldRow.isHidden = true
+        }
+
+        // **☠️ Kamikaze, always the chip's last row** (2026-11-22, Victor:
+        // *"Kamikaze în tooltip vine mereu … ultimul"*) — under the destination
+        // row too, so the one flag that ends the agent is where the eye lands last.
+        if kamikazeLast {
+            kamikazeInfo.sizeToFit()
+            layoutGlyphRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, width: innerWidth)
+            kamikazeRow.isHidden = false
+            rows.append((kamikazeRow, recordRowHeight))
         }
 
 

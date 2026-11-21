@@ -49,7 +49,7 @@
     "group" : "Dictating",
     "height" : 93,
     "image" : "listening-kamikaze.png",
-    "note" : "**A row under the others**, like everything the sentence carries. It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
+    "note" : "**Always the last row, under the destination too** (2026-11-22, Victor: *\"Kamikaze în tooltip vine mereu … ultimul\"*). It says the delivered prompt will end with `kamikaze` on a line of its own — the agent's cue to close its terminal once the job is done. It goes when the sentence is delivered or cancelled, or on a second 🔼 ↓.",
     "shape" : "chip",
     "slug" : "listening-kamikaze",
     "title" : "Kamikaze — the agent closes when done",
@@ -387,18 +387,6 @@
     "slug" : "transcribing-ready",
     "title" : "Ready for more — talk again while it transcribes",
     "when" : "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
-    "width" : 308
-  },
-  {
-    "alpha" : 0.80000000000000004,
-    "group" : "Dictating",
-    "height" : 93,
-    "image" : "transcribing-lora.png",
-    "note" : "**A subscript `ᵥ` after the local model's 💻** (2026-10-04, Victor: *\"pune un v mic după acel măr … dacă e modelul meu cu Lora\"*, then *\"ca indice\"*, and the apple became the laptop: *\"ca să se înțeleagă local\"*) — on `Transcribing via` and on the listening row's arrow alike. Small and lowered in the font itself, and it fills with the bar like the letters round it. The published Turbo weights wear the bare laptop.",
-    "shape" : "chip",
-    "slug" : "transcribing-lora",
-    "title" : "…on Victor's own model",
-    "when" : "The wait, when the local model is the Engine and its weights are the LoRA trained on his voice.",
     "width" : 308
   },
   {

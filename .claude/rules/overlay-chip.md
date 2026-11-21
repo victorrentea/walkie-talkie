@@ -76,6 +76,8 @@ yields to `--label`).
 
 ## Rows: order, tally, geometry
 
+- **☠️ Kamikaze is the chip's very last row, under the destination** (2026-11-22, Victor: *"Kamikaze în
+  tooltip vine mereu … ultimul"*) — on the prompt panel it keeps its place among the rows.
 - **Row order, top to bottom: the dictation's state, the shots, the quoted highlight, Chrome, and
   the destination last** (2026-10-26, Victor: *"mută simbolul de caret care apare în tooltip mereu să
   vină ultimul, sub toate celelalte … cum are label"*): the row with the map pin or the terminal's
@@ -263,9 +265,9 @@ yields to `--label`).
   simbolul microfonului in fata, inainte de Dictating/Prompting"*, then *"nu trebuie înconjurat cu
   cerc portocaliu, ci doar … emoji-ul normal"* — **no disc**). `AppDelegate.pushMicMark` sends the
   device to `RelayWindow.setRecordDevice` (the bare emoji at `iconInk`) and only `→ <logo>` to
-  `setMicMark`; an unknown device keeps the walkie. The row reads `🎤 Prompting → ⬮...`. **The local model's mark is 💻 (the Apple mark until 2026-10-04) and wears a subscript `ᵥ`
-  (`Glyphs.loraMark`, U+1D65) when the weights are not the published Turbo** — drawn as a letter,
-  filling with the bar (state `transcribing-lora`). The film row's icon is a drawn red dot (2026-10-16; 🎞️ from 2026-10-04, 📹 before), glowing three dots across while recording (`filmGlow`), and the trailing 🔴 is gone.
+  `setMicMark`; an unknown device keeps the walkie. The row reads `🎤 Prompting → ⬮...`. **The local model's mark is 💻 (the Apple mark until 2026-10-04), bare whatever the weights** —
+  the subscript `ᵥ` (`Glyphs.loraMark`) for his LoRA, 2026-10-04, went on 2026-11-22 (Victor: *"scoate de
+  după laptop V-ul mic … pune doar laptop, fără V"*), with the `transcribing-lora` shot. The film row's icon is a drawn red dot (2026-10-16; 🎞️ from 2026-10-04, 📹 before), glowing three dots across while recording (`filmGlow`), and the trailing 🔴 is gone.
 - **`Listening to 🎤 → ⬮...` since 2026-09-24** (the device moved into the disc on 2026-10-04, above) — the listening row names the recogniser too, after an
   arrow (*"place an arrow and then specify as well the transcription engine"*). Wispr's five bars
   whenever Wispr holds the mic, whatever `Engine` says, and the device glyph is then Wispr's own
