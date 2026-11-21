@@ -1,8 +1,13 @@
 """Blind judge: Opus sees the context frame, the raw recognition and the two edits in random order.
-usage: judge.py out/cases.jsonl out/edits.jsonl out/judged.jsonl [workers]"""
+usage: judge.py out/cases.jsonl out/edits.jsonl out/judged.jsonl [workers]
+       LEFT=file:key RIGHT=file:key judge.py … compares any two arms (default: edits A vs B)"""
 import base64, json, os, random, subprocess, sys, threading
 cases = {json.loads(l)["id"]: json.loads(l) for l in open(sys.argv[1])}
-edits = [json.loads(l) for l in open(sys.argv[2])]
+def arm(spec, default_key):
+    f, k = (spec.split(":") + [default_key])[:2] if spec else (sys.argv[2], default_key)
+    return {json.loads(l)["id"]: json.loads(l)[k] for l in open(f)}
+L, R = arm(os.environ.get("LEFT"), "A"), arm(os.environ.get("RIGHT"), "B")
+edits = [{"id": i, "A": L[i], "B": R[i]} for i in L if i in R]
 workers = int(sys.argv[4]) if len(sys.argv) > 4 else 6
 env = {k: v for k, v in os.environ.items() if not (k.startswith("CLAUDE_CODE_") or k == "CLAUDECODE")}
 ASK = """A speech recogniser wrote RAW from Victor's voice (Romanian and/or English, a software trainer).
@@ -21,9 +26,14 @@ jobs = [(e, random.random() < 0.5) for e in edits]
 def judge(e, flip):
     c = cases[e["id"]]
     e1, e2 = (e["B"], e["A"]) if flip else (e["A"], e["B"])
-    content = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
-                "data": base64.b64encode(open(c["shot"], "rb").read()).decode()}},
-               {"type": "text", "text": ASK.format(raw=c["words"], e1=e1, e2=e2)}]
+    ask = ASK.format(raw=c["words"], e1=e1, e2=e2)
+    if c.get("pre"):  # no picture: the talk before the dictation is the context
+        ask = ask.replace("the picture is his screen when he spoke", "PRIOR is what the room microphone transcribed in the minutes before (imperfect)")
+        ask = ask.replace("the screen helps you", "PRIOR helps you").replace("from the screen", "from PRIOR")
+        ask = ask.replace("RAW: <<<", "PRIOR: <<<" + c["pre"] + ">>>\nRAW: <<<", 1)
+    content = ([{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                "data": base64.b64encode(open(c["shot"], "rb").read()).decode()}}] if c.get("shot") else []) + \
+              [{"type": "text", "text": ask}]
     p = subprocess.run([os.path.expanduser("~/.local/bin/claude"), "-p", "--model", "opus", "--input-format", "stream-json",
         "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config",
         "--setting-sources", ""], input=json.dumps({"type": "user", "message": {"role": "user", "content": content}}) + "\n",
