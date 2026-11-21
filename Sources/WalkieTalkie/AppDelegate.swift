@@ -1579,6 +1579,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `walkie-reply` reads it; made now, not at the first answer.
         _ = Self.replyToken
         ReplyPanel.watchShareZoom()
+        // 💬 The reply pop-ups the last process was showing or holding (2026-11-21).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { ReplyPanel.restore() }
         // 🐋 Orca's tabs wear their sessions' titles (2026-11-19) — idle while the switch is off.
         OrcaBridge.startTitleSync()
         ReplyPanel.onBind = { [weak self] tty in self?.rebindFromMenu(tty: tty, from: "the reply pop-up", fly: true) }

@@ -191,6 +191,12 @@ the terms on this"*) — not *answer panel*; logs say `💬 the reply pop-up's �
   the pointer, size kept (shrunk to the pointer's screen), slid back inside its visible frame, raised
   at once, nothing bound. Not a Terminal.app tab (IDE, tmux) → `bringToFront` where it is.
   `ReplyPanel.onRaise` is gone. Log `🪟 ttysNNN centred on the pointer (x, y) on <screen> …`.
+- **The pop-ups survive a restart** (2026-11-21, Victor: *"în momentul în care restartez Walkie
+  Talkie, trebuie să restabilești coada de mesaje de pop-up … Tocmai am pierdut un mesaj"* — an answer
+  shown 3 s before `relay-restart.sh` went with the process). The agent answer on screen and the queue
+  behind it are `~/.walkie-talkie/reply-queue.json`, rewritten at every change (`ReplyPanel.saveQueue`);
+  2 s after launch `ReplyPanel.restore()` shows them again, in order. ⚡ quick answers are never kept.
+  Log `💬 N reply pop-up(s) from before the restart — shown again`.
 - **That click drops the same terminal's waiting answers** (2026-11-13, Victor: *"the terminal did
   come forward. The reply did remain on the screen. It should hide once the respective terminal pops
   under the mouse"*). The pop-up had closed; the session's second answer, queued behind it, opened

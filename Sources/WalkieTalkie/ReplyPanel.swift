@@ -41,6 +41,41 @@ enum ReplyPanel {
     private static var queue: [(text: String, label: String?, tty: String?, images: [URL])] = []
     private static var arrivedAt: NSPoint = .zero
 
+    // MARK: Surviving a restart (2026-11-21)
+
+    /// **The agent answer on screen and the ones waiting behind it are on disk until their ✕**
+    /// (2026-11-21, Victor: *"în momentul în care restartez Walkie Talkie, trebuie să restabilești
+    /// coada de mesaje de pop-up … Tocmai am pierdut un mesaj"* — an answer that came up 3 s before
+    /// `relay-restart.sh` went with the process). `~/.walkie-talkie/reply-queue.json`, rewritten at
+    /// every change; `restore()` shows them again at launch, in order. ⚡ quick answers are not kept:
+    /// their process and checks die with the app.
+    private static var openEntry: (text: String, label: String?, tty: String?, images: [URL])?
+    static var queueFile: URL { Outbox.home.appendingPathComponent("reply-queue.json") }
+
+    private static func saveQueue() {
+        let all = (openEntry.map { [$0] } ?? []) + queue
+        guard !all.isEmpty else { try? FileManager.default.removeItem(at: queueFile); return }
+        let rows: [[String: Any]] = all.map { e in
+            ["text": e.text, "label": e.label ?? "", "tty": e.tty ?? "", "images": e.images.map(\.path)]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: rows, options: [.prettyPrinted]) else { return }
+        try? data.write(to: queueFile, options: .atomic)
+    }
+
+    /// The answers the last process was showing or holding, back up — called once at launch.
+    static func restore() {
+        guard let data = try? Data(contentsOf: queueFile),
+              let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]], !rows.isEmpty else { return }
+        Log.info("💬 \(rows.count) reply pop-up(s) from before the restart — shown again")
+        for r in rows {
+            let label = (r["label"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let tty = (r["tty"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+            let images = ((r["images"] as? [String]) ?? []).map { URL(fileURLWithPath: $0) }
+                .filter { FileManager.default.fileExists(atPath: $0.path) }
+            show(r["text"] as? String ?? "", from: label, tty: tty, images: images)
+        }
+    }
+
     /// 400 until 2026-10-09; the pop-up holds a long answer whole, so only a
     /// runaway one is cut.
     static let maxChars = 4000
@@ -250,6 +285,7 @@ enum ReplyPanel {
         if panel != nil {
             queue.append((text, label, tty, images))
             Log.info("💬 answer from \(label ?? "agent") queued behind the open one — \(queue.count) waiting")
+            saveQueue()
             return
         }
         present(text, from: label, tty: tty, images: images)
@@ -369,6 +405,8 @@ enum ReplyPanel {
             panel = nil
         }
         present(text, from: label, tty: nil)
+        openEntry = nil
+        saveQueue()
         liveOpen = true
         liveToken = token
     }
@@ -473,6 +511,8 @@ enum ReplyPanel {
     }
 
     private static func present(_ text: String, from label: String?, tty: String?, images: [URL] = []) {
+        openEntry = label?.hasPrefix(quickMark) == true ? nil : (text, label, tty, images)
+        saveQueue()
         shown = plain(text)
         shownRaw = text
         shownTTY = tty
@@ -1216,6 +1256,7 @@ enum ReplyPanel {
         guard kept.count != queue.count else { return }
         Log.info("💬 \(queue.count - kept.count) waiting answer(s) from \(tty) dropped — its terminal is in front")
         queue = kept
+        saveQueue()
     }
 
     /// `/dev/ttys023` and `ttys023` are one terminal; an answer with no tty is nobody's.
@@ -1244,12 +1285,15 @@ enum ReplyPanel {
         shownImages = []
         wheel = nil
         pictureCache = [:]
-        guard !queue.isEmpty else { return }
+        openEntry = nil
+        guard !queue.isEmpty else { saveQueue(); return }
         let next = queue.removeFirst()
+        openEntry = next
+        saveQueue()
         // The next hop, so a click that closed this one is over before the
         // next panel lands under the pointer.
         DispatchQueue.main.async {
-            guard panel == nil else { queue.insert(next, at: 0); return }
+            guard panel == nil else { queue.insert(next, at: 0); saveQueue(); return }
             present(next.text, from: next.label, tty: next.tty, images: next.images)
         }
     }
