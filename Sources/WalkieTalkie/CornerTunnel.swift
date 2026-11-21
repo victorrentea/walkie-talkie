@@ -153,6 +153,22 @@ final class CornerTunnel {
     }
     /// One lap of the dust's ring, on average.
     static let dustLap: TimeInterval = 1.6
+    /// **The dust winds into its centre and dies out there, no fade** (2026-11-21, Victor:
+    /// *"la final, mișcarea să se ducă spre centru și apoi să se stingă de la sine, în loc
+    /// să facă fade … să se mărească ca mărime și să se oprească în centrul cercului"*):
+    /// over `collapseTime` the ring tightens to nothing (smoothstep), turning faster as it
+    /// does, while the stamp grows to twice its size; then it stands still on the centre,
+    /// fed silence, and the smoke's own dissipation takes it over `dieOut` before the
+    /// panel goes (a last 0.2 s fade only for what is left).
+    static let collapseTime: TimeInterval = 0.7
+    static let collapseGrace: TimeInterval = 0.3
+    static let dieOut: TimeInterval = 1.6
+    /// The ring has reached its centre: the voice stops feeding it.
+    private var quiet = false
+    /// `cut` was called: this sentence's settle draws nothing (cleared at its end).
+    private var cancelled = false
+    /// `pathTimer` is the ring's own (not `collapse`'s spiral).
+    private var circling = false
     /// **Where the dust's stamp is `t` seconds in** — points in the square, y down.
     /// Clockwise, a lap every `dustLap` on average, but *"not perfectly regular"*:
     /// the pace wanders between half and one and a half times that (never back),
@@ -172,6 +188,11 @@ final class CornerTunnel {
     func settle(_ on: Bool, take: @autoclosure () -> [Int16]) {
         guard on != settling else { return }
         settling = on
+        if on, cancelled {
+            Log.info("🌀 no corner wheel — the sentence was cancelled")
+            return
+        }
+        if !on, cancelled { cancelled = false; settleEndedAt = 0; return }
         if on {
             let samples = take()
             claimed = false
@@ -234,11 +255,40 @@ final class CornerTunnel {
         }
     }
 
-    /// A cancel: the wheel is off the screen in this call, no fade.
+    /// A cancel. **The dust stops where it is and dies out by itself** (2026-11-21, Victor:
+    /// *"dacă la orice moment se întrerupe … nu faci fade out, ci pur și simplu nu mai continui
+    /// mișcarea, pentru că animația de Dust se va opri singură"*): the stamp stands still, fed
+    /// silence, for `dieOut`; any other dress is off the screen in this call, no fade.
     func cut() {
+        // **And it does not come up for the cancel's own short settle** (2026-11-21, Victor:
+        // *"if I cancel a dictation, there should be no spinning wheel in the left corner top"*):
+        // `cut` lands before that settle opens, so the wheel came up and wound down after it.
+        cancelled = true
         guard up || panel?.isVisible == true else { return }
         up = false
         turn += 1
+        lingering = false
+        if built == .dust, let p = panel, host != nil {
+            let mine = turn
+            pathTimer?.invalidate(); pathTimer = nil
+            circling = false
+            quiet = true
+            Log.info("🌀 the corner's dust stops where it is — the sentence was cancelled; it dies out by itself")
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.dieOut) { [weak self] in
+                guard let self, self.turn == mine else { return }
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.2
+                    p.animator().alphaValue = 0
+                }, completionHandler: { [weak self] in
+                    guard let self, self.turn == mine else { return }
+                    p.orderOut(nil)
+                    self.feedTimer?.invalidate(); self.feedTimer = nil
+                    self.host?.stop()
+                    self.running = false
+                })
+            }
+            return
+        }
         panel?.alphaValue = 0
         panel?.orderOut(nil)
         feedTimer?.invalidate(); feedTimer = nil
@@ -355,12 +405,29 @@ final class CornerTunnel {
         p.setFrame(target, display: false)
         // Animated, so it cancels a fade-out still in flight (a hover on the dialog
         // and off again): a plain `alphaValue = 1` loses to the running animator.
-        if !p.isVisible { p.alphaValue = 0 }
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            p.animator().alphaValue = 1
+        // **The dust opens out of its centre** (2026-11-21, Victor: *"la fel la acel punct în care
+        // dispare … dintr-un punct central să înceapă să învârtă, făcând o spirală scurtă până
+        // ajunge pe circunferință"*): no fade — the fluid starts empty; `startCircling(grow:)`
+        // widens the ring from nothing over `collapseTime`, the stamp from twice its size.
+        let fresh = !p.isVisible
+        if fresh, built == .dust {
+            pathTimer?.invalidate(); pathTimer = nil
+            p.alphaValue = 1
+        } else {
+            if !p.isVisible { p.alphaValue = 0 }
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                p.animator().alphaValue = 1
+            }
         }
-        if built == .dust, pathTimer == nil { startCircling() }
+        if built == .dust {
+            // Caught mid-collapse: the ring goes on from the angle it had, not from its start.
+            let resume = !fresh && (quiet || pathTimer != nil && !circling)
+            if resume { pathTimer?.invalidate(); pathTimer = nil; startCircling(keepPhase: true) }
+            quiet = false
+            host?.setFluid(Int32(PMH_FLUID_RADIUS), Self.dustKnobs[Int32(PMH_FLUID_RADIUS)] ?? 0.003)
+        }
+        if built == .dust, pathTimer == nil { startCircling(grow: fresh) }
         if !running { host?.start(); running = true }
         if feedTimer == nil { startFeeding() }
         p.orderFrontRegardless()
@@ -373,6 +440,17 @@ final class CornerTunnel {
         up = false
         turn += 1
         let hiding = turn
+        // **Not for a hand-over** (2026-11-21, Victor: *"apar de două ori … două comete"*): the
+        // settle's end and the atom's hold come a few ms apart, and a collapse begun between them
+        // left its comet while the ring restarted beside it. It keeps circling for
+        // `collapseGrace`; a show in that time finds it still turning, untouched.
+        if built == .dust, host != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapseGrace) { [weak self] in
+                guard let self, self.turn == hiding, !self.up else { return }
+                self.collapse(p, hiding)
+            }
+            return
+        }
         Log.info("🌀 the corner tunnel goes")
         NSAnimationContext.runAnimationGroup({ ctx in
             // The dust turns on for half a lap while it fades (2026-11-20, as the pointer's own wheel).
@@ -389,11 +467,50 @@ final class CornerTunnel {
         })
     }
 
+    /// `collapseTime`'s spiral, then `dieOut` with the stamp still on the centre.
+    private func collapse(_ p: NSPanel, _ hiding: Int) {
+        Log.info("🌀 the corner dust winds into its centre and dies out")
+        pathTimer?.invalidate()
+        circling = false
+        let from = CFAbsoluteTimeGetCurrent()
+        let t0 = from - pathFrom
+        let side = Self.side * Self.dustGrain
+        let c = CGPoint(x: side / 2, y: side / 2)
+        let radius = Self.dustKnobs[Int32(PMH_FLUID_RADIUS)] ?? 0.003
+        let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
+            guard let self, self.turn == hiding, let host = self.host else { timer.invalidate(); return }
+            let elapsed = CFAbsoluteTimeGetCurrent() - from
+            let s = min(elapsed / Self.collapseTime, 1)
+            let e = CGFloat(s * s * (3 - 2 * s))
+            let q = Self.dustPoint(at: t0 + elapsed * (1 + s), side: side)
+            host.center(CGPoint(x: c.x + (q.x - c.x) * (1 - e), y: c.y + (q.y - c.y) * (1 - e)))
+            host.setFluid(Int32(PMH_FLUID_RADIUS), radius * Float(1 + e))
+            if s >= 1 { timer.invalidate(); self.pathTimer = nil; self.quiet = true }
+        }
+        pathTimer = t
+        RunLoop.main.add(t, forMode: .common)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.collapseTime + Self.dieOut) { [weak self] in
+            guard let self, self.turn == hiding else { return }
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.2
+                p.animator().alphaValue = 0
+            }, completionHandler: { [weak self] in
+                guard let self, self.turn == hiding else { return }
+                p.orderOut(nil)
+                self.feedTimer?.invalidate(); self.feedTimer = nil
+                self.pathTimer?.invalidate(); self.pathTimer = nil
+                self.host?.stop()
+                self.running = false
+            })
+        }
+    }
+
     private func startFeeding() {
         feedTimer?.invalidate()
         let t = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
             guard let self, let host = self.host else { return }
-            let window = Self.window(of: self.take, elapsed: CFAbsoluteTimeGetCurrent() - self.takeFrom, speed: self.speed)
+            let window = self.quiet ? [Float](repeating: 0, count: 1024)
+                : Self.window(of: self.take, elapsed: CFAbsoluteTimeGetCurrent() - self.takeFrom, speed: self.speed)
             host.feed(CaretHalo.lift(CaretHalo.undoInputGain(window)))
         }
         feedTimer = t
@@ -402,12 +519,26 @@ final class CornerTunnel {
 
     /// The stamp goes round at 60 a second — the engine's own pace, so the fluid is
     /// stirred every frame — from where the ring starts, each time it comes up.
-    private func startCircling() {
-        pathFrom = CFAbsoluteTimeGetCurrent()
-        host?.center(Self.dustPoint(at: 0, side: Self.side * Self.dustGrain))
+    private func startCircling(keepPhase: Bool = false, grow: Bool = false) {
+        circling = true
+        if !keepPhase { pathFrom = CFAbsoluteTimeGetCurrent() }
+        let side = Self.side * Self.dustGrain
+        let c = CGPoint(x: side / 2, y: side / 2)
+        let radius = Self.dustKnobs[Int32(PMH_FLUID_RADIUS)] ?? 0.003
+        let growFrom = CFAbsoluteTimeGetCurrent()
+        // The ring at `e` of its radius, the stamp at `2 − e` of its size (`collapse` backwards).
+        func place(_ host: ProjectMHalo, _ now: CFAbsoluteTime) {
+            let q = Self.dustPoint(at: now - self.pathFrom, side: side)
+            guard grow else { host.center(q); return }
+            let s = min((now - growFrom) / Self.collapseTime, 1)
+            let e = CGFloat(s * s * (3 - 2 * s))
+            host.center(CGPoint(x: c.x + (q.x - c.x) * e, y: c.y + (q.y - c.y) * e))
+            host.setFluid(Int32(PMH_FLUID_RADIUS), radius * Float(2 - e))
+        }
+        if let host { place(host, CFAbsoluteTimeGetCurrent()) }
         let t = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             guard let self, let host = self.host else { return }
-            host.center(Self.dustPoint(at: CFAbsoluteTimeGetCurrent() - self.pathFrom, side: Self.side * Self.dustGrain))
+            place(host, CFAbsoluteTimeGetCurrent())
         }
         pathTimer = t
         RunLoop.main.add(t, forMode: .common)

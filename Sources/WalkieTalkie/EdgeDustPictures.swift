@@ -24,6 +24,13 @@ protocol EdgeDustPicture: AnyObject {
     func stop()
     func feed(_ samples: [Float])
     func setIntensity(_ k: CGFloat)
+    /// Nothing new from now on, what is on its way finishes; answers how long that
+    /// takes. A picture that cannot answers 0 and `EdgeDust` fades it as before.
+    func drain() -> TimeInterval
+}
+
+extension EdgeDustPicture {
+    func drain() -> TimeInterval { 0 }
 }
 
 enum EdgeDustPictures {

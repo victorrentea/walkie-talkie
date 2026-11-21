@@ -63,6 +63,14 @@ final class EdgeDust {
     }
     /// How deep the strip is, in points; the swell doubles it.
     static var thickness: CGFloat { CGFloat(knob("thickness", 110)) }
+    /// The new session's top edge, 30 % deeper than the right one (2026-11-21, Victor:
+    /// *"animația de marginea de sus … fă-o 30% mai mare"*): 110 → 143 pt.
+    static var topThickness: CGFloat { CGFloat(knob("topThickness", 143)) }
+    /// **An edge comes in from off the screen, it does not appear open** (2026-11-21, Victor:
+    /// *"să se ridice de la margine spre interior, nu să apară brusc, deja deschise, să intre
+    /// pe ecran cumva"*): the strip slides in from beyond its edge over this, easing out,
+    /// while the panel fades up.
+    static let enter: TimeInterval = 0.7
     static var restAlpha: CGFloat { CGFloat(knob("alpha", 0.9)) }
     /// The ⚡ question's strip is deeper: its marks walk in and are gone by ~230 pt
     /// (2026-11-20, Victor marked the band on the screen: ~240 pt from the left edge).
@@ -200,9 +208,13 @@ final class EdgeDust {
     // MARK: - Up and down
 
     private func show(_ wanted: Edge) {
+        // **Always the Retina** (2026-11-21, Victor: *"animația de Edge rămâne blocată pe ecranul pe
+        // care a pornit … pune animația de Edge doar pe retina întotdeauna"*) — the pointer's
+        // screen until then; the pointer's only when the lid is closed (`CaretHalo.retina` nil).
         let mouse = NSEvent.mouseLocation
-        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
-        let thickness = wanted == .left ? Self.leftThickness : Self.thickness
+        guard let screen = CaretHalo.retina
+                ?? NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
+        let thickness = wanted == .left ? Self.leftThickness : wanted == .top ? Self.topThickness : Self.thickness
         if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness
             || builtVariant != EdgeDustPictures.current { teardown() }
         builtVariant = EdgeDustPictures.current
@@ -214,9 +226,10 @@ final class EdgeDust {
         picture?.setIntensity(1)
         setSwell(1, animated: false)
         p.sharingType = !Self.capturable && ReplyPanel.inShot ? .none : .readOnly
-        if !p.isVisible { p.alphaValue = 0 }
+        let entering = !p.isVisible
+        if entering { p.alphaValue = 0; slideIn() }
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.5
+            ctx.duration = entering ? Self.enter : 0.5
             p.animator().alphaValue = Self.restAlpha
         }
         picture?.start()
@@ -232,6 +245,22 @@ final class EdgeDust {
         let mine = turn
         pollTimer?.invalidate(); pollTimer = nil
         Log.info("🌫️ the \(edge?.rawValue ?? "?") edge goes — \(why)\(sent ? ", swelling first" : "")")
+        // **Drained, not faded** (2026-11-21): no new grains, the ones on their way finish.
+        // The swell of a sent message rides on top of it; a 0.15 s fade only for leftovers.
+        if let drain = picture?.drain(), drain > 0 {
+            if sent { picture?.setIntensity(2); setSwell(2, animated: true) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + drain) { [weak self] in
+                guard let self, self.turn == mine else { return }
+                NSAnimationContext.runAnimationGroup({ ctx in
+                    ctx.duration = 0.15
+                    p.animator().alphaValue = 0
+                }, completionHandler: {
+                    guard self.turn == mine else { return }
+                    self.settleDown()
+                })
+            }
+            return
+        }
         let out = { [weak self] (span: TimeInterval) in
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = span
@@ -333,6 +362,24 @@ final class EdgeDust {
         }
         layer.sublayerTransform = m
         CATransaction.commit()
+    }
+
+    /// The strip from one depth beyond its edge to where it rests (`Self.enter`).
+    private func slideIn() {
+        guard let layer = panel?.contentView?.layer, let b = built else { return }
+        let t = b.thickness
+        let away: CATransform3D
+        switch b.edge {
+        case .top:   away = CATransform3DMakeTranslation(0, t, 0)
+        case .right: away = CATransform3DMakeTranslation(t, 0, 0)
+        case .left:  away = CATransform3DMakeTranslation(-t, 0, 0)
+        }
+        let a = CABasicAnimation(keyPath: "sublayerTransform")
+        a.fromValue = away
+        a.toValue = layer.sublayerTransform
+        a.duration = Self.enter
+        a.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.8, 0.3, 1)
+        layer.add(a, forKey: "swell")
     }
 
     private func make(_ edge: Edge, on screen: NSRect, thickness: CGFloat) -> NSPanel? {

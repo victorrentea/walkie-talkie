@@ -840,7 +840,11 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   panel coming or held, keystrokes or a spawn in flight), then `sent()` from `deliverToTerminal`'s
   `.delivered` / `spawnClaude`'s bound window — *"it doubles its size and opacity and then fades out,
   suggesting the message was sent"*: strip ×2 deep about the edge (`sublayerTransform`), alpha ×2,
-  the picture at intensity 2, 0.35 s, held 0.45 s, out in 0.8 s. Nothing pending for 1.2 s, a flip
+  the picture at intensity 2, 0.35 s, held 0.45 s, out in 0.8 s. **It comes in from beyond its edge**
+  (2026-11-21, Victor: *"să se ridice de la margine spre interior, nu să apară brusc, deja deschise"*):
+  a fresh edge slides the strip in from one depth off the screen over `EdgeDust.enter` 0.7 s
+  (ease-out) while the panel fades up — every edge, the ⚡ left one too. **The top edge is 143 pt
+  deep** (`edgeDust.topThickness`, ×1.3 the right's 110 — *"fă-o 30% mai mare"*, same day). Nothing pending for 1.2 s, a flip
   to the caret mid-sentence, a cancel, or 90 s: out in 0.4 s with no swell. Knobs
   `edgeDust.alpha|thickness`. A new picture is an `EdgeDustPicture` (`EdgeDustPictures.swift`) added
   to `all`; `edgeDust.variant` / `POST /test/edge-dust-pick` choose among those listed. Desk: `POST
@@ -864,6 +868,38 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   (*"iar la cancel dispare brusc toată grafica de pe ecran (fără inel)"*, superseding the same
   day's *wave on cancel*): `cancelDictationInFlight` → `CaretHalo.vanishForCancel` (panel alpha 0 and
   out in the call; `hide` only stops the engine), `EdgeDust.cut`, `CornerTunnel.cut`.
+- **The edge is always on the Retina** (2026-11-21, Victor: *"animația de Edge rămâne blocată pe
+  ecranul pe care a pornit … pune animația de Edge doar pe retina întotdeauna"*): `EdgeDust.show` takes
+  `CaretHalo.retina`, the pointer's screen only with the lid closed — like the subtitle band.
+- **An edge is drained, not faded** (2026-11-21, Victor: *"să nu facă fade, ci pur și simplu să nu
+  mai vină altele, iar cele care au venit deja să-și continue traiectoria până dispar cum dispar de
+  obicei"*). `EdgeDust.leave` asks `EdgeDustPicture.drain()` (default 0 = the old fade): `EdgeDustV7`
+  sets its `stop` uniform — the fire's density is cut where the field left the edge after `stop`
+  (52 pt/s), so the flames lift off their base and die at their tips (~2.6 s); a ⚡ question mark born
+  after `stop` is never drawn, the walking ones finish (≤ 6.8 s), the bed lifts at 14 pt/s. A sent
+  message still swells (intensity 2, ×2) on top. Then a 0.15 s fade for leftovers. `cut` (a cancel)
+  keeps its 0.3 s fade. Offline: `EDGE_STOP=2 swift tools/render-edge-dust.swift 0 out.png 0.3 1.9 2.4 3 3.8`.
+- **The Dust wheel opens out of its centre, and a cancel only stops it** (2026-11-21, Victor: *"la fel
+  la acel punct în care dispare … dintr-un punct central … o spirală scurtă până ajunge pe
+  circunferință … dacă la orice moment se întrerupe … nu faci fade out, ci pur și simplu nu mai continui
+  mișcarea"*): a fresh show is `collapse` backwards — no alpha fade, the ring's radius 0 → full over
+  `collapseTime` (smoothstep), the stamp ×2 → ×1 (`startCircling(grow:)`). `cut` on the dust: the
+  stamp stands where it is, fed silence, for `dieOut`, then out (0.2 s for leftovers); other dresses
+  still go at once.
+- **No corner wheel for a cancelled sentence** (2026-11-21, Victor: *"if I cancel a dictation, there
+  should be no spinning wheel in the left corner top"*): `CornerTunnel.cut` lands before the cancel's
+  own short settle, which brought the wheel up again; `cut` now sets `cancelled`, that settle draws
+  nothing, and its end clears it.
+- **The Dust wheel ends by winding into its centre and dying out there — no fade** (2026-11-21,
+  Victor: *"la final, mișcarea să se ducă spre centru și apoi să se stingă de la sine, în loc să facă
+  fade … să se mărească ca mărime și să se oprească în centrul cercului"*). `CornerTunnel.collapse`
+  replaces the dust's half-lap fade: over `collapseTime` 0.7 s the ring's radius goes to 0
+  (smoothstep) while the lap speeds up, the stamp (`PMH_FLUID_RADIUS`) grows ×2; then the stamp stands
+  on the centre, fed silence (`quiet`), and the smoke dissipates by itself for `dieOut` 1.6 s; only
+  then a 0.2 s fade for what is left, and out. A show in the meantime restores the radius and the
+  ring, at the angle it had. **The collapse waits `collapseGrace` 0.3 s, still circling** — the
+  settle's end and the atom's hold come ms apart, and a collapse begun between them drew two comets
+  (same evening: *"apar de două ori"*). The tunnel dress keeps its `fadeOut`.
 - **The pointer's own smoke is the wheel — one unbroken movement** (2026-11-16, third pass: *"dustul
   care vine de la mouse trebuie să devină mai mic și mai intens pentru a da senzația că chiar el
   începe să se învârtă. ideal chiar acel smoke să se învârtă pe bune … ca o animație continuă"*).

@@ -44,6 +44,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
         var intensity: Float = 1        // 1 at rest … 2
         var scale: Float = 2            // pixels per point
         var seed: Float = 0
+        var stop: Float = 1e9           // the time nothing new is born after (`drain`)
     }
 
     private let view: MTKView
@@ -92,6 +93,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
     }
 
     func start() {
+        uniforms.stop = 1e9
         guard !running else { return }
         running = true
         // A fresh clock for every sentence: the shader's `time` stays small, and a
@@ -119,6 +121,14 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
     }
 
     func setIntensity(_ k: CGFloat) { wantedIntensity = Float(min(max(k, 0), 3)) }
+
+    /// Nothing new from now on; what is on its way finishes its path (2026-11-21).
+    /// The fire's field leaves the edge at 52 pt/s and is gone past ~1.5 × its height:
+    /// ~2.6 s. A question mark runs its life out: up to 6.8 s, most far shorter.
+    func drain() -> TimeInterval {
+        uniforms.stop = Float(CACurrentMediaTime() - began)
+        return uniforms.edge > 1.5 ? 6.8 : 2.6
+    }
 
     // MARK: - MTKViewDelegate
 
@@ -161,6 +171,7 @@ struct V7U {
     float intensity;  // 1..2
     float scale;      // pixels per point
     float seed;
+    float stop;       // nothing born after this time
 };
 
 struct V7Out { float4 pos [[position]]; };
@@ -242,13 +253,15 @@ static float v7_qmark(float2 g, float R, float hw, float open) {
 // loses its grains one by one as it goes on (its density falls, so the grains drop out by their
 // own thresholds, never a uniform alpha), gone before `gone` points in. The next life of the
 // same cell is a new mark: its own cut, size and place along the edge.
-static float v7_mark(float cell, float S, float a, float d, float t, float level, float k, float seed, float f) {
+static float v7_mark(float cell, float S, float a, float d, float t, float level, float k, float seed, float f, float stop) {
     const float pace = 1.15;
     const float gone = 232.0;
     float c1 = v7_h(float2(cell, 1.9)), c2 = v7_h(float2(cell, 4.4));
     float life = 4.6 + 2.2 * c2;
     float clock = t / life + c1 + seed * 0.13;
     float n = floor(clock), pp = clock - n;          // which life, how far through it
+    // Born after the edge was told to go: never drawn (the ones already walking finish).
+    if ((n - c1 - seed * 0.13) * life > stop) return 0.0;
     float2 id = float2(cell, n * 1.37 + 0.5);
     float h1 = v7_h(id + float2(0.0, 3.3)), h2 = v7_h(id + float2(0.0, 8.1)), h3 = v7_h(id + float2(0.0, 5.7));
     // Its cut, one of five, like five typefaces: the first one drawn, a heavy round, a
@@ -288,14 +301,16 @@ static float v7_mark(float cell, float S, float a, float d, float t, float level
 // dust at the edge, walks in while it forms, and loses its grains on the way, gone by ~230 pt;
 // then the next one. The voice makes them a little larger. A thin bed of dust runs along the
 // edge under them.
-static float v7_marks(float a, float d, float t, float level, float k, float seed) {
+static float v7_marks(float a, float d, float t, float level, float k, float seed, float stop) {
     // A tall mark spills past its cell: its neighbour on the nearer side is drawn too.
     const float S = 170.0;
     float cellA = floor(a / S);
     float other = (a - cellA * S) < S * 0.5 ? cellA - 1.0 : cellA + 1.0;
     float f = v7_fbm(float2(a / 15.0, (d - 14.0 * t) / 26.0));
-    float dens = max(v7_mark(cellA, S, a, d, t, level, k, seed, f), v7_mark(other, S, a, d, t, level, k, seed, f));
+    float dens = max(v7_mark(cellA, S, a, d, t, level, k, seed, f, stop), v7_mark(other, S, a, d, t, level, k, seed, f, stop));
     float bed = (1.0 - smoothstep(0.0, 14.0, d)) * (0.20 + 0.45 * f) * (0.8 + 0.4 * level);
+    // The bed's dust lifts off the edge like the fire's (14 pt/s, its own drift).
+    bed *= smoothstep(-4.0, 4.0, d - max(t - stop, 0.0) * 14.0);
     return clamp(max(dens, bed), 0.0, 1.0);
 }
 
@@ -330,7 +345,12 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float stray = smoothstep(0.55, 0.85, f) * (0.3 + 0.7 * tongue) * (1.0 - smoothstep(0.9, 2.4, rel)) * 0.30;
     dens = max(dens, stray);
     dens *= 0.80 + 0.20 * u.level + 0.25 * k;
-    if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed); h = 70.0; }
+    // **Drained** (2026-11-21, Victor: *"să nu facă fade, ci pur și simplu să nu mai vină
+    // altele, iar cele care au venit deja să-și continue traiectoria până dispar"*): what
+    // the edge gave off after `stop` is not there, so the fire lifts off its base at the
+    // field's own 52 pt/s and dies out at its tips as it always does.
+    dens *= smoothstep(-6.0, 6.0, d - max(t - u.stop, 0.0) * 52.0);
+    if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed, u.stop); h = 70.0; }
 
     // Each tongue its own hue; paler at the base, deeper at the tip.
     float hue = v7_n(float2(as / 150.0, t * 0.05 + 11.0)) * 2.0 + u.seed;
