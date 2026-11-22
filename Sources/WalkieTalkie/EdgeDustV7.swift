@@ -410,6 +410,8 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float n2 = v7_n(float2(as / 13.0, t * 1.1 + 3.0));
     float tongue = smoothstep(0.18, 0.86, n);
     float h = (14.0 + 62.0 * tongue * tongue + 9.0 * n2) * grow * 0.8;   // −30 %, then +15 % with everything else (Victor, 2026-11-16)
+    // The caret's bottom edge: its peaks 18 % lower (Victor, 2026-11-22: *"un pic mai mici vârfurile munților, 15%, 20%"*).
+    if (pins) h *= 0.82;
 
     // The fire field, carried away from the edge.
     float f = v7_fbm(float2(as / 17.0, (d - 52.0 * t) / 34.0));
