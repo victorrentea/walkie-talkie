@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>brewkit — package</title>
+<style>
+  /* A fictional package page for the "is this library still maintained?" scene. brewkit does not exist. */
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 16px/1.5 -apple-system, "Helvetica Neue", sans-serif; color: #1c2330; background: #fff; }
+  header { height: 56px; display: flex; align-items: center; gap: 26px; padding: 0 48px; background: #14181f; color: #fff; font-weight: 600; }
+  header b { font-size: 20px; letter-spacing: -.3px; } header span { opacity: .65; font-size: 14px; }
+  main { display: flex; gap: 48px; padding: 34px 48px; }
+  article { flex: 2.2; } aside { flex: 1; font-size: 15px; }
+  h1 { font-size: 40px; letter-spacing: -1px; } h1 small { font-size: 18px; color: #7a8291; font-weight: 500; margin-left: 10px; }
+  .tags { margin: 10px 0 22px; } .tags i { font-style: normal; display: inline-block; padding: 3px 12px; margin-right: 8px; border-radius: 999px; background: #eef2ff; color: #2f5bea; font-size: 13px; font-weight: 600; }
+  p { margin-bottom: 14px; font-size: 17px; color: #37404f; max-width: 40em; }
+  pre { background: #14181f; color: #d7e3ff; padding: 16px 20px; border-radius: 12px; font: 15px/1.5 Menlo, monospace; margin: 18px 0; }
+  aside div { padding: 13px 0; border-bottom: 1px solid #e6e8ee; } aside small { display: block; color: #7a8291; font-size: 13px; }
+  aside b { font-size: 17px; } .old { color: #b4541a; }
+</style>
+</head>
+<body>
+<header><b>📦 packages</b><span>Search 2,417,093 packages</span></header>
+<main>
+  <article>
+    <h1>brewkit <small>3.8.1</small></h1>
+    <div class="tags"><i>coffee</i><i>scheduling</i><i>subscriptions</i></div>
+    <p>Tiny helpers for subscription schedules: next delivery dates, skips, pauses and roast calendars — with no dependencies.</p>
+    <pre>npm install brewkit
+
+import { nextDelivery } from 'brewkit'
+nextDelivery({ every: '2 weeks', from: lastBag })</pre>
+    <p>Works in Node 14+ and every evergreen browser. TypeScript types included.</p>
+  </article>
+  <aside>
+    <div><small>Weekly downloads</small><b>48,112</b></div>
+    <div><small>Last publish</small><b class="old">3 years ago</b></div>
+    <div><small>Open issues</small><b>214</b></div>
+    <div><small>License</small><b>MIT</b></div>
+  </aside>
+</main>
+</body>
+</html>

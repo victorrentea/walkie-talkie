@@ -1,0 +1,68 @@
+/* Strong, flat colours on purpose: a change must read at a glance in a 1080p teaser. */
+* { box-sizing: border-box; margin: 0; }
+html { font: 16px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: #1c2330; background: #f4efe6; }
+body { min-height: 100vh; overflow: hidden; }
+a { color: inherit; text-decoration: none; }
+
+.top { display: flex; align-items: center; justify-content: space-between; height: 60px; padding: 0 44px;
+       background: #fff; border-bottom: 1px solid #e3dccf; transition: background .6s, color .6s, border-color .6s; }
+.logo { font-weight: 800; font-size: 22px; letter-spacing: -.3px; }
+.bean { display: inline-block; margin-right: 4px; }
+nav { display: flex; gap: 30px; font-weight: 600; font-size: 15px; align-items: center; }
+.header-dark .top { background: #14181f; color: #fff; border-color: #14181f; }
+
+.has-menu { position: relative; }
+.menu { display: none; position: absolute; top: 34px; left: -18px; width: 190px; list-style: none; padding: 8px;
+        background: #fff; color: #1c2330; border-radius: 12px; box-shadow: 0 12px 34px rgba(20,24,31,.22); z-index: 5; }
+.menu li { padding: 9px 12px; border-radius: 8px; font-weight: 500; }
+.menu li:nth-child(2) { background: #eef2ff; }
+.menu-open .menu { display: block; }
+/* the bug of the "film it" scene: the open menu flickers */
+.flicker .menu { animation: flick .42s steps(1) infinite; }
+@keyframes flick { 0% {opacity: 1} 28% {opacity: 0} 41% {opacity: 1} 63% {opacity: .15} 74% {opacity: 1} }
+
+.hero { display: flex; align-items: center; gap: 40px; padding: 30px 64px 14px; }
+.pitch { flex: 1.25; }
+.slot { height: 32px; margin-top: 16px; }
+.badge { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #1f9d6b; color: #fff;
+         font-weight: 700; font-size: 14px; }
+.badge.floating { position: fixed; z-index: 4; white-space: nowrap; transition: left .6s cubic-bezier(.3,1.2,.4,1), top .6s cubic-bezier(.3,1.2,.4,1); }
+.badge.landed { animation: land .8s ease-out; }
+@keyframes land { from { box-shadow: 0 0 0 0 rgba(31,157,107,.7); } to { box-shadow: 0 0 0 18px rgba(31,157,107,0); } }
+h1 { font-size: 54px; line-height: 1.04; letter-spacing: -1.6px; font-weight: 800; margin: 0 0 12px; }
+.sub { font-size: 19px; color: #4d5666; max-width: 30em; margin-bottom: 22px; }
+.cta { display: inline-block; padding: 15px 30px; border-radius: 12px; background: #2f5bea; color: #fff;
+       font-weight: 700; font-size: 18px; box-shadow: 0 8px 20px rgba(47,91,234,.32);
+       transition: background .6s, box-shadow .6s, transform .3s; }
+.button-orange .cta { background: #ff7a00; box-shadow: 0 8px 22px rgba(255,122,0,.42); transform: scale(1.04); }
+.hint { margin-left: 16px; color: #7a8291; font-size: 14px; }
+
+.art { flex: 1; height: 250px; position: relative; }
+.art-empty, .art-photo { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 22px; transition: opacity .6s, transform .6s; }
+.art-empty { display: flex; align-items: center; justify-content: center; text-align: center; border: 3px dashed #c7bca8;
+             color: #a99c85; font-weight: 700; font-size: 20px; background: #efe8da; }
+.art-photo { object-fit: cover; opacity: 0; transform: scale(.94); }
+.picture .art-photo { opacity: 1; transform: none; }
+.picture .art-empty { opacity: 0; }
+
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; padding: 10px 64px 0; }
+.card { background: #fff; border-radius: 18px; padding: 20px 22px; border: 1px solid #e3dccf; min-height: 168px; position: relative; }
+.ico { font-size: 28px; margin-bottom: 6px; }
+.card h3 { font-size: 19px; letter-spacing: -.2px; margin-bottom: 4px; }
+.card p { color: #4d5666; font-size: 15px; }
+.typo .right { display: none; }
+.typo .wrong { text-decoration: underline wavy #e02d2d; text-underline-offset: 4px; }
+.typo-fixed .typo .right { display: inline; }
+.typo-fixed .typo .wrong { display: none; }
+
+/* the visibly broken card: tilted, a title that runs out of it, a NaN price */
+.broken { border: 2px solid #e02d2d; background: #fff1f1; transform: rotate(-2.2deg) translateY(10px); transition: all .6s; }
+.broken h3 { white-space: nowrap; width: 150%; color: #b00020; }
+.broken .price { margin-top: 8px; font-weight: 800; font-size: 20px; color: #b00020; }
+.broken .now { display: none; }
+.card-fixed .broken { border: 1px solid #e3dccf; background: #fff; transform: none; }
+.card-fixed .broken h3 { white-space: normal; width: auto; color: inherit; }
+.card-fixed .broken .price { color: #1f9d6b; }
+.card-fixed .broken .was { display: none; }
+.card-fixed .broken .now { display: inline; }
+

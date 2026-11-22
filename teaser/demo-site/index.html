@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brewly — coffee, on a schedule</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Demo landing page for the Walkie Talkie teaser. `state.json` is polled a few times a second and
+     every key becomes a class on <body>, so the film's "agent" restyles the page by writing that file
+     (teaser/film/site.sh). Nothing here talks to the network. -->
+<header class="top">
+  <a class="logo" href="#"><span class="bean">☕</span> Brewly</a>
+  <nav>
+    <a href="#">Coffee</a>
+    <div class="has-menu"><a href="#">Plans ▾</a>
+      <ul class="menu">
+        <li>Solo · 250 g</li>
+        <li>Duo · 500 g</li>
+        <li>Office · 2 kg</li>
+        <li>Gift a month</li>
+      </ul>
+    </div>
+    <a href="#">Roasters</a>
+    <a href="#">Sign in</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="pitch">
+      <h1>Fresh coffee,<br>before you run out.</h1>
+      <p class="sub">Roasted on Monday, at your door by Thursday. Skip or pause any time.</p>
+      <a class="cta" href="#">Start my first bag</a>
+      <span class="hint">No card needed for the first one.</span>
+      <div class="slot"><span class="badge" id="badge">★ 4.9 · loved by 12,000 slow mornings</span></div>
+    </div>
+    <div class="art">
+      <div class="art-empty">image<br>goes here</div>
+      <img class="art-photo" src="beans.svg" alt="">
+    </div>
+  </section>
+
+  <section class="cards">
+    <article class="card">
+      <div class="ico">🌱</div>
+      <h3>Single origin</h3>
+      <p>One farm per bag. You get the farmer's name, the altitude and the harvest month.</p>
+    </article>
+    <article class="card">
+      <div class="ico">🚲</div>
+      <h3 class="typo"><span class="wrong">Freee shiping</span><span class="right">Free shipping</span></h3>
+      <p>Every bag travels carbon-neutral, and the last mile is on two wheels where we can.</p>
+    </article>
+    <article class="card broken">
+      <div class="ico">⏸️</div>
+      <h3>Pause any time, no questions asked, really</h3>
+      <p>Going away? One tap moves your next delivery.</p>
+      <div class="price"><span class="was">NaN €</span><span class="now">9 €</span> / bag</div>
+    </article>
+  </section>
+</main>
+
+<script>
+// Every truthy key of state.json is a class on <body>; CSS transitions do the rest.
+const badge = document.getElementById('badge');
+let last = '';
+async function tick() {
+  try {
+    const r = await fetch('state.json?' + Date.now(), {cache: 'no-store'});
+    const text = await r.text();
+    if (text !== last) {
+      last = text;
+      const s = JSON.parse(text);
+      document.body.className = Object.keys(s).filter(k => s[k]).join(' ');
+      // the "move this up here" scene: `moved` = the box Walkie's prompt carried, in screen points —
+      // where it was drawn (from) and where it was dropped (to). The badge keeps its place inside the box,
+      // so it lands exactly where the dropped ghost showed it.
+      if (s.moved) {
+        const ox = window.screenX, oy = window.screenY + (window.outerHeight - window.innerHeight);
+        if (!badge.classList.contains('floating')) {
+          const from = badge.getBoundingClientRect();
+          badge.dataset.dx = from.left - (s.moved.fromX - ox); badge.dataset.dy = from.top - (s.moved.fromY - oy);
+          badge.style.left = from.left + 'px'; badge.style.top = from.top + 'px';
+          badge.classList.add('floating'); badge.getBoundingClientRect();
+        }
+        badge.style.left = (s.moved.toX - ox + +badge.dataset.dx) + 'px';
+        badge.style.top = (s.moved.toY - oy + +badge.dataset.dy) + 'px';
+        setTimeout(() => badge.classList.add('landed'), 650);
+      } else {
+        badge.classList.remove('floating', 'landed'); badge.style.left = badge.style.top = '';
+      }
+    }
+  } catch (e) {}
+  setTimeout(tick, 150);
+}
+tick();
+</script>
+</body>
+</html>
