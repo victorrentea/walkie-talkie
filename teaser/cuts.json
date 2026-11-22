@@ -1,53 +1,296 @@
 {
-  "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; line = index of the scene's line this cut starts under (cuts of one line share that line's time and are stretched together to fill it); sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech, with almost no lead or tail.",
-  "_target": {"s02-site": 6.0, "s03-move": 5.4, "s06-review": 4.2, "s07-modes": 10.0, "s10-end": 4.3},
-  "_tight": ["s09-cost"],
-  "s01-hook": [
-    {"in": 4.0, "out": 8.9}
-  ],
-  "s02-site": [
-    {"in": 18.4, "out": 22.2, "crop": [560, 100, 1360, 765], "line": 0},
-    {"in": 27.6, "out": 29.8, "line": 1}
-  ],
-  "s03-move": [
-    {"in": 6.2, "out": 8.6, "crop": [0, 400, 768, 432], "line": 0},
-    {"in": 9.3, "out": 10.8, "line": 1},
-    {"in": 15.4, "out": 16.2},
-    {"in": 20.8, "out": 22.6}
-  ],
-  "s04-point": [
-    {"in": 13.4, "out": 15.8, "line": 0, "sub": "top"},
-    {"in": 23.6, "out": 25.2, "sub": "top"},
-    {"in": 31.8, "out": 34.6, "crop": [0, 80, 1404, 790], "line": 1, "sub": "top"},
-    {"in": 35.8, "out": 37.6, "sub": "top"}
-  ],
-  "s05-film": [
-    {"in": 7.2, "out": 11.5}
-  ],
-  "s06-review": [
-    {"in": 9.3, "out": 11.8, "crop": [300, 100, 1440, 810]},
-    {"in": 17.0, "out": 18.8, "crop": [300, 100, 1440, 810]}
-  ],
-  "s07-modes": [
-    {"clip": "s07-modes-a", "in": 7.0, "out": 8.5, "crop": [160, 0, 1280, 720], "line": 0},
-    {"clip": "s07-modes-a", "in": 21.4, "out": 22.8, "crop": [262, 208, 1216, 684]},
-    {"clip": "s07-modes-b", "in": 4.2, "out": 5.4, "crop": [700, 600, 768, 432], "line": 1},
-    {"clip": "s07-modes-c", "in": 6.3, "out": 7.6, "crop": [100, 130, 1280, 720], "line": 2},
-    {"clip": "s07-modes-c", "in": 8.6, "out": 9.9, "crop": [200, 600, 853, 480], "sub": "top"},
-    {"clip": "s07-modes-d", "in": 11.7, "out": 12.4, "crop": [940, 720, 768, 432], "line": 3, "sub": "top"},
-    {"clip": "s07-modes-d", "in": 12.7, "out": 13.6, "crop": [940, 720, 768, 432], "sub": "top"},
-    {"clip": "s07-modes-d", "in": 13.9, "out": 16.2, "crop": [380, 428, 1160, 652], "sub": "top"}
-  ],
-  "s08-ask": [
-    {"in": 5.0, "out": 7.4, "crop": [0, 120, 1632, 918], "line": 0},
-    {"in": 10.6, "out": 11.4, "crop": [790, 275, 1120, 630], "line": 1, "speed": 1.6},
-    {"in": 13.0, "out": 13.8, "crop": [790, 275, 1120, 630], "speed": 1.6},
-    {"in": 19.0, "out": 19.7, "crop": [790, 275, 1120, 630], "speed": 1.6},
-    {"in": 24.0, "out": 27.6, "crop": [790, 275, 1120, 630]}
-  ],
-  "s09-cost": [
-    {"in": 8.8, "out": 10.2},
-    {"in": 13.2, "out": 16.2, "crop": [215, 200, 1120, 630]},
-    {"in": 19.4, "out": 22.2, "crop": [666, 444, 768, 432]}
-  ]
+ "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; line = index of the scene's line this cut starts under (cuts of one line share that line's time and are stretched together to fill it); sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech, with almost no lead or tail.",
+ "_target": {
+  "s02-site": 6.0,
+  "s03-move": 5.4,
+  "s06-review": 4.2,
+  "s07-modes": 10.0,
+  "s10-end": 4.3
+ },
+ "_tight": [
+  "s09-cost"
+ ],
+ "s01-hook": [
+  {
+   "in": 4.0,
+   "out": 8.9
+  }
+ ],
+ "s02-site": [
+  {
+   "in": 18.4,
+   "out": 22.2,
+   "line": 0
+  },
+  {
+   "in": 27.6,
+   "out": 29.8,
+   "line": 1
+  }
+ ],
+ "s03-move": [
+  {
+   "in": 6.2,
+   "out": 8.6,
+   "crop": [
+    0,
+    400,
+    768,
+    432
+   ],
+   "line": 0
+  },
+  {
+   "in": 9.3,
+   "out": 10.8,
+   "line": 1
+  },
+  {
+   "in": 15.4,
+   "out": 16.2
+  },
+  {
+   "in": 20.8,
+   "out": 22.6
+  }
+ ],
+ "s04-point": [
+  {
+   "in": 13.4,
+   "out": 15.8,
+   "line": 0,
+   "sub": "top"
+  },
+  {
+   "in": 23.6,
+   "out": 25.2,
+   "sub": "top"
+  },
+  {
+   "in": 31.8,
+   "out": 34.6,
+   "crop": [
+    0,
+    80,
+    1404,
+    790
+   ],
+   "line": 1,
+   "sub": "top"
+  },
+  {
+   "in": 35.8,
+   "out": 37.6,
+   "sub": "top"
+  }
+ ],
+ "s05-film": [
+  {
+   "in": 7.2,
+   "out": 11.5
+  }
+ ],
+ "s06-review": [
+  {
+   "in": 9.3,
+   "out": 11.8,
+   "crop": [
+    300,
+    100,
+    1440,
+    810
+   ]
+  },
+  {
+   "in": 17.0,
+   "out": 18.8,
+   "crop": [
+    300,
+    100,
+    1440,
+    810
+   ]
+  }
+ ],
+ "s07-modes": [
+  {
+   "clip": "s07-modes-a",
+   "in": 7.0,
+   "out": 8.5,
+   "crop": [
+    160,
+    0,
+    1280,
+    720
+   ],
+   "line": 0
+  },
+  {
+   "clip": "s07-modes-a",
+   "in": 21.4,
+   "out": 22.8,
+   "crop": [
+    262,
+    208,
+    1216,
+    684
+   ]
+  },
+  {
+   "clip": "s07-modes-b",
+   "in": 4.2,
+   "out": 5.4,
+   "crop": [
+    700,
+    600,
+    768,
+    432
+   ],
+   "line": 1
+  },
+  {
+   "clip": "s07-modes-c",
+   "in": 6.3,
+   "out": 7.6,
+   "crop": [
+    100,
+    130,
+    1280,
+    720
+   ],
+   "line": 2
+  },
+  {
+   "clip": "s07-modes-c",
+   "in": 8.6,
+   "out": 9.9,
+   "crop": [
+    200,
+    600,
+    853,
+    480
+   ],
+   "sub": "top"
+  },
+  {
+   "clip": "s07-modes-d",
+   "in": 11.7,
+   "out": 12.4,
+   "crop": [
+    940,
+    720,
+    768,
+    432
+   ],
+   "line": 3,
+   "sub": "top"
+  },
+  {
+   "clip": "s07-modes-d",
+   "in": 12.7,
+   "out": 13.6,
+   "crop": [
+    940,
+    720,
+    768,
+    432
+   ],
+   "sub": "top"
+  },
+  {
+   "clip": "s07-modes-d",
+   "in": 13.9,
+   "out": 16.2,
+   "crop": [
+    380,
+    428,
+    1160,
+    652
+   ],
+   "sub": "top"
+  }
+ ],
+ "s08-ask": [
+  {
+   "in": 5.0,
+   "out": 7.4,
+   "crop": [
+    0,
+    120,
+    1632,
+    918
+   ],
+   "line": 0
+  },
+  {
+   "in": 10.6,
+   "out": 11.4,
+   "crop": [
+    790,
+    275,
+    1120,
+    630
+   ],
+   "line": 1,
+   "speed": 1.6
+  },
+  {
+   "in": 13.0,
+   "out": 13.8,
+   "crop": [
+    790,
+    275,
+    1120,
+    630
+   ],
+   "speed": 1.6
+  },
+  {
+   "in": 19.0,
+   "out": 19.7,
+   "crop": [
+    790,
+    275,
+    1120,
+    630
+   ],
+   "speed": 1.6
+  },
+  {
+   "in": 24.0,
+   "out": 27.6,
+   "crop": [
+    790,
+    275,
+    1120,
+    630
+   ]
+  }
+ ],
+ "s09-cost": [
+  {
+   "in": 8.8,
+   "out": 10.2
+  },
+  {
+   "in": 13.2,
+   "out": 16.2,
+   "crop": [
+    215,
+    200,
+    1120,
+    630
+   ]
+  },
+  {
+   "in": 19.4,
+   "out": 22.2,
+   "crop": [
+    666,
+    444,
+    768,
+    432
+   ]
+  }
+ ]
 }
