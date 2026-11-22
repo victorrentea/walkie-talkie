@@ -78,7 +78,7 @@ stage_terminal() {                                    # ONE opaque Terminal wind
   # no restored ones, no "terminate?" sheet from closing others).
   g pkill -f film/agent.py; g sudo pkill -x login; g pkill -9 -x Terminal; sleep 1.5
   gsh 'defaults write com.apple.Terminal ApplePersistenceIgnoreState -bool true; rm -rf ~/Library/Saved\ Application\ State/com.apple.Terminal.savedState
-       printf "#!/bin/sh\nsleep 3.4\nclear\ncd ~/film/demo-site && exec ~/film/bin/claude\n" > ~/film/brewly.command; chmod +x ~/film/brewly.command
+       printf "#!/bin/sh\nsleep 3.4\nclear\ncd ~/film/demo-site && exec env '"${AGENT_ENV:-A=1}"' ~/film/bin/claude\n" > ~/film/brewly.command; chmod +x ~/film/brewly.command
        open -a Terminal ~/film/brewly.command'
   sleep 2.5
   g osascript -e "tell application \"Terminal\" to set bounds of front window to {${TERM_BOUNDS:-480, 320, 1056, 686}}" -e 'tell application "Terminal" to set custom title of selected tab of front window to "brewly"' >/dev/null
@@ -88,7 +88,7 @@ stage_terminal() {                                    # ONE opaque Terminal wind
 chrome() {                                            # show | hide | start — the guest's Chrome on the local image search, left of the screen
   case "$1" in
     start) g pkill -x "Google Chrome"; sleep 1
-           gsh 'nohup open -na "Google Chrome" --args --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-notifications --hide-crash-restore-bubble --window-position=64,130 --window-size=576,332 "http://localhost:8000/search.html" >/dev/null 2>&1 </dev/null'; sleep 6 ;;
+           gsh 'nohup open -na "Google Chrome" --args --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-notifications --hide-crash-restore-bubble --window-position=64,130 --window-size=576,332 "http://localhost:8000/gimages/index.html" >/dev/null 2>&1 </dev/null'; sleep 6 ;;
     show)  g open -a "Google Chrome"; sleep 1 ;;
     hide)  g osascript -e 'tell application "System Events" to set visible of process "Google Chrome" to false' >/dev/null 2>&1 ;;
   esac

@@ -74,6 +74,7 @@ async function tick() {
       last = text;
       const s = JSON.parse(text);
       document.body.className = Object.keys(s).filter(k => s[k]).join(' ');
+      if (s.pictureSrc) document.querySelector('.art-photo').src = s.pictureSrc;   // the picture he copied in the search (s04)
       // the "move this up here" scene: `moved` = the box Walkie's prompt carried, in screen points —
       // where it was drawn (from) and where it was dropped (to). The badge keeps its place inside the box,
       // so it lands exactly where the dropped ghost showed it.

@@ -45,13 +45,13 @@ s03)  # wheel box round the badge, ⇧ locks it, the ghost rides the pointer, a 
   END ;;
 s04)  # a Chrome window with an image search (left): click a picture, right-click → Copy Image, the picture flies into
       # the chip; then to the site: the wheel box EXACTLY round the placeholder; then the typo selected; panel; page; pill.
-      # (Google itself answered the guest with a reCAPTCHA wall, so the search page is the local look-alike "findr".)
+      # (Google answers the guest with a reCAPTCHA wall: the page is demo-site/gimages — real result thumbnails, laid out as captured, under a rebuilt header.)
   g open -a Safari; tab 2; deselect; sleep 0.5; chrome show; mouse '[["move",900,560,0.3]]'; sleep 1.5
   rec_start s04; mark search_page_shown; sleep 1.2
   api test/gesture '{"name":"forward-right"}' >/dev/null; mark dictation_starts
   speak s04a 1.4 & SPEAK=$!
-  mouse '[["sleep",0.6],["move",352,415,0.8],["sleep",0.2],["click"],["sleep",0.5],["click","right"]]'; mark menu_open
-  mouse '[["sleep",1.4],["move",405,469,0.5],["sleep",0.3],["click"]]'; mark copy_clicked
+  mouse '[["sleep",0.6],["move",170,376,0.8],["sleep",0.2],["click"],["sleep",0.5],["click","right"]]'; mark menu_open
+  mouse '[["sleep",1.4],["move",223,430,0.5],["sleep",0.3],["click"]]'; mark copy_clicked
   mouse '[["sleep",2.4]]'; wait $SPEAK; mark copy_flight_end
   mouse '[["move",680,560,0.7],["click"],["sleep",0.9]]'; mark back_on_site
   speak s04b 0.8 & SPEAK=$!

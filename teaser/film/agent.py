@@ -36,11 +36,18 @@ def beat():
 
 
 threading.Thread(target=beat, daemon=True).start()
+QUIET = bool(os.environ.get("AGENT_QUIET"))                 # s09: only his sentence stays on screen, not the envelope's bracket rows
+show = True
 while True:
-    sys.stdout.write("\033[1m❯\033[0m "); sys.stdout.flush()
+    if show: sys.stdout.write("\033[1m❯\033[0m "); sys.stdout.flush()
     line = sys.stdin.readline()
     if not line: break
     LOG.write(line); LOG.flush()
+    if QUIET:
+        show = bool(line.strip()) and not line.lstrip().startswith("[")
+        if not show: continue
+        time.sleep(0.3)                                      # the rest of the envelope is typed and echoed by now: wipe it
+        print("\033[2J\033[H\033[2m ~/brewly\033[0m\n\n\033[1m❯\033[0m " + line.rstrip("\n"))
     low = line.lower()
     for words, change in RULES:
         # only his own words count — the envelope's bracketed rows mention pictures and files too
