@@ -277,6 +277,17 @@ For the missing-permission tests (`.claude/rules/menu-bar.md`, *❗ on the row a
   sheet is there** — typed into the pane itself the letters select another pane.
 - Microphone and Screen Recording raise *Quit & Reopen / Later*; Accessibility and Automation do not.
 
+## The halo in the guest: OpenGL is software only (2026-11-22)
+
+The guest's GPU is Metal-only (Virtualization.framework): `CGLChoosePixelFormat` with `kCGLPFAAccelerated`
+answers `kCGLBadPixelFormat`, 0 formats; without it, GL 4.1 on **Apple Software Renderer**. Until this day
+`pmhalo.cpp` asked for accelerated only, so every halo in the lab was the lightning film (`projectM could not
+start: CGLChoosePixelFormat failed — falling back to the film`) and the corner tunnel failed the same way.
+`pmh_create` now retries without it and the log says `no accelerated OpenGL here … software renderer`.
+Measured with `WT_PM_STATS=1` on the dust (Smoke, 1280×720 pt HiDPI guest, 4 vCPU): **6.4 fps at the default
+`WT_PM_SCALE` 2, 25.7 fps at `WT_PM_SCALE=1`** — launch the guest's app with
+`open --env WT_PM_SCALE=1 "/Applications/Walkie Talkie.app"` for anything that is looked at or filmed.
+
 ## The first two runs (2026-09-26)
 
 - **First run, 18:18–18:42 UTC** (`evals/plan/vm/report-vm-{A,G,AU}.md`): 65 cases, 33 PASS. It

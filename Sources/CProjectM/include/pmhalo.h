@@ -18,6 +18,9 @@ typedef struct pmh pmh;
 /// writes why into `err` (if given) when the GL context or projectM cannot be had.
 pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int err_len);
 void pmh_destroy(pmh* h);
+/// 1 when no accelerated OpenGL renderer could be had and Apple's software one
+/// draws instead (a virtual machine) — the same picture, slower.
+int pmh_software(pmh* h);
 
 /// Load a preset from its `.milk` text. Returns 0 on success; on failure the
 /// engine keeps its idle preset and `err` says what projectM said.

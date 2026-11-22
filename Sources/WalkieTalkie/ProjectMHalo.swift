@@ -329,6 +329,7 @@ final class ProjectMHalo: NSView, HaloWebHost {
         }
         guard let renderer = r else { fail("projectM could not start: \(String(cString: err))"); return false }
         self.renderer = renderer
+        Self.sayRendererOnce(software: pmh_software(renderer) != 0)
         let o = options()
         if trail {
             // The surface becomes the screen, in pixels; the square is stamped
@@ -782,6 +783,19 @@ final class ProjectMHalo: NSView, HaloWebHost {
         }
     }
     static let stats = ProcessInfo.processInfo.environment["WT_PM_STATS"] != nil
+
+    /// **Which OpenGL draws, said once a launch** (2026-11-22). A virtual machine
+    /// has no accelerated renderer; `pmh_create` then takes Apple's software one
+    /// instead of failing into the film — slower, so a slow halo there has its
+    /// reason in the log.
+    private static var saidRenderer = false
+    private static func sayRendererOnce(software: Bool) {
+        guard !saidRenderer else { return }
+        saidRenderer = true
+        Log.info(software
+            ? "◯ projectM: no accelerated OpenGL here (a virtual machine?) — drawing on Apple's software renderer; the same picture, slower (WT_PM_SCALE=1 keeps it fluid)"
+            : "◯ projectM: drawing on the accelerated OpenGL renderer")
+    }
     static let orbit = ProcessInfo.processInfo.environment["WT_PM_ORBIT"] != nil
     static let syncMode = ProcessInfo.processInfo.environment["WT_PM_SYNC"] ?? "seed"
 

@@ -329,6 +329,7 @@ struct pmh {
     double engineMs = 0, keyMs = 0;
     unsigned engineErrors = 0, keyErrors = 0;
     bool finish = false;                      // WT_PM_FINISH=1: glFinish for honest timings
+    bool software = false;                    // no accelerated renderer here (a VM): Apple's software one draws
     std::string loadError;
     std::vector<float> resampled;
     std::vector<std::string> texDirs; std::vector<const char*> texDirPtrs;
@@ -429,15 +430,27 @@ pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int
     auto* h = new pmh();
     h->px = px; h->ow = px; h->oh = px; h->fps = fps > 0 ? fps : 30;
     h->finish = getenv("WT_PM_FINISH") != nullptr;
-    CGLPixelFormatAttribute attrs[] = {
-        kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core,
-        kCGLPFAAccelerated,
-        kCGLPFAColorSize, (CGLPixelFormatAttribute)24,
-        kCGLPFAAlphaSize, (CGLPixelFormatAttribute)8,
-        kCGLPFADepthSize, (CGLPixelFormatAttribute)24,
-        (CGLPixelFormatAttribute)0 };
+    // **Accelerated first; the software renderer only where there is none**
+    // (2026-11-22). A Virtualization.framework guest has a Metal-only GPU:
+    // `kCGLPFAAccelerated` is refused there (kCGLBadPixelFormat, 0 formats) and
+    // the halo fell back to the lightning film, while the same attributes
+    // without it give GL 4.1 on "Apple Software Renderer" — the same picture,
+    // slower (measured in the Tart lab: 25.7 fps at WT_PM_SCALE=1, 6.4 at 2).
+    // On a real Mac the first choice succeeds and nothing changes.
     GLint npix = 0;
-    if (CGLChoosePixelFormat(attrs, &h->pix, &npix) != kCGLNoError || !h->pix) { set_err(err, err_len, "CGLChoosePixelFormat failed"); pmh_destroy(h); return nullptr; }
+    for (int soft = 0; soft < 2 && !h->pix; soft++) {
+        std::vector<CGLPixelFormatAttribute> attrs = {
+            kCGLPFAOpenGLProfile, (CGLPixelFormatAttribute)kCGLOGLPVersion_3_2_Core };
+        if (!soft) attrs.push_back(kCGLPFAAccelerated);
+        attrs.insert(attrs.end(), {
+            kCGLPFAColorSize, (CGLPixelFormatAttribute)24,
+            kCGLPFAAlphaSize, (CGLPixelFormatAttribute)8,
+            kCGLPFADepthSize, (CGLPixelFormatAttribute)24,
+            (CGLPixelFormatAttribute)0 });
+        if (CGLChoosePixelFormat(attrs.data(), &h->pix, &npix) != kCGLNoError) h->pix = nullptr;
+        h->software = soft != 0;
+    }
+    if (!h->pix) { set_err(err, err_len, "CGLChoosePixelFormat failed"); pmh_destroy(h); return nullptr; }
     if (CGLCreateContext(h->pix, nullptr, &h->ctx) != kCGLNoError || !h->ctx) { set_err(err, err_len, "CGLCreateContext failed"); pmh_destroy(h); return nullptr; }
     CGLContextObj prev = CGLGetCurrentContext();
     CGLSetCurrentContext(h->ctx);
@@ -505,6 +518,8 @@ pmh* pmh_create(int px, int fps, const char* const* texture_dirs, char* err, int
     CGLSetCurrentContext(prev);
     return h;
 }
+
+int pmh_software(pmh* h) { return h && h->software ? 1 : 0; }
 
 void pmh_destroy(pmh* h) {
     if (!h) return;
