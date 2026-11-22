@@ -6844,6 +6844,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// them.
     private func endDictation() {
         guard listening || source.isRecording else { return }
+        // **The wave leaves before the source is told to stop** (2026-11-22): the local
+        // recorder's `stop()` drops `isRecording` in the call, so the check below never
+        // passed on the local engine and the wave had not been seen since 2026-11-16.
+        if listening, recorderBehindListening { stopWaveOnce() }
         source.stop()
         // **A stop with nothing behind it says so** (2026-09-26, TR18): the
         // relay's `listening` with no microphone under it used to swallow the
@@ -6861,9 +6865,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 chipStoppedAt = CFAbsoluteTimeGetCurrent()
                 // **And so does the whole screen, once a sentence** (2026-11-05):
                 // a second press during the bridge's drain is not a second stop.
-                StopWave.fire(at: NSEvent.mouseLocation)
-                // A prompt's dust is not wiped: it flies to the corner's wheel (2026-11-16).
-                if !caretHalo.flyToCorner() { caretHalo.wipeWithTheWave() }
+                stopWaveOnce()
             }
             overlay.setListening(false)
             overlay.setTranscribing(true, audio: spokenSoFar)
@@ -6886,6 +6888,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// A microphone that answers for `listening`: the source's, Wispr's (a
     /// sentence his own chord started while another engine is picked), or a
     /// chord still waiting for Wispr's microphone.
+    /// The stop's wave, once a sentence: it wipes the pointer's dust (never the edge,
+    /// which stays until the words are in). Victor, 2026-11-22: *"un semn vizual evident
+    /// că am terminat de vorbit"*.
+    private var stopWaveAt: CFAbsoluteTime = 0
+    private func stopWaveOnce() {
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - stopWaveAt > 2 else { return }
+        stopWaveAt = now
+        StopWave.fire(at: NSEvent.mouseLocation)
+        if !caretHalo.flyToCorner() { caretHalo.wipeWithTheWave() }
+    }
+
     private var recorderBehindListening: Bool {
         source.isRecording || wisprSource.isRecording || speculative
     }

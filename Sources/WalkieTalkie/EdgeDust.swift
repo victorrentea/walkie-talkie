@@ -266,7 +266,9 @@ final class EdgeDust {
         if let drain = picture?.drain(), drain > 0 {
             // The caret's bottom edge has no swell (2026-11-22: it read as a jump and a
             // deformation at the paste) — its grains just stop coming and rise out.
-            if sent, edge != .bottom { picture?.setIntensity(2); setSwell(2, animated: true) }
+            // No swell on any drained edge (2026-11-22, Victor of the right edge: *"să dispară fără să se
+            // deformeze, pur și simplu să nu mai intre alte puncte"*) — `sent` only names the reason now.
+            _ = sent
             DispatchQueue.main.asyncAfter(deadline: .now() + drain) { [weak self] in
                 guard let self, self.turn == mine else { return }
                 NSAnimationContext.runAnimationGroup({ ctx in

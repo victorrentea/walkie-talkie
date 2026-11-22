@@ -679,6 +679,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   alone stretched a pin into a V, more would break the 15 %. Ends with the swell from `pinLanded` (`edgeDust.sent(only: .bottom)`), not the 12 s ceiling;
   `caretLanding` counts in `stillPending`. Seen live in a screen recording the same morning. Offline:
   `swift tools/render-edge-dust.swift 3 <png> 0.3 1 3 5`; desk: `POST /test/edge-dust {"edge": "bottom"}`.
+- **⚠️ The stop's wave is back on the local engine, and every fire edge ends by its grains riding out** (2026-11-22
+  afternoon, Victor: *"un semn vizual evident că am terminat de vorbit"* — the wave wipes the pointer's dust only,
+  the edge stays until the words are in; of the right edge, filmed: *"să dispară fără să se deformeze, pur și simplu
+  să nu mai intre alte puncte"*). The wave had not fired since 2026-11-16: `endDictation` asked
+  `recorderBehindListening` AFTER `source.stop()`, and the local recorder drops `isRecording` inside that call (Wispr's
+  drain kept it true). `AppDelegate.stopWaveOnce` now runs before the stop (2 s guard for a second press). The bullet
+  below, for the bottom edge, holds for top and right too: no density cut, no swell on `sent` (`EdgeDust.leave`),
+  rows born after `stop` not drawn (`alive` for every non-marks edge), `drain` 3.4 s. Not seen live when written:
+  the next sentence's log must say `🌊 the stop's wave leaves`.
 - **The caret's bottom edge ends by its grains rising out — no swell, no lifting line; its peaks 18 % lower**
   (2026-11-22, Victor: *"un pic mai mici vârfurile munților, 15%, 20%"*; *"se ridică tot cu o linie artificială
   în sus, sare și se deformează … când dau efectiv paste-ul, ar trebui să se ducă punctele în sus și să dispară
