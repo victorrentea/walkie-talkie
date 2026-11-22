@@ -128,7 +128,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
     /// pin crumbles where it is over ~2.4 s (a paste is quick; it does not walk on).
     func drain() -> TimeInterval {
         uniforms.stop = Float(CACurrentMediaTime() - began)
-        return uniforms.edge > 2.5 ? 2.8 : uniforms.edge > 1.5 ? 6.8 : 2.6
+        return uniforms.edge > 2.5 ? 3.4 : uniforms.edge > 1.5 ? 6.8 : 2.6
     }
 
     // MARK: - MTKViewDelegate
@@ -375,7 +375,7 @@ static float v7_pin_life(float cell, float S, float a, float d, float t, float l
     float near = 1.0 - smoothstep(0.0, 12.0, sd);
     float form = smoothstep(0.0, 0.26, pp);
     float fade = (1.0 - smoothstep(0.34, 0.92, pp)) * (1.0 - smoothstep(gone * 0.75, gone, d));
-    fade *= 1.0 - smoothstep(stop + 0.2, stop + 2.4, t);
+    fade *= 1.0 - smoothstep(stop + 0.1, stop + 1.4, t);
     float formed = shape * (0.85 + 0.30 * f);
     float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
     return mix(loose, max(formed, loose * 0.5), form) * fade;
@@ -427,7 +427,10 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     // altele, iar cele care au venit deja să-și continue traiectoria până dispar"*): what
     // the edge gave off after `stop` is not there, so the fire lifts off its base at the
     // field's own 52 pt/s and dies out at its tips as it always does.
-    dens *= smoothstep(-6.0, 6.0, d - max(t - u.stop, 0.0) * 52.0);
+    // Not the caret's bottom edge (2026-11-22, Victor: *"se ridică tot cu o linie artificială în
+    // sus, sare și se deformează … ar trebui să se ducă punctele în sus și să dispară natural"*):
+    // there no grain is born after `stop` (`alive`, in the loop) and the ones in flight go on.
+    if (!pins) dens *= smoothstep(-6.0, 6.0, d - max(t - u.stop, 0.0) * 52.0);
     if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed, u.stop); h = 70.0; }
     // The caret's bottom edge: the same fire, and now and then a red pin made of its grains.
     // Its strip is deeper (the pins walk to ~230 pt), so the fire's own fade — the mask's on
@@ -456,6 +459,9 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
         float fi = float(i);
         float2 q = float2(a, d - speed[i] * slow * t) / (cell[i] * fine) + fi * 31.7;
         float row = floor(q.y);
+        // The caret's edge, drained: a row of grains left the edge at a fixed moment (it rides
+        // away at its sheet's speed); the rows that left after `stop` are simply not there.
+        float alive = pins ? step(-(row + 0.5 - fi * 31.7) * cell[i] * fine / (speed[i] * slow), u.stop) : 1.0;
         // Each row of grains drifts sideways by a fraction of a cell, at its own pace.
         float r0 = v7_h(float2(row, 5.0 + fi));
         q.x += 0.45 * sin(t * (0.6 + 1.3 * r0) + r0 * 6.2832) + r0 * 13.0;
@@ -474,13 +480,14 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
         // A pin's grains are its red (`NSColor.systemRed`), a touch lighter or deeper each.
         col = mix(col, mix(float3(1.0, 0.20, 0.17), float3(1.0, 0.42, 0.34), r4), pinW);
         col = mix(col * col * 0.95, mix(col, float3(1.0), 0.30), heat);
-        sum += col * dotv * lit * twinkle * gain[i];
+        sum += col * dotv * lit * twinkle * gain[i] * alive;
     }
 
     // A faint smooth glow under the dust, to bind it.
     float3 base = mix(v7_palette(hue), float3(1.0, 0.20, 0.17), pinW);
     base = mix(base * base, mix(base, float3(1.0), 0.2), heat);
-    float3 rgb = sum * 0.95 + base * dens * dens * 0.12;
+    float glow = pins ? 1.0 - smoothstep(u.stop, u.stop + 0.8, t) : 1.0;
+    float3 rgb = sum * 0.95 + base * dens * dens * 0.12 * glow;
     rgb = 1.0 - exp(-rgb * 1.15);
     // Premultiplied. Alpha close to the grain's own brightness: on a dark desk that
     // is as good as additive, on a white page the grain keeps its colour instead of

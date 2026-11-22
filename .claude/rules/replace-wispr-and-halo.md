@@ -679,6 +679,14 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   alone stretched a pin into a V, more would break the 15 %. Ends with the swell from `pinLanded` (`edgeDust.sent(only: .bottom)`), not the 12 s ceiling;
   `caretLanding` counts in `stillPending`. Seen live in a screen recording the same morning. Offline:
   `swift tools/render-edge-dust.swift 3 <png> 0.3 1 3 5`; desk: `POST /test/edge-dust {"edge": "bottom"}`.
+- **The caret's bottom edge ends by its grains rising out — no swell, no lifting line; its peaks 18 % lower**
+  (2026-11-22, Victor: *"un pic mai mici vârfurile munților, 15%, 20%"*; *"se ridică tot cu o linie artificială
+  în sus, sare și se deformează … când dau efectiv paste-ul, ar trebui să se ducă punctele în sus și să dispară
+  natural … să nu mai apară altele noi"*). Supersedes the ×1.15 swell and the 52 pt/s density cut for this edge:
+  `EdgeDust.leave` skips `setSwell`/intensity 2 on `.bottom`; in the shader (`pins`) the fire's density is not
+  cut — each sheet's rows of grains that left the edge after `stop` are not drawn (`alive`, per row, so no
+  grain is clipped), the rest ride on and die at the tips; the glow goes in 0.8 s, a pin crumbles in 1.4 s;
+  `drain` 3.4 s. `h *= 0.82`. Offline: `EDGE_STOP=2 swift tools/render-edge-dust.swift 3 out.png 0.3 1.9 2.4 3 3.8`.
 - **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece
   de sub mouse către centrul ecranului când apare. Zoomeze in"*). `flashQuestion` animates `stage`
   (`question-fly`) from `questionFrom` 0.08 of its size centred on the pointer (clamped to the
