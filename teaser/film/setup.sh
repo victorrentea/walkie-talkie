@@ -6,6 +6,10 @@
 #   framebuffer is exactly 1920x1080; FILM_MODE="1280 720" for the older rounds), Dock and desktop icons hidden, the drawn
 #   pointer, the guest-side helpers and voices in ~/film, the demo site on :8000.
 source "$(dirname "$0")/lib.sh"
+# Never take a VM somebody else booted: the nightly Wispr labelling run (~/tart/wispr-batch, from 22:00 after 10 idle minutes)
+# uses this same guest for hours. On 2026-11-22 this script did not look, changed its display setting and removed its
+# control socket (vm_up_vnc) before noticing — the batch survived only because its guard falls back to SSH.
+[ "$(vm_state)" = running ] && { echo "wt-lab is already running ($(pgrep -lf 'tart run wt-lab' | cut -c1-120)) — not mine to take; wait for it to stop"; exit 1; }
 tart set $VM --display 1920x1080
 vm_up_vnc
 g mkdir -p /Users/admin/film/voice

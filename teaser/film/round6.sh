@@ -19,7 +19,7 @@ calm() {   # nothing of the previous take on screen: a held panel / its corner d
   api test/prompt '{"do":"release"}' >/dev/null 2>&1
   wait_state "not ((d.get('prompt') or {}).get('cornerTunnel') or {}).get('up') and not (d.get('prompt') or {}).get('held') and not d.get('chip')" 45 >/dev/null
 }
-rec_start() { calm; REC_NAME=$1; rm -f "$RAW/$1.marks" "$RAW/$1.gmarks" "$RAW/$1.rects"; python3 "$FILM_DIR/vncrec.py" "$RAW/$1.mp4" > "$RAW/$1.log" 2>&1 & REC_PID=$!; sleep 1.2; }
+rec_start() { calm; REC_NAME=$1; rm -f "$RAW/$1.marks" "$RAW/$1.gmarks" "$RAW/$1.rects" "$RAW/$1.peek"; python3 "$FILM_DIR/vncrec.py" "$RAW/$1.mp4" > "$RAW/$1.log" 2>&1 & REC_PID=$!; sleep 1.2; }
 END()  { [ -f $RAW/$REC_NAME.gmarks ] && gmarks; kill -INT $REC_PID; wait $REC_PID; tail -1 $RAW/$REC_NAME.log; tr '\n' ' ' < $RAW/$REC_NAME.marks; echo; }
 SEND() { wait_state "(d.get('prompt') or {}).get('held')" 25; sleep ${1:-1.4}; mark prompt_sent; api test/prompt '{"do":"send"}' >/dev/null; }
 # One take = one choreography INSIDE the guest: `play` hands mouse.py every gesture, pointer path, control-port call and
@@ -159,6 +159,35 @@ s06)  # the Java diff (drawn in the browser; the lab has no IDE). "I don't like 
 s04prep)  # the page back to how s03 left it (s04's result undone), to retake s04 alone
   "$FILM_DIR/site.sh" state "$(python3 -c "import json;d=json.load(open('$RAW/final-state.json'));[d.pop(k,None) for k in ('picture','typo-fixed','artBox','pictureSrc')];print(json.dumps(d))")"
   dark false; url "index.html?v=r6"; sleep 1.5 ;;
+s05)  # film mode over the blinking Plans menu, on the page as s04 left it. 🔼 → opens the prompt, 🔽 ↑ starts the film of the whole
+      # display (REC corners; the app draws no dust and no edge while it runs), "See how this flickers? Fix it.", 🔼 ends both;
+      # the stand-in stops the blinking when the prompt lands
+  dark false; [ -f $RAW/final-state.json ] && FINAL=$(cat $RAW/final-state.json)
+  "$FILM_DIR/site.sh" state "$(python3 -c "import json,sys;d=json.loads(sys.argv[1]);d.update({'menu-open':1,'flicker':1});print(json.dumps(d))" "$FINAL")"; url "index.html?v=r6"
+  stage_terminal >/dev/null; sleep 5; front Terminal; sleep 0.6; front Safari; mouse '[["move",430,330,0.3]]'; sleep 1.5
+  rec_start s05; t0; voice s05b@2.3
+  play '[["at",0],["mark","flicker_visible_from"],["mark","dictation_starts"],["api","test/gesture",{"name":"forward-right"}],
+         ["at",1.2],["mark","film_starts"],["api","test/gesture",{"name":"back-up"}],
+         ["at",1.9],["move",690,215,0.9],["at",3.4],["move",760,245,0.6],["at",4.3],["move",700,205,0.6],
+         ["at",5.6],["mark","film_stops"],["mark","dictation_ends"],["api","test/gesture",{"name":"forward-click"}]]'
+  SEND 1.4; sleep 2.0; mark flicker_fixed; sleep 5
+  END; "$FILM_DIR/site.sh" merge '{"menu-open":0,"flicker":0}' ;;
+s08)  # the ⚡ quick question (🔼 ← at rest) over the real github.com/Netflix/Hystrix, dark appearance: question marks down the left
+      # edge, the reply pop-up and its 🔎 web check and 🧐 review. The three answers are SCRIPTED (claude_p.py stands in for
+      # `claude -p`; they state only what was verified on that page on 2026-11-22)
+  fake_claude on; dark true; api test/quick '{"close":true}' >/dev/null 2>&1
+  S -e 'tell application "Terminal" to set miniaturized of every window to true' 2>/dev/null
+  S -e 'tell application "Safari" to set URL of front document to "https://github.com/Netflix/Hystrix#hystrix-status"'; front Safari; sleep 12
+  mouse '[["move",600,300,0.3]]'; sleep 1
+  rec_start s08; t0; voice s08@1.0
+  play '[["at",0],["move",560,280,0.7],["mark","question_starts"],["api","test/gesture",{"name":"forward-left"}],
+         ["at",5.6],["mark","question_ends"],["api","test/gesture",{"name":"forward-click"}]]'
+  for i in $(seq 1 44); do   # the pop-up's frame and words, twice a second, for the editor's marks
+    api test/quick '{"peek":true}' | python3 -c "
+import json,sys,time
+d=json.load(sys.stdin); print(json.dumps({'t':time.time(),'frame':d.get('frame'),'shown':d.get('shown')}, ensure_ascii=False))" >> $RAW/s08.peek 2>/dev/null; sleep 0.4
+  done
+  END; api test/quick '{"close":true}' >/dev/null; dark false ;;
 # ---- s07: five destinations on ONE desktop: dark appearance, the Brewly page as s04 left it filling the screen, the bound
 #      session's terminal (TERM_BIG) behind it. Each beat stages that desktop afresh.
 s07e) # a prompt to the bound session hidden behind the browser (right edge dust); the moment it is sent, a real ⌘Tab brings the
