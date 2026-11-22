@@ -398,6 +398,14 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// box, a label beside it, the two lining up into a column.
     private let titleRow = NSView()
     private let titleGlyph = NSImageView()
+    /// **The bound project's logo, right of the walkie at rest** (2026-11-22,
+    /// Victor: *"când sunt bound la un proiect, lângă iconița walkie să apară
+    /// logoul proiectului"*). Only where the walkie itself is drawn — the
+    /// `collapsed` chip, the yellow Wispr ring included; once a sentence is in
+    /// flight the row is the terminal's icon and `folder@branch`. Pushed in by
+    /// `AppDelegate` (`ProjectLogo`), in its own colours, no rim and no shadow.
+    private let projectGlyph = NSImageView()
+    private var projectLogo: NSImage?
 
     /// The bound terminal's working directory, on a row of its own.
     ///
@@ -1402,6 +1410,9 @@ private let heardLabel = NSTextField(labelWithString: "")
         titleGlyph.imageAlignment = .alignCenter
         titleGlyph.isHidden = true          // only a bound relay shows a destination
         titleRow.addSubview(titleGlyph)
+        projectGlyph.imageScaling = .scaleProportionallyUpOrDown
+        projectGlyph.isHidden = true
+        titleRow.addSubview(projectGlyph)
         titleRow.addSubview(titleLabel)
         root.addSubview(titleRow)
 
@@ -1966,6 +1977,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         let titleWidth = ceil(titleLabel.frame.width)
             + (boundLabel != nil || spawnIcon != nil
                ? glyphColumn + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
+            + (restingLogo.map { recordDotGap + $0.size.width } ?? 0)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -3068,6 +3080,14 @@ private let heardLabel = NSTextField(labelWithString: "")
         // measured from — an app icon and a map pin are different shapes and
         // only a fixed box makes them the same size on screen.
         if bound { centre(titleGlyph, inRowOfHeight: titleRowHeight) }
+        // The walkie keeps its place whatever stands beside it: the logo takes
+        // the far side of the column, where a name would start.
+        projectGlyph.image = restingLogo
+        projectGlyph.isHidden = restingLogo == nil
+        if let logo = restingLogo {
+            projectGlyph.frame = NSRect(x: column + gap, y: ((titleRowHeight - logo.size.height) / 2).rounded(),
+                                        width: logo.size.width, height: logo.size.height)
+        }
         centre(titleLabel, x: column + gap,
                width: max(0, width - column - gap), inRowOfHeight: titleRowHeight)
     }
@@ -4808,6 +4828,17 @@ private let heardLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
+    /// The logo, while the chip is the walkie alone.
+    private var restingLogo: NSImage? { collapsed ? projectLogo : nil }
+
+    /// The bound project's logo (`ProjectLogo`), nil for none. It is dropped with
+    /// the binding (`setBound(label: nil)`), so it is set **after** `setBound`.
+    func setProjectLogo(_ image: NSImage?) {
+        guard projectLogo !== image else { return }
+        projectLogo = image
+        layoutContent()
+    }
+
     func setBound(label: String?, folder: String? = nil, title: String? = nil, spawned: Bool = false,
                   icon: NSImage? = nil) {
         guard boundLabel != label || boundFolder != folder || boundTitle != title
@@ -4818,6 +4849,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         boundTitle = label == nil ? nil : title
         boundSpawned = label != nil && spawned
         boundIcon = label == nil ? nil : icon
+        if label == nil { projectLogo = nil }
         refreshTitle()
         layoutContent()
     }

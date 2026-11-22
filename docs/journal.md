@@ -16985,3 +16985,22 @@ generată și pusă și în README.md pe GitHub mereu"*.
   README's *Gestures*. The guard is text, not pixels: the shoot writes `docs/readme/hint-bar.txt` (titles, badges,
   sizes) and a unit test compares it with what the code would draw now. A pixel compare would fail on an emoji
   font update; this fails on exactly the changes that make the picture a lie.
+
+## 2026-11-22 — 🐱 The bound project's logo beside the walkie
+
+Victor: *"când sunt bound la un proiect, lângă iconița walkie să apară logoul proiectului (de ex. cat pt
+petclinic)"* — and, corrected within the hour, the walkie he means is the chip's beside the pointer, not
+the menu bar's.
+
+- **Where**: the resting chip only (`collapsed`), right of the walkie; the walkie keeps its x. Rule and
+  the search order: `overlay-chip.md`, *The bound project's logo*.
+- **Which project**: the directory the binding's `folder@branch` was read from, noted by
+  `TerminalBinding.label(forDirectory:)` (`ProjectLogo.note`), then its repo root. Two folders of one
+  name on one branch share a label, so the later read wins.
+- **petclinic is the cat because Victor said so on 2026-11-19** (`ProjectIcons`), not because of its
+  files: the frontend ships Spring's leaf as `favicon.ico` and a 🐶 in `index.html`. His marks therefore
+  rank above the file search.
+- **walkie-talkie has no file by a logo's name** (the `.icns` is built), hence `.walkie/logo.png`, a link
+  to the Dock tile's PNG.
+- Looked at: `WT_SHOOT_PROJECT_LOGO` for petclinic, walkie-talkie, victor-net (template mark), victor-vsc
+  (`app-icon/Code.icns`), training-assistant, two with none; dark and light. Not seen on a live bind.

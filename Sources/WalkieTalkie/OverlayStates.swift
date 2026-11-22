@@ -82,6 +82,22 @@ enum OverlayStates {
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
             },
 
+            Shot(slug: "bound-idle-logo", group: "At rest", title: "Bound, with the project's logo",
+                 when: "Standing by, bound to a session working in a project that has a logo — here `~/workspace/petclinic`.",
+                 note: "**The project's own mark beside the walkie** (2026-11-22, Victor: *\"când sunt bound la un proiect, lângă iconița walkie să apară logoul proiectului (de ex. cat pt petclinic)\"*). Only on the resting chip, the one place the walkie is drawn; a sentence in flight shows the terminal's icon and `folder@branch` instead. In its own colours, no rim and no shadow. The cat is the mark the spawn menu already gives petclinic (`ProjectIcons`); a project with no logo keeps the walkie alone.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setProjectLogo(ProjectLogo.logo(forDirectory: NSHomeDirectory() + "/workspace/petclinic"))
+            },
+
+            Shot(slug: "bound-idle-logo-file", group: "At rest", title: "…a logo found in the project's files",
+                 when: "The same, bound to a session in this repo.",
+                 note: "`.walkie/logo.png` in the repo root is the project saying which picture it is — here a link to the Dock tile's artwork. Without one the search goes on to `logo` / `icon` / `apple-touch-icon` / `favicon` files in the usual folders, then an `.icns`. A full square is drawn with rounded corners; this one is a disc already.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "walkie-talkie", folder: "walkie-talkie", title: "✳ walkie-talkie", icon: terminal)
+                o.setProjectLogo(ProjectLogo.logo(forDirectory: FileManager.default.currentDirectoryPath))
+            },
+
             Shot(slug: "listening-filming", group: "Dictating", title: "Recording the screen",
                  when: "🔽 ↑ while a dictation is open — bound, unbound, or headed for a folder that does not exist yet.",
                  note: "**A row of its own, under the shots**, and it carries two numbers because they answer different questions. `0:04` is what he is *spending* — the thing that says when to stop. `21` is what he has *got*, and it is not derivable from the seconds: the encoder drops a frame when it falls behind, so a recording that quietly caught half of what he thinks it did is exactly what this makes impossible. The row **stays after he stops**, with the finished pair on it — the sentence is carrying the film by then, and `📸 ×3` does not vanish when the shutter stops either. It goes when the sentence does. The recording stops itself at 30 s, and ends with the sentence if he never presses the gesture again.",

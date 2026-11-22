@@ -9524,6 +9524,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (`capturing` false while `listening` was true); the phantom second
     /// sentence started because a forward click landed while `settling` was true
     /// and `onPasteToggle` only ever asked about `listening`. Neither fact is on
+        // The project's logo beside the resting walkie (`ProjectLogo`, 2026-11-22).
+        ProjectLogo.resolve(label: target.folder) { [weak self] in self?.overlay.setProjectLogo($0) }
     /// screen, and reconstructing either from `relay.log` means reading prose
     /// after the event.
     private func stateSnapshot() -> [String: Any] {

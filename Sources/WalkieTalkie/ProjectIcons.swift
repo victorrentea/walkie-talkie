@@ -36,6 +36,10 @@ enum ProjectIcons {
 
     private static var cache: [String: Mark?] = [:]
 
+    /// The mark in its own colours — `ProjectLogo` draws it beside the walkie on
+    /// the chip (2026-11-22); the menu's rows keep the greys of `mark(for:)`.
+    static func original(for folder: String) -> Mark? { make(folder) }
+
     private static func make(_ folder: String) -> Mark? {
         // Every live checkout of petclinic (`petclinic-main`, `petclinic-pr-…`) is petclinic.
         if folder == "petclinic" || folder.hasPrefix("petclinic-") { return .colour(Glyphs.emoji("🐱", ink: 18)) }

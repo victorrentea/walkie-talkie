@@ -144,6 +144,18 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_WAVE"] {
     exit(0)
 }
 
+// The resting chip's walkie with a project's logo beside it, on a dark ground and
+// a light one, and quit: `WT_SHOOT_PROJECT_LOGO=<dir>
+// WT_SHOOT_PROJECT_LOGO_FOLDERS=~/workspace/petclinic:~/workspace/walkie-talkie`.
+// See `ProjectLogo.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_PROJECT_LOGO"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    let folders = (ProcessInfo.processInfo.environment["WT_SHOOT_PROJECT_LOGO_FOLDERS"] ?? "")
+        .split(separator: ":").map { (String($0) as NSString).expandingTildeInPath }
+    ProjectLogo.shoot(into: out, folders: folders)
+    exit(0)
+}
+
 // The chip's `📋 Re-paste ⌘⇧P` row on a dark ground and a light one — alone,
 // and under `☠️ Kamikaze` for comparison — and quit. The chip cannot be
 // captured, so this is the only way to see it. See `PasteHint.shoot`.

@@ -270,6 +270,25 @@ yields to `--label`).
   `walkieIdleGlyph` / `walkieLiveGlyph` are `Glyphs.walkieOutlined` — `Glyphs.walkie` in white with a
   1 pt black rim (16 offset copies), the slots dark. The PNGs (`walkie-idle`, `walkie-bound`) stay for
   the Dock tile, the reply pop-up, `MicAnnouncer` and the yellow Wispr ring.
+- **The bound project's logo stands right of the resting walkie** (2026-11-22, Victor: *"când sunt bound
+  la un proiect, lângă iconița walkie să apară logoul proiectului (de ex. cat pt petclinic)"* — the walkie
+  of the chip, not the menu bar's). Only on the `collapsed` chip, the one state that draws the walkie (the
+  yellow Wispr ring included); a sentence in flight keeps the terminal's icon and `folder@branch`.
+  `RelayWindow.setProjectLogo` / `projectGlyph`, at `glyphColumn + recordDotGap`, so the walkie never moves;
+  in its colours, 18 pt, no rim, no shadow; dropped by `setBound(label: nil)`. `ProjectLogo` finds it: the
+  project is the repo root of the directory the binding's label was read from
+  (`TerminalBinding.label(forDirectory:)` notes it — no second lookup; an IDE panel with no folder has no
+  logo). **First hit wins:** `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` → `ProjectIcons`' colour
+  mark for the folder name, un-greyed (🐱 petclinic, whatever favicon its frontend ships) → a `logo` /
+  `icon` / `appicon` / `apple-touch-icon` / `favicon` file (svg, png, icns, ico) in the root, `docs`,
+  `public`, `static`, `assets`, `images`, `src/assets`, `src/main/resources/static`… and one level of
+  sub-modules, then an `.icns` or the largest `AppIcon.appiconset` PNG → `ProjectIcons`' monochrome mark,
+  white with the walkie's black rim. Nothing found, nothing drawn. Transparent margins are cut, a full
+  square gets 22 % corners. Off main, 0.5 s budget, ≤ 40 sub-modules, cached per root for 60 s; a cached
+  answer is given in the same turn as the bind, so re-binding does not blink. This repo's is
+  `.walkie/logo.png`, a link to `assets/walkie-bound.png`. Shots `bound-idle-logo`,
+  `bound-idle-logo-file`; `WT_SHOOT_PROJECT_LOGO=<dir> WT_SHOOT_PROJECT_LOGO_FOLDERS=a:b` renders walkie +
+  logo on dark and light; `ProjectLogoTests`.
 - **The microphone breathes in front of the word, where the walkie did** (2026-10-04, Victor: *"în
   loc de simbolul de Walkie Talkie care clipește lent când dictez, pune simbolul microfonului"*, *"muta
   simbolul microfonului in fata, inainte de Dictating/Prompting"*, then *"nu trebuie înconjurat cu

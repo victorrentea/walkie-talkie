@@ -22,6 +22,30 @@
   },
   {
     "alpha" : 0.80000000000000004,
+    "group" : "At rest",
+    "height" : 45,
+    "image" : "bound-idle-logo.png",
+    "note" : "**The project's own mark beside the walkie** (2026-11-22, Victor: *\"când sunt bound la un proiect, lângă iconița walkie să apară logoul proiectului (de ex. cat pt petclinic)\"*). Only on the resting chip, the one place the walkie is drawn; a sentence in flight shows the terminal's icon and `folder@branch` instead. In its own colours, no rim and no shadow. The cat is the mark the spawn menu already gives petclinic (`ProjectIcons`); a project with no logo keeps the walkie alone.",
+    "shape" : "chip",
+    "slug" : "bound-idle-logo",
+    "title" : "Bound, with the project's logo",
+    "when" : "Standing by, bound to a session working in a project that has a logo — here `~\/workspace\/petclinic`.",
+    "width" : 69
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "At rest",
+    "height" : 45,
+    "image" : "bound-idle-logo-file.png",
+    "note" : "`.walkie\/logo.png` in the repo root is the project saying which picture it is — here a link to the Dock tile's artwork. Without one the search goes on to `logo` \/ `icon` \/ `apple-touch-icon` \/ `favicon` files in the usual folders, then an `.icns`. A full square is drawn with rounded corners; this one is a disc already.",
+    "shape" : "chip",
+    "slug" : "bound-idle-logo-file",
+    "title" : "…a logo found in the project's files",
+    "when" : "The same, bound to a session in this repo.",
+    "width" : 71
+  },
+  {
+    "alpha" : 0.80000000000000004,
     "group" : "Dictating",
     "height" : 117,
     "image" : "listening-filming.png",

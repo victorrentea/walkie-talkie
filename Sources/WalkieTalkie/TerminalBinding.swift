@@ -2986,6 +2986,15 @@ final class TerminalBinding {
     /// default is the one fact worth interrupting for: it says this session is
     /// somewhere other than where he usually is.
     static func label(forDirectory dir: String) -> String {
+        let label = branchLabel(forDirectory: dir)
+        // The chip's project logo is found in the directory this label was read
+        // from (`ProjectLogo`, 2026-11-22) — noted here, the one door every label
+        // comes through, rather than asked of the terminal a second time.
+        ProjectLogo.note(label: label, directory: dir)
+        return label
+    }
+
+    private static func branchLabel(forDirectory dir: String) -> String {
         let folder = (dir as NSString).lastPathComponent
         guard let branch = run("/usr/bin/git", ["-C", dir, "rev-parse", "--abbrev-ref", "HEAD"]),
               !branch.isEmpty, branch != "HEAD",
