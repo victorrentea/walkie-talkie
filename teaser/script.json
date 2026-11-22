@@ -143,7 +143,7 @@
         },
         {
           "who": "n",
-          "text": "The agent opens only what it needs. And you see the cost of every task."
+          "text": "Aggressively evaluated to add as few tokens as possible. And you see the cost of every task."
         }
       ]
     },
