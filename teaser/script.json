@@ -10,7 +10,7 @@
       "lines": [
         {
           "who": "n",
-          "text": "Your coding agent lives in a terminal."
+          "text": "Your agent lives in your terminal, but you shouldn't!"
         },
         {
           "who": "n",
@@ -44,7 +44,7 @@
         },
         {
           "who": "n",
-          "text": "Drag it exactly where you want it."
+          "text": "Move elements exactly where you want them."
         }
       ]
     },
@@ -59,7 +59,7 @@
         },
         {
           "who": "n",
-          "text": "Everything you point at lands in the sentence, at the moment you said it."
+          "text": "Everything you point at lands in the prompt, at the moment you said it."
         }
       ]
     },
@@ -81,7 +81,7 @@
     {
       "id": "s06-review",
       "target": 5,
-      "shows": "A diff in an IDE; a loop is selected; it gets rewritten.",
+      "shows": "A Java class in an IDE-like diff; a for loop summing prices is selected; it is rewritten as items.stream().filter(...).mapToDouble(i -> i.price() * i.qty()).sum() — no reduce.",
       "lines": [
         {
           "who": "u",
@@ -91,12 +91,20 @@
     },
     {
       "id": "s07-modes",
-      "target": 14,
-      "shows": "Four quick cuts: flick up = new session (top edge dust, new terminal); wake word; prompt at the caret (bottom edge, red pins); clean dictation in a mail with 'Transcribing and redacting'. The dictated sentence holds a technical name that lands spelled right (the learned dictionary).",
+      "target": 18,
+      "shows": "Five beats: (e) a prompt to the bound session behind the browser, right edge dust; (a) swipe up = new session: the folder dialog open with 3-4 saved folders besides workspace, top edge; (b) the wake word row; (c) a prompt at the caret, bottom edge with red pins; (d) clean dictation with the puzzle (Mosaic) effect and the red caret pin, Transcribing → Redacting → the text landing with Resilience4j spelled right.",
       "lines": [
         {
           "who": "n",
-          "text": "Flick up: a new session. Or simply say:"
+          "text": "Send your prompt to the session in the back,"
+        },
+        {
+          "who": "n",
+          "text": "to a new session,"
+        },
+        {
+          "who": "n",
+          "text": "or call out the wake word:"
         },
         {
           "who": "u",
@@ -105,15 +113,11 @@
         },
         {
           "who": "n",
-          "text": "Prompt wherever your cursor is."
+          "text": "or drop it at the cursor."
         },
         {
           "who": "n",
-          "text": "Or just dictate, cleaned up as you speak."
-        },
-        {
-          "who": "n",
-          "text": "The redactor learns your vocabulary from your agent sessions."
+          "text": "Or simply dictate: your text is cleaned up as you speak, by a dictionary that keeps learning from your agent sessions."
         }
       ]
     },
@@ -143,7 +147,7 @@
         },
         {
           "who": "n",
-          "text": "Aggressively evaluated to add as few tokens as possible. And you see the cost of every task."
+          "text": "All for a very low token overhead, tuned via heavy evals. And you see the cost of every task."
         }
       ]
     },
