@@ -3,25 +3,147 @@
   "version": 1,
   "notes": "speaker n = narrator (white subtitle), u = what Walkie hears (yellow subtitle, 🎙️ in front). 'target' = seconds of the scene in the cut. Only the local model is shown; never ElevenLabs or Wispr Flow.",
   "scenes": [
-    {"id": "s01-hook", "target": 4, "shows": "A website full screen; the Claude Code terminal is hidden behind it.",
-     "lines": [{"who": "n", "text": "Your agent lives in a terminal. Your eyes stay on what matters."}]},
-    {"id": "s02-site", "target": 7, "shows": "Prompt to the bound terminal (right edge dust). The page restyles; Claude's wait is cut.",
-     "lines": [{"who": "u", "text": "Make the header dark and the button orange."}, {"who": "n", "text": "So talk to it."}]},
-    {"id": "s03-move", "target": 5, "shows": "Wheel-drag an area, shift-drag it elsewhere (the move arrow); the element moves on the page.",
-     "lines": [{"who": "u", "text": "Move this up here."}]},
-    {"id": "s04-point", "target": 7, "shows": "While talking: a screenshot, a crop, highlighted text, an image copied from Google Images. The prompt panel shows them inside the sentence where they were made.",
-     "lines": [{"who": "u", "text": "Use this picture here, and fix this text."}, {"who": "n", "text": "Everything you point at lands in the sentence, at the moment you said it."}]},
-    {"id": "s05-film", "target": 4, "shows": "Screen recording mode (REC corners) over a flickering menu.",
-     "lines": [{"who": "u", "text": "See how this flickers? Fix it."}, {"who": "n", "text": "Or film it."}]},
-    {"id": "s06-review", "target": 5, "shows": "A diff in an IDE; a loop is selected; it gets rewritten.",
-     "lines": [{"who": "u", "text": "I don't like this loop. Simplify it."}]},
-    {"id": "s07-modes", "target": 11, "shows": "Four quick cuts: flick up = new session (top edge dust, new terminal); wake word; prompt at the caret (bottom edge, red pins); clean dictation in a mail with 'Transcribing and redacting'.",
-     "lines": [{"who": "n", "text": "Flick up: a new session."}, {"who": "u", "text": "Hey Claude."}, {"who": "n", "text": "Prompt wherever your cursor is."}, {"who": "n", "text": "Or just dictate, cleaned up as you speak."}]},
-    {"id": "s08-ask", "target": 6, "shows": "Quick question: left edge question marks, the reply pop-up with web check and adversarial review.",
-     "lines": [{"who": "u", "text": "Is this library still maintained?"}, {"who": "n", "text": "Quick questions: searched on the web, adversarially reviewed."}]},
-    {"id": "s09-cost", "target": 6, "shows": "The cost bubble beside a prompt; pictures as file paths in the prompt.",
-     "lines": [{"who": "n", "text": "Transcribed on your Mac. Media stays on disk; the agent opens only what it needs. And you see the cost of every turn."}]},
-    {"id": "s10-end", "target": 5, "shows": "End card: Walkie Talkie logo, 'Free · open source · macOS', github.com/victorrentea/walkie-talkie.",
-     "lines": [{"who": "n", "text": "Walkie Talkie. Talk to your coding agent."}]}
+    {
+      "id": "s01-hook",
+      "target": 4,
+      "shows": "A website full screen; the Claude Code terminal is hidden behind it.",
+      "lines": [
+        {
+          "who": "n",
+          "text": "Your agent lives in a terminal. Your eyes stay on what matters."
+        }
+      ]
+    },
+    {
+      "id": "s02-site",
+      "target": 7,
+      "shows": "Prompt to the bound terminal (right edge dust). The page restyles; Claude's wait is cut.",
+      "lines": [
+        {
+          "who": "u",
+          "text": "Make the header dark and the button orange."
+        },
+        {
+          "who": "n",
+          "text": "So talk to it."
+        }
+      ]
+    },
+    {
+      "id": "s03-move",
+      "target": 6,
+      "shows": "Wheel-drag a box round an element, shift-drag it to a new place (the arrow from the red box to the green one); the element lands exactly there on the page. A high-impact scene: show the precision.",
+      "lines": [
+        {
+          "who": "u",
+          "text": "Move this up here."
+        },
+        {
+          "who": "n",
+          "text": "Drag it exactly where you want it."
+        }
+      ]
+    },
+    {
+      "id": "s04-point",
+      "target": 7,
+      "shows": "While talking: a screenshot, a crop, highlighted text, an image copied from Google Images. The prompt panel shows them inside the sentence where they were made.",
+      "lines": [
+        {
+          "who": "u",
+          "text": "Use this picture here, and fix this text."
+        },
+        {
+          "who": "n",
+          "text": "Everything you point at lands in the sentence, at the moment you said it."
+        }
+      ]
+    },
+    {
+      "id": "s05-film",
+      "target": 4,
+      "shows": "Screen recording mode (REC corners) over a flickering menu.",
+      "lines": [
+        {
+          "who": "u",
+          "text": "See how this flickers? Fix it."
+        },
+        {
+          "who": "n",
+          "text": "Or film it."
+        }
+      ]
+    },
+    {
+      "id": "s06-review",
+      "target": 5,
+      "shows": "A diff in an IDE; a loop is selected; it gets rewritten.",
+      "lines": [
+        {
+          "who": "u",
+          "text": "I don't like this loop. Simplify it."
+        }
+      ]
+    },
+    {
+      "id": "s07-modes",
+      "target": 11,
+      "shows": "Four quick cuts: flick up = new session (top edge dust, new terminal); wake word; prompt at the caret (bottom edge, red pins); clean dictation in a mail with 'Transcribing and redacting'.",
+      "lines": [
+        {
+          "who": "n",
+          "text": "Flick up: a new session."
+        },
+        {
+          "who": "u",
+          "text": "Hey Claude."
+        },
+        {
+          "who": "n",
+          "text": "Prompt wherever your cursor is."
+        },
+        {
+          "who": "n",
+          "text": "Or just dictate, cleaned up as you speak."
+        }
+      ]
+    },
+    {
+      "id": "s08-ask",
+      "target": 6,
+      "shows": "Quick question: left edge question marks, the reply pop-up with web check and adversarial review.",
+      "lines": [
+        {
+          "who": "u",
+          "text": "Is this library still maintained?"
+        },
+        {
+          "who": "n",
+          "text": "Quick questions: searched on the web, adversarially reviewed."
+        }
+      ]
+    },
+    {
+      "id": "s09-cost",
+      "target": 6,
+      "shows": "The cost bubble beside a prompt; pictures as file paths in the prompt.",
+      "lines": [
+        {
+          "who": "n",
+          "text": "Transcribed on your Mac. Media stays on disk; the agent opens only what it needs. And you see the cost of every turn."
+        }
+      ]
+    },
+    {
+      "id": "s10-end",
+      "target": 5,
+      "shows": "End card: Walkie Talkie logo, 'Free · open source · macOS', github.com/victorrentea/walkie-talkie.",
+      "lines": [
+        {
+          "who": "n",
+          "text": "Walkie Talkie. Talk to your coding agent."
+        }
+      ]
+    }
   ]
 }
