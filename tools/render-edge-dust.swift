@@ -24,9 +24,13 @@ guard let b = file.range(of: "// SHADER-BEGIN"), let e = file.range(of: "// SHAD
 }
 let source = String(file[open.upperBound..<close.lowerBound])
 
-struct U { var size: SIMD2<Float>; var time: Float; var edge: Float; var level: Float; var intensity: Float; var scale: Float; var seed: Float; var stop: Float }
+struct U { var size: SIMD2<Float>; var time: Float; var edge: Float; var level: Float; var intensity: Float; var scale: Float; var seed: Float; var stop: Float; var boost: Float }
 // `EDGE_STOP=<s>`: drained from that time on (`EdgeDustV7.drain`, 2026-11-21).
 let stop = Float(ProcessInfo.processInfo.environment["EDGE_STOP"] ?? "") ?? 1e9
+// `MARKS_BOOST=<0.5…3>`: the ⚡ marks' filming knob (`EdgeDustV7.marksBoost`, 2026-11-22).
+let boost = Float(ProcessInfo.processInfo.environment["MARKS_BOOST"] ?? "") ?? 1
+// `EDGE_BG=light`: over a white page instead of the dark desk.
+let light = ProcessInfo.processInfo.environment["EDGE_BG"] == "light"
 
 let device = MTLCreateSystemDefaultDevice()!
 let library = try! device.makeLibrary(source: source, options: nil)
@@ -51,7 +55,7 @@ func render(_ t: Float) -> [UInt8] {
     pass.colorAttachments[0].loadAction = .clear
     pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
     pass.colorAttachments[0].storeAction = .store
-    var u = U(size: size, time: t, edge: edge, level: level, intensity: 1, scale: scale, seed: 3.7, stop: stop)
+    var u = U(size: size, time: t, edge: edge, level: level, intensity: 1, scale: scale, seed: 3.7, stop: stop, boost: boost)
     let buf = queue.makeCommandBuffer()!
     let enc = buf.makeRenderCommandEncoder(descriptor: pass)!
     enc.setRenderPipelineState(pipeline)
@@ -65,7 +69,7 @@ func render(_ t: Float) -> [UInt8] {
 }
 
 // Premultiplied BGRA over a dark desk (#1c1c1e), panels side by side with a gap.
-let gap = 24, bg: [Int] = [0x1e, 0x1c, 0x1c]
+let gap = 24, bg: [Int] = light ? [0xf5, 0xf5, 0xf5] : [0x1e, 0x1c, 0x1c]
 let horizontal = edge >= 0.5 && edge < 2.5
 let W = horizontal ? times.count * w + (times.count - 1) * gap : w
 let H = horizontal ? h : times.count * h + (times.count - 1) * gap

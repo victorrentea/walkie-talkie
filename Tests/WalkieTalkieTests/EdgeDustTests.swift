@@ -107,4 +107,41 @@ final class EdgeDustTests: XCTestCase {
     func testOnlyTheThreePromptsAreDressedAlike() {
         XCTAssertEqual(HaloDestination.allCases.filter(\.isPrompt), [.caret, .bound, .spawn])
     }
+
+    /// The ⚡ marks' filming knob (2026-11-22): 1 unless asked, the environment over the
+    /// saved value, kept within 0.5…3.
+    func testTheMarksBoostIsOneUnlessAskedAndStaysInItsRange() {
+        let name = "marks-boost-test"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: [:]), 1)
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: ["WT_MARKS_BOOST": "2"]), 2)
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: ["WT_MARKS_BOOST": "9"]), 3)
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: ["WT_MARKS_BOOST": "0"]), 0.5)
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: ["WT_MARKS_BOOST": "lots"]), 1)
+        d.set(1.6, forKey: "edgeDust.marksBoost")
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: [:]), 1.6, accuracy: 0.001)
+        XCTAssertEqual(EdgeDustV7.marksBoost(defaults: d, environment: ["WT_MARKS_BOOST": "2.5"]), 2.5)
+        d.removePersistentDomain(forName: name)
+    }
+
+    /// The offline renderer hands the shader its own copy of the uniforms: a field added to
+    /// one and not the other shifts every value after it.
+    func testTheOfflineRendererCarriesTheShadersUniforms() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let shader = try String(contentsOf: root.appendingPathComponent("Sources/WalkieTalkie/EdgeDustV7.swift"), encoding: .utf8)
+        let tool = try String(contentsOf: root.appendingPathComponent("tools/render-edge-dust.swift"), encoding: .utf8)
+        let block = try XCTUnwrap(shader.range(of: "struct V7U {").flatMap { open in
+            shader.range(of: "};", range: open.upperBound..<shader.endIndex).map { String(shader[open.upperBound..<$0.lowerBound]) }
+        })
+        let fields = block.split(separator: "\n").compactMap { line -> String? in
+            let words = line.split(separator: ";").first?.split(separator: " ") ?? []
+            return words.count == 2 ? String(words[1]) : nil
+        }
+        XCTAssertEqual(fields, ["size", "time", "edge", "level", "intensity", "scale", "seed", "stop", "boost"])
+        let mine = try XCTUnwrap(tool.range(of: "struct U {").flatMap { open in
+            tool.range(of: "}", range: open.upperBound..<tool.endIndex).map { String(tool[open.upperBound..<$0.lowerBound]) }
+        })
+        XCTAssertEqual(mine.split(separator: ";").compactMap { $0.split(separator: ":").first?.split(separator: " ").last.map(String.init) }, fields)
+    }
 }

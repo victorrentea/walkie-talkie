@@ -656,6 +656,19 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   (every edge, not only the left) — the rest of the cancel's graphics still vanish at once. The ⚡
   question's edge ends by `cut` every time (its stop reaches `cancelDictationInFlight`), which is why
   it read as brutal. Offline: `swift tools/render-edge-dust.swift 2 <png> 0.3 1 2 3 4 5 6` (a 240 pt strip).
+- **The ⚡ marks are a little more visible, and a hidden knob pushes them further for a film**
+  (2026-11-22, Victor: *"semnele de întrebare să fie mai vizibile în video (și un pic mai mult și-n
+  realitate de fapt)"*). **In reality, a little:** strokes 10 % heavier (`hw × 1.10`), formed density
+  `0.92 + 0.30 f` (was 0.80), a grain's threshold reaches 1.15 not 1.3 (more of a stroke's grains lit),
+  grains ×1.18 brighter, the binding glow 0.20 against the fire's 0.12, the fade from 35 % of the life
+  (was 30 %). Still grains with gaps between them — never a filled glyph; the fire edges and the pins
+  are untouched. **For filming: `edgeDust.marksBoost`** (`defaults write ro.victorrentea.wispr-relay
+  edgeDust.marksBoost -float 2`, or `WT_MARKS_BOOST=2` for one run; the environment wins; 0.5…3,
+  default 1; no menu row; read when an edge is built, so set it before the launch). It is one more
+  uniform (`boost`) scaling the same five numbers: at 2 a mark is a near-solid glittering shape, good
+  on a compressed video, too loud for daily use; 1.5 is in between. The offline renderer carries its
+  own copy of the uniforms (a test pins the two lists): `MARKS_BOOST=2 EDGE_BG=light swift
+  tools/render-edge-dust.swift 2 <png> 0.3 1 2 3 4 5 6` (`EDGE_BG=light`: over a white page).
 - **The ⚡ left edge stays until the reply pop-up is closed** (2026-11-20, Victor: *"the question mark
   that comes from the left should appear … until I close the answer panel … even if I ask you to dig
   again … during your transcription process, your searching, your initial response"*). It went ~2 s

@@ -45,6 +45,22 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
         var scale: Float = 2            // pixels per point
         var seed: Float = 0
         var stop: Float = 1e9           // the time nothing new is born after (`drain`)
+        var boost: Float = 1            // the ⚡ marks' visibility, 1 = the app's own (`marksBoost`)
+    }
+
+    /// **How visible the ⚡ question's marks are: 1 is the app's own look, more is for filming**
+    /// (2026-11-22, Victor: *"semnele de întrebare să fie mai vizibile în video (și un pic mai
+    /// mult și-n realitate de fapt)"*). The *a little more in reality* is in the shader's own
+    /// numbers; this hidden knob pushes it further for a screen recording: thicker strokes, more
+    /// grains lit, brighter grains, more glow, a later fade. `defaults write
+    /// ro.victorrentea.wispr-relay edgeDust.marksBoost -float 2`, or `WT_MARKS_BOOST=2` for one
+    /// run (the environment wins). Kept within 0.5…3; no menu row. Read when an edge is built.
+    static func marksBoost(defaults: UserDefaults = .standard,
+                           environment: [String: String] = ProcessInfo.processInfo.environment) -> Float {
+        let asked = environment["WT_MARKS_BOOST"].flatMap(Float.init)
+            ?? (defaults.object(forKey: "edgeDust.marksBoost") as? NSNumber)?.floatValue
+        guard let asked, asked.isFinite else { return 1 }
+        return min(max(asked, 0.5), 3)
     }
 
     private let view: MTKView
@@ -78,6 +94,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
         view = MTKView(frame: strip.bounds, device: device)
         uniforms.edge = edge == .top ? 0 : edge == .right ? 1 : edge == .left ? 2 : 3
         uniforms.seed = Float.random(in: 0..<64)
+        uniforms.boost = Self.marksBoost()
         super.init()
         view.colorPixelFormat = format
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
@@ -173,6 +190,7 @@ struct V7U {
     float scale;      // pixels per point
     float seed;
     float stop;       // nothing born after this time
+    float boost;      // the marks' visibility: 1 the app's own, up to 3 for filming
 };
 
 struct V7Out { float4 pos [[position]]; };
@@ -254,7 +272,7 @@ static float v7_qmark(float2 g, float R, float hw, float open) {
 // loses its grains one by one as it goes on (its density falls, so the grains drop out by their
 // own thresholds, never a uniform alpha), gone before `gone` points in. The next life of the
 // same cell is a new mark: its own cut, size and place along the edge.
-static float v7_mark(float cell, float S, float a, float d, float t, float level, float k, float seed, float f, float stop) {
+static float v7_mark(float cell, float S, float a, float d, float t, float level, float k, float seed, float f, float stop, float b) {
     const float pace = 1.15;
     const float gone = 232.0;
     float c1 = v7_h(float2(cell, 1.9)), c2 = v7_h(float2(cell, 4.4));
@@ -271,7 +289,8 @@ static float v7_mark(float cell, float S, float a, float d, float t, float level
     const float cR[5]    = { 15.0, 16.5, 14.0, 12.5, 17.0 };
     const float cHw[5]   = { 4.2,  5.8,  2.7,  3.6,  3.1 };
     const float cOpen[5] = { 2.97, 3.05, 2.9,  2.7,  3.3 };
-    float R = cR[cut], hw = cHw[cut], open = cOpen[cut];
+    // 10 % heavier strokes than first drawn (2026-11-22, *"un pic mai mult și-n realitate"*); `b` adds more for filming.
+    float R = cR[cut], hw = cHw[cut] * (1.10 + 0.22 * (b - 1.0)), open = cOpen[cut];
     float sc = mix(1.45, 2.35, h2) * (1.0 + 0.12 * level + 0.12 * k);
     float halfW = (R + hw) * sc;
     float top = 34.0 + 2.0 * R + hw;
@@ -290,8 +309,9 @@ static float v7_mark(float cell, float S, float a, float d, float t, float level
     float near = 1.0 - smoothstep(0.0, 12.0, sd);
     float form = smoothstep(0.0, 0.26, pp);
     // Its grains go from the middle of its life, the last of them before `gone`.
-    float fade = (1.0 - smoothstep(0.30, 0.92, pp)) * (1.0 - smoothstep(gone - 90.0, gone, d));
-    float formed = shape * (0.80 + 0.30 * f);
+    // (From 30 % until 2026-11-22: they stay whole a little longer now.)
+    float fade = (1.0 - smoothstep(0.35 + 0.08 * clamp(b - 1.0, -0.5, 1.5), 0.92, pp)) * (1.0 - smoothstep(gone - 90.0, gone, d));
+    float formed = shape * (0.92 + 0.30 * f);
     float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
     return mix(loose, max(formed, loose * 0.5), form) * fade;
 }
@@ -302,13 +322,13 @@ static float v7_mark(float cell, float S, float a, float d, float t, float level
 // dust at the edge, walks in while it forms, and loses its grains on the way, gone by ~230 pt;
 // then the next one. The voice makes them a little larger. A thin bed of dust runs along the
 // edge under them.
-static float v7_marks(float a, float d, float t, float level, float k, float seed, float stop) {
+static float v7_marks(float a, float d, float t, float level, float k, float seed, float stop, float b) {
     // A tall mark spills past its cell: its neighbour on the nearer side is drawn too.
     const float S = 170.0;
     float cellA = floor(a / S);
     float other = (a - cellA * S) < S * 0.5 ? cellA - 1.0 : cellA + 1.0;
     float f = v7_fbm(float2(a / 15.0, (d - 14.0 * t) / 26.0));
-    float dens = max(v7_mark(cellA, S, a, d, t, level, k, seed, f, stop), v7_mark(other, S, a, d, t, level, k, seed, f, stop));
+    float dens = max(v7_mark(cellA, S, a, d, t, level, k, seed, f, stop, b), v7_mark(other, S, a, d, t, level, k, seed, f, stop, b));
     float bed = (1.0 - smoothstep(0.0, 14.0, d)) * (0.20 + 0.45 * f) * (0.8 + 0.4 * level);
     // The bed's dust lifts off the edge like the fire's (14 pt/s, its own drift).
     bed *= smoothstep(-4.0, 4.0, d - max(t - stop, 0.0) * 14.0);
@@ -400,6 +420,8 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float t = u.time;
     float k = clamp(u.intensity - 1.0, 0.0, 1.5);
     float grow = 1.0 + 0.8 * u.level + 0.6 * k;
+    // The marks' visibility (`EdgeDustV7.marksBoost`): 1 unless a film asks for more.
+    float mb = clamp(u.boost, 0.5, 3.0);
 
     // The tongues sway a little, more the further from their base.
     float sway = (v7_n(float2(a / 60.0, d / 38.0 - t * 0.6)) - 0.5) * 34.0 * smoothstep(0.0, 60.0, d);
@@ -431,7 +453,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     // sus, sare și se deformează … ar trebui să se ducă punctele în sus și să dispară natural"*):
     // there no grain is born after `stop` (`alive`, in the loop) and the ones in flight go on.
     // Every fire edge since the same afternoon (the right edge filmed deforming as it left): no cut here at all.
-    if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed, u.stop); h = 70.0; }
+    if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed, u.stop, mb); h = 70.0; }
     // The caret's bottom edge: the same fire, and now and then a red pin made of its grains.
     // Its strip is deeper (the pins walk to ~230 pt), so the fire's own fade — the mask's on
     // the 110 pt edges, from 30 % of the depth — is drawn here (`fireFade`).
@@ -450,6 +472,13 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     // The caret's pins are ~60–85 pt tall: finer grains there too, or the ring round the hole is mush.
     float fine = marks ? 0.62 : mix(1.0, 0.72, pinW);
     float slow = marks ? 0.25 : 1.0;
+    // **The marks a little more visible** (2026-11-22, Victor: *"semnele de întrebare să fie mai
+    // vizibile în video (și un pic mai mult și-n realitate de fapt)"*): more of a stroke's
+    // grains lit (their thresholds reach 1.15, not 1.3), each ~18 % brighter, the binding glow
+    // 0.20 against the fire's 0.12. Still grains: never a filled glyph. `mb` pushes all three.
+    float reach = marks ? 1.15 / (1.0 + 0.55 * (mb - 1.0)) : 1.3;
+    float bright = marks ? 1.18 * (1.0 + 0.40 * (mb - 1.0)) : 1.0;
+    float bind = marks ? 0.20 * mb * mb : 0.12;
 
     float3 sum = float3(0.0);
     const float cell[3]  = { 4.5, 6.2, 8.6 };
@@ -474,20 +503,20 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
         float2 c = 0.5 + (float2(r2, r3) - 0.5) * 2.0 * (0.5 - rad);
         float dotv = smoothstep(rad, rad * 0.25, length(fr - c));
         // Lit where the fire is denser than this grain's own threshold.
-        float lit = smoothstep(r1 * 1.3, r1 * 1.3 + 0.12, dens);
+        float lit = smoothstep(r1 * reach, r1 * reach + 0.12, dens);
         float twinkle = 0.55 + 0.45 * sin(t * (2.5 + 5.0 * r2) + r3 * 6.2832);
         float3 col = v7_palette(hue + (r4 - 0.5) * 0.16);
         // A pin's grains are its red (`NSColor.systemRed`), a touch lighter or deeper each.
         col = mix(col, mix(float3(1.0, 0.20, 0.17), float3(1.0, 0.42, 0.34), r4), pinW);
         col = mix(col * col * 0.95, mix(col, float3(1.0), 0.30), heat);
-        sum += col * dotv * lit * twinkle * gain[i] * alive;
+        sum += col * dotv * lit * twinkle * gain[i] * bright * alive;
     }
 
     // A faint smooth glow under the dust, to bind it.
     float3 base = mix(v7_palette(hue), float3(1.0, 0.20, 0.17), pinW);
     base = mix(base * base, mix(base, float3(1.0), 0.2), heat);
     float glow = !marks ? 1.0 - smoothstep(u.stop, u.stop + 0.8, t) : 1.0;
-    float3 rgb = sum * 0.95 + base * dens * dens * 0.12 * glow;
+    float3 rgb = sum * 0.95 + base * dens * dens * bind * glow;
     rgb = 1.0 - exp(-rgb * 1.15);
     // Premultiplied. Alpha close to the grain's own brightness: on a dark desk that
     // is as good as additive, on a white page the grain keeps its colour instead of
