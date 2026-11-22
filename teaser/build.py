@@ -224,7 +224,7 @@ def wrap(text: str, f: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
     return lines
 
 
-def subtitle_png(text: str, who: str, path: Path, top: bool = False) -> None:
+def subtitle_png(text: str, who: str, path: Path, top: bool = False, tag: str | None = None) -> None:
     size = 62
     f = font(size, "Bold")
     colour = YELLOW if who == "u" else WHITE
@@ -253,6 +253,12 @@ def subtitle_png(text: str, who: str, path: Path, top: bool = False) -> None:
             x += mic_w
         d.text((x, y + line_h / 2), row, font=f, fill=colour, anchor="lm",
                stroke_width=3, stroke_fill=(0, 0, 0, 230))
+    if tag:  # a small label riding the box's top-left corner (script line's "tag", e.g. WAKE WORD)
+        tf = font(30, "Bold")
+        tw = tf.getlength(tag)
+        tx, ty = x0 + 26, y0 - 26
+        d.rounded_rectangle((tx, ty, tx + tw + 36, ty + 46), 23, fill=(255, 214, 10, 255))
+        d.text((tx + 18, ty + 23), tag, font=tf, fill=(20, 20, 20, 255), anchor="lm")
     im.save(path)
 
 
@@ -386,9 +392,9 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
         n = 1
 
     last = "v0"
-    subs = [(line["who"], line["at"] + c["at"], c["dur"], c["text"])
+    subs = [(line["who"], line["at"] + c["at"], c["dur"], c["text"], line.get("tag"))
             for line in scene["lines"] for c in line["subs"]]
-    for j, (who, at, sub_dur, text) in enumerate(subs):
+    for j, (who, at, sub_dur, text, tag) in enumerate(subs):
         a = max(0.0, at - 0.05)
         nxt = subs[j + 1][1] - 0.05 if j + 1 < len(subs) else dur
         b = min(dur, at + sub_dur + 0.25, nxt)
@@ -396,7 +402,7 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
         top = any(sg.get("sub") == "top" and sg["at"] < b and sg["at"] + sg["dur"] > a
                   for sg in segs)
         png = WORK / f"{sid}-sub{j}.png"
-        subtitle_png(text, who, png, top)
+        subtitle_png(text, who, png, top, tag)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(png)]
         chains.append(f"[{last}][{n + j}:v]overlay=0:0:enable='between(t,{a:.3f},{b:.3f})'"
                       f"[v{j + 1}]")

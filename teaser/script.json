@@ -5,12 +5,16 @@
   "scenes": [
     {
       "id": "s01-hook",
-      "target": 4,
-      "shows": "A website full screen; the Claude Code terminal is hidden behind it.",
+      "target": 7,
+      "shows": "The untouched site with a small opaque Terminal (the coding agent) in the lower-right. He binds it (the bind gesture: the flight to the window, the chip naming the session), then clicks the page: the browser covers the terminal and the chip keeps showing the bound session.",
       "lines": [
         {
           "who": "n",
-          "text": "Your agent lives in a terminal. Your eyes stay on what matters."
+          "text": "Your coding agent lives in a terminal."
+        },
+        {
+          "who": "n",
+          "text": "Bind it once. Then keep your eyes on what matters,"
         }
       ]
     },
@@ -25,7 +29,7 @@
         },
         {
           "who": "n",
-          "text": "So talk to it."
+          "text": "and just talk to it."
         }
       ]
     },
@@ -92,11 +96,12 @@
       "lines": [
         {
           "who": "n",
-          "text": "Flick up: a new session."
+          "text": "Flick up: a new session. Or simply say:"
         },
         {
           "who": "u",
-          "text": "Hey Claude."
+          "text": "Hey Claude.",
+          "tag": "WAKE WORD"
         },
         {
           "who": "n",
@@ -111,11 +116,11 @@
     {
       "id": "s08-ask",
       "target": 6,
-      "shows": "Quick question: left edge question marks, the reply pop-up with web check and adversarial review.",
+      "shows": "Quick question over the real GitHub page of Netflix/Hystrix: left edge question marks, the reply pop-up (No: maintenance mode since 2018, last release 1.5.18, Netflix recommends resilience4j) with web check and adversarial review.",
       "lines": [
         {
           "who": "u",
-          "text": "Is this library still maintained?"
+          "text": "Is Hystrix still maintained?"
         },
         {
           "who": "n",
@@ -130,7 +135,11 @@
       "lines": [
         {
           "who": "n",
-          "text": "Transcribed on your Mac. Media stays on disk; the agent opens only what it needs. And you see the cost of every turn."
+          "text": "Everything stays on your machine: your voice, your media."
+        },
+        {
+          "who": "n",
+          "text": "The agent opens only what it needs. And you see the cost of every task."
         }
       ]
     },
