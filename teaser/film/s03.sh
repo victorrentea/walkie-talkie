@@ -4,6 +4,7 @@
 # badge to exactly the dropped box. Voice: synthetic, into the guest mic, transcribed by the local Whisper.
 source "$(dirname "$0")/lib.sh"
 "$FILM_DIR/site.sh" state '{}'
+stage_terminal >/dev/null; sleep 5        # a fresh stand-in agent in the bound tab
 g open -a Safari; mouse '[["move",560,520,0.4]]'; sleep 1.5
 rec_start s03
 sleep 1.5

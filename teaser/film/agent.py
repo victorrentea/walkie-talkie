@@ -6,23 +6,35 @@ Walkie really delivers into the tab and, when a prompt's words match a scene, ap
 edit to the demo site (state.json → the page restyles). So in the footage the page changes because the
 dictated prompt arrived, about a second later.
 """
-import json, os, re, sys, time
+import json, os, re, sys, threading, time
 STATE = os.path.expanduser("~/film/demo-site/state.json")
-MOVE = re.compile(r"corners \(x,y\) \((\d+),(\d+)\).*?should move to the box \((\d+),(\d+)\)")
+MOVE = re.compile(r"(\d+),(\d+)\D+\d+,\d+\)?\s*(?:should move to the box|moved to)\s*\(?(\d+),(\d+)")   # short and long envelope
 RULES = [("header", {"header-dark": 1, "button-orange": 1}),
-         ("user-drawn move", None),                          # the ✂️ row of a moved area: its real coordinates
+         ("moved to", None), ("user-drawn move", None),                          # the ✂️ row of a moved area: its real coordinates
          ("picture", {"picture": 1, "typo-fixed": 1}),
          ("flicker", {"flicker": 0, "menu-open": 1}),
          ("loop", {"loop-fixed": 1}),
          ("broken", {"card-fixed": 1})]
 LOG = open(os.path.expanduser("~/film/agent.log"), "a")
-print("\033[2J\033[H\033[1m✻ demo agent\033[0m  " + os.getcwd().replace(os.path.expanduser("~"), "~") + "\n")
+print("\033[2J\033[H\033[2m ~/brewly\033[0m\n")              # no banner: a plain agent prompt in a project folder
 first = [l for l in (sys.argv[-1] if len(sys.argv) > 1 else "").splitlines() if l.strip() and not l.startswith("[")]
-first = first[0] if first else ""                       # a spawned session gets its first prompt as an argument
+first = first[0] if first else ""                           # a spawned session gets its first prompt as an argument
 if first:
     print("\033[1m❯\033[0m " + first + "\n\n  ⏺ On it …\n")
-else:
-    print("  Waiting for a prompt…\n")
+
+
+def beat():
+    """What the walkie-inbox mod does in a real Claude Code session: say every 2 s that this tty holds the
+    agent rules, so Walkie sends the SHORT envelope (data only) instead of repeating the instructions."""
+    try: tty = os.path.basename(os.ttyname(0))
+    except OSError: return
+    d = os.path.expanduser("~/.walkie-talkie/inbox/" + tty); os.makedirs(d, exist_ok=True)
+    while True:
+        json.dump({"at": int(time.time() * 1000), "rules": 3}, open(d + "/.alive.tmp", "w")); os.replace(d + "/.alive.tmp", d + "/.alive")
+        time.sleep(2)
+
+
+threading.Thread(target=beat, daemon=True).start()
 while True:
     sys.stdout.write("\033[1m❯\033[0m "); sys.stdout.flush()
     line = sys.stdin.readline()

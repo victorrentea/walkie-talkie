@@ -3,9 +3,10 @@
 # the screen film (● REC corners), the voice describes the bug, the prompt ends; agent.py stops the flicker.
 source "$(dirname "$0")/lib.sh"
 "$FILM_DIR/site.sh" state '{"menu-open":1,"flicker":1}'
+stage_terminal >/dev/null; sleep 5        # a fresh stand-in agent in the bound tab
 g open -a Safari; mouse '[["move",700,430,0.4]]'; sleep 1.5
 rec_start s05; sleep 1.5
-mouse '[["move",930,300,0.7]]'
+mouse '[["move",520,330,0.7]]'
 api test/gesture '{"name":"forward-right"}' >/dev/null
 sleep 1.0
 api test/gesture '{"name":"back-up"}' >/dev/null          # 🔽 ↑ : film the screen

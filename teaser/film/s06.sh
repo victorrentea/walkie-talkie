@@ -4,6 +4,7 @@
 # (stand-in) rewrites the loop when the prompt lands.
 source "$(dirname "$0")/lib.sh"
 "$FILM_DIR/site.sh" state '{}'
+stage_terminal >/dev/null; sleep 5        # a fresh stand-in agent in the bound tab
 g osascript -e 'tell application "Terminal" to set miniaturized of every window to true' -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/code.html"' >/dev/null
 g open -a Safari; mouse '[["move",760,520,0.4]]'; sleep 1.5
 rec_start s06; sleep 1.5

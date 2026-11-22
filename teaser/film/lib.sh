@@ -33,7 +33,8 @@ deploy() {                                            # deploy <bundle>: replace
   g sudo rm -rf "/Applications/Walkie Talkie.app"
   COPYFILE_DISABLE=1 tar -C "$(dirname "$1")" -cf - "Walkie Talkie.app" | tart exec -i $VM sudo tar -C /Applications -xf -
   g sudo chown -R admin:staff "/Applications/Walkie Talkie.app"
-  g open "/Applications/Walkie Talkie.app"
+  # WT_PM_SCALE=1: the guest has only the software OpenGL renderer — the dust is 6 fps at 2x, 26 at 1x (docs/vm-lab.md)
+  g open --env WT_PM_SCALE=1 "/Applications/Walkie Talkie.app"
   for _ in $(seq 1 90); do api test/state >/dev/null 2>&1 && { echo "app answering"; return 0; }; sleep 2; done
   echo "app never answered"; return 1
 }
@@ -53,7 +54,7 @@ tile() { ffmpeg -loglevel error -y -i "$1" -vf "fps=${3:-1/2},scale=960:-1,tile=
 reload_site() { g osascript -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/"' >/dev/null; }
 agent_restart() {                                     # (re)start the stand-in agent in the bound Terminal tab
   g pkill -f film/agent.py; sleep 0.5               # in the guest only
-  g osascript -e 'tell application "Terminal" to do script "clear; /usr/bin/python3 ~/film/agent.py" in front window' >/dev/null
+  g osascript -e 'tell application "Terminal" to do script "clear; cd ~/film/demo-site && ~/film/bin/claude" in front window' >/dev/null
   g open -a Safari
 }
 fake_claude() {                                       # on | off — a stand-in `claude` on the guest's PATH, for the spawn take only
@@ -66,9 +67,9 @@ fake_claude() {                                       # on | off — a stand-in 
 stage_terminal() {                                    # one clean dark Terminal window running the stand-in agent, bound
   g pkill -f film/agent.py; g sudo pkill -x login; sleep 1   # guest only: every tab's session ends, so no "terminate?" sheet
   g osascript -e 'tell application "Terminal" to close every window' >/dev/null 2>&1; sleep 1
-  g osascript -e 'tell application "Terminal"' -e 'set t to do script "clear; /usr/bin/python3 ~/film/agent.py"' \
+  g osascript -e 'tell application "Terminal"' -e 'set t to do script "clear; cd ~/film/demo-site && ~/film/bin/claude"' \
      -e 'set current settings of front window to settings set "Pro"' -e 'set font size of front window to 17' \
-     -e 'set bounds of front window to {170, 110, 1110, 630}' -e 'end tell' >/dev/null
+     -e "set bounds of front window to {${TERM_BOUNDS:-170, 110, 1110, 630}}" -e 'end tell' >/dev/null
   sleep 1
   local tty=$(g osascript -e 'tell application "Terminal" to get tty of selected tab of front window' | sed 's#/dev/##')
   api unbind >/dev/null 2>&1; api bind "{\"tty\":\"$tty\"}" >/dev/null; api target; echo

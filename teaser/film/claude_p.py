@@ -59,13 +59,13 @@ for line in sys.stdin:
         time.sleep(1.6)
         out({"type": "user", "tool_use_result": {"query": q, "results": [{"content": [
             {"url": "https://github.example/brewkit/brewkit"}, {"url": "https://brewkit.example/blog/farewell"}]}]}})
-        time.sleep(1.0)
+        time.sleep(1.8)
         stream(WEB, 1.2)
     elif role in ("review", "merge"):
         time.sleep(0.8)
         out({"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "WebFetch",
                                                             "input": {"url": "https://github.example/brewkit/brewkit"}}]}})
-        time.sleep(2.0)
+        time.sleep(3.2)
         stream(REVIEW, 1.2)
     else:
         time.sleep(0.7)

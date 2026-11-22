@@ -4,12 +4,13 @@
 # demo route with made-up numbers (/test/turn-cost): the lab has no Claude Code session to price.
 source "$(dirname "$0")/lib.sh"
 "$FILM_DIR/site.sh" state '{}'
+g osascript -e 'tell application "Safari" to set miniaturized of every window to false' -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/"' >/dev/null
 stage_terminal >/dev/null; sleep 6
 g osascript -e 'tell application "Terminal" to activate'; mouse '[["move",820,560,0.4]]'; sleep 1.5
 rec_start s09; sleep 1.5
 mouse '[["move",700,470,0.7]]'
 api test/gesture '{"name":"forward-right"}' >/dev/null
-speak s02 0.4
+speak s09 0.4
 api test/gesture '{"name":"forward-click"}' >/dev/null
 wait_state "(d.get('prompt') or {}).get('held')" 20
 sleep 1.0; api test/prompt '{"do":"send"}' >/dev/null

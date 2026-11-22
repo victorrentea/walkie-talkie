@@ -5,6 +5,7 @@
 # inline in the sentence. agent.py (stand-in) then puts the picture in and fixes the typo.
 source "$(dirname "$0")/lib.sh"
 "$FILM_DIR/site.sh" state '{}'
+stage_terminal >/dev/null; sleep 5        # a fresh stand-in agent in the bound tab
 g osascript -e 'tell application "Terminal" to set miniaturized of every window to true' -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/"' >/dev/null
 g open -a Safari; mouse '[["move",600,470,0.4]]'; sleep 1.5
 rec_start s04; sleep 1.2
