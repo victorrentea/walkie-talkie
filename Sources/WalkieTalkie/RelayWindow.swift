@@ -1041,7 +1041,13 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// three dots are the last three steps, which is the part Victor reads to
     /// know it is done.
     private var listeningWord: String {
-        opening ? "Opening Wispr Flow..." : "\(asking ? "Asking" : prompting ? "Prompting" : "Dictating")\(micMark)\(Glyphs.dotsGap)..."
+        opening ? "Opening Wispr Flow..." : Self.listeningWord(asking: asking, prompting: prompting, micMark: micMark)
+    }
+
+    /// One row for the three sentences: the word differs, the `→ <mark>` is the
+    /// same — a plain dictation says where it will be transcribed as a prompt does.
+    static func listeningWord(asking: Bool = false, prompting: Bool, micMark: String) -> String {
+        "\(asking ? "Asking" : prompting ? "Prompting" : "Dictating")\(micMark)\(Glyphs.dotsGap)..."
     }
 
     /// **`Opening Wispr Flow...` until Wispr's microphone is really open** (Q20,

@@ -280,6 +280,14 @@ yields to `--label`).
   facts rode one row as `Listening(🎙️/E)...` from 2026-09-19 to 09-22 and should not have: while
   the mic is open nothing is transcribed yet.
 
+- **A plain dictation's row is `<device> Dictating → <logo>...` for every engine, the local 💻
+  included** (2026-11-22, Victor: *"Și Dictating ar trebui să arate dacă se face local sau prin
+  servicii online. Transcribing... Redacting... rămân însă curate"*). It already was: `Prompting` /
+  `Dictating` / `Asking` are one string (`RelayWindow.listeningWord(asking:prompting:micMark:)`) and
+  `AppDelegate.micMark(engine:)` never answers empty — do not strip the 💻 here because the
+  `Transcribing...` row lost it. Shot `listening-plain-local`; pinned by
+  `DictationEditorTests.testTheDictatingRowSaysWhereItWillBeTranscribed`.
+
 - **`Listening...` is a progress bar drawn one character at a time** — twelve steps
   (`RelayWindow.listeningWord`), **three full stops rather than `…`** so the tail is three steps,
   not one glyph taking a quarter of the bar. Binary per character, not a gradient — a gradient

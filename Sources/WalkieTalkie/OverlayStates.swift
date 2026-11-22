@@ -229,6 +229,16 @@ enum OverlayStates {
                 o.setShotCount(1)
             },
 
+            Shot(slug: "listening-plain-local", group: "Dictating", title: "A plain dictation, the local model",
+                 when: "🔽 / 🔽 → or right ⌘ ×2 with Engine = the local model: words only, pasted at the caret.",
+                 note: "**`Dictating → 💻...` — a plain dictation says where it will be transcribed, as a prompt does** (2026-11-22, Victor: *\"Și Dictating ar trebui să arate dacă se face local sau prin servicii online. Transcribing... Redacting... rămân însă curate\"*). The same row as `Prompting → <logo>...`, only the word differs: 💻 for this Mac, the service's logo for ElevenLabs or Wispr Flow. It is the row after it that is plain for the local model (`Transcribing...`).",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setSpawnDestination("caret", icon: RelayWindow.pinGlyph)
+                o.prompting = false
+                o.setMicMark(" → \(Glyphs.Engine.mac.rawValue)")
+                o.setListening(true)
+            },
+
             Shot(slug: "listening-opening", group: "Dictating", title: "Opening Wispr Flow — its microphone is not open yet",
                  when: "A Wispr Flow sentence, from the gesture until Wispr's own microphone opens (0.3–0.7 s warm, 5–6 s cold).",
                  note: "**Q20 (2026-09-28, Victor's Q8 = A).** A cold Wispr is deaf for up to six seconds after the chord, and the chip used to say `Listening` over it — the first words went nowhere and nothing said so. It says `Opening Wispr Flow...` until the 100 ms poll or the CoreAudio edge sees Wispr's microphone open (`WisprFlowSource.micOpened`), then the ordinary row. The relay's own recording runs from the gesture regardless, which is what the local fallback (Q14) transcribes if Wispr never hears the sentence.",
@@ -840,6 +850,7 @@ enum OverlayStates {
     /// the catalogue can be reordered without the pictures changing.
     private static func reset(_ o: RelayWindow) {
         o.asking = false
+        o.prompting = true
         o.cancelHeldPrompt()
         o.clearFlash(animated: false)
         o.setHovering(false)

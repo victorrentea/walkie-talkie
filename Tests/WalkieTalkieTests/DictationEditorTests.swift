@@ -152,6 +152,16 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(RelayWindow.redactingWord, "Redacting\(gap)...", "no engine mark, no tool's name")
     }
 
+    /// A plain dictation's listening row names the engine like a prompt's (2026-11-22).
+    func testTheDictatingRowSaysWhereItWillBeTranscribed() {
+        let gap = String(Glyphs.dotsGap)
+        for (id, logo) in [("whisper", Glyphs.Engine.mac), ("eleven", .eleven), ("eleven-live", .eleven), ("wispr", .wispr)] {
+            let mark = AppDelegate.micMark(engine: id)
+            XCTAssertEqual(RelayWindow.listeningWord(prompting: false, micMark: mark), "Dictating → \(logo.rawValue)\(gap)...", id)
+            XCTAssertEqual(RelayWindow.listeningWord(prompting: true, micMark: mark), "Prompting → \(logo.rawValue)\(gap)...", id)
+        }
+    }
+
     /// The row goes up only when the model is asked, and its bar spans a usual edit.
     func testTheRedactingRowIsOnlyForASentenceTheModelGets() {
         XCTAssertTrue(DictationEditor.asksModel("please fix the test"))

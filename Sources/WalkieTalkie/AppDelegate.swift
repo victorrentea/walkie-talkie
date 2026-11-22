@@ -399,11 +399,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// answer for 30 s: the sample in `hangs/` is this function under
     /// `dictationBegan`, and the whole app froze with it. The glyph arrives a
     /// beat later; the newest ask wins.
+    /// The listening row's `→ <logo>` — every engine has one, the local model's
+    /// 💻 included, for a plain dictation as for a prompt (2026-11-22, Victor:
+    /// *"Și Dictating ar trebui să arate dacă se face local sau prin servicii
+    /// online. Transcribing... Redacting... rămân însă curate"*).
+    static func micMark(engine id: String) -> String { " → " + engineMark(id) }
+
     private func pushMicMark() {
         let wispr = wisprHearsThis
         let wisprName = wisprMicName
         // No "to" (2026-09-29, Victor: "Prompting to" -> "Prompting").
-        overlay.setMicMark(" → " + Self.engineMark(wispr ? "wispr" : engineId))
+        overlay.setMicMark(Self.micMark(engine: wispr ? "wispr" : engineId))
         micMarkAsk += 1
         let ask = micMarkAsk
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
