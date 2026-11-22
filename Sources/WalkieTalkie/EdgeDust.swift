@@ -81,8 +81,12 @@ final class EdgeDust {
     /// The ⚡ question's strip is deeper: its marks walk in and are gone by ~230 pt
     /// (2026-11-20, Victor marked the band on the screen: ~240 pt from the left edge).
     static var leftThickness: CGFloat { CGFloat(knob("leftThickness", 240)) }
-    /// The caret's strip is as deep, for the pins that rise in it (the fire stays 110 pt tall).
-    static var bottomThickness: CGFloat { CGFloat(knob("bottomThickness", 240)) }
+    /// The caret's strip: **at most ~13.5 % of the screen's height** (2026-11-22, Victor: *"să nu
+    /// ocupe mai mult de 10-15% din înălțimea ecranului … acele pinuri"*) — 150 pt on the
+    /// Retina. The pins rise to its top; the fire stays its usual ≤110 pt.
+    static func bottomThickness(_ screenHeight: CGFloat) -> CGFloat {
+        CGFloat(knob("bottomShare", 0.135)) * screenHeight
+    }
     /// A cancel takes the edge out this fast (2026-11-20: *"să dispară cu fade out pe zero
     /// trei secunde. Nu e brutal instant"* — it was cut at once since 2026-11-16).
     static let cutFade: TimeInterval = 0.3
@@ -226,7 +230,7 @@ final class EdgeDust {
         guard let screen = CaretHalo.retina
                 ?? NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
         let thickness = wanted == .left ? Self.leftThickness : wanted == .top ? Self.topThickness
-            : wanted == .bottom ? Self.bottomThickness : Self.thickness
+            : wanted == .bottom ? Self.bottomThickness(screen.frame.height) : Self.thickness
         if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness
             || builtVariant != EdgeDustPictures.current { teardown() }
         builtVariant = EdgeDustPictures.current
@@ -360,9 +364,10 @@ final class EdgeDust {
         case .left:
             m = CATransform3DTranslate(m, -t, 0, 0); m = CATransform3DScale(m, k, 1, 1); m = CATransform3DTranslate(m, t, 0, 0)
         case .bottom:
-            // Evenly, ×1.4 at the full swell, about the bottom's middle: stretched ×2 in depth
-            // alone, a pin came out a tall V (the recording of 2026-11-22).
-            let e = 1 + (k - 1) * 0.4
+            // Evenly, ×1.15 at the full swell, about the bottom's middle: stretched ×2 in depth
+            // alone, a pin came out a tall V (the recording of 2026-11-22); more than ×1.15
+            // would break the 15 % of the screen's height.
+            let e = 1 + (k - 1) * 0.15
             m = CATransform3DTranslate(m, 0, -t, 0); m = CATransform3DScale(m, e, e, 1); m = CATransform3DTranslate(m, 0, t, 0)
         }
         CATransaction.begin()

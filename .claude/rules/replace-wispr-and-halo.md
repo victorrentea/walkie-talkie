@@ -668,13 +668,15 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   Victor: *"atunci când fac promptare la caret, aș vrea să vină de jos … o animație similară cu cele care
   vin de sus sau din dreapta … punctele care vin să alcătuiască, din când în când, forme care seamănă cu
   pinul acela roșu"*). Supersedes *none at the caret* below: `destination == .caret` → `EdgeDust.Edge.bottom`,
-  `EdgeDustV7` `edge` 3 — the same fire (faded from 33 pt in the shader, since the strip is
-  `bottomThickness` 240 pt and its mask starts at 90 %) plus `v7_pins`: `Glyphs.mapPinShape` as an SDF
-  (`v7_pin`, tip down), in `systemRed` grains, one 320 pt cell each, ~3 lives in 5 a pin (5–7 s, 95–140 pt
-  tall), rising from a third below the edge, forming over the first quarter, crumbling from 34 %, gone by
-  232 pt; a life under way at t = 0 is drawn only if still forming. Drained: pins crumble where they stand
-  (`drain` 2.8 s). The swell is **even ×1.4 about the bottom middle** — ×2 in depth alone stretched a pin
-  into a V. Ends with the swell from `pinLanded` (`edgeDust.sent(only: .bottom)`), not the 12 s ceiling;
+  `EdgeDustV7` `edge` 3 — the same fire (faded from 33 pt in the shader, its mask starting at 90 %)
+  plus `v7_pins`: `Glyphs.mapPinShape` as an SDF (`v7_pin`, tip down), in `systemRed` finer grains, one
+  260 pt cell each, ~3 lives in 5 a pin (5–7 s), rising from a third below the edge, forming over the
+  first quarter, crumbling from 34 %, gone at the strip's top; a life under way at t = 0 is drawn only if
+  still forming. Drained: pins crumble where they stand (`drain` 2.8 s). **The strip is at most 13.5 % of
+  the screen's height** (same morning: *"să nu ocupe mai mult de 10-15% din înălțimea ecranului … acele
+  pinuri"*): `bottomThickness(screenHeight)`, knob `edgeDust.bottomShare` 0.135 (150 pt on the Retina),
+  the pins 0.42–0.58 of it (~60–85 pt). The swell is **even ×1.15 about the bottom middle** — ×2 in depth
+  alone stretched a pin into a V, more would break the 15 %. Ends with the swell from `pinLanded` (`edgeDust.sent(only: .bottom)`), not the 12 s ceiling;
   `caretLanding` counts in `stillPending`. Seen live in a screen recording the same morning. Offline:
   `swift tools/render-edge-dust.swift 3 <png> 0.3 1 3 5`; desk: `POST /test/edge-dust {"edge": "bottom"}`.
 - **The ❓ opens by flying out of the pointer** (2026-10-29, Victor: *"semnul întrebării … să plece

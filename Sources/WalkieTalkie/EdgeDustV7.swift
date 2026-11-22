@@ -352,8 +352,7 @@ static float v7_pin(float2 g) {
 // already under way when the edge comes up is drawn only if it is still forming: the first
 // pins rise from the edge, none is found standing in the middle. Drained, a pin that is out
 // crumbles where it stands (`stop`): a paste lands in a second, it does not wait for them.
-static float v7_pin_life(float cell, float S, float a, float d, float t, float level, float k, float seed, float f, float stop) {
-    const float gone = 232.0;
+static float v7_pin_life(float cell, float S, float a, float d, float t, float level, float k, float seed, float f, float stop, float gone) {
     float c1 = v7_h(float2(cell, 2.3)), c2 = v7_h(float2(cell, 6.1));
     float life = 5.0 + 2.0 * c2;
     float clock = t / life + c1 + seed * 0.11;
@@ -363,7 +362,8 @@ static float v7_pin_life(float cell, float S, float a, float d, float t, float l
     float2 id = float2(cell, n * 1.37 + 0.5);
     if (v7_h(id + float2(0.0, 7.7)) > 0.6) return 0.0;
     float h1 = v7_h(id + float2(0.0, 3.3)), h2 = v7_h(id + float2(0.0, 8.1)), h3 = v7_h(id + float2(0.0, 5.7));
-    float H = mix(95.0, 140.0, h2) * (1.0 + 0.10 * level + 0.12 * k);
+    // Sized by the strip, so the tallest stays under its top (~13.5 % of the screen).
+    float H = mix(0.42, 0.58, h2) * gone * (1.0 + 0.08 * level);
     float walk = 1.0 - (1.0 - pp) * (1.0 - pp) * 0.35 - 0.65 * (1.0 - pp);
     float tip = mix(-0.35 * H, gone - 1.02 * H, walk);
     float sway = sin(t * (0.35 + 0.20 * h3) + h1 * 6.2832) * 6.0;
@@ -374,17 +374,17 @@ static float v7_pin_life(float cell, float S, float a, float d, float t, float l
     float shape = 1.0 - smoothstep(-1.5, 2.0, sd);
     float near = 1.0 - smoothstep(0.0, 12.0, sd);
     float form = smoothstep(0.0, 0.26, pp);
-    float fade = (1.0 - smoothstep(0.34, 0.92, pp)) * (1.0 - smoothstep(gone - 70.0, gone, d));
+    float fade = (1.0 - smoothstep(0.34, 0.92, pp)) * (1.0 - smoothstep(gone * 0.75, gone, d));
     fade *= 1.0 - smoothstep(stop + 0.2, stop + 2.4, t);
     float formed = shape * (0.85 + 0.30 * f);
     float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
     return mix(loose, max(formed, loose * 0.5), form) * fade;
 }
 
-static float v7_pins(float a, float d, float t, float level, float k, float seed, float stop) {
-    const float S = 320.0;
+static float v7_pins(float a, float d, float t, float level, float k, float seed, float stop, float depth) {
+    const float S = 260.0;
     float f = v7_fbm(float2(a / 15.0, (d - 30.0 * t) / 26.0));
-    return clamp(v7_pin_life(floor(a / S), S, a, d, t, level, k, seed, f, stop), 0.0, 1.0);
+    return clamp(v7_pin_life(floor(a / S), S, a, d, t, level, k, seed, f, stop, depth - 6.0), 0.0, 1.0);
 }
 
 fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]) {
@@ -432,7 +432,7 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     // the 110 pt edges, from 30 % of the depth — is drawn here (`fireFade`).
     float pinW = 0.0, fireFade = 1.0;
     if (pins) {
-        float pd = v7_pins(a, d, t, u.level, k, u.seed, u.stop);
+        float pd = v7_pins(a, d, t, u.level, k, u.seed, u.stop, u.size.y);
         pinW = smoothstep(0.08, 0.40, pd);
         fireFade = 1.0 - smoothstep(33.0, 110.0, d);
         dens = max(dens * fireFade, pd);
@@ -442,7 +442,8 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     float hue = v7_n(float2(as / 150.0, t * 0.05 + 11.0)) * 2.0 + u.seed;
     float heat = exp(-d / (0.30 * h + 4.0));
     // Finer, slower grains for the marks: a 9 pt stroke has to read as a line of dots.
-    float fine = marks ? 0.62 : 1.0;
+    // The caret's pins are ~60–85 pt tall: finer grains there too, or the ring round the hole is mush.
+    float fine = marks ? 0.62 : mix(1.0, 0.72, pinW);
     float slow = marks ? 0.25 : 1.0;
 
     float3 sum = float3(0.0);

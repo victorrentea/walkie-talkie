@@ -38,7 +38,7 @@ let pipeline = try! device.makeRenderPipelineState(descriptor: d)
 let queue = device.makeCommandQueue()!
 
 let scale: Float = 2
-let size: SIMD2<Float> = edge < 0.5 ? [900, 110] : edge < 1.5 ? [110, 700] : edge < 2.5 ? [240, 700] : [1100, 240]
+let size: SIMD2<Float> = edge < 0.5 ? [900, 110] : edge < 1.5 ? [110, 700] : edge < 2.5 ? [240, 700] : [1100, 151]
 let w = Int(size.x * scale), h = Int(size.y * scale)
 
 func render(_ t: Float) -> [UInt8] {
