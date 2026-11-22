@@ -3,6 +3,7 @@ paths:
   - "Sources/WalkieTalkie/StatusItem.swift"
   - "Sources/WalkieTalkie/MessageLog.swift"
   - "Sources/WalkieTalkie/GestureGuide.swift"
+  - "Sources/WalkieTalkie/Permissions.swift"
 ---
 
 # The menu bar item
@@ -546,6 +547,39 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   installs. Quit goes through the same `endSession(reason:)` as the ✕, so the outbox gets its
   `session_end`.
   → journal: *Autosend*, *Version row and ⌘Q (2026-09-13)*
+
+## ❗ on the row above Quit, and the Permissions page (2026-11-22)
+
+Victor: *"un semn de exclamare dacă n-ai toate permisiunile date … să-ți arate frumos, într-o
+pagină, de ce permisiuni mai ai nevoie de dat și de ce ai nevoie de ele"*.
+
+- **`Permissions.catalogue` is the one table** — the page, the README's table and the tests read the
+  same seven entries. **Required** (they raise the ❗): Accessibility, Microphone, Screen Recording,
+  Automation ▸ Terminal. **Optional** (shown grey, never an alarm): System Audio Recording Only (the
+  Codex chime mute, `AppMute`), Camera (🙂 Read my face), Open at Login.
+- **The `Built …` row reads `❗ 2 permissions missing` while a required one is `missing` or
+  `not-asked`**, the stamp moves to its tooltip, and the click opens `PermissionsPage` instead of the
+  guide's foot. With everything granted the row is exactly what it was; the page is then the
+  `Permissions` link in the Gesture Guide's footer (`walkie://permissions`) — no new menu row.
+- **Nothing here may raise a system dialog.** Preflight forms only: `AXIsProcessTrusted`,
+  `AVCaptureDevice.authorizationStatus`, `CGPreflightScreenCaptureAccess`,
+  `AEDeterminePermissionToAutomateTarget(…, askUserIfNeeded: false)`, `TCCAccessPreflight`
+  (`dlsym`, `unknown` if absent — System Audio has no public preflight), `SMAppService.status`.
+  The asking stays in `requestGrantsAtLaunch` and at the first use.
+- **Read at three moments only:** launch (one `permissions:` log line), menu open, and every 2 s
+  **while the page is visible** (the timer dies with the window; the page reloads only when a state
+  changed). The Automation answer needs Terminal running and can wait on the AppleEvent manager, so
+  it is read off main and cached — `unknown` (Terminal not running, never yet answered) does not count.
+- **`CGPreflightScreenCaptureAccess` is stale until the app restarts** — the page's path line says
+  *then restart it*.
+- **The page is the house window** (`GestureGuide`): non-activating `NSPanel` + `WKWebView`, English,
+  light and dark. Each row: state, one sentence of why, and — only when lacking — *Without it* and an
+  `Open Settings` link (`x-apple.systempreferences:…`, opened by the navigation delegate).
+- **Photograph it without revoking anything**: `POST /test/permissions {"fake": …, "png": …}` or
+  `WT_SHOOT_PERMISSIONS` (`desk-testing.md`); a faked page says *simulated states* in its footer.
+  `docs/readme/permissions-page.png` is that picture.
+- **Nothing about a third-party dictation app on this page or in the README's table** — no permission
+  exists solely for it.
 
 ## Prompt Log (`MessageLog`)
 

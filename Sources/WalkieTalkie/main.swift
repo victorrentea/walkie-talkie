@@ -147,6 +147,14 @@ if let out = ProcessInfo.processInfo.environment["WT_SHOOT_HINT"] {
     exit(0)
 }
 
+// The Permissions page as a PNG, with faked states, and quit — no window on any
+// screen. `WT_SHOOT_PERMISSIONS=/tmp/p.png WT_PERMISSIONS_FAKE=accessibility:missing`.
+// See `PermissionsPage.shoot`.
+if let out = ProcessInfo.processInfo.environment["WT_SHOOT_PERMISSIONS"] {
+    NSApplication.shared.setActivationPolicy(.accessory)
+    PermissionsPage.shoot(to: out)
+}
+
 // The halo round the pointer for a fixed number of seconds, cycling its swell,
 // and capturable — the only way to *watch* a panel that no screen recording can
 // contain. See `CaretHalo.demo`.

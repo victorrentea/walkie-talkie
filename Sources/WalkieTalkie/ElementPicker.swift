@@ -363,6 +363,8 @@ final class ElementPicker {
     /// panel's own frame. A panel that is up and unreadable and a panel that is
     /// correct differ by those two numbers and by nothing a screenshot can show.
     var onTestAbout: (() -> [String: Any])?
+    /// `POST /test/permissions` changed the fakes: the menu row re-reads.
+    var onPermissionsChanged: (() -> Void)?
 
     /// `POST /test/gesture` `{"name": "forward-left"}` — post the ⌃⌥⌘F-key chord
     /// Logi Options+ makes for one mouse gesture, so the gesture branch of
@@ -932,6 +934,46 @@ final class ElementPicker {
             }
             onTestSpawn?(text)
             respond(conn, 200, ["ok": true, "text": text])
+
+        // **The permissions, read and faked** (2026-11-22). `GET`, or `POST {}`,
+        // answers every permission's state. `fake: {"accessibility": "missing", …}`
+        // lays states over the real ones for the row and the page (`fake: null`
+        // clears them; never written anywhere, gone at relaunch — nothing is
+        // revoked). `png: <path>` draws the page to a file in a window that is
+        // never shown (`dark: true` for the dark theme); `show: true｜false` puts
+        // the real window up or takes it down.
+        case ("GET", "/test/permissions"), ("POST", "/test/permissions"):
+            let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
+            if body["fake"] is NSNull {
+                Permissions.faked = [:]
+            } else if let raw = body["fake"] as? [String: Any] {
+                let parsed = Permissions.parseFakes(raw)
+                guard parsed.errors.isEmpty else {
+                    return respond(conn, 400, ["ok": false, "error": parsed.errors.joined(separator: "; ")])
+                }
+                Permissions.faked = parsed.fakes
+            }
+            Permissions.refreshAutomationNow()
+            var answer: [String: Any] = ["ok": true]
+            if let path = body["png"] as? String {
+                let wait = DispatchSemaphore(value: 0)
+                var wrote = false
+                DispatchQueue.main.async {
+                    PermissionsPage.png(Permissions.readings(), to: path, dark: body["dark"] as? Bool == true) {
+                        wrote = $0
+                        wait.signal()
+                    }
+                }
+                _ = wait.wait(timeout: .now() + 15)
+                answer["png"] = wrote ? path : NSNull()
+            }
+            DispatchQueue.main.sync {
+                if let show = body["show"] as? Bool { show ? PermissionsPage.show() : PermissionsPage.close() }
+                PermissionsPage.refresh()
+                self.onPermissionsChanged?()
+                answer.merge(Permissions.describe()) { _, new in new }
+            }
+            respond(conn, 200, answer)
 
         // The About panel, and the size it actually came up at — see
         // `onTestAbout`.

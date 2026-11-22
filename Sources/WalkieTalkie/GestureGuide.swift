@@ -106,6 +106,8 @@ enum GestureGuide {
         func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             if action.navigationType == .linkActivated, let url = action.request.url {
+                // The footer's `Permissions` link is this app's own page.
+                if url.scheme == "walkie" { PermissionsPage.show(); decisionHandler(.cancel); return }
                 NSWorkspace.shared.open(url)
                 decisionHandler(.cancel)
                 return
@@ -410,7 +412,8 @@ enum GestureGuide {
         }.joined()
         let about = """
         <footer id="about"><b>Victor's Walkie Talkie</b> · built \(esc(StatusItem.buildStamp)) ·
-        <a href="https://github.com/victorrentea/walkie-talkie">github.com/victorrentea/walkie-talkie</a></footer>
+        <a href="https://github.com/victorrentea/walkie-talkie">github.com/victorrentea/walkie-talkie</a> ·
+        <a href="walkie://permissions">Permissions</a></footer>
         """
         let content = hero() + banner + body + about
         return "<!doctype html><html><head><meta charset=\"utf-8\"><title>Gesture Guide</title><style>\(css)\n\(pictureCSS())</style></head><body>"

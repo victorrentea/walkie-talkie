@@ -59,9 +59,23 @@ wheel. The menu bar icon lists every action next to the gesture that does it.
 - 🍏 Apple silicon only: the vendored projectM libraries are arm64.
 - 📦 [`victor-mac-kit`](https://github.com/victorrentea/victor-mac-kit) is fetched from GitHub on the first build, unless it is checked out next to this folder (then that copy is used).
 - 🔏 Without `CODESIGN_IDENTITY` the app is signed ad hoc, and macOS forgets the Accessibility grant on every rebuild; any local self-signed code-signing certificate fixes that.
-- 🔐 Grant **Accessibility**, **Screen Recording** and **Microphone** when asked.
+- 🔐 Grant the permissions below when macOS asks.
 - 🗣️ Pick a recogniser from the menu: **ElevenLabs Scribe** (key in `~/.walkie-talkie/elevenlabs.env`), a **local Whisper** (`pip install mlx-whisper`, plus `ffmpeg`) or **Wispr Flow**.
 - 📜 **Agent rules — a required step, done by the app at every launch.** Walkie writes its standing instructions (when to run `walkie-reply`, when `walkie-dict`) once, where each agent reads its global instructions, so a dictation carries only data. Nothing to run by hand; what it needs from you is below, under [Agent rules](#agent-rules-the-instructions-live-in-the-agent-not-in-every-prompt).
+
+### Permissions
+
+| Permission | What the app does with it | Without it | |
+|---|---|---|---|
+| **Accessibility** | hears the mouse gestures and shortcuts in every app, types the sentence at the caret, reads the selected text | no gesture or shortcut works | required |
+| **Microphone** | records your dictation | nothing to transcribe | required |
+| **Screen & System Audio Recording** | screenshots, area crops and screen recordings attached to a prompt | black pictures; dictation still works | required |
+| **Automation ▸ Terminal** | sends the prompt into the bound Terminal tab, opens new sessions | no binding; prompts go to the caret only | required |
+| **System Audio Recording Only** | mutes the Codex app's chime when a voice chat starts or ends | you hear the chime | optional |
+| **Camera** | 🙂 *Read my face*: tags a smile, tiredness or looking away; no picture is kept | no face tag | optional |
+| **Open at Login** | starts the app at login | start it by hand | optional |
+
+The menu's last row before Quit turns into `❗ 2 permissions missing` while a required one is not granted; a click opens the **Permissions** page ([picture](docs/readme/permissions-page.png)), which says what each is for and opens the right pane of System Settings. With everything granted the page is one link away, at the foot of the Gesture Guide. The app only ever reads these states; macOS asks at launch (the first three) and at the first use (the rest).
 
 👉 Every state the overlay can be in, photographed: [docs/overlay-states.html](docs/overlay-states.html)
 

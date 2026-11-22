@@ -3520,6 +3520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The Gesture Guide from a desk (`POST /test/about`, the About panel's
         // route — the guide replaced it on 2026-11-12), answering the size it came
         // up at and whether its page loaded. Hops to main: it builds AppKit views.
+        picker.onPermissionsChanged = { [weak self] in self?.status.applyPermissionsRow() }
         picker.onTestAbout = { [weak self] in
             guard self != nil else { return ["shown": false] }
             var out: [String: Any] = [:]
@@ -3595,6 +3596,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // reported, never re-asked (macOS asks once). Skipped under the photo
         // run, which is a second, unsigned process that must not be listed.
         if !RelayWindow.shooting { requestGrantsAtLaunch() }
+        // What is held, in one log line — read without asking (`Permissions`).
+        if !RelayWindow.shooting { Permissions.logAtLaunch() }
         let trusted = AXIsProcessTrusted()
         // **No tap while shooting the state pages** (2026-10-21). The photo run
         // is a second process beside the installed app — `SingleInstance` never

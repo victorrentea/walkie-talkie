@@ -2055,6 +2055,23 @@ final class StatusItem: NSObject, NSMenuDelegate {
         applyStopRecording()
         pasteLast.isEnabled = hasLastDictation?() ?? false
         applySwitchRows()
+        applyPermissionsRow()
+        // Terminal's Automation answer comes off main; the row repaints in the open menu.
+        Permissions.refreshAutomation { [weak self] in self?.applyPermissionsRow() }
+    }
+
+    /// **❗ on the row above Quit while a required permission is missing**
+    /// (2026-11-22, Victor: *"un semn de exclamare dacă n-ai toate permisiunile
+    /// date"*) — `❗ 2 permissions missing`, and the click opens `PermissionsPage`.
+    /// With everything granted it is the plain `Built …` readout it was. Read at
+    /// menu open only; no check here can raise a system dialog (`Permissions`).
+    private var permissionsMissing = 0
+    func applyPermissionsRow() {
+        permissionsMissing = Permissions.missingRequired(Permissions.readings(requiredOnly: true))
+        version.title = Permissions.rowTitle(missing: permissionsMissing, build: Self.buildStamp)
+        version.toolTip = permissionsMissing > 0
+            ? "Built \(Self.buildStamp). Click to see which permissions are missing and what each is for."
+            : nil
     }
 
     /// **The bare `petclinic@main` since 2026-10-03** (Victor: *"prima linie, nu
@@ -2101,6 +2118,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
     /// The guide, opened at its foot — the build and the repository.
     @objc private func versionClicked() {
+        if permissionsMissing > 0 { PermissionsPage.show(); return }
         GestureGuide.logiGesturesOn = logiGesturesOn
         GestureGuide.show(at: .about)
     }
