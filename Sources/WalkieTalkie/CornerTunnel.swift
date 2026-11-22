@@ -167,6 +167,11 @@ final class CornerTunnel {
     private var quiet = false
     /// `cut` was called: this sentence's settle draws nothing (cleared at its end).
     private var cancelled = false
+    /// The mark is the cancelled sentence's alone: a cancel that opens no settle (a ⚡ question
+    /// cut while he talks) left it up, and the NEXT sentence then got the atom instead of its
+    /// wheel (2026-11-22 14:34, Victor: *"ai restaurat iarăși atomul … am văzut doar o dată"*).
+    private var cancelledAt: CFAbsoluteTime = 0
+    static let cancelSettleWindow: TimeInterval = 2
     /// `pathTimer` is the ring's own (not `collapse`'s spiral).
     private var circling = false
     /// **Where the dust's stamp is `t` seconds in** — points in the square, y down.
@@ -188,6 +193,7 @@ final class CornerTunnel {
     func settle(_ on: Bool, take: @autoclosure () -> [Int16]) {
         guard on != settling else { return }
         settling = on
+        if cancelled, CFAbsoluteTimeGetCurrent() - cancelledAt > Self.cancelSettleWindow { cancelled = false }
         if on, cancelled {
             Log.info("🌀 no corner wheel — the sentence was cancelled")
             return
@@ -264,6 +270,7 @@ final class CornerTunnel {
         // *"if I cancel a dictation, there should be no spinning wheel in the left corner top"*):
         // `cut` lands before that settle opens, so the wheel came up and wound down after it.
         cancelled = true
+        cancelledAt = CFAbsoluteTimeGetCurrent()
         guard up || panel?.isVisible == true else { return }
         up = false
         turn += 1

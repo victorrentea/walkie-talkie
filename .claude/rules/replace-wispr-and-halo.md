@@ -939,6 +939,8 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `collapseTime` (smoothstep), the stamp ×2 → ×1 (`startCircling(grow:)`). `cut` on the dust: the
   stamp stands where it is, fed silence, for `dieOut`, then out (0.2 s for leftovers); other dresses
   still go at once.
+- **The cancel's "no wheel" mark lasts 2 s** (2026-11-22): a cancel that opened no settle left `CornerTunnel.cancelled`
+  up and the next sentence drew the atom instead of the Dust wheel; `cancelledAt` + `cancelSettleWindow`.
 - **No corner wheel for a cancelled sentence** (2026-11-21, Victor: *"if I cancel a dictation, there
   should be no spinning wheel in the left corner top"*): `CornerTunnel.cut` lands before the cancel's
   own short settle, which brought the wheel up again; `cut` now sets `cancelled`, that settle draws
