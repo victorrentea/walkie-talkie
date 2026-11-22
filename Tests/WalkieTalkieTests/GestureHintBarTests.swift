@@ -29,6 +29,17 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         ])
     }
 
+    func testABoundPromptOffersTheInterruptAndCrossesItOutOnceOn() {
+        let on = GestureHintBar.crosses(for: .init(listening: true, prompting: true, interruptible: true))
+        XCTAssertEqual(on[1].left, "🛑 interrupt")
+        let marked = GestureHintBar.crosses(for: .init(listening: true, prompting: true,
+                                                       interruptible: true, interrupt: true))
+        XCTAssertEqual(marked[1].left, GestureHintBar.struck + "🛑")
+        let question = GestureHintBar.crosses(for: .init(listening: true, prompting: true,
+                                                         interruptible: true, quick: true))
+        XCTAssertEqual(question[1].left, "")
+    }
+
     func testTheFilmKamikazeAndSpawnFollowTheirState() {
         let c = GestureHintBar.crosses(for: .init(listening: true, prompting: true, filming: true,
                                                   kamikaze: true, spawn: true))

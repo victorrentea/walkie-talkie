@@ -780,8 +780,14 @@ final class TerminalBinding {
     /// it goes to the terminal named here, which need not be the one bound now.
     /// A target found gone lets go of the binding only when it **is** the
     /// binding — a latched A that died must not unbind the B bound since.
-    func deliver(_ text: String, to latched: Target? = nil) -> Outcome {
-        let outcome = typeIn(text, to: latched)
+    ///
+    /// **`interrupt`** (2026-11-22, the 🛑 tag — 🔽 ← over a bound prompt): the sentence
+    /// must not wait in Claude Code's queue — see `sendsNow`. Only a Terminal.app tab and
+    /// an Orca pane can honour it (they read the screen back); `sentNow` is called when
+    /// ⌃X ⌃S was pressed. Everywhere else the words go as ever.
+    func deliver(_ text: String, to latched: Target? = nil,
+                 interrupt: Bool = false, sentNow: (() -> Void)? = nil) -> Outcome {
+        let outcome = typeIn(text, to: latched, interrupt: interrupt, sentNow: sentNow)
         // **A session told `kamikaze` is dead already** (2026-10-13): its next
         // answer's ☠️ shows it, before the window has had time to close.
         if case .delivered = outcome, Self.saysKamikaze(text), let tty = (latched ?? target)?.handle.tty {
@@ -809,7 +815,8 @@ final class TerminalBinding {
         return !isShell(command)
     }
 
-    private func typeIn(_ text: String, to latched: Target?) -> Outcome {
+    private func typeIn(_ text: String, to latched: Target?,
+                        interrupt: Bool = false, sentNow: (() -> Void)? = nil) -> Outcome {
         guard let target = latched ?? target else { return .noTarget }
         let unbind: () -> Void = { [weak self] in self?.unbind(ifAddress: target.address) }
         let line = Self.singleLine(text)
@@ -837,7 +844,7 @@ final class TerminalBinding {
                 break
             }
             if Self.deliverToInbox(line, tty: tty) { return .delivered }
-            guard Self.writeToTerminalApp(line, tty: tty) else {
+            guard Self.writeToTerminalApp(line, tty: tty, interrupt: interrupt, sentNow: sentNow) else {
                 unbind()
                 return .targetGone("no Terminal.app tab on \(target.address)")
             }
@@ -863,7 +870,7 @@ final class TerminalBinding {
                 break
             }
             if Self.deliverToInbox(line, tty: tty) { return .delivered }
-            switch OrcaBridge.deliver(line, tty: tty) {
+            switch OrcaBridge.deliver(line, tty: tty, interrupt: interrupt, sentNow: sentNow) {
             case .delivered: return .delivered
             case .refused: return .failed("Orca would not take the line")
             case .noPane:
@@ -2019,7 +2026,9 @@ final class TerminalBinding {
     /// suggestions sit there as ghost text), and because a tab that did not
     /// ask must not be pressed again.
     private static func writeToTerminalApp(_ text: String, tty: String,
-                                           typed: (() -> Void)? = nil) -> Bool {
+                                           typed: (() -> Void)? = nil,
+                                           interrupt: Bool = false,
+                                           sentNow: (() -> Void)? = nil) -> Bool {
         // **The text and the Return are two scripts since 2026-11-20**, so the
         // caller hears *the words are in the box* the moment they are
         // (`typed`) — the caret pin went only when the whole Return watch below
@@ -2166,9 +2175,14 @@ final class TerminalBinding {
             // pressed only on Claude Code's own `to send now` under this sentence,
             // so an idle session never gets it. Before the Returns: the review
             // notice outlives the queueing, and they would land on an empty box.
-            if waitsToSendNow(tail: shown, sent: text) {
+            //
+            // **A 🛑 interrupt sentence presses it on the queue itself** (2026-11-22,
+            // `sendsNow`): the hint is not always in the 600 read, the box's own
+            // `Press up to edit queued messages` is.
+            if sendsNow(tail: tail, sent: text, interrupt: interrupt) {
                 guard osascript(sendNow) == "ok" else { break }
-                Log.info("⌨️ ⌃X ⌃S — the sentence was queued behind a running turn, sent now")
+                Log.info("⌨️ ⌃X ⌃S — the sentence was queued behind a running turn, sent now\(interrupt ? " (🛑 interrupt)" : "")")
+                sentNow?()
                 break
             }
             var why: String?
@@ -3070,6 +3084,29 @@ final class TerminalBinding {
             }
         }
         return String(out)
+    }
+
+    /// **⌃X ⌃S, Claude Code's `chat:sendNow`, as bytes** — what goes down the tty.
+    static let sendNowChord = "\u{18}\u{13}"
+
+    /// **Whether ⌃X ⌃S is due on this read of the tab** (`tail`: its last 1500 characters).
+    /// Any sentence: Claude Code's own hint under it, in the last 600 (2026-11-05,
+    /// `waitsToSendNow`). **A 🛑 interrupt sentence** (2026-11-22, Victor: *"să-ți injecteze
+    /// repede ceea ce am spus eu, să nu stea în coadă. Uneori se întâmplă să aștept minute
+    /// grele"*): also on the queue itself — the empty box saying `Press up to edit queued
+    /// messages` (`queueShown`), which that day's log showed on deliveries that waited with
+    /// no chord pressed. Never blind: an idle session shows neither, and gets nothing.
+    static func sendsNow(tail: String, sent: String, interrupt: Bool) -> Bool {
+        if waitsToSendNow(tail: String(tail.suffix(600)), sent: sent) { return true }
+        return interrupt && queueShown(tail: tail)
+    }
+
+    /// Claude Code's prompt box is empty and says there are queued messages — read after
+    /// the last `❯`, so it is the box now, not a line a sentence said.
+    static func queueShown(tail: String) -> Bool {
+        guard let box = tail.range(of: "❯", options: .backwards) else { return false }
+        let after = tail[box.upperBound...].filter { !$0.isWhitespace }.lowercased()
+        return after.hasPrefix("pressuptoeditqueuedmessages")
     }
 
     /// **Whether this sentence sits queued under Claude Code's `ctrl+x ctrl+s to

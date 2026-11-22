@@ -147,6 +147,16 @@ final class HotkeyTap {
     /// **🔽 → while a prompt records: 🧠 the session's model, switched for this
     /// prompt** (2026-11-21, `ModelSwitch`); again = taken back.
     var onModelToggle: (() -> Void)?
+    /// **🔽 ← while a bound prompt records: 🛑 the sentence is an interrupt**
+    /// (2026-11-22, `InterruptGate`); again = taken back.
+    var onInterruptToggle: (() -> Void)?
+    /// **The relay's open sentence goes to the bound terminal** — pushed beside
+    /// `relayPromptOpen` (`AppDelegate.boundSentenceOpen`).
+    var relayBoundOpen: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return relayBoundOpenFlag }
+        set { stateLock.lock(); relayBoundOpenFlag = newValue; stateLock.unlock() }
+    }
+    private var relayBoundOpenFlag = false
 
     /// **Wispr Flow is probably about to start listening** — its own start
     /// gesture, seen on the wire, ahead of any microphone opening.
@@ -4211,6 +4221,16 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             case VK_F3:
                 if relayPromptOpen || relayPlainOpen || ownMicOpen || backStopsWispr
                     || wisprMicIsOpen?() == true {
+                    // **Over a sentence bound for the terminal: 🛑 interrupt** (2026-11-22,
+                    // Victor: *"la gestul de back cu swipe stânga în timpul dictării, dacă e
+                    // dictare bound, doar dacă e bound dictarea, să însemne interrupt"*) —
+                    // the mark, again = taken back (`AppDelegate.toggleInterrupt`).
+                    if InterruptGate.flick(boundOpen: relayBoundOpen, ownDictation: ownDictation,
+                                           quick: relayQuickOpen) == .interrupt {
+                        Log.info("🛑 🔽 ← over a bound sentence — interrupt")
+                        DispatchQueue.main.async { [weak self] in self?.onInterruptToggle?() }
+                        return swallow(gesture, type, event)
+                    }
                     // **Nothing mid-sentence since 2026-11-21** (Victor: *"curăță butonul de
                     // Back cu swipe stânga, pentru că fac mereu cancel cu butonul de forward
                     // swipe stânga"*) — the cancel of 2026-10-21 is 🔼 ←'s alone; the flick is
@@ -5209,7 +5229,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
           "at rest: start a plain dictation — a picture while a prompt is dictating; during a plain dictation: stop it, insert the words, then Return"),
          ("back-down",     VK_F12, "⌃⌥⌘F12", "during a plain dictation: stop it, the words alone, no Return — otherwise unbind (the menu's Disconnect)"),
          ("back-right",    VK_F5,  "⌃⌥⌘F5",  "start or stop a plain dictation — clean words at the caret, heard by the Engine; the stop presses no Return"),
-         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "a microphone open: cancel it, as 🔼 ←; at rest: ChatGPT voice on / off"),
+         ("back-left",     VK_F3,  "⌃⌥⌘F3",  "a bound sentence open: 🛑 interrupt (again = off); any other microphone open: nothing; at rest: the Codex app's voice on / off"),
          ("back-up",       VK_F4,  "⌃⌥⌘F4",  "start or stop a screen recording, while a dictation is open")]
     }
 

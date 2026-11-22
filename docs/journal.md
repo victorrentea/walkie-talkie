@@ -16900,3 +16900,74 @@ dictating with the installed build. To try: 🔼 → (or 🔼 ↑ / 🔼 / ⚡) 
 display — the edge is there; carry the pointer to the Retina mid-sentence — within about a third of a
 second the old strip is gone and the edge slides in on the Retina; stop, then cross back while the
 grains ride out — they stay where they are. The log says `🌫️ the right edge moves to the pointer's screen`.
+
+## 2026-11-22 — 🛑 Interrupt on 🔽 ← over a bound sentence; 🧠 a third model, Sonnet / high
+
+Victor, dictated: *"Mai pune încă un model în listă. Normal pleacă de pe Opus, apoi Fable. Dacă nu, Sonnet High — când dau gestul de back cu swipe dreapta. Iar la gestul de back cu swipe stânga în timpul dictării, dacă e dictare bound, doar dacă e bound dictarea, să însemne interrupt. Și să apară un tag nou în tooltip și să se manifeste ca și cum ți-aș da Control X, Control S în Claude. Adică să-ți injecteze repede ceea ce am spus eu, să nu stea în coadă. Uneori se întâmplă să aștept minute grele."*
+
+**The model ring.** `ModelPick` was two (`opusHigh`, `fableMedium`) and a flick took *the other*; it is
+three, in the order he said: Opus / high (a session's start) → Fable / medium → Sonnet / high → back to
+the session's own, which takes the mark off (`ModelSwitch.flick`). Each sends what the two sent:
+`/model <alias>` and `/effort <level>` typed before the prompt, `--model … --effort …` on a new
+session — `sonnet` + `high` for the new one.
+
+**What ⌃X ⌃S is.** Not a binding of his: `~/.claude/keybindings.json` has only `chat:clearInput` and an
+Orca command. It is Claude Code's default `chat:sendNow` (docs, *keybindings*: `Ctrl+Enter, Ctrl+X
+Ctrl+S` — *"Send your queued messages, and your draft with them, right away … Terminals that don't
+report extended keys deliver Ctrl+Enter as plain Enter, so Ctrl+X Ctrl+S is the binding that works in
+any terminal. Requires v2.1.275"*; installed 2.1.330, the action name is in the binary). *Interactive
+mode*: work that can move to the background does, and Claude reads the messages in the same turn; a
+turn only writing a response, or running what cannot be backgrounded, is interrupted and the messages
+go next. A plain Enter mid-turn only queues, read when the running tool calls finish; Esc interrupts
+and sends the queue next, but it also cancels a draft and answers a dialog — not sent by this app.
+
+**It was already pressed, and missed.** Since 2026-11-05 every bound delivery presses the chord when
+it reads `to send now` after the sentence's echo in the tab's last 600 characters. Today's log: 56
+bound deliveries, 19 chords, and at least seven that ended `0 extra Return(s), 5 read-back(s) — tail:
+…❯Pressuptoeditqueuedmessages` with no chord — queued, the hint not in the read (all on the wide
+tabs: two 150-column rules and the status line fill most of 600 characters; not proven to be the
+cause). The interrupt mark presses it on the box's own line instead (`queueShown`). **The ordinary
+sentence was left as it was** — whether every queued sentence should get the wider trigger is his call.
+
+**Flow control.** `stty -f /dev/ttys005 -a` on the bound Claude Code tab: `-ixon -ixoff -icanon -isig`
+— `0x13` reaches the program.
+
+**Not done, on purpose.** No envelope clause (the agent needs no telling); no key for Codex / Copilot
+(none known); nothing for tmux / IDE targets, which have no read-back — a flash says the mark was
+ignored. The pre-existing 14 failing rows of `evals/test_gesture_spec.py` (envelope and `deliver`
+extraction rows, the same 14 on `HEAD`) are not this change's.
+
+**Verified by:** `InterruptGateTests`, `ModelSwitchTests`, `GestureHintBarTests`, `SendNowHintTests`;
+the gesture spec's 🔽 ← row; shots `listening-interrupt`, `listening-model-switch`. **Not verified:**
+live — a real queued sentence taking the chord from the mark (his installed build was in use).
+
+
+## 2026-11-22 — ⌨️ The corner hint bar: glyphs alone with the mouse, keys only without it, copy and select as pictures
+
+Victor, dictating: *"În sugestiile din partea care apare pe ecranul secundar: înlocuiește clipboard-ul care
+scrie Copy … pune iconița de Copy care e standard, cele două dreptunghiuri cumva rotunjite. Și afișează tastele,
+adică Command Command pentru finish, Control P pentru poză, doar dacă nu e mouse-ul conectat. Dacă e mouse-ul
+conectat, nu mă ajută. Alea, lasă doar emoji-urile, da? Gunoi, finish, new, kamikaze. Și cred că poți chiar să
+scoți textele cu totul. E cazul în care devine mult mai compact acel tooltip … mai puțin late acele badge-uri.
+Dacă [n-]ai mouse, atunci atașez și tastele. De exemplu, la copy jos nici nu mai spui Command [C], că spui doar
+iconița de copy. Și mai pune-mi încă un badge, să fie ceva de genul select. Să aibă un caret și niște texte pe
+care tragi, ca simbol, ca să înțeleg ce pot să fac în momentul acela al dictării."*
+
+- **One cut, after the wording** (`GestureHintBar.shown`, `bar(for:)`). `crosses(for:)` still says `🗑️ discard`,
+  `🏁 / ⌘⌘`, `🧠 model` — three sessions were editing those strings that afternoon (the 🛑 interrupt arrived on
+  🔽 ← mid-change and was cut to `🛑` with no line written for it). The screen gets the glyph tokens; the key
+  tokens only when `MouseDevices` sees no Logitech mouse (`Stage.noMouse`, the signal the trackpad bar already
+  had); the words never. A label with no glyph keeps its words rather than vanish.
+- **Keys with no gesture behind them go with the mouse attached**: `💬 prompt ⌃P` (🔼 → / 🔼 ↑ do it) and the
+  crop's `Esc cancel`. The second is the one loss: while the box is being dragged nothing on the mouse cancels,
+  and the palm is now blank. He asked for no keys with the mouse; say so if it is missed.
+- **Copy = `doc.on.doc`, select = `Glyphs.select`** (drawn by proportion: three bars, a blue band behind part of
+  the middle one, an I-beam). Select only where a highlight is filed — a prompt and a ⚡ question; a plain
+  dictation shows copy alone.
+- **Widths, in points at × 1** (× 3 on the secondary): prompt 260 → 122, after a crop 263 → 142, plain 299 → 150,
+  ⚡ 260 → 149, a crop's mouse 245 → 122, the fingers at rest 305 → 122; without the mouse: prompt 157, plain
+  187, at rest 157. Two things did it: the box's floor 68 → 38, and a column as wide as its own widest badge
+  instead of the bar's. The glyphs took some of the room back: 12 → 15 pt, boxes 24 → 26 tall (bar 220 → 234).
+- **On the states page for the first time** — seven `bar-*` shots, both cases — and `HINT_BAR_PNG` renders
+  through `bar(for:)` at the secondary's size.
+- Not measured: how the glyph-only crop reads to him mid-drag (`➡️`, `⬆️`, `↩️`, `🎯` with no word).

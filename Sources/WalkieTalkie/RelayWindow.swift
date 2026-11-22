@@ -346,6 +346,12 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let modelRow = NSView()
     private let modelGlyph = NSImageView()
     private let modelInfo = NSTextField(labelWithString: "")
+    /// **`🛑 Interrupt`** (2026-11-22, `InterruptGate`) — 🔽 ← while a bound prompt records:
+    /// the sentence will not wait in the agent's queue (⌃X ⌃S after its words). Built like
+    /// `kamikazeRow`; again takes it down.
+    private let interruptRow = NSView()
+    private let interruptGlyph = NSImageView()
+    private let interruptInfo = NSTextField(labelWithString: InterruptGate.row)
     /// **`📋 Re-paste ⌘⇧P`** (2026-09-23) — for five seconds after every
     /// delivered sentence (and a cancelled prompt), the keys that bring the
     /// last text back, whether it went out as a prompt or as a clean dictation.
@@ -1512,6 +1518,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         root.addSubview(filmRow)
         installEmojiRow(kamikazeRow, glyph: kamikazeGlyph, label: kamikazeInfo, emoji: "☠️")
         installEmojiRow(modelRow, glyph: modelGlyph, label: modelInfo, emoji: "🧠")
+        installEmojiRow(interruptRow, glyph: interruptGlyph, label: interruptInfo, emoji: "🛑")
         installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
         installEmojiRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, emoji: "💻")
         installEmojiRow(readyRow, glyph: readyGlyph, label: readyInfo, emoji: "📻")
@@ -2013,7 +2020,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // Written before it is measured, for the selection row's reason below.
         if let text = localNowShown { localNowInfo.stringValue = text }
         if let modelSwitch { modelInfo.stringValue = modelSwitch }
-        for (on, label) in [(kamikaze, kamikazeInfo), (modelSwitch != nil, modelInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
+        for (on, label) in [(kamikaze, kamikazeInfo), (modelSwitch != nil, modelInfo), (interrupt, interruptInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
                             (readyForNext, readyInfo)] where on {
             label.sizeToFit()
             let lead = glyphColumn + recordDotGap
@@ -2258,6 +2265,15 @@ private let heardLabel = NSTextField(labelWithString: "")
             rows.append((modelRow, recordRowHeight))
         } else {
             modelRow.isHidden = true
+        }
+
+        if interrupt {
+            interruptInfo.sizeToFit()
+            layoutGlyphRow(interruptRow, glyph: interruptGlyph, label: interruptInfo, width: innerWidth)
+            interruptRow.isHidden = false
+            rows.append((interruptRow, recordRowHeight))
+        } else {
+            interruptRow.isHidden = true
         }
 
         // ☠️ Kamikaze is the chip's last row (2026-11-22) — placed under the
@@ -3637,6 +3653,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         kamikazeGlyph.wantsLayer = true
         modelInfo.wantsLayer = true
         modelGlyph.wantsLayer = true
+        interruptInfo.wantsLayer = true
+        interruptGlyph.wantsLayer = true
         pasteInfo.wantsLayer = true
         pasteGlyph.wantsLayer = true
         localNowInfo.wantsLayer = true
@@ -3668,6 +3686,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             modelInfo.shadow = Self.halo()
             modelInfo.textColor = .white
             modelGlyph.shadow = Self.halo()
+            interruptInfo.shadow = Self.halo()
+            interruptInfo.textColor = .white
+            interruptGlyph.shadow = Self.halo()
             pasteInfo.shadow = Self.halo()
             pasteInfo.textColor = .white
             pasteGlyph.shadow = Self.halo()
@@ -3725,6 +3746,9 @@ private let heardLabel = NSTextField(labelWithString: "")
             modelInfo.shadow = nil
             modelInfo.textColor = .secondaryLabelColor
             modelGlyph.shadow = nil
+            interruptInfo.shadow = nil
+            interruptInfo.textColor = .secondaryLabelColor
+            interruptGlyph.shadow = nil
             pasteInfo.shadow = nil
             pasteInfo.textColor = .secondaryLabelColor
             pasteGlyph.shadow = nil
@@ -5122,7 +5146,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
         hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
                              areaFilm: areaFilm,
-                             kamikaze: kamikaze, spawn: spawnMarked, held: heldPair, crop: cropPhase,
+                             kamikaze: kamikaze, interruptible: interruptible, interrupt: interrupt,
+                             spawn: spawnMarked, held: heldPair, crop: cropPhase,
                              quick: asking, fingers: trackpadHints, noMouse: noMouse))
     }
 
@@ -5145,6 +5170,26 @@ private let heardLabel = NSTextField(labelWithString: "")
         guard modelSwitch != label else { return }
         modelSwitch = label
         layoutContent()
+    }
+
+    /// `🛑 Interrupt` — the sentence in flight must not wait in the agent's queue.
+    private(set) var interrupt = false
+
+    func setInterrupt(_ on: Bool) {
+        guard interrupt != on else { return }
+        interrupt = on
+        layoutContent()
+        updateHintBar()
+    }
+
+    /// The open sentence goes to the bound terminal, so 🔽 ← can mark it — the corner
+    /// hints draw `🛑 interrupt` only then.
+    private(set) var interruptible = false
+
+    func setInterruptible(_ on: Bool) {
+        guard interruptible != on else { return }
+        interruptible = on
+        updateHintBar()
     }
 
     /// The `💻 Local now  ⌘⌃X` row — nil when down, else whether it says

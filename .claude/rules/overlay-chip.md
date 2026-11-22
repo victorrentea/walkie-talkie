@@ -76,6 +76,12 @@ yields to `--label`).
 
 ## Rows: order, tally, geometry
 
+- **`🛑 Interrupt` is a row of its own, under `🧠`** (2026-11-22, Victor: *"să apară un tag nou în tooltip"*):
+  `RelayWindow.interruptRow` / `setInterrupt`, built by `installEmojiRow` like kamikaze's (width in the
+  emoji-rows measure, both halo branches), on the chip and on the prompt panel; 🔽 ← over a sentence
+  bound for the terminal puts it up, again takes it down. `setInterruptible` only feeds the corner
+  bar (`🛑 interrupt`, crossed out once on). `🧠` reads `Fable/med`, `Sonnet/high` or `Opus/high`. Shot
+  `listening-interrupt`. Not ⚡ — that is the quick question's.
 - **☠️ Kamikaze is the chip's very last row, under the destination** (2026-11-22, Victor: *"Kamikaze în
   tooltip vine mereu … ultimul"*) — on the prompt panel it keeps its place among the rows.
 - **Row order, top to bottom: the dictation's state, the shots, the quoted highlight, Chrome, and

@@ -61,11 +61,23 @@
     "group" : "Dictating",
     "height" : 93,
     "image" : "listening-model-switch.png",
-    "note" : "**A row under the others**, like kamikaze's: at delivery the bound session is typed `\/model fable` and `\/effort medium` before the prompt (a new session is launched with them). The next flick on the same session offers the other one, so it alternates Opus \/ high ⇄ Fable \/ medium.",
+    "note" : "**A row under the others**, like kamikaze's: at delivery the bound session is typed `\/model fable` and `\/effort medium` before the prompt (a new session is launched with them). **Three in the ring since 2026-11-22** (Victor: *\"Normal pleacă de pe Opus, apoi Fable. Dacă nu, Sonnet High\"*): each flick marks the next one after the session's own — Opus \/ high → Fable \/ medium → Sonnet \/ high — and the flick that comes back to its own takes the row down.",
     "shape" : "chip",
     "slug" : "listening-model-switch",
     "title" : "🧠 The session's model, switched for this prompt",
     "when" : "🔽 → while a prompt records (2026-11-21). Again takes it back.",
+    "width" : 308
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 93,
+    "image" : "listening-interrupt.png",
+    "note" : "**A row under the others**, like kamikaze's (Victor: *\"să apară un tag nou în tooltip și să se manifeste ca și cum ți-aș da Control X, Control S în Claude … să nu stea în coadă\"*). At delivery the words go as ever — the chunk, then Return — and once Claude Code shows them queued behind its running turn (`Press up to edit queued messages`, or its own `ctrl+x ctrl+s to send now`) the app presses ⌃X ⌃S, `chat:sendNow`. An idle session gets nothing extra. Only a bound sentence: at the caret, for a new session, a ⚡ question or a plain dictation the flick does nothing.",
+    "shape" : "chip",
+    "slug" : "listening-interrupt",
+    "title" : "🛑 Interrupt — the sentence does not wait in the agent's queue",
+    "when" : "🔽 ← while a sentence bound for the terminal records (2026-11-22). Again takes it back.",
     "width" : 308
   },
   {

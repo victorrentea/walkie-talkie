@@ -114,12 +114,22 @@ enum OverlayStates {
 
             Shot(slug: "listening-model-switch", group: "Dictating", title: "🧠 The session's model, switched for this prompt",
                  when: "🔽 → while a prompt records (2026-11-21). Again takes it back.",
-                 note: "**A row under the others**, like kamikaze's: at delivery the bound session is typed `/model fable` and `/effort medium` before the prompt (a new session is launched with them). The next flick on the same session offers the other one, so it alternates Opus / high ⇄ Fable / medium.",
+                 note: "**A row under the others**, like kamikaze's: at delivery the bound session is typed `/model fable` and `/effort medium` before the prompt (a new session is launched with them). **Three in the ring since 2026-11-22** (Victor: *\"Normal pleacă de pe Opus, apoi Fable. Dacă nu, Sonnet High\"*): each flick marks the next one after the session's own — Opus / high → Fable / medium → Sonnet / high — and the flick that comes back to its own takes the row down.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setListening(true)
                 o.pinListenWarmth(1)
                 o.setModelSwitch("Fable/med")
+            },
+
+            Shot(slug: "listening-interrupt", group: "Dictating", title: "🛑 Interrupt — the sentence does not wait in the agent's queue",
+                 when: "🔽 ← while a sentence bound for the terminal records (2026-11-22). Again takes it back.",
+                 note: "**A row under the others**, like kamikaze's (Victor: *\"să apară un tag nou în tooltip și să se manifeste ca și cum ți-aș da Control X, Control S în Claude … să nu stea în coadă\"*). At delivery the words go as ever — the chunk, then Return — and once Claude Code shows them queued behind its running turn (`Press up to edit queued messages`, or its own `ctrl+x ctrl+s to send now`) the app presses ⌃X ⌃S, `chat:sendNow`. An idle session gets nothing extra. Only a bound sentence: at the caret, for a new session, a ⚡ question or a plain dictation the flick does nothing.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.pinListenWarmth(1)
+                o.setInterrupt(true)
             },
 
             Shot(slug: "bound-wispr-hearing", group: "At rest", title: "Wispr Flow is listening — not us",
@@ -864,6 +874,7 @@ enum OverlayStates {
         o.setWisprHearing(false)
         o.setKamikaze(false)
         o.setModelSwitch(nil)
+        o.setInterrupt(false)
         o.setLocalNow(false)
         o.setPasteHint(false)
         o.setReadyForNext(false)

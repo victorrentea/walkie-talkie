@@ -109,6 +109,11 @@ this way. Log `📍 a plain dictation over Claude Code on ttysNNN — …`.
   the chord lands, and on an idle empty box the same bytes do nothing. **It moves a foreground command to
   the background** (a 40-pings Bash went on as `1 shell still running`, the answer came 20 s early). Terminal.app
   only: tmux and the IDE bridges have no read-back. Log `⌨️ ⌃X ⌃S`.
+- **A 🛑 interrupt sentence presses it on the queue itself** (2026-11-22, 🔽 ← over a bound sentence —
+  `mouse-gestures.md`). `deliver(_:to:interrupt:sentNow:)` → `sendsNow`: the hint above, or `queueShown`
+  — after the last `❯`, `Press up to edit queued messages`. The hint alone missed queued sentences that
+  day (`5 read-back(s) — tail: …❯Pressuptoeditqueuedmessages`, no chord). Never blind; Orca the same;
+  tmux / IDE / paste targets ignore the mark (`Handle.readsBack`).
 - **The third Return reads only what follows the sentence's own echo** (batch 5, TD19):
   `writeToTerminalApp` hands the tab's last 600 characters to `asksForReview`, which looks for
   `press Enter to send` after the last place the sentence's last 24 characters appear

@@ -54,6 +54,10 @@ final class GestureHintBar {
         /// (2026-11-21).
         var areaFilm = false
         var kamikaze = false
+        /// The sentence goes to the bound terminal: 🔽 ← marks it 🛑 interrupt
+        /// (2026-11-22, `InterruptGate`); `interrupt` = already marked.
+        var interruptible = false
+        var interrupt = false
         /// The sentence already opens a new session — 🔼 ↑ has nothing left to do.
         var spawn = false
         /// Right ⌘⌥ is held for it: his hand is on the keyboard, not the mouse,
@@ -136,7 +140,9 @@ final class GestureHintBar {
         // open microphone (2026-10-21) and 🔼 ↑ makes any sentence a new-session
         // prompt — neither was drawn outside a prompt, 🔽 ← nowhere.
         // 🔽 ← does nothing mid-sentence since 2026-11-21 — 🔼 ← is the cancel.
-        back.left = ""
+        // …except over a sentence bound for the terminal: 🛑 interrupt (2026-11-22),
+        // crossed out once it is on, as kamikaze.
+        back.left = s.interruptible && !s.quick ? (s.interrupt ? Self.struck + "🛑" : "🛑 interrupt") : ""
         front.up = s.spawn ? "📂 folder" : "✨ new"
         if s.prompting {
             front.click = "🏁 end"
@@ -155,7 +161,8 @@ final class GestureHintBar {
             // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
             // de taste din colț"*) — `HotkeyTap.onTypeIn`.
             back.down = "⌨️ type"
-            // 🧠 The session's model, Opus / high ⇄ Fable / medium (2026-11-21, `ModelSwitch`).
+            // 🧠 The session's model, round the ring Opus / high → Fable / medium →
+            // Sonnet / high (2026-11-21, three since 2026-11-22 — `ModelSwitch`).
             back.right = "🧠 model"
         } else if s.quick {
             // **A question is a prompt** (2026-10-15): 🔼 asks, 🔽 is the
@@ -226,7 +233,9 @@ final class GestureHintBar {
             // The keys ride in the badges already (`crosses`, *"suggest [⌃P] in
             // the button … Put command command next to the flag"*).
             c = crosses(for: Stage(listening: true, prompting: s.prompting, filming: s.filming,
-                                   areaFilm: s.areaFilm, kamikaze: s.kamikaze, spawn: s.spawn, quick: s.quick))
+                                   areaFilm: s.areaFilm, kamikaze: s.kamikaze,
+                                   interruptible: s.interruptible, interrupt: s.interrupt,
+                                   spawn: s.spawn, quick: s.quick))
         } else {
             c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
                  Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]

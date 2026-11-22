@@ -66,7 +66,7 @@ from pathlib import Path
 
 SOURCES = Path(__file__).resolve().parent.parent / "Sources" / "WalkieTalkie"
 FILES = ("HotkeyTap.swift", "AppDelegate.swift", "TerminalBinding.swift", "WisprFlowSource.swift",
-         "BoundPromptGate.swift")
+         "BoundPromptGate.swift", "InterruptGate.swift")
 
 
 class ParseError(Exception):
@@ -477,7 +477,9 @@ def spec(src: dict):
             # 2026-11-13: "vreau back + swipe left … alternativa ChatGPT" — at
             # rest it is ChatGPT's voice conversation; the Return is gone.
             # 2026-11-21: "curăță butonul de Back cu swipe stânga … fac mereu cancel cu forward swipe stânga".
-            "does": "a microphone open: NOTHING (🔼 ← is the cancel); at rest: ChatGPT voice on / off — never a Return",
+            # 2026-11-22: "la gestul de back cu swipe stânga în timpul dictării, dacă e dictare
+            # bound, doar dacă e bound dictarea, să însemne interrupt".
+            "does": "a sentence bound for the terminal open: 🛑 INTERRUPT (again = off); any other microphone open: NOTHING (🔼 ← is the cancel); at rest: ChatGPT voice on / off — never a Return",
             "checks": [
                 ("F3 at rest raises ChatGPT voice and is swallowed", "HotkeyTap `case VK_F3`",
                  lambda: has(gesture_case(src, "VK_F3"), r"onChatVoice\?\(\) \}\s*return swallow\(gesture, type, event\)\s*$")),
@@ -487,6 +489,16 @@ def spec(src: dict):
                  lambda: before(gesture_case(src, "VK_F3"),
                                 r"if relayPromptOpen \|\| relayPlainOpen \|\| ownMicOpen \|\| backStopsWispr\s*\|\| wisprMicIsOpen\?\(\) == true \{.*?return swallow",
                                 r"onChatVoice\?\(\)") and not has(gesture_case(src, "VK_F3"), r"onBackCancel")),
+                ("…except over a sentence bound for the terminal: 🛑 interrupt, inside the microphone-open branch", "HotkeyTap `case VK_F3`",
+                 lambda: before(gesture_case(src, "VK_F3"),
+                                r"if relayPromptOpen \|\| relayPlainOpen \|\| ownMicOpen \|\| backStopsWispr",
+                                r"InterruptGate\.flick\(boundOpen: relayBoundOpen, ownDictation: ownDictation,\s*quick: relayQuickOpen\) == \.interrupt \{.*?onInterruptToggle\?\(\) \}\s*return swallow")
+                         and before(gesture_case(src, "VK_F3"), r"onInterruptToggle\?\(\)", r"nothing \(🔼 ← cancels\)")),
+                ("only a bound sentence is one: not a ⚡ question, a new session, the caret, a plain dictation", "InterruptGate `bound`",
+                 lambda: has(src["InterruptGate.swift"],
+                             r"listening && isBound && !quick && !spawn && !caret && !plainAtCaret")),
+                ("the tap is told by the app, which drops the mark when the sentence leaves the terminal", "AppDelegate `syncBorrowedGestures`",
+                 lambda: has(src["AppDelegate.swift"], r"hotkeys\.relayBoundOpen = boundSentenceOpen") and has(src["AppDelegate.swift"], r"if listening, interrupt, !boundSentenceOpen \{\s*interrupt = false")),
                 ("…not 🔼 ←'s, which asks a ⚡ question at rest", "HotkeyTap `case VK_F3`",
                  lambda: not has(gesture_case(src, "VK_F3"), r"onLocalCancel")),
                 ("the back cancel cancels, else nothing — never a question, a Return or ChatGPT", "AppDelegate `onBackCancel`",

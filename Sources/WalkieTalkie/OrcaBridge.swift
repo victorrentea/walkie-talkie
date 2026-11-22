@@ -205,7 +205,8 @@ enum OrcaBridge {
 
     /// `.noPane` = no Orca pane on that tty (the caller's `targetGone`); `.refused` =
     /// Orca would not take the line (nothing typed).
-    static func deliver(_ text: String, tty: String) -> Delivery {
+    static func deliver(_ text: String, tty: String,
+                        interrupt: Bool = false, sentNow: (() -> Void)? = nil) -> Delivery {
         guard let pane = pane(tty: tty) else { return .noPane }
         let h = pane.handle
         guard type(text, handle: h) else { return .refused }
@@ -217,10 +218,12 @@ enum OrcaBridge {
         let deadline = Date().addingTimeInterval(4)
         while true {
             let shown = String(tail.suffix(600))
-            if TerminalBinding.waitsToSendNow(tail: shown, sent: text) {
-                if type(String(UnicodeScalar(24)) + String(UnicodeScalar(19)), handle: h) {
+            // 🛑 An interrupt sentence: on the queue itself too (`TerminalBinding.sendsNow`).
+            if TerminalBinding.sendsNow(tail: tail, sent: text, interrupt: interrupt) {
+                if type(TerminalBinding.sendNowChord, handle: h) {
                     _ = pressReturn(handle: h)
-                    Log.info("⌨️ 🐋 ⌃X ⌃S — the sentence was queued behind a running turn, sent now")
+                    Log.info("⌨️ 🐋 ⌃X ⌃S — the sentence was queued behind a running turn, sent now\(interrupt ? " (🛑 interrupt)" : "")")
+                    sentNow?()
                 }
                 break
             }

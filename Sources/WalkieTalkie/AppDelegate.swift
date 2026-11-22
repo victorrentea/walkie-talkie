@@ -1011,6 +1011,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var kamikaze = false {
         didSet { if kamikaze != oldValue { overlay.setKamikaze(kamikaze) } }
     }
+    /// **🛑 This sentence is an interrupt** (🔽 ← while a bound prompt records, 2026-11-22;
+    /// again = taken back). Victor: *"la gestul de back cu swipe stânga în timpul dictării,
+    /// dacă e dictare bound, doar dacă e bound dictarea, să însemne interrupt. Și să apară
+    /// un tag nou în tooltip și să se manifeste ca și cum ți-aș da Control X, Control S în
+    /// Claude. Adică să-ți injecteze repede ceea ce am spus eu, să nu stea în coadă."* At
+    /// delivery the bound Claude Code gets ⌃X ⌃S on the queue (`TerminalBinding.sendsNow`).
+    /// Not in the envelope: the agent is told nothing.
+    private var interrupt = false {
+        didSet { if interrupt != oldValue { overlay.setInterrupt(interrupt) } }
+    }
+    /// The open sentence goes to the bound terminal — the only one 🔽 ← can mark.
+    private var boundSentenceOpen: Bool {
+        InterruptGate.bound(listening: listening, isBound: isBound, quick: quickAsk, spawn: spawnPending,
+                            caret: pasteMode || caretPrompt, plainAtCaret: cleanSentence && !cleanRedirected)
+    }
     private var orphanFlush: DispatchWorkItem?
 
     /// The context shot is promised but `screencapture` has not come back yet.
@@ -1494,6 +1509,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// **🧠 The model this prompt switches its session to** (2026-11-21, `ModelSwitch`):
         /// typed as `/model` + `/effort` before the words, or a new session's flags.
         var modelPick: ModelPick? = nil
+        /// **🛑 Must not wait in the agent's queue** (2026-11-22): ⌃X ⌃S after the words,
+        /// in a bound Claude Code tab — `TerminalBinding.deliver(_:to:interrupt:)`.
+        var interrupt = false
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -3122,6 +3140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `quickGoogle`. The stop is 🔼's (`endDictation`); only where the words
         // go changes.
         hotkeys.onModelToggle = { [weak self] in self?.toggleModelPick() }
+        hotkeys.onInterruptToggle = { [weak self] in self?.toggleInterrupt() }
         hotkeys.onQuickGoogle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self, self.quickAsk, self.listening || self.source.isRecording else { return }
@@ -3426,6 +3445,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "forward-up" where self.listening:
                     self.convertDictationToSpawn()
                     out = ["direct": "convertDictationToSpawn"]
+                // 🛑 / 🧠 The two marks of a recording prompt (2026-11-22), with what they left.
+                case "back-left" where self.listening:
+                    self.toggleInterrupt()
+                    out = ["direct": "toggleInterrupt", "interrupt": self.interrupt]
+                case "back-right" where self.listening:
+                    self.toggleModelPick()
+                    out = ["direct": "toggleModelPick", "model": self.modelPick?.label ?? ""]
                 default:
                     out = nil
                 }
@@ -4290,6 +4316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // came back empty must not ride along on the next.
         kamikaze = false
         modelPick = nil
+        interrupt = false
         speculative = false
         transcriptDisowned = false
         caretLanding = 0
@@ -7966,6 +7993,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func clearCancelledDictationState() {
         kamikaze = false
         modelPick = nil
+        interrupt = false
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
@@ -8810,6 +8838,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.relayPlainOpen = listening && plainToTheHand
         // 🔽 → over a ⚡ question Googles it (2026-10-25, `onQuickGoogle`).
         hotkeys.relayQuickOpen = listening && quickAsk
+        // 🛑 🔽 ← marks only a sentence bound for the terminal (2026-11-22); one turned
+        // to the caret or a new session mid-way loses the mark.
+        hotkeys.relayBoundOpen = boundSentenceOpen
+        overlay.setInterruptible(boundSentenceOpen)
+        if listening, interrupt, !boundSentenceOpen {
+            interrupt = false
+            Log.info("🛑 interrupt dropped — the sentence no longer goes to the bound terminal")
+        }
         let attachable = live && !hotkeys.cleanSentenceOpen
         // **The ring round the pointer rides the same switch**, and deliberately
         // on `listening` rather than on `live`: since 2026-09-11 it answers *is
@@ -10306,8 +10342,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DispatchQueue.main.async { ModelSwitch.remember(pick, tty: tty) }
                 }
             }
-            let outcome = self.terminal.deliver(line, to: target)
+            // 🛑 **An interrupt does not wait in the queue** (2026-11-22): ⌃X ⌃S once the
+            // sentence is seen queued — a Terminal.app tab or an Orca pane running Claude
+            // Code. Anything else has no such key known here: the words go as ever, and
+            // the flash says so.
+            var sentNow = false
+            let outcome = self.terminal.deliver(line, to: target, interrupt: m.interrupt) { sentNow = true }
             DispatchQueue.main.async {
+                if m.interrupt, case .delivered = outcome,
+                   let said = InterruptGate.receipt(sentNow: sentNow, readsBack: target.handle.readsBack) {
+                    Log.info("🛑 interrupt — \(said)")
+                    self.overlay.flash(said, duration: sentNow ? 1.5 : 3)
+                }
                 self.deliveriesInFlight -= 1
                 var delivered = false
                 if case .delivered = outcome { delivered = true }
@@ -11052,27 +11098,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The word alone to a terminal — the bound one's own delivery (shell guard,
     /// Return, read-back), on the same serial queue, so it can only land after
     /// the prompt it follows.
-    /// **🔽 → while a prompt records** (2026-11-21, `ModelSwitch`): the other of Opus / high
-    /// and Fable / medium than the session has now; again = taken back. A bound or a new
-    /// session only — a caret prompt has none to switch.
+    /// **🔽 → while a prompt records** (2026-11-21, `ModelSwitch`): the next model round the
+    /// ring from the one the session has now — Opus / high → Fable / medium → Sonnet / high
+    /// (2026-11-22) — and the flick that comes back to the session's own takes the mark off.
+    /// A bound or a new session only — a caret prompt has none to switch.
     private func toggleModelPick() {
         let wordsComing = listening || settling || fallingBack || source.phase.isWaitingForWords
         let plain = cleanSentence && !cleanRedirected
         guard wordsComing, !plain, !quickAsk else { return }
-        if modelPick != nil {
-            modelPick = nil
-            Log.info("🧠 model switch taken back")
-            return
-        }
         guard spawnPending || !(pasteMode || latchedAtCaret) else {
+            if modelPick != nil { modelPick = nil; return }
             Log.info("🧠 no model switch — a caret prompt has no session to switch")
             overlay.flash("🧠 Only for a bound or a new session", duration: 2)
             return
         }
         let tty = spawnPending ? nil : (latch?.target ?? terminal.target)?.handle.tty
-        let pick = ModelSwitch.current(tty: tty).other
+        guard let pick = ModelSwitch.flick(marked: modelPick, session: ModelSwitch.current(tty: tty)) else {
+            modelPick = nil
+            Log.info("🧠 model switch taken back")
+            return
+        }
         modelPick = pick
         Log.info("🧠 this prompt switches \(spawnPending ? "the new session" : tty ?? "its session") to \(pick.label)")
+    }
+
+    /// **🔽 ← while a bound prompt records** (2026-11-22): 🛑 the sentence is an interrupt;
+    /// again = taken back. The row on the chip is the receipt, as kamikaze's.
+    private func toggleInterrupt() {
+        guard boundSentenceOpen else {
+            Log.info("🛑 no interrupt — the open sentence does not go to the bound terminal")
+            return
+        }
+        interrupt.toggle()
+        Log.info(interrupt ? "🛑 this sentence is an interrupt — ⌃X ⌃S after its words, if Claude Code queues it"
+                           : "🛑 interrupt taken back")
     }
 
     private func sendKamikaze(to target: TerminalBinding.Target) {
@@ -13306,6 +13365,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if kind == "dictation", modelPick != nil {
             if Thread.isMainThread { modelPick = nil } else { DispatchQueue.main.async { self.modelPick = nil } }
         }
+        // 🛑 The same: the mark is this sentence's, for a terminal only.
+        let cutsIn = kind == "dictation" && interrupt
+        if cutsIn {
+            if Thread.isMainThread { interrupt = false } else { DispatchQueue.main.async { self.interrupt = false } }
+        }
         if kind == "dictation" { spawnPending = false; spawnFolder = nil
                                  pendingVia = nil; pendingEngine = nil; pendingHeard = nil
                                  pendingDeliveryKind = nil; pendingAffect = nil }
@@ -13401,7 +13465,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               directory: directory, via: via, engine: engine,
                               mic: Self.mic(inHeard: heard),
                               deliveryKind: deliveryKind, target: spawn ? nil : target,
-                              affect: affect, modelPick: pick)
+                              affect: affect, modelPick: pick,
+                              interrupt: cutsIn && !spawn && target != nil)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -14173,6 +14238,7 @@ extension AppDelegate {
         var localRecordingApp: String?
         var kamikaze = false, contextAtWheelRelease = false
         var modelPick: ModelPick?
+        var interrupt = false
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
         var quickAsk = false, quickFollowUp = false, quickGoogle = false, quickGoogleToo = false
@@ -14215,6 +14281,7 @@ extension AppDelegate {
         e.localRecordingApp = localRecordingApp
         e.kamikaze = kamikaze
         e.modelPick = modelPick
+        e.interrupt = interrupt
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
@@ -14232,6 +14299,7 @@ extension AppDelegate {
         localRecordingApp = nil
         kamikaze = false
         modelPick = nil
+        interrupt = false
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
         quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false
@@ -14277,6 +14345,7 @@ extension AppDelegate {
         localRecordingApp = e.localRecordingApp
         kamikaze = e.kamikaze
         modelPick = e.modelPick
+        interrupt = e.interrupt
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp

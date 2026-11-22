@@ -187,8 +187,18 @@
         </header>
         <div class="shot"><img src="states/listening-model-switch.png" width="308" height="93" style="opacity:0.8" alt="🧠 The session&#x27;s model, switched for this prompt"></div>
         <p class="when">🔽 → while a prompt records (2026-11-21). Again takes it back.</p>
-        <p class="note"><strong>A row under the others</strong>, like kamikaze&#x27;s: at delivery the bound session is typed <code>/model fable</code> and <code>/effort medium</code> before the prompt (a new session is launched with them). The next flick on the same session offers the other one, so it alternates Opus / high ⇄ Fable / medium.</p>
+        <p class="note"><strong>A row under the others</strong>, like kamikaze&#x27;s: at delivery the bound session is typed <code>/model fable</code> and <code>/effort medium</code> before the prompt (a new session is launched with them). <strong>Three in the ring since 2026-11-22</strong> (Victor: <em>&quot;Normal pleacă de pe Opus, apoi Fable. Dacă nu, Sonnet High&quot;</em>): each flick marks the next one after the session&#x27;s own — Opus / high → Fable / medium → Sonnet / high — and the flick that comes back to its own takes the row down.</p>
         <code class="slug">listening-model-switch</code>
+      </section>
+      <section class="card" id="listening-interrupt">
+        <header>
+          <h3>🛑 Interrupt — the sentence does not wait in the agent&#x27;s queue</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-interrupt.png" width="308" height="93" style="opacity:0.8" alt="🛑 Interrupt — the sentence does not wait in the agent&#x27;s queue"></div>
+        <p class="when">🔽 ← while a sentence bound for the terminal records (2026-11-22). Again takes it back.</p>
+        <p class="note"><strong>A row under the others</strong>, like kamikaze&#x27;s (Victor: <em>&quot;să apară un tag nou în tooltip și să se manifeste ca și cum ți-aș da Control X, Control S în Claude … să nu stea în coadă&quot;</em>). At delivery the words go as ever — the chunk, then Return — and once Claude Code shows them queued behind its running turn (<code>Press up to edit queued messages</code>, or its own <code>ctrl+x ctrl+s to send now</code>) the app presses ⌃X ⌃S, <code>chat:sendNow</code>. An idle session gets nothing extra. Only a bound sentence: at the caret, for a new session, a ⚡ question or a plain dictation the flick does nothing.</p>
+        <code class="slug">listening-interrupt</code>
       </section>
     </div>
     <h2 id="At rest">At rest</h2>
