@@ -151,6 +151,10 @@ final class ScreenFilm {
     /// The frames and the video are that box alone, the border rings it, and the
     /// pointer leaving it changes nothing.
     static func start(area: NSRect? = nil, on areaScreen: NSScreen? = nil) -> ScreenFilm? {
+        guard Permissions.real(.screenRecording) == .granted else {
+            Permissions.hint(.screenRecording, every: 60)
+            return nil
+        }
         guard let screen = areaScreen ?? screenUnderPointer(),
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
         else {

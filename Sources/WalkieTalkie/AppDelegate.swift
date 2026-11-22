@@ -3611,8 +3611,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // two moments a tap is most likely to be enabled and dead. A dead tap
         // under an always-on drop is not a dead hotkey, it is Wispr's next
         // sentence landing in his document, so the alarm goes on the screen.
-        if tapped {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.canary("launch") }
+        if tapped { tapArmed("launch") }
+        if !RelayWindow.shooting { watchPermissions(tapped: tapped) }
+        // **And who macOS thinks is asking.** On 2026-09-21 the app went entirely
+        // dead — no hotkey, no gesture — while the Accessibility checkbox beside a
+        // row called "Walkie Talkie" was still ticked, and this line said only
+        // `trusted=false`, which reads as *Victor has not granted it yet*. The
+        // truth was that a bundle assembled by two concurrent builds had lost its
+        // `Info.plist`, so the process had **no bundle identifier at all** and TCC
+        // was attributing it to its executable path, as a second application with
+        // none of the grants. `bundle=` is the whole diagnosis in one word: if it
+        // is not `ro.victorrentea.wispr-relay`, no checkbox anywhere will help and
+        // the fix is `./build-app.sh`, not System Settings.
+        Log.info("accessibility trusted=\(trusted) eventTap=\(tapped) bundle=\(Bundle.main.bundleIdentifier ?? "<none>")")
+        startListeningForSnapshots()
+        routeSIGTERMThroughQuit()
+        launchTail()
+    }
+
+    /// The canary and its observers — once, whenever the tap first exists
+    /// (at launch, or later when Accessibility is granted while running).
+    private var tapObserved = false
+    /// Alive only while Accessibility is missing — `waitForAccessibility`.
+    fileprivate var accessibilityWait: Timer?
+    fileprivate func tapArmed(_ why: String) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.canary(why) }
+        guard !tapObserved else { return }
+        tapObserved = true
+        do {
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { self?.canary("wake") }
@@ -3632,25 +3658,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self?.canary("unlock") }
             }
         }
-        // **And who macOS thinks is asking.** On 2026-09-21 the app went entirely
-        // dead — no hotkey, no gesture — while the Accessibility checkbox beside a
-        // row called "Walkie Talkie" was still ticked, and this line said only
-        // `trusted=false`, which reads as *Victor has not granted it yet*. The
-        // truth was that a bundle assembled by two concurrent builds had lost its
-        // `Info.plist`, so the process had **no bundle identifier at all** and TCC
-        // was attributing it to its executable path, as a second application with
-        // none of the grants. `bundle=` is the whole diagnosis in one word: if it
-        // is not `ro.victorrentea.wispr-relay`, no checkbox anywhere will help and
-        // the fix is `./build-app.sh`, not System Settings.
-        Log.info("accessibility trusted=\(trusted) eventTap=\(tapped) bundle=\(Bundle.main.bundleIdentifier ?? "<none>")")
-        if (!trusted || !tapped) && !RelayWindow.shooting {
-            DispatchQueue.main.async { [weak self] in
-                self?.overlay.flash("⚠️ grant Accessibility to Walkie Talkie", duration: 15)
-            }
-        }
-        startListeningForSnapshots()
-        routeSIGTERMThroughQuit()
+    }
 
+    /// The rest of `applicationDidFinishLaunching`, below the tap.
+    private func launchTail() {
         // The chip's `Listening...` bar fills on speech, not on elapsed time —
         // see `RelayWindow.listenWarmth`. This is the whole of the wiring: the
         // overlay pulls the number when it wants it and never learns what a
@@ -3956,6 +3967,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let tapHealBackoff: [Double] = [2, 5, 10, 30]
 
     private func healTap(_ why: String, attempt: Int, since: Date) {
+        // Dead because Accessibility is gone: nothing to rebuild until it is back.
+        guard AXIsProcessTrusted() else {
+            tapHealing = false
+            accessibilityMayHaveChanged("the canary")
+            return
+        }
         tapHealing = true
         if let hidden = HotkeyTap.keyboardHidden() {
             if attempt == 0 || attempt % 30 == 0 {
@@ -6671,6 +6688,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // that stops ⌘⌃D / 🔼 posting the hands-free toggle into it.
         // **Not for a start Wispr will defer** (Q12, 2026-10-21): no chord goes
         // out now, and the release asks W6 again before its own.
+        // **No microphone, no sentence** (2026-11-22): refused here, said on the
+        // chip, instead of a ring over a recording of silence. Not for Wispr's
+        // own microphone, and not while macOS has yet to ask.
+        if source !== wisprSource, Permissions.denied(.microphone) {
+            Log.error("dictate gesture refused — the Microphone permission is missing")
+            Permissions.hint(.microphone, every: 2)
+            return
+        }
         let wisprDefers = source === wisprSource && wisprSource.wouldDeferStart
         if !source.isRecording, !wisprDefers, wisprMic.sampleIsRunningInput() {
             Log.error("dictate gesture refused — Wispr Flow's microphone is already open")
@@ -14548,13 +14573,77 @@ extension AppDelegate {
             let now = AXIsProcessTrustedWithOptions(options)
             Log.info("grants: accessibility prompted → trusted=\(now)")
         }
-        MicRecorder.requestAccess { [weak self] ok in
+        MicRecorder.requestAccess { ok in
             Log.info("grants: microphone granted=\(ok)")
-            if !ok { self?.overlay.flash("⚠️ grant Microphone to Walkie Talkie", duration: 15) }
+            // The launch summary (`watchPermissions`) says it with the others.
         }
         if !CGPreflightScreenCaptureAccess() {
             let now = CGRequestScreenCaptureAccess()
             Log.info("grants: screen recording prompted → granted=\(now)")
         }
+    }
+    // MARK: - Living with a missing permission (2026-11-22)
+
+    /// **A missing permission switches its feature off, says so once, and the
+    /// feature comes back when the grant does — without a restart.**
+    ///
+    /// - The chip names what is missing and points at the menu's ❗ row
+    ///   (`Permissions.onHint`) — at launch one line for all of them, later one
+    ///   per feature that ran into it (rate-limited in `Permissions.hint`).
+    /// - **Accessibility is watched**: while it is missing, every 2 s (one call,
+    ///   no prompt) and on macOS's own change notice; the moment it is there the
+    ///   tap is created or rebuilt and the canary runs. Revoked while running,
+    ///   the tap is taken out of the chain, never left for the heal to rebuild
+    ///   against a refusal every 30 s.
+    fileprivate func watchPermissions(tapped: Bool) {
+        Permissions.onHint = { [weak self] kind in
+            self?.overlay.flash(Permissions.hintText(kind), duration: 10)
+            self?.status.applyPermissionsRow()
+        }
+        // macOS posts this when the Accessibility list changes (either way).
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"), object: nil, queue: .main) { [weak self] _ in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.accessibilityMayHaveChanged("notice") }
+        }
+        if !tapped { waitForAccessibility() }
+        // One line for everything refused, after the system's own dialogs had their turn.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            let missing = Permissions.catalogue.filter { $0.required && Permissions.denied($0.kind) }.map(\.title)
+            guard !missing.isEmpty else { return }
+            Log.error("🔐 missing at launch: \(missing.joined(separator: ", "))")
+            self?.overlay.flash(Permissions.launchHint(missing), duration: 15)
+        }
+    }
+
+    private func waitForAccessibility() {
+        guard accessibilityWait == nil else { return }
+        Log.info("🔐 accessibility is missing — no event tap; checking every 2 s until it is granted")
+        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in self?.accessibilityMayHaveChanged("poll") }
+        RunLoop.main.add(t, forMode: .common)
+        accessibilityWait = t
+    }
+
+    private func accessibilityMayHaveChanged(_ why: String) {
+        let trusted = AXIsProcessTrusted()
+        if trusted, !hotkeys.isActive {
+            let armed = hotkeys.arm("accessibility granted")
+            Log.info("🔐 accessibility granted (\(why)) → event tap \(armed ? "armed" : "NOT armed")")
+            guard armed else { waitForAccessibility(); return }
+            accessibilityWait?.invalidate()
+            accessibilityWait = nil
+            tapHealing = false
+            tapArmed("accessibility granted")
+            overlay.flash("✅ Accessibility granted — gestures and shortcuts are on", duration: 6)
+        } else if !trusted, hotkeys.isActive {
+            Log.error("🔐 accessibility was revoked (\(why)) — the event tap is taken down")
+            hotkeys.disarm("accessibility revoked")
+            Permissions.hint(.accessibility, every: 10)
+            waitForAccessibility()
+        } else if trusted {
+            accessibilityWait?.invalidate()
+            accessibilityWait = nil
+        }
+        status.applyPermissionsRow()
+        PermissionsPage.refresh()
     }
 }

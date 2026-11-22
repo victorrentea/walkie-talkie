@@ -42,6 +42,16 @@ final class PermissionsTests: XCTestCase {
         XCTAssertEqual(Permissions.parseFakes(["nope": "missing", "camera": "gone"]).errors.count, 2)
     }
 
+    func testHintsAreRateLimitedAndNameThePermission() {
+        let t0 = Date(timeIntervalSince1970: 1000)
+        XCTAssertTrue(Permissions.hintDue(last: nil, now: t0, every: 60))
+        XCTAssertFalse(Permissions.hintDue(last: t0, now: t0.addingTimeInterval(59), every: 60))
+        XCTAssertTrue(Permissions.hintDue(last: t0, now: t0.addingTimeInterval(60), every: 60))
+        XCTAssertEqual(Permissions.hintText(.microphone), "❗ Microphone permission missing — the menu's ❗ row says why")
+        XCTAssertEqual(Permissions.launchHint(["Accessibility"]), "❗ Missing permission: Accessibility — the menu's ❗ row says why")
+        XCTAssertTrue(Permissions.launchHint(["Accessibility", "Microphone"]).hasPrefix("❗ Missing permissions: Accessibility, Microphone"))
+    }
+
     func testEveryEntryExplainsItselfAndLinksToSettings() {
         XCTAssertEqual(Permissions.catalogue.map(\.kind), Permissions.Kind.allCases)
         for e in Permissions.catalogue {

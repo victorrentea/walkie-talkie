@@ -49,6 +49,12 @@ while let arg = args.next() {
 // bad thing to leave working. So the direct launch is honoured by relaunching
 // the bundle properly, before anything here has asked macOS for a single
 // permission.
+// `Permissions.probeScreenRecording`: this binary run as a child of the app, to
+// ask what the app itself cannot see until it restarts. Before the relaunch below.
+if CommandLine.arguments.contains(Permissions.screenProbeFlag) {
+    print(CGPreflightScreenCaptureAccess() ? "granted" : "missing")
+    exit(0)
+}
 relaunchThroughLaunchServicesIfNeeded()
 
 // Draw the spawn folder menu into a PNG and quit — the only way to look at a

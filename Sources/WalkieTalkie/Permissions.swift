@@ -72,13 +72,13 @@ enum Permissions {
               why: "Records your voice while you dictate, so it can be transcribed.",
               without: "Nothing is recorded — every dictation comes out empty.",
               settings: privacy + "Privacy_Microphone",
-              path: "Privacy & Security ▸ Microphone ▸ switch Walkie Talkie on",
+              path: "Privacy & Security ▸ Microphone ▸ switch Walkie Talkie on, then Quit & Reopen when macOS offers it",
               notAskedHint: "macOS asks at the first dictation — click Allow."),
         Entry(kind: .screenRecording, title: "Screen & System Audio Recording", required: true,
               why: "Takes the screenshots, area crops and short screen recordings you attach to a prompt.",
               without: "Pictures come out black or show only the wallpaper. Dictation still works.",
               settings: privacy + "Privacy_ScreenCapture",
-              path: "Privacy & Security ▸ Screen & System Audio Recording ▸ switch Walkie Talkie on, then restart it",
+              path: "Privacy & Security ▸ Screen & System Audio Recording ▸ switch Walkie Talkie on (macOS offers Quit & Reopen — Later works too)",
               notAskedHint: nil),
         Entry(kind: .automationTerminal, title: "Automation ▸ Terminal", required: true,
               why: "Sends your prompt into the Terminal tab you bound, opens new agent sessions, and reads the tabs' names.",
@@ -201,7 +201,12 @@ enum Permissions {
         case .camera:
             return capture(.video)
         case .screenRecording:
-            return CGPreflightScreenCaptureAccess() ? .granted : .missing
+            // `CGPreflightScreenCaptureAccess` (and TCC's own preflight) keep the
+            // answer they gave first until the app restarts — measured in the lab
+            // guest. A child process is asked afresh: `probeScreenRecording`.
+            if CGPreflightScreenCaptureAccess() { return .granted }
+            lock.lock(); defer { lock.unlock() }
+            return screenProbe?.granted == true ? .granted : .missing
         case .automationTerminal:
             lock.lock(); defer { lock.unlock() }
             return automation
@@ -230,6 +235,47 @@ enum Permissions {
         return unsafeBitCast(symbol, to: (@convention(c) (CFString, CFDictionary?) -> Int32).self)
     }()
 
+    // MARK: Screen Recording, granted while running
+
+    static let screenProbeFlag = "--preflight-screen-recording"
+    private static var screenProbe: (granted: Bool, at: Date)?
+
+    /// **Ask a child whether the screen may be recorded** — this same binary with
+    /// `screenProbeFlag` (`main.swift`). A child is this app to TCC (as `osascript`
+    /// and `screencapture` are) but starts with no cached answer, so it sees a
+    /// grant given while the app runs. Only when the in-process answer is *no*;
+    /// the answer is kept `maxAge` seconds. Blocks ≤ 2 s — never on main in a loop.
+    @discardableResult
+    static func probeScreenRecording(maxAge: TimeInterval = 5) -> Bool {
+        if CGPreflightScreenCaptureAccess() { return true }
+        lock.lock()
+        let cached = screenProbe
+        lock.unlock()
+        if let cached, Date().timeIntervalSince(cached.at) < maxAge { return cached.granted }
+        var granted = false
+        if let path = Bundle.main.executablePath {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: path)
+            p.arguments = [screenProbeFlag]
+            let out = Pipe()
+            p.standardOutput = out
+            p.standardError = FileHandle.nullDevice
+            if (try? p.run()) != nil {
+                let done = DispatchSemaphore(value: 0)
+                p.terminationHandler = { _ in done.signal() }
+                if done.wait(timeout: .now() + 2) == .timedOut { p.terminate() }
+                let said = String(decoding: out.fileHandleForReading.availableData, as: UTF8.self)
+                granted = said.hasPrefix("granted")
+            }
+        }
+        lock.lock()
+        let changed = screenProbe?.granted != granted
+        screenProbe = (granted, Date())
+        lock.unlock()
+        if changed { Log.info("🔐 screen recording, asked of a child: \(granted ? "granted" : "missing")") }
+        return granted
+    }
+
     private static let queue = DispatchQueue(label: "walkie.permissions", qos: .utility)
     private static var refreshing = false
 
@@ -243,11 +289,14 @@ enum Permissions {
         lock.unlock()
         queue.async {
             let now = automationNow()
+            let screenBefore = read(.screenRecording)
+            probeScreenRecording()
             lock.lock()
             refreshing = false
-            let differs = now != .unknown && now != automation
+            var differs = now != .unknown && now != automation
             if differs { automation = now }
             lock.unlock()
+            if read(.screenRecording) != screenBefore { differs = true }
             if differs, let changed { DispatchQueue.main.async(execute: changed) }
         }
     }
@@ -255,6 +304,7 @@ enum Permissions {
     /// `POST /test/permissions` waits for a fresh answer.
     static func refreshAutomationNow() {
         let now = automationNow()
+        probeScreenRecording(maxAge: 0)
         lock.lock()
         if now != .unknown { automation = now }
         lock.unlock()
@@ -271,6 +321,52 @@ enum Permissions {
         defer { AEDisposeDesc(&address) }
         let status = AEDeterminePermissionToAutomateTarget(&address, typeWildCard, typeWildCard, false)
         return automationState(status: Int(status))
+    }
+
+    // MARK: - Guards: a feature that finds its permission missing
+
+    /// The state macOS reports — **never a fake**: a guard must not switch a
+    /// feature off because a test route said so.
+    static func real(_ kind: Kind) -> State { read(kind) }
+
+    /// Refused or switched off (not merely *not asked yet* — then macOS is about to ask).
+    static func denied(_ kind: Kind) -> Bool { read(kind) == .missing }
+
+    /// What the chip says when a feature finds its permission missing.
+    static func hintText(_ kind: Kind) -> String {
+        "❗ \(entry(kind).title) permission missing — the menu's ❗ row says why"
+    }
+
+    /// The one line at launch for everything refused.
+    static func launchHint(_ titles: [String]) -> String {
+        "❗ Missing permission\(titles.count == 1 ? "" : "s"): \(titles.joined(separator: ", ")) — the menu's ❗ row says why"
+    }
+
+    /// Wired by `AppDelegate`: flash the hint. Called on main.
+    static var onHint: ((Kind) -> Void)?
+    private static var hintedAt: [Kind: Date] = [:]
+
+    /// Whether a hint for `kind` is due: at most one per `every` seconds (pure but for the clock).
+    static func hintDue(last: Date?, now: Date, every: TimeInterval) -> Bool {
+        last.map { now.timeIntervalSince($0) >= every } ?? true
+    }
+
+    /// A feature found `kind` missing: say so, at most once per `every` seconds
+    /// (a gesture the hand repeats: 3 s; something polled: 5 min). Any thread.
+    static func hint(_ kind: Kind, every: TimeInterval = 300) {
+        lock.lock()
+        let due = hintDue(last: hintedAt[kind], now: Date(), every: every)
+        if due { hintedAt[kind] = Date() }
+        lock.unlock()
+        guard due else { return }
+        Log.error("🔐 \(kind.rawValue) is not granted — the feature that needed it is off")
+        DispatchQueue.main.async { onHint?(kind) }
+    }
+
+    /// `osascript` answered -1743: Terminal's Automation switch is off.
+    static func automationRefused() {
+        lock.lock(); automation = .missing; lock.unlock()
+        hint(.automationTerminal)
     }
 
     /// One line at launch; also warms the Automation answer for the first menu open.

@@ -2487,6 +2487,28 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private var tapRunLoop: CFRunLoop?
     private var tapMask: CGEventMask = 0
     var isActive: Bool { port() != nil }
+
+    /// **(Re-)arm after Accessibility was granted while running** (2026-11-22):
+    /// the first `start()` that found no grant left no thread behind, a tap that
+    /// lost its grant did — that one is rebuilt on its own thread.
+    func arm(_ why: String) -> Bool {
+        tapRunLoop != nil ? rebuildTap(why) : start()
+    }
+
+    /// Accessibility was revoked: take the tap out of the session's chain, so a
+    /// tap nobody may service cannot hold the keyboard and the mouse.
+    func disarm(_ why: String) {
+        guard tapRunLoop != nil, port() != nil else { return }
+        let ran = onTapThread { [self] in
+            if let old = tapPort {
+                CGEvent.tapEnable(tap: old, enable: false)
+                CFMachPortInvalidate(old)
+            }
+            if let src = tapSource, let rl = tapRunLoop { CFRunLoopRemoveSource(rl, src, .commonModes) }
+            setPort(nil); tapSource = nil
+        }
+        Log.info("🛡️ tap disarmed (\(why)): \(ran ? "off the run loop" : "the tap thread did not answer in 2 s")")
+    }
     private func port() -> CFMachPort? { portLock.lock(); defer { portLock.unlock() }; return tapPort }
     private func setPort(_ p: CFMachPort?) { portLock.lock(); tapPort = p; portLock.unlock() }
 
@@ -2685,6 +2707,9 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             CFRunLoopRun()
         }
         thread.name = "WalkieTalkieEventTap"
+        // The beat starts with the tap: armed minutes after launch (Accessibility
+        // granted late), the gate must not read the wait as a frozen main thread.
+        beatLock.lock(); mainBeatAt = HotkeyTap.uptime(); beatLock.unlock()
         thread.start()
         startMainHeartbeat()
         return true

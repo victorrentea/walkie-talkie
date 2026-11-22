@@ -570,14 +570,36 @@ pagină, de ce permisiuni mai ai nevoie de dat și de ce ai nevoie de ele"*.
   **while the page is visible** (the timer dies with the window; the page reloads only when a state
   changed). The Automation answer needs Terminal running and can wait on the AppleEvent manager, so
   it is read off main and cached — `unknown` (Terminal not running, never yet answered) does not count.
-- **`CGPreflightScreenCaptureAccess` is stale until the app restarts** — the page's path line says
-  *then restart it*.
+- **`CGPreflightScreenCaptureAccess` is stale until the app restarts — and so is TCC's own
+  preflight** (measured in the guest, 2026-11-22). A **child** is asked instead: this binary with
+  `--preflight-screen-recording` (`main.swift`, before the LaunchServices relaunch), only while the
+  in-process answer is *no*, cached 5 s (`Permissions.probeScreenRecording`).
 - **The page is the house window** (`GestureGuide`): non-activating `NSPanel` + `WKWebView`, English,
   light and dark. Each row: state, one sentence of why, and — only when lacking — *Without it* and an
   `Open Settings` link (`x-apple.systempreferences:…`, opened by the navigation delegate).
 - **Photograph it without revoking anything**: `POST /test/permissions {"fake": …, "png": …}` or
   `WT_SHOOT_PERMISSIONS` (`desk-testing.md`); a faked page says *simulated states* in its footer.
   `docs/readme/permissions-page.png` is that picture.
+- **A missing permission switches its feature off, says so, and the feature comes back with the
+  grant** (same day; every row verified in the lab guest by flipping the real switch in System
+  Settings — `docs/vm-lab.md`, *Flipping a privacy switch*):
+
+  | | missing | granted while running |
+  |---|---|---|
+  | Accessibility | no tap; `waitForAccessibility` checks every 2 s (only while missing) and on macOS's `com.apple.accessibility.api` notice. **Revoked while running: the tap is taken out of the chain** (`HotkeyTap.disarm`) — the heal no longer rebuilds against a refusal every 30 s | tap created / rebuilt (`HotkeyTap.arm`), canary alive, `✅ Accessibility granted` — **no restart** (re-armed in < 2 s) |
+  | Microphone | `startDictation` refuses (not for Wispr's own microphone, not while macOS has yet to ask) | **macOS demands a restart** (*"will not have access to your microphone until it is quit"* → Quit & Reopen, which ends the session cleanly); the status stays `denied` in-process until then |
+  | Screen Recording | `ScreenCapture.grab` / `grabArea` / `ScreenFilm.start` return nil — no wallpaper-only picture reaches an agent | **no restart needed** although macOS offers one: after *Later* the child probe says granted and both `screencapture` and the in-process film show real windows |
+  | Automation ▸ Terminal | `osascriptOutcome` reads `-1743` → `Permissions.automationRefused()`; bind answers 409 | the next bind works, row and page clear by themselves |
+  | Camera (denied in the guest), System Audio (never asked) | prompts record without a face tag; nothing crashes | — |
+
+- **The hint is one chip line**, `❗ <Permission> permission missing — the menu's ❗ row says why`
+  (`Permissions.hint`, rate-limited per permission: 2 s for the dictation gesture, 60 s for pictures,
+  5 min for Automation); at launch one line names everything refused, 2 s in. They replace
+  `⚠️ grant Accessibility to Walkie Talkie` / `⚠️ grant Microphone …`.
+- **Guards read `Permissions.real`, never a fake** — a test route must not be able to switch his
+  dictation off.
+- **The first click on `Open Settings` only brings the page forward** when another app is in front
+  (a non-activating panel); the second opens the pane. All six panes open from their links (guest).
 - **Nothing about a third-party dictation app on this page or in the README's table** — no permission
   exists solely for it.
 

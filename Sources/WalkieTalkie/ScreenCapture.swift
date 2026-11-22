@@ -48,6 +48,11 @@ enum ScreenCapture {
 
     static func grab(cursor: NSPoint? = nil, offset: TimeInterval? = nil,
                      index: Int? = nil, into folder: URL? = nil) -> Frame? {
+        guard Permissions.probeScreenRecording() else {
+            // Without the grant the picture is the wallpaper alone: no picture is better.
+            Permissions.hint(.screenRecording, every: 60)
+            return nil
+        }
         let mouse = cursor ?? NSEvent.mouseLocation
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
         let display = activeDisplayNumber(of: screen)
@@ -176,6 +181,11 @@ enum ScreenCapture {
         let dir = folder ?? Outbox.shotsDir
         let file = dir
             .appendingPathComponent(uniqueBase(stem(offset, index), in: dir) + "-original.jpg")
+        guard Permissions.probeScreenRecording() else {
+            // Without the grant the picture is the wallpaper alone: no picture is better.
+            Permissions.hint(.screenRecording, every: 60)
+            return nil
+        }
         let display = activeDisplayNumber(of: screen)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")

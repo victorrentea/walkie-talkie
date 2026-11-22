@@ -3191,6 +3191,8 @@ final class TerminalBinding {
         default:
             Log.error("osascript failed after \(ms) ms — \(outcome.reason) — script: \(firstLine(of: script))"
                       + (bundleReplacedNote().map { " — \($0)" } ?? ""))
+            // Not authorised to script Terminal: the Automation switch is off.
+            if outcome.reason.contains("-1743") { Permissions.automationRefused() }
         }
         return outcome
     }

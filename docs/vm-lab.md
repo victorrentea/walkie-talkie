@@ -256,6 +256,27 @@ Order, once:
 3. `tools/vm-lab.sh bake` — folds `wt-lab` into `wt-base` (instant clone). From then on
    `reset` + `up` gives a clean guest with the grants, BlackHole , the Python packages, Tailscale and the stub.
 
+## Flipping a privacy switch in the guest (2026-11-22)
+
+For the missing-permission tests (`.claude/rules/menu-bar.md`, *❗ on the row above Quit*):
+
+- **Editing `TCC.db` is not the switch.** SIP is off, so `sudo sqlite3 …/TCC.db "update access set
+  auth_value=0 …"` works — and a **running** app never sees it (its answers are cached), `tccd` and
+  the Settings pane keep their own state, and an Accessibility row re-allowed that way made
+  `AXIsProcessTrusted` true while `CGEvent.tapCreate` went on failing. Good only for *start the app
+  without X*: edit, then relaunch. `tccutil reset <Service> ro.victorrentea.wispr-relay` is real but
+  only ever means *never asked*.
+- **The real switch is a click in System Settings**, driven from the host with synthetic input
+  **inside the guest**: `open "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"`
+  (`…Microphone`, `…ScreenCapture`, `…Automation`, `…Camera`), then `teaser/film/mouse.py` (pushed to
+  the guest) clicks the row's switch — at 1024×768 the first list's switches are at x≈870; look at a
+  VNC-framebuffer still first (`teaser/film/vncrec.py … --png`). Automation's row must be expanded
+  first, and the click after an expand needs ~2.5 s.
+- **A password sheet comes up now and then** (*Privacy & Security is trying to modify your system
+  settings*): type `admin` + Return with `mouse.py '[["type","admin"],["key",36]]'`. **Only when the
+  sheet is there** — typed into the pane itself the letters select another pane.
+- Microphone and Screen Recording raise *Quit & Reopen / Later*; Accessibility and Automation do not.
+
 ## The first two runs (2026-09-26)
 
 - **First run, 18:18–18:42 UTC** (`evals/plan/vm/report-vm-{A,G,AU}.md`): 65 cases, 33 PASS. It
