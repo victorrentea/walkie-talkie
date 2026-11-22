@@ -107,6 +107,7 @@ def main():
     for sig in (signal.SIGINT, signal.SIGTERM): signal.signal(sig, lambda *_: stop.set())
     t0 = time.monotonic(); n = 0
     print(f"recording {w}x{h} → {a.out}", flush=True)
+    print(f"t0 {time.time():.3f}", flush=True)                 # wall clock of frame 0, for the takes' event marks
     while not stop.is_set() and (not a.seconds or n < a.seconds * a.fps):
         due = t0 + n / a.fps; now = time.monotonic()
         if due > now: time.sleep(due - now)

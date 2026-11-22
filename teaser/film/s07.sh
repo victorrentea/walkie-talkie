@@ -8,7 +8,7 @@
 source "$(dirname "$0")/lib.sh"
 case "$1" in
 c)
-  "$FILM_DIR/site.sh" state '{}'; TERM_BOUNDS='150, 215, 1130, 716' stage_terminal; sleep 5; g osascript -e 'tell application "Terminal" to activate'; mouse '[["move",930,330,0.4]]'; sleep 1.5
+  "$FILM_DIR/site.sh" state '{}'; TERM_BOUNDS='150, 215, 1130, 716' stage_terminal; sleep 5; g osascript -e 'tell application "Safari" to set miniaturized of every window to true' -e 'tell application "Terminal" to activate'; mouse '[["move",930,330,0.4]]'; sleep 1.5
   rec_start s07c; sleep 2
   mouse '[["move",700,300,0.8]]'
   api test/gesture '{"name":"forward-click"}' >/dev/null     # 🔼 : prompt at the caret
@@ -42,6 +42,8 @@ b)
   kill -INT $REC_PID; wait $REC_PID; cat $RAW/s07b.log ;;
 d)
   fake_claude on
+  # the learned vocabulary the redactor reads (agents feed it with walkie-dict): seeded with the term of this take
+  gsh 'printf "Resilience4j\nresilience for jay → Resilience4j\n" > ~/.walkie-talkie/vocabulary.txt'
   g osascript -e 'tell application "Safari" to set miniaturized of every window to false' -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/chat.html"' >/dev/null; g open -a Safari; sleep 1.5
   mouse '[["move",600,640,0.4],["click"]]'                 # the caret into the message box
   rec_start s07d
@@ -49,6 +51,7 @@ d)
   api test/gesture '{"name":"back-click"}' >/dev/null      # 🔽 : plain dictation
   speak s07d 0.3
   api test/gesture '{"name":"back-click"}' >/dev/null
-  sleep 11
+  sleep 2; wait_state "d.get('phase')=='done' and not any('Redact' in c or 'Transcrib' in c for c in d.get('chip') or [])" 20; mark text_landed
+  mouse '[["move",900,300,0.6]]'; sleep 5
   kill -INT $REC_PID; wait $REC_PID; cat $RAW/s07d.log ;;
 esac

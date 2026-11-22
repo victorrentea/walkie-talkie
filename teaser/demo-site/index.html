@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Brewly — coffee, on a schedule</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <!-- Demo landing page for the Walkie Talkie teaser. `state.json` is polled a few times a second and
@@ -30,8 +30,8 @@
 <main>
   <section class="hero">
     <div class="pitch">
-      <h1>Fresh coffee,<br>before you run out.</h1>
-      <p class="sub">Roasted on Monday, at your door by Thursday. Skip or pause any time.</p>
+      <h1><span id="line1">Fresh coffee,</span><br>before you run out.</h1>
+      <p class="sub"><span class="typo">Roasted on Monday, at your door by <span class="wrong">Thurdsay</span><span class="right">Thursday</span>.</span><br>Skip or pause any time.</p>
       <a class="cta" href="#">Start my first bag</a>
       <span class="hint">No card needed for the first one.</span>
       <div class="slot"><span class="badge" id="badge">★ 4.9 · loved by 12,000 slow mornings</span></div>
@@ -50,14 +50,14 @@
     </article>
     <article class="card">
       <div class="ico">🚲</div>
-      <h3 class="typo"><span class="wrong">Freee shiping</span><span class="right">Free shipping</span></h3>
+      <h3>Free shipping</h3>
       <p>Every bag travels carbon-neutral, and the last mile is on two wheels where we can.</p>
     </article>
     <article class="card broken">
       <div class="ico">⏸️</div>
       <h3>Pause any time, no questions asked, really</h3>
       <p>Going away? One tap moves your next delivery.</p>
-      <div class="price"><span class="was">NaN €</span><span class="now">9 €</span> / bag</div>
+      <div class="price"><span class="was">9 €</span><span class="now">9 €</span> / bag</div>
     </article>
   </section>
 </main>
@@ -85,8 +85,13 @@ async function tick() {
           badge.style.left = from.left + 'px'; badge.style.top = from.top + 'px';
           badge.classList.add('floating'); badge.getBoundingClientRect();
         }
-        badge.style.left = (s.moved.toX - ox + +badge.dataset.dx) + 'px';
-        badge.style.top = (s.moved.toY - oy + +badge.dataset.dy) + 'px';
+        let left = s.moved.toX - ox + +badge.dataset.dx, top = s.moved.toY - oy + +badge.dataset.dy;
+        // dropped beside the headline's first line? then it sits ON that line: centred on it, a neat gap after the comma
+        const line = document.getElementById('line1').getBoundingClientRect();
+        if (Math.abs(top + badge.offsetHeight / 2 - (line.top + line.height / 2)) < 40 && left > line.right - 40) {
+          top = line.top + line.height / 2 - badge.offsetHeight / 2 + 3; left = line.right + 18;
+        }
+        badge.style.left = left + 'px'; badge.style.top = top + 'px';
         setTimeout(() => badge.classList.add('landed'), 650);
       } else {
         badge.classList.remove('floating', 'landed'); badge.style.left = badge.style.top = '';

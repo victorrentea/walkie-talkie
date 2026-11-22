@@ -53,6 +53,7 @@ h1 { font-size: 54px; line-height: 1.04; letter-spacing: -1.6px; font-weight: 80
 .card p { color: #a9b6ca; font-size: 15px; }
 .typo .right { display: none; }
 .typo .wrong { text-decoration: underline wavy #ff5a5a; text-underline-offset: 4px; }
+.sub { line-height: 1.6; }
 .typo-fixed .typo .right { display: inline; }
 .typo-fixed .typo .wrong { display: none; }
 

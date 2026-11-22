@@ -10,7 +10,10 @@ mk s05 "See how this flickers? [[slnc 600]] It should stay still. [[slnc 400]] F
 mk s06 "I do not like this loop. [[slnc 500]] Simplify it, and keep the behaviour the same."
 mk s07a "Start a new session, [[slnc 400]] review my last commit, [[slnc 300]] and tell me what could break."
 mk s07c "Rename this function to parse order, [[slnc 400]] and update every place that calls it."
-mk s07d "Hi Anna. Um, the release is ready. So, uh, we can ship it on Friday."
-mk s08 "Is this library still maintained, [[slnc 400]] or has everyone moved on from it?"
-mk s09 "Make the header dark, and the button orange."
+mk s07d "Hi Anna. Um, the resilience for jay upgrade is, uh, ready, so we can ship it on Friday."
+mk s08 "Is the Hystrix library from Netflix still maintained?"   # the bare "Is Hystrix still maintained?" comes out of Whisper as "histrix"
+mk s09 "Fix the broken pricing card."
+mk s04a "Use this picture"
+mk s04b "here,"
+mk s04c "and fix this text."
 for f in *.wav; do echo "$f $(/opt/homebrew/bin/ffprobe -v error -show_entries format=duration -of csv=p=0 $f)"; done'

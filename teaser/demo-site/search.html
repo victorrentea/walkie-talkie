@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>coffee cup — Findr Images</title>
+<style>
+  /* A fictional image-search results page ("Findr") for the "use this picture" scene. Local pictures only. */
+  * { box-sizing: border-box; margin: 0; }
+  body { font: 15px -apple-system, "Helvetica Neue", sans-serif; background: #10151f; color: #e8edf5; overflow: hidden; }
+  header { display: flex; align-items: center; gap: 26px; padding: 18px 40px 14px; }
+  .logo { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: #7fd4ff; } .logo b { color: #ffb347; }
+  .box { flex: 1; max-width: 620px; padding: 12px 20px; border-radius: 999px; background: #1c2536; border: 1px solid #33415c; font-size: 18px; }
+  .box::before { content: "🔍  "; }
+  nav { display: flex; gap: 26px; padding: 0 40px 10px 172px; color: #8f9db5; font-weight: 600; border-bottom: 1px solid #263147; }
+  nav .on { color: #7fd4ff; border-bottom: 3px solid #7fd4ff; padding-bottom: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 20px 40px; }
+  @media (max-width: 800px) { header { padding: 12px 18px 10px; gap: 14px; } .logo { font-size: 22px; } .box { font-size: 15px; padding: 8px 16px; }
+    nav { padding: 0 18px 8px 96px; font-size: 13px; } .grid { grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 12px 18px; } figure img { height: 112px; } figcaption { display: none; } }
+  figure { background: #1a2333; border-radius: 14px; overflow: hidden; }
+  figure img { display: block; width: 100%; height: 190px; object-fit: cover; }
+  figcaption { padding: 8px 12px 10px; font-size: 13px; color: #a9b6ca; } figcaption b { display: block; color: #e8edf5; font-size: 14px; }
+</style>
+</head>
+<body>
+<header><div class="logo">findr<b>.</b></div><div class="box">coffee cup</div></header>
+<nav><span>All</span><span class="on">Images</span><span>Videos</span><span>News</span></nav>
+<div class="grid">
+  <figure><img src="pics/cup-teal.svg" alt=""><figcaption><b>Morning cup, flat illustration</b>pixelpantry.example</figcaption></figure>
+  <figure><img src="pics/cup.png" alt=""><figcaption><b>Coffee cup with beans</b>roastery-art.example</figcaption></figure>
+  <figure><img src="pics/cup-plum.svg" alt=""><figcaption><b>Espresso, purple background</b>stockbrew.example</figcaption></figure>
+  <figure><img src="pics/cup-olive.svg" alt=""><figcaption><b>Cup of coffee icon</b>iconbarn.example</figcaption></figure>
+  <figure><img src="pics/cup-slate.svg" alt=""><figcaption><b>Steaming mug</b>mugshots.example</figcaption></figure>
+  <figure><img src="pics/cup-rose.svg" alt=""><figcaption><b>Latte illustration</b>pixelpantry.example</figcaption></figure>
+  <figure><img src="pics/cup-teal.svg" alt=""><figcaption><b>Coffee break clipart</b>clipcorner.example</figcaption></figure>
+  <figure><img src="pics/cup-plum.svg" alt=""><figcaption><b>Dark roast poster</b>stockbrew.example</figcaption></figure>
+</div>
+</body>
+</html>
