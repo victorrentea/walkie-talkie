@@ -48,6 +48,8 @@ import AppKit
 ///   don't see it"*): `.readOnly`, dropped to `.none` only while the shutter takes
 ///   its own picture (`ReplyPanel.outOfShot` → `inShotChanged`). Above the
 ///   menu bar — the top edge is the screen's, not the visible frame's.
+/// - **On the pointer's screen, and it follows the pointer there** (2026-11-22, `ScreenFollow`;
+///   always the Retina for one day before).
 ///
 /// Knobs, in the defaults (`edgeDust.alpha|thickness`):
 /// read when the strip is built, so a `defaults write` and the next sentence (or
@@ -119,6 +121,8 @@ final class EdgeDust {
     private var builtVariant = -1
     private var built: (edge: Edge, screen: NSRect, thickness: CGFloat)?
     private var pollTimer: Timer?
+    private var followTimer: Timer?
+    private var follow = ScreenFollow()
     private var micOpen = false
     private var waitingFrom: CFAbsoluteTime = 0
     private var lastPending: CFAbsoluteTime = 0
@@ -140,6 +144,55 @@ final class EdgeDust {
         case .left:  return NSRect(x: screen.minX, y: screen.minY, width: 2 * thickness, height: screen.height)
         case .bottom: return NSRect(x: screen.minX, y: screen.minY, width: screen.width, height: 2 * thickness)
         }
+    }
+
+    /// How deep `edge`'s strip is on a screen this tall, in points.
+    static func thickness(_ edge: Edge, screenHeight: CGFloat) -> CGFloat {
+        switch edge {
+        case .left: return leftThickness
+        case .top: return topThickness
+        case .bottom: return bottomThickness(screenHeight)
+        case .right: return thickness
+        }
+    }
+
+    /// **The screen the pointer is on**, out of `frames` (global, bottom-left origin — a display
+    /// left of or below the main one has negative coordinates): the one holding the point, else
+    /// the nearest (a pointer on a seam's last row, or in the gap of an uneven arrangement).
+    /// Nil with no screen at all.
+    static func screen(under pointer: NSPoint, of frames: [NSRect]) -> NSRect? {
+        if let holds = frames.first(where: {
+            pointer.x >= $0.minX && pointer.x < $0.maxX && pointer.y >= $0.minY && pointer.y < $0.maxY
+        }) { return holds }
+        func distance(_ f: NSRect) -> CGFloat {
+            hypot(pointer.x - min(max(pointer.x, f.minX), f.maxX), pointer.y - min(max(pointer.y, f.minY), f.maxY))
+        }
+        return frames.min { distance($0) < distance($1) }
+    }
+
+    /// **The edge follows the pointer's screen, after a dwell** (2026-11-22, Victor: *"Efectul de
+    /// edge trebuie să apară pe ecranul pe care e și mouse-ul. Nu doar pe Retina întotdeauna. Dacă
+    /// mut mouse-ul, se mută și efectul pe acel ecran"*). Asked at 10 Hz while an edge is up: the
+    /// pointer must have been on one other screen for `dwell` before the strip moves there, so a
+    /// pointer brushing a seam, or crossing a middle display on its way, moves nothing.
+    struct ScreenFollow {
+        static let dwell: TimeInterval = 0.3
+        private(set) var candidate: NSRect?
+        private var since: TimeInterval = 0
+
+        /// `shown`: the screen the strip is on; `pointer`: the one the pointer is on now.
+        /// The screen to move to, once — nil for *stay*.
+        mutating func step(shown: NSRect, pointer: NSRect?, now: TimeInterval) -> NSRect? {
+            guard let pointer, pointer != shown else { candidate = nil; return nil }
+            if candidate != pointer { candidate = pointer; since = now }
+            guard now - since >= Self.dwell else { return nil }
+            candidate = nil
+            return pointer
+        }
+    }
+
+    private static func pointerScreen() -> NSRect? {
+        screen(under: NSEvent.mouseLocation, of: NSScreen.screens.map(\.frame)) ?? NSScreen.main?.frame
     }
 
     // MARK: - The sentence
@@ -196,6 +249,7 @@ final class EdgeDust {
         turn += 1
         let mine = turn
         pollTimer?.invalidate(); pollTimer = nil
+        followTimer?.invalidate(); followTimer = nil
         Log.info("🌫️ the \(edge?.rawValue ?? "?") edge is cut — \(why), out in \(Self.cutFade) s")
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = Self.cutFade
@@ -223,22 +277,21 @@ final class EdgeDust {
     // MARK: - Up and down
 
     private func show(_ wanted: Edge) {
-        // **Always the Retina** (2026-11-21, Victor: *"animația de Edge rămâne blocată pe ecranul pe
-        // care a pornit … pune animația de Edge doar pe retina întotdeauna"*) — the pointer's
-        // screen until then; the pointer's only when the lid is closed (`CaretHalo.retina` nil).
-        let mouse = NSEvent.mouseLocation
-        guard let screen = CaretHalo.retina
-                ?? NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
-        let thickness = wanted == .left ? Self.leftThickness : wanted == .top ? Self.topThickness
-            : wanted == .bottom ? Self.bottomThickness(screen.frame.height) : Self.thickness
-        if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness
+        // **The pointer's screen** (2026-11-22, `ScreenFollow`) — and `startFollowing` moves the
+        // strip when the pointer changes screens. It was always the Retina for one day
+        // (2026-11-21: *"animația de Edge rămâne blocată pe ecranul pe care a pornit"* — the
+        // pointer's screen was read once, here, and never again; the following is that fix now).
+        guard let screen = Self.pointerScreen() else { return }
+        let thickness = Self.thickness(wanted, screenHeight: screen.height)
+        if let b = built, b.edge != wanted || b.screen != screen || b.thickness != thickness
             || builtVariant != EdgeDustPictures.current { teardown() }
         builtVariant = EdgeDustPictures.current
-        guard let p = panel ?? make(wanted, on: screen.frame, thickness: thickness) else { return }
+        guard let p = panel ?? make(wanted, on: screen, thickness: thickness) else { return }
         turn += 1
         edge = wanted
         phase = .listening
         pollTimer?.invalidate(); pollTimer = nil
+        startFollowing()
         picture?.setIntensity(1)
         setSwell(1, animated: false)
         p.sharingType = !Self.capturable && ReplyPanel.inShot ? .none : .readOnly
@@ -254,7 +307,51 @@ final class EdgeDust {
         Log.info("🌫️ the \(wanted.rawValue) edge is up — \(wanted == .top ? "a prompt to a new session" : wanted == .right ? "a prompt to the bound terminal" : wanted == .bottom ? "a prompt at the caret" : "a ⚡ question")")
     }
 
+    /// The pointer's screen, asked at 10 Hz while the edge is listening or waiting (a timer,
+    /// no event monitor and nothing per frame). An edge that is leaving finishes where it is.
+    private func startFollowing() {
+        follow = ScreenFollow()
+        guard followTimer == nil else { return }
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self, self.phase == .listening || self.phase == .waiting, let b = self.built else { return }
+            if let to = self.follow.step(shown: b.screen, pointer: Self.pointerScreen(), now: CFAbsoluteTimeGetCurrent()) {
+                self.move(to: to)
+            }
+        }
+        followTimer = t
+        RunLoop.main.add(t, forMode: .common)
+    }
+
+    /// The same edge, in the same phase, on another screen: the old strip is gone at once (no
+    /// drain there), a new one is built for that screen's frame, depth and backing scale (a new
+    /// panel, so the Metal view takes the scale of the screen it is born on) and slides in.
+    /// `turn`, the poll and the feed are untouched: the sentence does not notice.
+    private func move(to screen: NSRect) {
+        guard phase == .listening || phase == .waiting, let wanted = edge else { return }
+        panel?.orderOut(nil)
+        picture?.stop()
+        panel = nil; picture = nil; built = nil
+        builtVariant = EdgeDustPictures.current
+        guard let p = make(wanted, on: screen, thickness: Self.thickness(wanted, screenHeight: screen.height)) else {
+            teardown()
+            return
+        }
+        picture?.setIntensity(1)
+        setSwell(1, animated: false)
+        p.sharingType = !Self.capturable && ReplyPanel.inShot ? .none : .readOnly
+        p.alphaValue = 0
+        slideIn()
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = Self.enter
+            p.animator().alphaValue = Self.restAlpha
+        }
+        picture?.start()
+        p.orderFrontRegardless()
+        Log.info("🌫️ the \(wanted.rawValue) edge moves to the pointer's screen — \(NSStringFromRect(screen))")
+    }
+
     private func leave(sent: Bool, why: String) {
+        followTimer?.invalidate(); followTimer = nil
         guard let p = panel else { phase = .down; return }
         phase = .leaving
         turn += 1
@@ -307,6 +404,7 @@ final class EdgeDust {
     private func settleDown() {
         phase = .down
         edge = nil
+        followTimer?.invalidate(); followTimer = nil
         panel?.orderOut(nil)
         feedTimer?.invalidate(); feedTimer = nil
         picture?.stop()
@@ -318,6 +416,7 @@ final class EdgeDust {
         phase = .down
         edge = nil
         pollTimer?.invalidate(); pollTimer = nil
+        followTimer?.invalidate(); followTimer = nil
         panel?.orderOut(nil)
         feedTimer?.invalidate(); feedTimer = nil
         picture?.stop()

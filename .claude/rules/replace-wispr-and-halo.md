@@ -921,7 +921,22 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   (*"iar la cancel dispare brusc toată grafica de pe ecran (fără inel)"*, superseding the same
   day's *wave on cancel*): `cancelDictationInFlight` → `CaretHalo.vanishForCancel` (panel alpha 0 and
   out in the call; `hide` only stops the engine), `EdgeDust.cut`, `CornerTunnel.cut`.
-- **The edge is always on the Retina** (2026-11-21, Victor: *"animația de Edge rămâne blocată pe
+- **⚠️ The edge is on the pointer's screen, and follows it there** (2026-11-22, Victor: *"Efectul de edge
+  trebuie să apară pe ecranul pe care e și mouse-ul. Nu doar pe Retina întotdeauna. Dacă mut mouse-ul, se
+  mută și efectul pe acel ecran. Să schimbăm asta."* — **supersedes the bullet below**). `EdgeDust.show`
+  takes `EdgeDust.screen(under:of:)` (the screen holding the pointer, else the nearest — negative
+  coordinates, the top row's `y == maxY`, a gap, the lid closed all land on a real screen), the demo route
+  too. While the edge is `listening` or `waiting`, a 10 Hz timer (`startFollowing`, no event monitor,
+  nothing per frame) asks `ScreenFollow.step`: **the pointer must have been on one other screen for
+  `ScreenFollow.dwell` 0.3 s** — a brush over the seam or a display crossed on the way moves nothing. Then
+  `move(to:)`: the old strip is ordered out at once (no drain there), a **new panel** is built for that
+  screen's frame and depth (the bottom's share of *its* height; a new `MTKView`, so the backing scale is
+  the new screen's) and slides in over `enter`; `phase`, `edge`, `turn`, the poll and the feed are
+  untouched. **An edge that is `leaving` never moves** — it drains where it is (the timer dies in `leave` /
+  `cut`). Do not go back to reading the pointer's screen once in `show`: that was 2026-11-21's *stuck on
+  the screen it started on*. Log `🌫️ the … edge moves to the pointer's screen`. `EdgeDustTests` hold the
+  pure part; the move itself was **not seen live** when written (it needs two displays and his hand).
+- **~~The edge is always on the Retina~~ — superseded 2026-11-22 by the bullet above** (2026-11-21, Victor: *"animația de Edge rămâne blocată pe
   ecranul pe care a pornit … pune animația de Edge doar pe retina întotdeauna"*): `EdgeDust.show` takes
   `CaretHalo.retina`, the pointer's screen only with the lid closed — like the subtitle band.
 - **An edge is drained, not faded** (2026-11-21, Victor: *"să nu facă fade, ci pur și simplu să nu

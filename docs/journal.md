@@ -13,6 +13,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 
 ## Superseded on the way
 
+- *The edge is always on the Retina* (2026-11-21, in `.claude/rules/replace-wispr-and-halo.md`) — superseded 2026-11-22: the edge is on the pointer's screen and follows it after 0.3 s there (*🌫️ The edge follows the pointer's screen*)
 - *Picking elements in Chrome*, *The music pauses for the length of a dictation* and every later ⌘⇧-pick / music-bridge section — retired 2026-11-20: the *Walkie Talkie Inspector* extension, `MusicBridge` and the picks are deleted (*The Chrome extension is gone*)
 - *Active terminals* as the folder menu's last row (2026-11-03, first row since 2026-09-23) — removed 2026-11-20: every session no pinned row claims is a line under *✨ Workspace* (*▢ Active terminals goes*)
 - *The whole panel rests at 30 %* (2026-11-05) — superseded 2026-11-06: the panel is not on screen at rest, an atom stands in the corner and the dialog comes under the hand (*The prompt at rest is an atom*).
@@ -16856,3 +16857,46 @@ and a desk run of TR20 opens Terminal tabs on his screen; the rewritten lab case
 terminal bound last (his 2026-10-01 ask). (2) A deliberate unbind mid-sentence ends *kept
 undelivered*, like a closed terminal. (3) An undelivered prompt writes an outbox row. (4)
 `.wouldRunAsShell` / `.failed` deliveries keep their own flash and write no row.
+
+
+## 2026-11-22 — 🌫️ The edge follows the pointer's screen
+
+Victor, dictated: *"Efectul de edge trebuie să apară pe ecranul pe care e și mouse-ul. Nu doar pe
+Retina întotdeauna. Dacă mut mouse-ul, se mută și efectul pe acel ecran. Să schimbăm asta."*
+
+This reverses his own ask of the day before (*"animația de Edge rămâne blocată pe ecranul pe care a
+pornit … pune animația de Edge doar pe retina întotdeauna"*). That complaint was about an edge
+**stuck** where it started: `EdgeDust.show` read the pointer's screen once and never again. Pinning it
+to the Retina was the quick cure; following the pointer is the cure he wants.
+
+**What it does.** `show` (a sentence, and `POST /test/edge-dust`) puts the strip on
+`EdgeDust.screen(under:of:)`: the screen holding the pointer, else the nearest one — so displays with
+negative coordinates, AppKit's top row (`y == maxY`, inside no half-open frame), a gap in an uneven
+arrangement and the lid-closed case (the built-in is simply not in the list) all resolve. While the
+edge is `listening` or `waiting`, a 10 Hz timer asks `ScreenFollow.step(shown:pointer:now:)`; once the
+pointer has been on **one** other screen for 0.3 s (`ScreenFollow.dwell`), `move(to:)` orders the old
+strip out at once — no drain on the screen he left — and builds a new panel on the new screen, which
+slides in over `enter` 0.7 s. A new panel rather than a moved one: the depth is per screen (the bottom
+strip is 13.5 % of *that* screen's height), and a fresh `MTKView` takes the backing scale of the screen
+it is born on (the shader reads `drawableSize / bounds` every frame). `phase`, `edge`, `turn`, the
+`waiting` poll and the microphone feed are untouched, so `sent`, `release`, `cut`, the 1.2 s patience
+and the demo's own end still fire on time. **An edge that is leaving does not move**: the timer is
+invalidated in `leave` and `cut`, the grains ride out where they are.
+
+**Why a dwell and a timer.** A pointer resting on a seam, or crossing a middle display on its way to a
+third, would rebuild a Metal pipeline twice a second; 0.3 s is under what reads as *late* and over a
+crossing. 10 Hz while an edge is up costs one `NSEvent.mouseLocation` and a rect search — no global
+mouse monitor, nothing per frame. A display unplugged or re-arranged under the strip is the same
+case: the pointer's screen's frame is no longer the built one, and the strip is rebuilt after the dwell.
+
+**Not changed.** `EdgeDustShow` (`/test/edge-dust-show`) already used the pointer's screen and does
+not follow. The subtitle band and the corner wheel keep their own screens.
+
+**Verified by:** `EdgeDustTests` — the screen under a pointer (negative coordinates, the seam, the top
+row, a gap, lid closed, no screen), the strip's depth and frame on the screen moved to, the dwell (a
+brush over the seam, a screen crossed on the way, no second answer); the whole `swift test` suite.
+**Not verified:** the move itself, live — it needs two displays and his hand on the mouse, and he was
+dictating with the installed build. To try: 🔼 → (or 🔼 ↑ / 🔼 / ⚡) with the pointer on an external
+display — the edge is there; carry the pointer to the Retina mid-sentence — within about a third of a
+second the old strip is gone and the edge slides in on the Retina; stop, then cross back while the
+grains ride out — they stay where they are. The log says `🌫️ the right edge moves to the pointer's screen`.
