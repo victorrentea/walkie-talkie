@@ -46,6 +46,42 @@ know it automatically falls back to local, but I'd like to have this faster when
   **Transcribe Locally Now** (⌘⌃X in the shortcut column, enabled only when there is a take).
   `POST /test/local-now` is the action; `evals/plan/cases_localnow.py` TN1–TN3.
 
+## Custom gestures: any trigger, the same chord (2026-11-22)
+
+Victor: *"un meniu 'custom' în gestures … echivalente pentru tastele care mie acum îmi vin din logi gestures.
+cu un picker de key shortcuts care să permită de ex. cmd wheel click, sau opt-cmd-left click … mouse with 3
+buttons + special keys pressed"*, and *"eu nu voi folosi vreodată, dar vreau să ușurez viața altora care nu au
+mouse Logi, fără a mi-o complica pe a mea"*.
+
+- **A trigger is translated into its Logi chord at the tap's entrance, nothing else** (`CustomGestures.swift`;
+  `HotkeyTap.customGestureTakes` → `dispatchChord`, the trackpad's door, so it works in Logi and in Wheel
+  mode). No branch is copied and none was changed: the one concession is `leftIsHeld || customForcesBind` in
+  `case VK_F7`, because *Bind and prompt* is ⌃⌥⌘F7 with the left button down and no trigger can hold it.
+  **Never give a custom action a branch of its own.**
+- **Off by default, and off the tap asks one thing** — `customGestures.live` (ticked, or a release still owed),
+  right after `wheelPressSeen` and before the frozen check. Nothing in the hint bar, the guide or the Logi path
+  knows about it.
+- **A trigger** = a mouse button (left, right, wheel pressed — never the side buttons) with ≥ 1 of ⌃⌥⇧⌘, or a
+  key with ≥ 1 of ⌃⌥⌘; modifiers match exactly. Shown `⌘ wheel click`, `⌥⌘ click`, `⌃⇧ right click`, `⌃⌥K`;
+  kept as `mouse:2:8` / `key:40:3:K`. Refused: a bare click, a bare (or ⇧-only) key, the trigger of another
+  row, and the app's own keys (⌘⌃B, ⌘⌃X, ⌃P, ⌃⌥⌘F3…F12).
+- **The release matches the press** (`area-crop.md`): the press is swallowed and remembered (`held`), its
+  release is swallowed whatever is held by then, and any press that passes forgets the button — so neither a
+  passed press with a swallowed release nor the reverse. A key's autorepeat is swallowed with it. **Nothing is
+  posted**, so no modifier is left standing in the session (the stale-⌘ rule has nothing to guard here); his
+  own fingers are still on the modifiers when the branch runs, exactly as under the trackpad's left ⌃⌥⌘.
+- **Not a trigger:** this app's own events (`trackpadStamp`, `backButtonStamp`, `replayStamp`), anything while
+  main is frozen, while a field in the window records, under the trackpad chord, and while a crop is up
+  (`areaCropping` / `areaPressHeld` / `areaAwaitingDestination` — ⌘ ⌥ ⇧ mean something inside the selection).
+  **The bare wheel is never one**, so the wheel-drag crop and the click that closes a tab are untouched.
+- `CustomGestureAction.keyCode` is a third copy of the F-key numbers; `CustomGesturesTests` holds every row to
+  `HotkeyTap.gestureNames` (glyph included) and requires a row for every chord there — **a chord added to the
+  tap needs its row**. The tests feed `HotkeyTap.handle` itself (`takesForTesting`): ⌘ wheel click →
+  `onPasteToggle` once, down and up taken, the bare wheel passing, *Bind and prompt* → `onGestureBindAndDictate`,
+  a key trigger in both modes, a crop with a wheel trigger bound.
+- **Not made by hand**: no real modifier-click has gone through the installed tap, and nothing was measured
+  about a branch that posts keys (a paste, a Return) while his fingers still hold the trigger's modifiers.
+
 ## Logi mode (default, ticked): the side buttons speak in function keys
 
 In this mode the app takes **no mouse button at all**. Every mouse event is handed straight back one comparison later in `HotkeyTap.handle`; the side buttons arrive as ⌃⌥⌘F-key chords posted by Logi Options+.

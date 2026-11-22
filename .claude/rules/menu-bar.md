@@ -23,6 +23,26 @@ that are right now in engine top level."*
 - **The menu, top to bottom (2026-11-21):** header · Paste last prompt ⌘V / Prompt History (opens the
   Full Log, no submenu) / Recover Dictation / Replay Last Heard Audio · Mic ▸ / Engine ▸ / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
   **the engine switches** (Live captions (local) — off by default since 2026-11-22, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Orca (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed, 💸 Turn cost since 2026-11-20 — `TurnCost.enabled`, on by default) · **Gesture Guide** · `Built …` · Quit.
+- **Gesture Guide lives in `Gestures ▸`, under the Logi row; `Custom` is a switch below the two** (2026-11-22,
+  Victor: *"gestures guide să fie intrare de sub 'logi' din submeniul gestures. și mai adaugă încă un meniu
+  'custom' în gestures"*) — supersedes *· Gesture Guide ·* as a top-level row in the bullet above. The submenu,
+  rebuilt whole by `applyLogiGesturesRow`: `✓ Logi — side buttons from Options+` / `  Gesture Guide` (indented) /
+  `Wheel — the wheel carries the dictation` / separator / `Custom — your own triggers for the same gestures`
+  (ticked when on) / `  Edit Custom Gestures…` (only while Custom is on). The parent row reads
+  `Gestures: Logi + Custom`. **Custom is a tick, not a third radio row**: Logi or Wheel stays chosen under it.
+  Ticking (`setCustomGestures`) turns `CustomGestures.shared.enabled` on and opens `CustomGesturesWindow`;
+  unticking turns it off, closes the window and keeps the bindings (`customGesturesOn`,
+  `customGestureBindings` in the defaults). Off by default — for Victor nothing but the one row.
+- **The "Custom gestures" window** (`CustomGesturesWindow.swift`, 2026-11-22): a titled
+  `.nonactivatingPanel` that can become key, brought up with `orderFrontRegardless` + `makeKey` — no
+  `NSApp.activate`. One row per `CustomGestureAction` (the ten Logi chords + *Bind and prompt*), named as the
+  guide names them with the Logi gesture in grey; a `RecorderField` per row (click → *Make the trigger…* →
+  a local event monitor reads the next button or key **over the window**), ✕ clears, Esc or a plain click
+  ends the recording, the refusal (`CustomTriggerRefusal.message`) in red in the footer. While a field
+  listens `CustomGestures.recording` stops the tap translating, so a bound trigger can be pressed again.
+  Written for somebody with an ordinary mouse who never saw Options+. Review:
+  `CUSTOM_GESTURES_PNG=<dir> swift test --filter CustomGesturesTests` (dark + light; copies in
+  `docs/readme/custom-gestures-*.png`). Not on the states page — no menu or window is shot there.
 - **Bind / Disconnect / Rebind to… / End / Cancel Dictation are off the menu** (2026-11-21, Victor:
   *"nu folosesc niciodată … end dictation, cancel dictation … bind terminal, disconnect, rebind to …
   folosesc din mouse direct"*) — the items are still built and kept in step, only not added; this

@@ -2470,6 +2470,37 @@ final class HotkeyTap {
         _ = handle(type: .keyDown, event: key)
     }
 
+    /// **Custom gestures** (2026-11-22, `CustomGestures`): a mouse button with
+    /// modifiers, or a key combination, standing in for a side-button gesture
+    /// on a mouse without Options+. Off by default; off, `handle` asks `live`
+    /// and nothing else.
+    var customGestures = CustomGestures.shared
+    /// The custom *Bind and prompt* is ⌃⌥⌘F7 with the left button held, which
+    /// no trigger can hold — set only around its `dispatchChord`.
+    private var customForcesBind = false
+
+    /// A trigger is translated into its gesture's own chord (`dispatchChord`,
+    /// the trackpad's door — either gesture mode), so no branch is copied. The
+    /// press is taken and its release with it; nothing is posted, so no
+    /// modifier is left standing in the session. This app's own events, a crop
+    /// under the wheel and the trackpad chord are not triggers.
+    private func customGestureTakes(_ type: CGEventType, _ event: CGEvent, frozen: Bool) -> Bool {
+        let stamp = event.getIntegerValueField(.eventSourceUserData)
+        guard stamp != Self.trackpadStamp, stamp != Self.backButtonStamp, stamp != Self.replayStamp,
+              let input = CustomGestures.tapInput(type, event) else { return false }
+        let busy = !frozen && (padChordDown || areaCropping || areaPressHeld || areaAwaitingDestination)
+        switch customGestures.feed(input, frozen: frozen, busy: busy) {
+        case .pass: return false
+        case .swallow: return true
+        case .fire(let action):
+            Log.info("🎛️ custom trigger — as \(action.holdsLeft ? "⬅️ held + " : "")\(Self.gestureNames[action.keyCode] ?? action.glyph)")
+            customForcesBind = action.holdsLeft
+            dispatchChord(action.keyCode)
+            customForcesBind = false
+            return true
+        }
+    }
+
     /// **Is the forward button physically down, according to the window server?**
     ///
     /// The event stream cannot answer this. Something between the mouse and this
@@ -3086,6 +3117,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
            event.getIntegerValueField(.mouseEventButtonNumber) == MOUSE_BUTTON_MIDDLE {
             wheelPressSeen = type == .otherMouseDown
         }
+        // Custom gestures — nothing unless ticked (or a release still owed).
+        if customGestures.live, customGestureTakes(type, event, frozen: frozen) { return nil }
         if frozen {
             // The chord's edges are still followed, so a release while main is
             // frozen gives the pointer back (`holdCursor`).
@@ -4441,7 +4474,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // *"bind-ul automat să pună la sfârșit dictarea … cât mai puține
                 // gesturi"*) — ⬅️ held + 🔼 → 's own call; 🔼 ← cancels it if he
                 // only meant to bind.
-                if leftIsHeld {
+                if leftIsHeld || customForcesBind {
                     Log.info("🎯 ⬅️ held + forward button — bind, then dictate at it")
                     DispatchQueue.global().async { [weak self] in self?.onGestureBindAndDictate?() }
                     return swallow(gesture, type, event)

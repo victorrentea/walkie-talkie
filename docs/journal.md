@@ -17073,3 +17073,34 @@ the menu bar's.
   to the Dock tile's PNG.
 - Looked at: `WT_SHOOT_PROJECT_LOGO` for petclinic, walkie-talkie, victor-net (template mark), victor-vsc
   (`app-icon/Code.icns`), training-assistant, two with none; dark and light. Not seen on a live bind.
+
+## 2026-11-22 — 🎛️ Custom gestures: the Logi set on any mouse
+
+Victor: *"gestures guide să fie intrare de sub 'logi' din submeniul gestures. și mai adaugă încă un meniu
+'custom' în gestures care, când e bifat, să deschidă un meniu în care să poți trece echivalente pentru tastele
+care mie acum îmi vin din logi gestures. cu un picker de key shortcuts care să permită de ex. cmd wheel click,
+sau opt-cmd-left click, …etc. mouse with 3 buttons + special keys pressed."* Then, on why: *"eu nu voi folosi
+vreodată, dar vreau să ușurez viața altora care nu au mouse Logi, fără a mi-o complica pe a mea: de aia dăm
+echivalente la gesturile mele Logi."*
+
+- **The menu**: Gesture Guide moved from the top level into `Gestures ▸`, indented under the Logi row; a
+  `Custom` tick under a separator, and `Edit Custom Gestures…` while it is on. Custom is a switch beside
+  Logi / Wheel, not a third choice.
+- **The model** (`CustomGestures.swift`): eleven rows — the ten ⌃⌥⌘F-key chords and *Bind and prompt*
+  (F7 with the left button held) — each with at most one `CustomTrigger`: a button (left / right / wheel)
+  under modifiers, or a key combination. In the defaults; unticking keeps them. Off by default.
+- **The wiring is a translation**: the tap asks `customGestures.live`, and a matching press becomes
+  `dispatchChord(<its F-key>)` — the door the trackpad's swipes already use — so the branches, the re-fire
+  clocks and the plain-dictation gate are the side button's own. The only line changed in a branch is
+  `leftIsHeld || customForcesBind`. A duplicate branch per action was the alternative and is what *must not
+  drift* forbids.
+- **Press and release are both swallowed**, tracked per button so a passed press never loses its release;
+  nothing is posted, so there is no modifier to release in the session. A crop under the wheel, the trackpad
+  chord, a frozen main thread and the recorder itself switch the translation off.
+- **The window** (`CustomGesturesWindow.swift`): a non-activating panel that takes the key; rows with a
+  recorder, ✕, a red refusal line (bare click, bare key, another row's trigger, the app's own keys). Its
+  words are for someone with an ordinary mouse. The trigger is read by a local monitor, so it has to be made
+  over the window.
+- **Open**: `Edit Custom Gestures…` was not asked for (unticking and ticking again also reopens); the hint
+  bar and the Gesture Guide still draw the Logi mouse for a Custom user; a trigger whose branch posts keys
+  while the modifiers are still held is unmeasured; nothing was made by hand on a mouse.

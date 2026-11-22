@@ -1095,10 +1095,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
 
         // **The gestures are taught on a page, not listed here** (2026-11-12) —
         // `GestureGuide`: his mouse drawn, each gesture animated on it.
+        // **Under `Gestures ▸ Logi` since 2026-11-22** (Victor: *"gestures guide să
+        // fie intrare de sub 'logi' din submeniul gestures"*) — the row is put
+        // there by `applyLogiGesturesRow`.
         guide.image = Self.symbolIcon("computermouse")
         guide.action = #selector(guideClicked)
         guide.target = self
-        menu.addItem(guide)
 
         dictionaryRow.image = Self.symbolIcon("character.book.closed")
         dictionaryRow.action = #selector(dictionaryClicked)
@@ -2169,7 +2171,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// `Mouse Gestures: Logi` or `: Wheel`, and the tick beside whichever of the
     /// two rows is the one wired up. See the note on the row.
     private func applyLogiGesturesRow() {
-        logiGestures.title = "Gestures: \(logiGesturesOn ? "Logi" : "Wheel")"
+        let customOn = CustomGestures.shared.enabled
+        logiGestures.title = "Gestures: \(logiGesturesOn ? "Logi" : "Wheel")\(customOn ? " + Custom" : "")"
         gesturesSubmenu.removeAllItems()
         // **Named by the hardware each one needs**, not by what it does to the
         // wheel: the question this list answers is *which mouse am I on*, and
@@ -2185,7 +2188,45 @@ final class StatusItem: NSObject, NSMenuDelegate {
             // `NSMenuItem.state`, which would reserve a second column.
             row.image = on == logiGesturesOn ? Self.symbolIcon("checkmark") : Self.blankIcon
             gesturesSubmenu.addItem(row)
+            // The guide teaches the Logi set, so it sits under that row.
+            if on {
+                guide.indentationLevel = 1
+                gesturesSubmenu.addItem(guide)
+            }
         }
+        // **Custom** (2026-11-22, `CustomGestures`): a switch beside the two, not
+        // a third choice — its triggers make the Logi gestures on any mouse.
+        gesturesSubmenu.addItem(.separator())
+        let custom = NSMenuItem(title: "Custom — your own triggers for the same gestures",
+                                action: #selector(customGesturesClicked), keyEquivalent: "")
+        custom.target = self
+        custom.image = customOn ? Self.symbolIcon("checkmark") : Self.blankIcon
+        gesturesSubmenu.addItem(custom)
+        if customOn {
+            let edit = NSMenuItem(title: "Edit Custom Gestures…",
+                                  action: #selector(editCustomGesturesClicked), keyEquivalent: "")
+            edit.target = self
+            edit.image = Self.blankIcon
+            edit.indentationLevel = 1
+            gesturesSubmenu.addItem(edit)
+        }
+    }
+
+    /// Ticked: the triggers are live and the window opens. Unticked: they are
+    /// kept and translate nothing.
+    @objc private func customGesturesClicked() { setCustomGestures(!CustomGestures.shared.enabled) }
+
+    @objc private func editCustomGesturesClicked() {
+        DispatchQueue.main.async { CustomGesturesWindow.show() }
+    }
+
+    func setCustomGestures(_ on: Bool, window: Bool = true) {
+        CustomGestures.shared.enabled = on
+        applyLogiGesturesRow()
+        Log.info("🎛️ custom gestures \(on ? "on" : "off") — \(CustomGestures.shared.bindings.count) bound")
+        guard window else { return }
+        // Dispatched: the click is still closing the menu it came from.
+        DispatchQueue.main.async { on ? CustomGesturesWindow.show() : CustomGesturesWindow.close() }
     }
 
     /// `POST /test/autosend` (G6): the same toggle as the row, optionally not

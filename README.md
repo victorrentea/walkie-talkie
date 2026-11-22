@@ -278,6 +278,20 @@ and the keys that do the same are back in their badges:
 left button held plus a wheel click to bind, right button held plus a wheel click to unbind, the
 back button as the shutter.
 
+**Custom** (*Gestures ▸ Custom*, off by default) is for an ordinary three-button mouse. With a Logitech
+mouse, Logi Options+ turns the two side buttons into the gestures in the table above; without one, tick
+*Custom* and give each of those gestures a trigger of your own in the window that opens: a mouse button
+(left, right, or the wheel pressed) with any of ⌘ ⌥ ⌃ ⇧ held — `⌘ wheel click`, `⌥⌘ click`,
+`⌃⇧ right click` — or a key combination. Click a field, make the trigger over the window; Esc cancels,
+✕ clears, and a trigger already used on another row (or a click with nothing held) is refused. The
+trigger does exactly what the Logi gesture does, the click itself never reaches the app underneath, and
+a plain wheel click and the wheel-drag crop stay as they are. Unticking keeps your triggers; *Edit Custom
+Gestures…* reopens the window. It works beside either mode.
+
+<p align="center">
+  <img src="docs/readme/custom-gestures-dark.png" width="560" alt="The Custom gestures window: one row per gesture, each with a field that records a trigger such as ⌘ wheel click">
+</p>
+
 The menu bar icon lists every action with its gesture. The spec is `evals/test_gesture_spec.py`,
 the reasoning `.claude/rules/mouse-gestures.md`.
 
