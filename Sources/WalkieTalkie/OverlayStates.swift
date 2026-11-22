@@ -388,7 +388,7 @@ enum OverlayStates {
                  note: "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and the row's ordinary ink, above the wait — **no green since 2026-10-22**, and the yellow flash of a changed row when it comes up (Victor: *\"să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare\"*) — **on the word `Ready` alone** since 2026-10-23 (*\"cuvântul ready, nu și ready for more\"*), shown here at its brightest. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
-                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue)")
+                o.setEngineMark("")   // the local model: no `via`, no 💻 (2026-11-22)
                 o.setTranscribing(true)
                 o.setReadyForNext(true)
                 o.setShotCount(1)
@@ -433,12 +433,12 @@ enum OverlayStates {
 
             Shot(slug: "transcribing-fallback-now", group: "Dictating", title: "Fallback to local — the budget ran out",
                  when: "The count reached zero with the engine's words still out and the local decode not quite done.",
-                 note: "**At `now` the engine on the line is this Mac** (2026-10-22, Victor: *\"când treci la modelul local, în transcribing să înlocuiești … cu calculatorul … zici now și efectiv înlocuiești motorul cu local\"*): `Transcribing via 💻... — ⌘⌃X` (one laptop: the mark says it, 2026-10-23; `now` went 2026-10-27). `now`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
+                 note: "**At `now` the engine on the line is this Mac** (2026-10-22, Victor: *\"când treci la modelul local, în transcribing să înlocuiești … cu calculatorul … zici now și efectiv înlocuiești motorul cu local\"*): `Transcribing... — ⌘⌃X` — the cloud's `via <logo>` goes and nothing takes its place since 2026-11-22 (Victor: *\"Fără emoji de laptop și fără via. Să pară via doar dacă folosim serviciile cloud\"*; `via 💻` from 2026-10-23, `now` went 2026-10-27). `now`: the local words go in the moment the decode ahead finishes — usually already done at zero, so this frame lasts a few hundred milliseconds at most. A local model that heard nothing leaves the sentence to the engine and the row goes.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.setTranscribing(true)
                 o.setShotCount(1)
-                o.setEngineMark(" via \(Glyphs.Engine.mac.rawValue)")
+                o.setEngineMark("")   // the local model: no `via`, no 💻 (2026-11-22)
                 o.pinTranscribeWarmth(1.0)
                 o.setLocalNow(true, countdown: 0)
             },

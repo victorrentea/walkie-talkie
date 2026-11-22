@@ -16719,3 +16719,11 @@ measured 1.2–3.9 s on four). Up after the request leaves, down after the paste
 cost: one relayout at each edge, ink only between. He also believes the redactor runs only after a
 local transcription; in the code it runs for ElevenLabs too (`applies`: everything but Wispr Flow) —
 left as is, reported to him.
+
+## 2026-11-22 — The local model's wait is the plain `Transcribing...`
+
+Victor: *"Vreau in tooltip doar Transcribing... Fără emoji de laptop și fără via. Să pară via doar
+dacă folosim serviciile cloud, gen [Wispr] Flow sau ElevenLabs. Altfel să stea doar simplificat."*
+`AppDelegate.mark(engine:)` sends an empty mark for the local model, on the `Transcribing` row only;
+`via 💻` (2026-10-22's *"înlocuiești motorul cu local"*) is superseded — at the fallback's `now` the
+cloud's logo now simply goes. The `Prompting → 💻` row and the 💻 flashes are unchanged.

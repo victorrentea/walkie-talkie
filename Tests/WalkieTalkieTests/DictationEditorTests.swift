@@ -138,10 +138,17 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(DictationEditor.message("x", nil, vocabulary: v), "<vocabulary>Devoxx, Rentea</vocabulary>\n<replacements>GVT → JWT</replacements>\n<dictation>x</dictation>")
     }
 
-    /// Two phases on one row: `Transcribing via <logo>...`, then `Redacting...` (2026-11-22).
-    func testTheWaitRowSaysTranscribingThenRedacting() {
+    /// The wait row's three strings (2026-11-22): plain for the local model,
+    /// `via <logo>` for a cloud engine, then `Redacting...`.
+    func testTheWaitRowsThreeStrings() {
         let gap = String(Glyphs.dotsGap)
-        XCTAssertEqual(RelayWindow.transcribeWord(engineMark: " via E"), "Transcribing via E\(gap)...")
+        let local = AppDelegate.mark(engine: "whisper")
+        XCTAssertEqual(local, "", "the local model: no via, no laptop")
+        XCTAssertEqual(RelayWindow.transcribeWord(engineMark: local), "Transcribing\(gap)...")
+        for (id, logo) in [("eleven", Glyphs.Engine.eleven), ("eleven-live", .eleven), ("wispr", .wispr)] {
+            XCTAssertEqual(RelayWindow.transcribeWord(engineMark: AppDelegate.mark(engine: id)),
+                           "Transcribing via \(logo.rawValue)\(gap)...", id)
+        }
         XCTAssertEqual(RelayWindow.redactingWord, "Redacting\(gap)...", "no engine mark, no tool's name")
     }
 

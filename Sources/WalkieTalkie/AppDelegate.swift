@@ -364,7 +364,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// its own settings. Victor: *"poate să fie un pic mincinos să zici că
     /// asculți la microfonul lui Walkie … ar trebui să-i citești microfonul
     /// activ al lui Wispr"*. See `pushMicMark`.
-    private static func mark(engine id: String) -> String { " via " + engineMark(id) }
+    ///
+    /// **The local model has no mark: the row is the plain `Transcribing...`**
+    /// (2026-11-22, Victor: *"Vreau in tooltip doar Transcribing... Fără emoji
+    /// de laptop și fără via. Să pară via doar dacă folosim serviciile cloud,
+    /// gen [Wispr] Flow sau ElevenLabs. Altfel să stea doar simplificat"*). Only
+    /// this row — `Prompting → 💻` keeps its laptop (`pushMicMark`).
+    static func mark(engine id: String) -> String { id == "whisper" ? "" : " via " + engineMark(id) }
 
     /// **Whose microphone the chip names: whoever is doing the hearing.**
     /// Wispr is, while it holds a sentence (`isRecording`, or `wisprHearing` for

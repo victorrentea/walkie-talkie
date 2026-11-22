@@ -63,7 +63,7 @@ yields to `--label`).
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
 | bound to an app with no readable directory (a blind-paste target) | the icon + the app's own name — the one case where the icon has no subject beside it |
 | dictating | `🎤 Prompting → ⬮...` — the device emoji, then the recogniser's logo (see *The microphone breathes in front of the word*, below); **which microphone is hearing him** (2026-09-22 evening; `Listening(<glyph>/<letter>)...` from 2026-09-19, the letter alone from 2026-09-18). 🎙️ Elgato Wave XLR · 💻 the built-in · 🎤 the DJI receiver · 🎧 Bose. A device that is none of the four leaves the mark empty and the row is the plain `Listening...` — *listening to* with nothing after it is worse than not saying it. **Pushed in as a string by `AppDelegate`** — the chip may not ask which device it means (`RelayWindow.setMicMark`), and it is re-read at every `dictationBegan`, because cables move between sentences. **The glyph is drawn as a picture** (`Glyphs.emoji` → `inline`, cached in `wordGlyphs`), never as a character in the string, and it is **always lit** while the letters ramp: a picture has no unlit state that reads as *not yet*, and dimming it by alpha is the halo problem the opaque grey exists to avoid |
-| transcribing | `Transcribing via <logo>...` — **which recogniser is actually reading it** (2026-09-22 evening). The logo is drawn in **exactly the row's ink** (`Glyphs.Engine` → `Glyphs.engine`, cached per colour in `wordGlyphs`): ElevenLabs' pause-in-a-ring, Wispr Flow's five bars traced off its own icon, 💻 for the local model (with `ᵥ` for non-published weights). Pushed as a string by `AppDelegate` (`setEngineMark`), carried as a **private-use character** so the chip still cannot branch on which engine it is; `transcribeString` gained `applyEngineText`'s *non-ASCII is a picture* branch the day the mark landed on this row, because until then every character in it was ASCII |
+| transcribing | `Transcribing via <logo>...` for a cloud engine, **the plain `Transcribing...` when the local model reads it** (2026-11-22; `via 💻` until then) — **which recogniser is actually reading it** (2026-09-22 evening). The logo is drawn in **exactly the row's ink** (`Glyphs.Engine` → `Glyphs.engine`, cached per colour in `wordGlyphs`): ElevenLabs' pause-in-a-ring, Wispr Flow's five bars traced off its own icon. Then `✍️ Redacting...` while the Redactor rewrites a plain dictation. Pushed as a string by `AppDelegate` (`setEngineMark`), carried as a **private-use character** so the chip still cannot branch on which engine it is; `transcribeString` gained `applyEngineText`'s *non-ASCII is a picture* branch the day the mark landed on this row, because until then every character in it was ASCII |
 | the dictation was cancelled | `🗑️ Cancelled` in the row `Listening…` was in — 1.5 s, swapped in and out **in one frame**; the oblique wipe that used to carry it both ways was removed on 2026-09-18 (*The chip swaps in one frame*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
 | dictating in Replace Wispr | **the drawn map pin alone** (2026-10-22, *"nu mai vreau să scrie efectiv caret, doar să apară acea iconiță"* — `identity` answers `""` for `caret` behind `pinGlyph` — `bind to send` keeps its words; `caret` behind it until then, `at caret` until 2026-10-04) — the same slot a spawn takes, and for the same reason |
 
@@ -349,6 +349,17 @@ yields to `--label`).
   it, and the logo **fills with it** since 2026-10-01 (it was always lit until then). The 💻, a colour
   emoji with no ink to take, is drawn at 35 % alpha until its step lights (`wordGlyph(lit:)`,
   2026-10-07, Victor: *"the laptop … should have a faded form and then it turns bright"*).
+- **The local model's row is the plain `Transcribing...` — no `via`, no 💻** (2026-11-22, Victor:
+  *"Vreau in tooltip doar Transcribing... Fără emoji de laptop și fără via. Să pară via doar dacă
+  folosim serviciile cloud, gen [Wispr] Flow sau ElevenLabs. Altfel să stea doar simplificat"*).
+  `AppDelegate.mark(engine:)` answers `""` for `whisper`, so the chip still does not know which
+  engine it is. **Only this row**: `Prompting → 💻`, the `💻 Fell back to local` / `Used local`
+  flashes, `💻 local in 3s` and the grey `— ⌘⌃X` tail keep theirs. A cloud sentence the local model
+  takes over mid-wait (the budget's `now`, ⌘⌃X, a failure) loses its `via <logo>` and nothing takes
+  its place; the bar keeps its **fraction** (`steps = count × warmth`, recomputed at the relayout),
+  so fewer letters are lit on the shorter word but the edge does not move back. Shots
+  `transcribing-ready`, `transcribing-fallback-now`; pinned by
+  `DictationEditorTests.testTheWaitRowsThreeStrings`.
 - **`✍️ Redacting...` is the wait row's second phase** (2026-11-22, Victor: *"e mult text acolo … pe
   durata redacting-ului, îmi scrii «redacting» și-l colorezi iarăși"*; `Transcribing and redacting`
   for an hour before — never put it back). `Transcribing via <logo>...` is unchanged, Redactor on or
@@ -445,7 +456,7 @@ yields to `--label`).
   Victor: *"să se vadă minim 2 s"* — two showings in three lasted ≤ 1 s).
 - **The local fallback's shortcut is on the `Transcribing` line** while there is one: `Transcribing via <mark>...
   — ⌘⌃X` (`localNowInline`, `AutoLocal.inlineText`, grey — not part of the bar); the
-  `localNowRow` only while the sentence records. At `now` AppDelegate sets the engine mark to 💻.
+  `localNowRow` only while the sentence records. At `now` AppDelegate sets the engine mark to the local model's — 💻 until 2026-11-22, empty since (the plain `Transcribing...`).
   **No 💻 and no seconds on that line since 2026-10-27** (Victor: *"să nu mai spui emoji-ul de laptop,
   … nici câte secunde, că e stresant, ci doar progress bar-ul … lasă scurtătura cu gri la final, după
   un MDash"*) — `💻 in 3s ⌘⌃X` before; the bar is the countdown. Never put the digits back.
