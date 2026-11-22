@@ -55,7 +55,11 @@
       "lines": [
         {
           "who": "u",
-          "text": "Use this picture here, and fix this text."
+          "text": "Use this picture"
+        },
+        {
+          "who": "u",
+          "text": "here, and fix this text."
         },
         {
           "who": "n",
