@@ -65,7 +65,8 @@ import sys
 from pathlib import Path
 
 SOURCES = Path(__file__).resolve().parent.parent / "Sources" / "WalkieTalkie"
-FILES = ("HotkeyTap.swift", "AppDelegate.swift", "TerminalBinding.swift", "WisprFlowSource.swift")
+FILES = ("HotkeyTap.swift", "AppDelegate.swift", "TerminalBinding.swift", "WisprFlowSource.swift",
+         "BoundPromptGate.swift")
 
 
 class ParseError(Exception):
@@ -181,7 +182,8 @@ def spec(src: dict):
         },
         {
             "row": ("🔼 forward", "drag right"),
-            "does": "BOUND terminal · prompt; mid-sentence flips bound ⇄ caret (2026-10-05)",
+            "does": "BOUND terminal · prompt; mid-sentence flips bound ⇄ caret (2026-10-05); "
+                    "NOTHING BOUND: no start, a flash — and a caret sentence stays at the caret (2026-11-22)",
             "checks": [
                 ("F10 raises onForwardRight", "HotkeyTap `case VK_F10`",
                  lambda: has(gesture_case(src, "VK_F10"), r"onForwardRight\?\(\)")),
@@ -189,10 +191,26 @@ def spec(src: dict):
                  lambda: has(closure(src, "hotkeys.onForwardRight"), r"toggleDictation\(flipsDestination: true\)")),
                 ("⌘⌃D keeps its stop: onLocalToggle never flips", "AppDelegate `hotkeys.onLocalToggle`",
                  lambda: has(closure(src, "hotkeys.onLocalToggle"), r"toggleDictation\(\)")),
-                ("a bound sentence goes to the caret, the caret one back", "AppDelegate `toggleDictation`",
+                ("a bound sentence goes to the caret, the caret one back — by BoundPromptGate.flip", "AppDelegate `toggleDictation`",
                  lambda: all(has(function(src, ad, "toggleDictation"), p)
-                             for p in (r"if flipsDestination, !pasteMode, !spawnPending, isBound \{\s*aimAtCaret\(\)",
-                                       r"if pasteMode, isBound \{\s*aimAtBoundTerminal\(\)"))),
+                             for p in (r"switch BoundPromptGate\.flip\(gesture: flipsDestination, atCaret: pasteMode, spawn: spawnPending,",
+                                       r"case \.toBound:\s*aimAtBoundTerminal\(\)",
+                                       r"case \.toCaret:\s*aimAtCaret\(\)"))),
+                ("the table: caret + bound → terminal, terminal → caret, caret + nothing bound → stays", "BoundPromptGate `flip`",
+                 lambda: all(has(src["BoundPromptGate.swift"], p)
+                             for p in (r"if atCaret \{ return bound \? \.toBound : \(gesture \? \.stay : \.end\) \}",
+                                       r"if gesture, !spawn, !pickInFlight \{ return \.toCaret \}"))),
+                ("nothing bound mid-sentence: the hint, no flip, no stop (2026-11-22)", "AppDelegate `toggleDictation`",
+                 lambda: has(function(src, ad, "toggleDictation"),
+                             r"case \.stay:\s*Log\.info\([^\n]*\)\s*overlay\.flash\(BoundPromptGate\.nothingBound")),
+                ("nothing bound at rest: the start is refused before anything opens (2026-11-22)", "AppDelegate `startDictation`",
+                 lambda: all(has(function(src, ad, "startDictation"), p)
+                             for p in (r"switch BoundPromptGate\.start\(spawn: spawn, paste: paste, bound: isBound, bindInFlight: bindInFlight\)",
+                                       r"case \.refuse:\s*return refuseUnbound\("))
+                         and has(src["BoundPromptGate.swift"],
+                                 r"if spawn \|\| paste \|\| bound \{ return \.open \}\s*return bindInFlight \? \.bank : \.refuse")),
+                ("no sentence is held for a bind any more (2026-11-22)", "AppDelegate",
+                 lambda: not any(has(src[ad], p) for p in (r"var awaitingBind", r"func holdForBind", r"static let holdsForBind"))),
             ],
         },
         {
@@ -618,8 +636,12 @@ MUTATIONS = [
     ("forward click goes to the bound terminal", "HotkeyTap.swift",
      "a dictation at the caret\")\n                DispatchQueue.global().async { [weak self] in self?.onPasteToggle?() }",
      "a dictation at the caret\")\n                DispatchQueue.global().async { [weak self] in self?.onLocalToggle?() }"),
-    ("🔼 → stops a bound sentence again (before 2026-10-05)", "AppDelegate.swift",
-     "if flipsDestination, !pasteMode, !spawnPending, isBound {", "if false {"),
+    ("🔼 → stops a bound sentence again (before 2026-10-05)", "BoundPromptGate.swift",
+     "if gesture, !spawn, !pickInFlight { return .toCaret }", "if false { return .toCaret }"),
+    ("a bound prompt starts with nothing bound again (before 2026-11-22)", "BoundPromptGate.swift",
+     "return bindInFlight ? .bank : .refuse", "return .open"),
+    ("🔼 → flips a caret sentence to a terminal that is not bound (before 2026-11-22)", "BoundPromptGate.swift",
+     "return bound ? .toBound : (gesture ? .stay : .end)", "return .toBound"),
     ("⌘⌃D flips the destination too, losing its stop", "AppDelegate.swift",
      "if self.toggleCoalescedByStall() { return }\n                self.toggleDictation()\n",
      "if self.toggleCoalescedByStall() { return }\n                self.toggleDictation(flipsDestination: true)\n"),

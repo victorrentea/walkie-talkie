@@ -22,7 +22,7 @@ So the gate opens only when both of these hold:
 1. **Nothing is dictating or transcribing, on any engine** — `GET
    /test/state.busy` (the app's `restartBlockers`: every microphone of its own,
    the recogniser, the local fallback, the sentence queue, the live caption, the
-   prompt on screen, a sentence held for a bind, the words being typed, audio
+   prompt on screen, the words being typed, audio
    staged for Recover — and since 2026-09-28 **Wispr Flow's own microphone and a
    History row it is still working on**), plus the same Wispr checks made here,
    from `wisprLive` and from Wispr's `flow.sqlite` read directly, so an app

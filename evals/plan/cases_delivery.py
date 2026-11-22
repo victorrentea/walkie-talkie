@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """T-D (delivery, binding, restart) and T-R 20-22 of docs/test-plan.md, §7.2 / §7.3.
 
-Every case starts unbound with nothing held and ends the same way: a held sentence is released
-into the witness tab (a `cat` into a file) and the binding dropped. The witness is the delivery
+Every case starts unbound and ends the same way, the binding dropped. **Nothing is held for a bind
+since 2026-11-22** (a bound prompt does not start unbound; a prompt that reaches nobody is an
+`undelivered` outbox row + the clipboard — `AppDelegate.keepUndelivered`). The witness is the delivery
 target; a case that needs a second one opens `wt-witness-B` (its own file) and closes it itself.
 
 `/test/dictation` enters below the recogniser: it skips `deliver()` and goes straight to `send`
-(the plan's T-D31 fidelity note), so an unbound one is *held*, never pasted at the caret.
+(the plan's T-D31 fidelity note), so an unbound one is *kept undelivered*, never pasted at the caret.
 Verdicts: PASS = what the plan expects · BUG = the plan's predicted defect · FAIL = neither ·
 SKIP = needs audio / Claude Code / Codex / sleep / a relaunch, or the race was lost.
 
@@ -103,16 +104,18 @@ def bind_tty(tty):
     return post("/bind", {"tty": tty.replace("/dev/", "")})
 
 def _release_held():
-    """Deliver a held sentence into the witness so nothing stays `awaitingBind`."""
-    if not state().get("awaitingBind"):
-        return True
-    bind_witness()
-    ok = wait_for(lambda: not state()["awaitingBind"], 15, 0.2)
-    time.sleep(1.5)
-    return bool(ok)
+    """Nothing is held for a bind since 2026-11-22 — kept as a no-op for the cases that call it."""
+    return True
+
+def _undelivered_row(rows, tok):
+    """The outbox row `keepUndelivered` wrote for the sentence carrying `tok`, or None."""
+    for x in rows:
+        if tok in (x.get("text") or "") and _row_to(x) == "undelivered":
+            return x
+    return None
 
 def _settle():
-    """Nothing open, nothing held, nothing bound, Replace Wispr off."""
+    """Nothing open, nothing bound, Replace Wispr off."""
     try:
         s = state()
         if s.get("listening") or s.get("isRecording") or s.get("settling"):
@@ -167,44 +170,42 @@ def td1():
 
 
 @case("TD2", tags=("http", "tty"),
-      expect="two sentences held while unbound → the bind delivers both (or says the first was replaced)")
+      expect="two sentences with nothing bound → two `undelivered` outbox rows; a later bind delivers neither (2026-11-22)")
 def td2():
-    """A second held sentence replaces the first silently; the bind delivers only BRAVO."""
+    """Until 2026-11-22 both were held and the bind delivered them in order (Q3). Now nothing waits."""
     _fresh()
     try:
         witness_open(); witness_clear()
-        mark = log_mark()
+        mark, n0 = log_mark(), outbox_count()
         a, b = _tok("ALFA"), _tok("BRAVO")
         prev = _delivery_at()
-        post("/test/dictation", {"text": f"{a} first held sentence"})
+        post("/test/dictation", {"text": f"{a} first unbound sentence"})
         d1 = _wait_new_delivery(prev, 15) or {}
-        wait_for(lambda: state()["awaitingBind"], 5, 0.1)
-        post("/test/dictation", {"text": f"{b} second held sentence"})
+        post("/test/dictation", {"text": f"{b} second unbound sentence"})
         d2 = _wait_new_delivery(d1.get("at"), 15) or {}
-        held_after_two = state()["awaitingBind"]
+        time.sleep(0.5)
+        rows = _new_rows(n0)
+        ra, rb = _undelivered_row(rows, a), _undelivered_row(rows, b)
         bind_witness()
-        wait_for(lambda: not state()["awaitingBind"], 15, 0.2)
-        wait_for(lambda: b in witness_text(), 10, 0.2)
-        time.sleep(2)
+        time.sleep(4)
         text = witness_text()
         a_in, b_in = a in text, b in text
-        holds = len(re.findall(r"nothing bound — holding", log_since(mark)))
-        said = re.findall(r"[^\n]*(replac|dropped|discard)[^\n]*", log_since(mark))
-        facts = (f"to1={d1.get('to')} to2={d2.get('to')} held-after-two={held_after_two}; hold lines={holds}; "
-                 f"after bind: ALFA in witness={a_in}, BRAVO in witness={b_in}; replacement said in log={bool(said)}")
-        if a_in and b_in:
+        kept = len(re.findall(r"📭 not delivered", log_since(mark)))
+        facts = (f"to1={d1.get('to')} to2={d2.get('to')}; undelivered rows: ALFA={bool(ra)} BRAVO={bool(rb)}; "
+                 f"'not delivered' lines={kept}; after a bind: ALFA in witness={a_in}, BRAVO in witness={b_in}")
+        if d1.get("to") == d2.get("to") == "undelivered" and ra and rb and not a_in and not b_in:
             return "PASS", facts
-        if b_in and not a_in:
-            return "BUG", "first held sentence silently replaced — " + facts
+        if a_in or b_in:
+            return "BUG", "a sentence waited for the bind (the hold is back) — " + facts
         return "FAIL", facts + " | " + _log_excerpt(mark)
     finally:
         _settle()
 
 
-@case("TD3", tags=("audio",), expect="unbound real sentence is held for a bind, not pasted at the caret")
+@case("TD3", tags=("audio",), expect="a bound prompt with nothing bound does not start (2026-11-22) — retired: there is no unbound real sentence to route")
 def td3():
     """Needs a real spoken sentence (the latch at mic close); /test/dictation cannot reach it."""
-    return "SKIP", "needs real audio: /test/dictation skips latchedAtCaret (see TD31); run with cases_audio"
+    return "SKIP", "retired 2026-11-22 — an unbound bound-prompt gesture is refused (TG-unbound in test_gesture_spec / BoundPromptGateTests)"
 
 
 @case("TD4", tags=("http", "tty"),
@@ -369,27 +370,9 @@ def td9():
 
 
 @case("TD10", tags=("http",),
-      expect="relay-restart.sh --dry-run --max-wait 20 with a sentence held for a bind → exit 3, 'held for a bind'")
+      expect="retired 2026-11-22 — no sentence is held for a bind, so the restart gate has nothing of that kind to wait for")
 def td10():
-    """The restart gate waits for a held sentence."""
-    _fresh()
-    try:
-        prev = _delivery_at()
-        post("/test/dictation", {"text": _tok("TD10") + " a sentence held while the gate is asked"})
-        d = _wait_new_delivery(prev, 15) or {}
-        if not wait_for(lambda: state()["awaitingBind"], 5, 0.1):
-            return "FAIL", f"nothing held (to={d.get('to')})"
-        t0 = time.time()
-        p = subprocess.run(["./relay-restart.sh", "--dry-run", "--max-wait", "20"], cwd=REPO,
-                           capture_output=True, text=True, timeout=90)
-        dt = time.time() - t0
-        out = (p.stdout + p.stderr).strip()
-        facts = f"exit {p.returncode} after {dt:.0f}s; output: {out[-300:]}"
-        if p.returncode == 3 and "held for a bind" in out:
-            return "PASS", facts
-        return "FAIL", facts
-    finally:
-        _settle()
+    return "SKIP", "the hold for a bind was removed 2026-11-22 (`busyWhy` no longer says 'held for a bind')"
 
 
 @case("TD11", tags=("http", "slow"),
@@ -818,55 +801,24 @@ def td21():
 
 
 def _td22(offset):
-    _fresh()
-    try:
-        witness_open(); witness_clear()
-        tok, prev, mark, n0 = _tok("TD22"), _delivery_at(), log_mark(), outbox_count()
-        post("/test/dictation", {"text": f"{tok} held across the five-minute boundary"})
-        d = _wait_new_delivery(prev, 15) or {}
-        if d.get("to") != "held":
-            return "FAIL", f"not held: to={d.get('to')}"
-        t_hold = _iso_ts(d["at"])
-        time.sleep(max(0, t_hold + offset - time.time()))
-        t_post = time.time() - t_hold
-        bind_witness()
-        t_done = time.time() - t_hold
-        time.sleep(6)
-        s = state()
-        delivered = tok in witness_text()
-        expired = log_has(mark, r"held dictation expired")
-        released = log_has(mark, r"bound — sending the sentence that was waiting")
-        rows = [x for x in _new_rows(n0) if tok in (x.get("text") or "")]
-        facts = (f"bind posted at +{t_post:.2f}s, done +{t_done:.2f}s; released={released} expired={expired} "
-                 f"delivered={delivered} rows={len(rows)} awaitingBind={s['awaitingBind']}")
-        if delivered != expired and not s["awaitingBind"] and (delivered == bool(rows)):
-            return "PASS", facts
-        return "FAIL", facts + " | " + _log_excerpt(mark)
-    finally:
-        _settle()
+    return "SKIP", "the five-minute hold was removed 2026-11-22 — there is no expiry to race a bind against"
 
-@case("TD22-298.5", tags=("http", "tty", "slow"),
-      expect="bind at 298.5 s after the hold → exactly one outcome (delivered xor expired), nothing left held")
+@case("TD22-298.5", tags=("http",), expect="retired 2026-11-22 — no five-minute hold")
 def td22a():
-    """Expiry vs bind boundary, just before 300 s."""
     return _td22(298.5)
 
-@case("TD22-299.5", tags=("http", "tty", "slow"),
-      expect="bind at 299.5 s after the hold → exactly one outcome (delivered xor expired), nothing left held")
+@case("TD22-299.5", tags=("http",), expect="retired 2026-11-22 — no five-minute hold")
 def td22b():
-    """Expiry vs bind boundary, inside the bind's own latency."""
     return _td22(299.5)
 
-@case("TD22-300.2", tags=("http", "tty", "slow"),
-      expect="bind at 300.2 s after the hold → exactly one outcome (delivered xor expired), nothing left held")
+@case("TD22-300.2", tags=("http",), expect="retired 2026-11-22 — no five-minute hold")
 def td22c():
-    """Expiry vs bind boundary, just after 300 s."""
     return _td22(300.2)
 
 
-@case("TD23", tags=("sleep",), expect="a held sentence does not outlive its 5 min across a sleep")
+@case("TD23", tags=("sleep",), expect="retired 2026-11-22 — no held sentence to outlive a sleep")
 def td23():
-    return "SKIP", "needs a real sleep (pmset) — [SLEEP]"
+    return "SKIP", "the hold for a bind was removed 2026-11-22"
 
 
 @case("TD24", tags=("audio",), expect="busy never flickers false between the first busy and the panel (R14)")
@@ -971,7 +923,7 @@ def td29():
         d = _wait_new_delivery(prev, 20) or {}
         commit_at = _iso_ts(d.get("at") or "") or 0
         time.sleep(1.0)
-        held = state()["awaitingBind"]
+        held = state().get("awaitingBind")
         in_a = tok in witness_text()
         in_b = False
         if held:
@@ -999,31 +951,33 @@ def td30():
 
 
 @case("TD31", tags=("http", "tty"),
-      expect="/test/dictation unbound → lastDelivery.to=='held', awaitingBind, no outbox row; a bind then delivers it")
+      expect="/test/dictation unbound → lastDelivery.to=='undelivered', an outbox row saying so with the whole line, "
+             "the clipboard written by walkie; a bind afterwards delivers nothing (2026-11-22)")
 def td31():
-    """Test-route fidelity: /test/dictation reaches the hold; real speech would latch the caret (TD3)."""
+    """Nothing bound when the words arrive: kept (Prompt History reads the outbox), never held, never the caret."""
     _fresh()
     try:
         witness_open(); witness_clear()
-        tok, prev, n0 = _tok("TD31"), _delivery_at(), outbox_count()
+        tok, prev, n0, mark = _tok("TD31"), _delivery_at(), outbox_count(), log_mark()
         post("/test/dictation", {"text": f"{tok} unbound test sentence"})
         d = _wait_new_delivery(prev, 15) or {}
-        wait_for(lambda: state()["awaitingBind"], 3, 0.1)
-        s = state()
-        held_rows = len(_new_rows(n0))
-        bind_witness()
-        wait_for(lambda: tok in witness_text(), 10, 0.2)
         time.sleep(0.5)
-        s2 = state()
-        rows = [x for x in _new_rows(n0) if tok in (x.get("text") or "")]
-        d2 = s2.get("lastDelivery") or {}
-        agree = bool(rows) and _row_to(rows[-1]) == d2.get("to")
-        facts = (f"to={d.get('to')} awaitingBind={s['awaitingBind']} rows while held={held_rows}; after bind: "
-                 f"to={d2.get('to')} rows={[_row_to(x) for x in rows]} outbox agrees with lastDelivery={agree} "
-                 f"awaitingBind={s2['awaitingBind']}")
-        if d.get("to") == "held" and s["awaitingBind"] and held_rows == 0 and tok in witness_text() and agree:
-            return "PASS", facts + " (real unbound speech is held the same way since 2026-09-26 — TG18)"
-        return "FAIL", facts
+        s = state()
+        row = _undelivered_row(_new_rows(n0), tok)
+        line_ok = bool(row) and tok in (row.get("line") or "")
+        clip = [e for e in ((s.get("pasteboard") or {}).get("events") or []) if e.get("writer") == "walkie"]
+        flashed = any("Prompt History" in r for r in (s.get("chip") or [])) or log_has(mark, r"📭 not delivered")
+        bind_witness()
+        time.sleep(4)
+        late = tok in witness_text()
+        facts = (f"to={d.get('to')}; undelivered row={bool(row)} with the line={line_ok} "
+                 f"(wanted={((row or {}).get('delivery') or {}).get('wanted')!r}); clipboard writes by walkie={len(clip)}; "
+                 f"said={flashed}; in the witness after a bind={late}")
+        if d.get("to") == "undelivered" and line_ok and flashed and not late:
+            return "PASS", facts
+        if late:
+            return "BUG", "the sentence waited for the bind (the hold is back) — " + facts
+        return "FAIL", facts + " | " + _log_excerpt(mark)
     finally:
         _settle()
 
@@ -1031,12 +985,12 @@ def td31():
 # ================================================================ T-R 20-22
 
 @case("TR20", tags=("http", "tty", "gesture"),
-      expect="terminal closed mid-sentence → the sentence is pasted at the caret (Victor's Q4, 2026-09-26), "
-             "no 'delivered' row for the dead tty")
+      expect="terminal closed mid-sentence → the dictation runs on; at its end the prompt is NOT pasted at the caret: "
+             "lastDelivery.to=='undelivered', an outbox row with the line, the flash names Prompt History (2026-11-22)")
 def tr20():
     """Tab closed while the dictation is open; the words arrive for a dead binding (§3.11).
-    Since Q4 they are pasted at the caret — caught by the relay's own sink window, made key first,
-    which is why this case needs hands-off (the sink takes the front)."""
+    Q4 (2026-09-26) pasted them at the caret; since 2026-11-22 they are kept (`keepUndelivered`).
+    The relay's own sink window is made key so a paste at the caret would be caught."""
     _fresh()
     tb = None
     try:
@@ -1051,23 +1005,29 @@ def tr20():
             return "FAIL", "the test dictation never opened"
         close_b(tb)
         time.sleep(0.8)
+        still_open = state()["listening"]
         post("/test/sink", {"key": True})
         time.sleep(0.3)
         post("/test/sink/clear")
         tok, mark, n0, prev = _tok("TR20"), log_mark(), outbox_count(), _delivery_at()
         post("/test/dictation", {"text": f"{tok} words for a tab that was closed"})
         d = _wait_new_delivery(prev, 20) or {}
-        wait_for(lambda: log_has(mark, r"is gone|no Terminal\.app tab|⛔️|delivered to the bound"), 10, 0.2)
+        wait_for(lambda: log_has(mark, r"📭 not delivered|⛔️|delivered to the bound"), 10, 0.2)
         time.sleep(0.8)
         s = state()
         rows = [x for x in _new_rows(n0) if tok in (x.get("text") or "")]
-        gone = log_has(mark, r"is gone|no Terminal\.app tab")
+        row = _undelivered_row(rows, tok)
+        line_ok = bool(row) and tok in (row.get("line") or "")
         in_sink = tok in (get("/test/sink").get("text") or "")
-        facts = (f"B={tb} closed while listening; to={d.get('to')}; rows={[_row_to(x) for x in rows]}; gone logged={gone}; "
-                 f"bound after={s.get('bound')}; awaitingBind={s['awaitingBind']}; pasted into the sink={in_sink}")
-        if d.get("to") == "caret" and in_sink and not any(_row_to(x) == "terminal:" + tb for x in rows):
+        said = any("Terminal closed" in r and "Prompt History" in r for r in (s.get("chip") or []))
+        facts = (f"B={tb} closed while listening (still listening after the close={still_open}); to={d.get('to')}; "
+                 f"rows={[_row_to(x) for x in rows]}; undelivered row with the line={line_ok}; chip said it={said}; "
+                 f"bound after={s.get('bound')}; pasted into the sink={in_sink}")
+        if still_open and d.get("to") == "undelivered" and line_ok and not in_sink and s.get("bound") is None:
             return "PASS", facts
-        if gone and any(_row_to(x) == "terminal:" + tb for x in rows) and not s["awaitingBind"]:
+        if in_sink:
+            return "BUG", "pasted at the caret (Q4 is back) — " + facts
+        if any(_row_to(x) == "terminal:" + tb for x in rows):
             return "BUG", "delivered-row for a dead tty, sentence lost — " + facts
         return "FAIL", facts + " | " + _log_excerpt(mark)
     finally:

@@ -229,6 +229,7 @@ enum GestureGuide {
         Card(section: "forward", title: "Prompt to the bound terminal", chord: "Hold Forward, swipe right",
              scene: .swipe(.forward, .right),
              lines: ["Ends with a Forward click.",
+                     "Nothing bound: it does not start — ⌘⌃B binds the terminal in front.",
                      "Mid-sentence: flips the destination, bound terminal ⇄ caret.",
                      "Over a reply pop-up: answer the agent that sent it."]),
         Card(section: "forward", title: "Prompt to a new Claude session", chord: "Hold Forward, swipe up",

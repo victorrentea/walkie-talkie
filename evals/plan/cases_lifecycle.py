@@ -23,15 +23,12 @@ def _quiet(s=None):
     return not (s["listening"] or s["settling"] or s["isRecording"] or s.get("speculative"))
 
 def _settle_down():
-    """End of every case: cancel only if something is in flight; a held sentence goes to the
-    witness (never to Victor's session) so `awaitingBind` is never left true."""
+    """End of every case: cancel only if something is in flight. (Nothing is held for a bind
+    since 2026-11-22.)"""
     try:
         if not _quiet():
             post("/test/cancel")
             wait_for(lambda: _quiet(), 6, 0.1)
-        if state().get("awaitingBind"):
-            bind_witness()
-            wait_for(lambda: not state()["awaitingBind"], 6, 0.1)
     except Exception:
         pass
 
@@ -112,8 +109,8 @@ def _invariants():
     try:
         s = state()
         ld = s.get("lastDelivery") or None
-        if ld and ld.get("to") != "held" and s.get("awaitingBind"):
-            out.append(f"awaitingBind true while lastDelivery.to={ld.get('to')}")
+        if "awaitingBind" in s:
+            out.append("state still has `awaitingBind` — the hold for a bind was removed 2026-11-22")
         if ld and str(ld.get("to", "")).startswith(("terminal:", "spawn:")):
             tail = ((outbox_tail(1) or [{}])[0].get("delivery")) or {}
             if tail.get("to") != ld.get("to"):
@@ -127,10 +124,8 @@ def _inv_note():
     return ("; invariants: " + " | ".join(v)) if v else "; invariants ok"
 
 def _hold_unbound(text):
-    """A /test/dictation with nothing bound → held for a bind. Returns the wall time it became held."""
-    post("/test/dictation", {"text": text})
-    ok = wait_for(lambda: state()["awaitingBind"], 15, 0.1)
-    return time.time() if ok else None
+    """Retired 2026-11-22: nothing is held for a bind. Kept so an old caller fails loudly."""
+    return None
 
 def _stage_cancelled():
     """A real recording through the Loopback, cancelled → staged for Recover. Needs a gesture."""
@@ -630,85 +625,22 @@ def tl24_ceiling_test_sentence():
         _settle_down()
 
 
-@case("TL26", tags=("slow",), expect="held sentence (unbound /test/dictation) expires at 300 s: 'held dictation expired'")
+@case("TL26", tags=("slow",),
+      expect="retired 2026-11-22 — no sentence is held for a bind")
 def tl26_held_expiry():
-    """Hold a sentence for a bind and watch the five-minute expiry."""
-    rw = _replace_wispr_off()
-    try:
-        _unbound()
-        mark = log_mark()
-        t_held = _hold_unbound(f"tl26 held probe {int(time.time())}")
-        if not t_held:
-            return "FAIL", f"never held (lastDelivery={state().get('lastDelivery')})"
-        ld = (state().get("lastDelivery") or {}).get("to")
-        time.sleep(max(0, t_held + 298 - time.time()))
-        gone = wait_for(lambda: not state()["awaitingBind"], 4 + max(0, t_held + 298 - time.time()), 0.1)
-        dt = round(time.time() - t_held, 1)
-        line = log_has(mark, r"held dictation expired")
-        note = f"held (lastDelivery.to={ld}); released at {dt if gone else '>302'} s; expiry line: {'yes' if line else 'no'}"
-        if gone and 298 <= dt <= 302 and line:
-            return "PASS", note + _inv_note()
-        return "FAIL", note + _inv_note()
-    finally:
-        _settle_down()
-        _replace_wispr_restore(rw)
+    return "SKIP", "the hold for a bind was removed 2026-11-22 — a bound prompt does not start unbound, a prompt that reaches nobody is kept `undelivered`"
 
 
-@case("TL27", tags=("tty",), expect="held sentence released by POST /bind {\"tty\"} within 1 s")
+@case("TL27", tags=("tty",),
+      expect="retired 2026-11-22 — no sentence is held for a bind")
 def tl27_held_released_by_bind():
-    """Hold a sentence unbound, then bind the witness by tty."""
-    rw = _replace_wispr_off()
-    try:
-        _unbound()
-        tty = witness_open()
-        witness_clear()
-        phrase = f"tl27 held probe {int(time.time())}"
-        if not _hold_unbound(phrase):
-            return "FAIL", "never held"
-        time.sleep(1.0)
-        t0 = time.time()
-        post("/bind", {"tty": tty})
-        released = wait_for(lambda: not state()["awaitingBind"], 3, 0.02)
-        dt = round(time.time() - t0, 2)
-        landed = wait_for(lambda: phrase in witness_text(), 10, 0.1)
-        # Batch 1: `lastDelivery` for a bound terminal is written after the keystrokes — wait for it.
-        wait_for(lambda: (state().get("lastDelivery") or {}).get("to") == f"terminal:{tty}", 5, 0.05)
-        ld = state().get("lastDelivery") or {}
-        note = (f"released {dt} s after the bind; words in the witness: {'yes' if landed else 'no'}; "
-                f"lastDelivery.to={ld.get('to')}")
-        if released and dt <= 1.0 and landed and ld.get("to") == f"terminal:{tty}":
-            return "PASS", note + _inv_note()
-        return "FAIL", note + _inv_note()
-    finally:
-        _settle_down()
-        _replace_wispr_restore(rw)
+    return "SKIP", "the hold for a bind was removed 2026-11-22 — a bound prompt does not start unbound, a prompt that reaches nobody is kept `undelivered`"
 
 
 @case("TL28", tags=("hw", "slow"),
-      expect="held sentence across sleep (6 wall-clock min) expires; today still awaitingBind (uptime clock)")
+      expect="retired 2026-11-22 — no sentence is held for a bind")
 def tl28_held_across_sleep():
-    """Hold a sentence, `pmset sleepnow`, wake after ≥ 6 min (by hand), read awaitingBind."""
-    if os.environ.get("WT_SLEEP_OK") != "1":
-        return "SKIP", "puts the Mac to sleep and needs a hand to wake it after ≥ 6 min — set WT_SLEEP_OK=1"
-    rw = _replace_wispr_off()
-    try:
-        _unbound()
-        mark = log_mark()
-        t_held = _hold_unbound(f"tl28 held probe {int(time.time())}")
-        if not t_held:
-            return "FAIL", "never held"
-        subprocess.run(["pmset", "sleepnow"])
-        while time.time() - t_held < 360:
-            time.sleep(5)
-        s = state()
-        note = f"{time.time() - t_held:.0f} s of wall clock since the hold; awaitingBind={s['awaitingBind']}; " \
-               f"expiry line: {'yes' if log_has(mark, r'held dictation expired') else 'no'}"
-        if s["awaitingBind"]:
-            return "BUG", note + " — the 300 s hold counts awake time only"
-        return "PASS", note
-    finally:
-        _settle_down()
-        _replace_wispr_restore(rw)
+    return "SKIP", "the hold for a bind was removed 2026-11-22 — a bound prompt does not start unbound, a prompt that reaches nobody is kept `undelivered`"
 
 
 @case("TL31", tags=("gesture", "slow"),

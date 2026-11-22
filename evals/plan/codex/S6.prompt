@@ -30,7 +30,7 @@ RECOVER_ENABLED — OPEN_MENU, then:
   then CLOSE_MENU.
 
 STATE:
-  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"busy":d["busy"],"listening":d["listening"],"isRecording":d["isRecording"],"awaitingBind":d["awaitingBind"],"recoverable":d["recoverable"],"bound":b.get("tty"),"lastDelivery":d["lastDelivery"]}))'
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"busy":d["busy"],"listening":d["listening"],"isRecording":d["isRecording"],"awaitingBind":d.get("awaitingBind", False),"recoverable":d["recoverable"],"bound":b.get("tty"),"lastDelivery":d["lastDelivery"]}))'
 
 STEPS
 

@@ -35,7 +35,7 @@ KEY <code> (125 = ↓, 36 = ⏎, 53 = ⎋):
   osascript -e 'tell application "System Events" to key code <code>'
 
 BOUND:
-  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"tty":b.get("tty"),"awaitingBind":d["awaitingBind"],"busy":d["busy"]}))'
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"tty":b.get("tty"),"awaitingBind":d.get("awaitingBind", False),"busy":d["busy"]}))'
 
 ORDER (the first two rows the panel will list: rebind history sorted by last contact, newest first):
   python3 -c 'import json,os;e=json.load(open(os.path.expanduser("~/.walkie-talkie/rebind-history.json")));e=e if isinstance(e,list) else e.get("entries",e);e=sorted(e,key=lambda x:x.get("unboundAt") or x.get("boundAt") or "",reverse=True);print(json.dumps([[x.get("tty"),x.get("boundAt"),x.get("unboundAt")] for x in e[:3]]))'

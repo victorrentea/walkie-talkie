@@ -370,16 +370,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     private let localNowGlyph = NSImageView()
     private let localNowInfo = NSTextField(labelWithString: "")
     private let pasteInfo = NSTextField(labelWithString: "\(PasteHint.label)  \(PasteHint.keys)")
-    /// **`📨 N waiting — bind to send`** (2026-09-26) — sentences spoken with
-    /// nothing bound, held in memory for the next bind (`AppDelegate.awaitingBind`).
-    /// Victor, Q1: *"mi-ar trebui un cue vizual să știu că trebuie să las mesajul
-    /// din memorie"*. Up for as long as one is held, **on the idle chip too** — the
-    /// one row that may put a chip beside the pointer with nothing bound (*The
-    /// pointer is clean when nothing is bound* names it as the exception). Built
-    /// like `kamikazeRow`.
-    private let heldRow = NSView()
-    private let heldGlyph = NSImageView()
-    private let heldInfo = NSTextField(labelWithString: "")
     /// **`📻 Ready` — the microphone may open again while the words are still
     /// in flight** (2026-10-21, Victor: *"even though it's transcribing, in the
     /// tooltip you should suggest ready whenever I could start talking again by
@@ -1524,7 +1514,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         installEmojiRow(modelRow, glyph: modelGlyph, label: modelInfo, emoji: "🧠")
         installEmojiRow(pasteRow, glyph: pasteGlyph, label: pasteInfo, emoji: "📋")
         installEmojiRow(localNowRow, glyph: localNowGlyph, label: localNowInfo, emoji: "💻")
-        installEmojiRow(heldRow, glyph: heldGlyph, label: heldInfo, emoji: "📨")
         installEmojiRow(readyRow, glyph: readyGlyph, label: readyInfo, emoji: "📻")
         if let walkie = Self.walkieLiveGlyph { readyGlyph.image = walkie }
         // **No green since 2026-10-22** — the ink of every other row, and the
@@ -2022,11 +2011,10 @@ private let heardLabel = NSTextField(labelWithString: "")
         // row on the chip, and a chip measured without it is a chip 0 wide.
         var emojiRowsWidth: CGFloat = 0
         // Written before it is measured, for the selection row's reason below.
-        if heldCount > 0 { heldInfo.stringValue = Self.heldText(heldCount) }
         if let text = localNowShown { localNowInfo.stringValue = text }
         if let modelSwitch { modelInfo.stringValue = modelSwitch }
         for (on, label) in [(kamikaze, kamikazeInfo), (modelSwitch != nil, modelInfo), (localNow != nil, localNowInfo), (pasteHint, pasteInfo),
-                            (heldCount > 0, heldInfo), (readyForNext, readyInfo)] where on {
+                            (readyForNext, readyInfo)] where on {
             label.sizeToFit()
             let lead = glyphColumn + recordDotGap
             emojiRowsWidth = max(emojiRowsWidth, lead + ceil(label.frame.width))
@@ -2369,18 +2357,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             titleRow.isHidden = true
         }
 
-        // **What is waiting for a bind, under where the words go** — see
-        // `heldRow`. Often the only row on the chip: nothing bound, nothing said.
-        if heldCount > 0 {
-            heldInfo.stringValue = Self.heldText(heldCount)
-            heldInfo.sizeToFit()
-            layoutGlyphRow(heldRow, glyph: heldGlyph, label: heldInfo, width: innerWidth)
-            heldRow.isHidden = false
-            rows.append((heldRow, recordRowHeight))
-        } else {
-            heldRow.isHidden = true
-        }
-
         // **☠️ Kamikaze, always the chip's last row** (2026-11-22, Victor:
         // *"Kamikaze în tooltip vine mereu … ultimul"*) — under the destination
         // row too, so the one flag that ends the agent is where the eye lands last.
@@ -2669,7 +2645,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// Glyphs are not in it: a row is an image view beside a label, and the
     /// image is `Glyphs`' own rendering rather than a character, so there is
     /// nothing to put in a string. What survives is the words, which is what an
-    /// assertion is written against — `⏳ bind to send — ⌘⌃B`, `Listening…`,
+    /// assertion is written against — `Listening…`,
     /// `walkie-talkie@main`.
     private(set) var renderedRows: [String] = []
 
@@ -3665,8 +3641,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         pasteGlyph.wantsLayer = true
         localNowInfo.wantsLayer = true
         localNowGlyph.wantsLayer = true
-        heldInfo.wantsLayer = true
-        heldGlyph.wantsLayer = true
         readyInfo.wantsLayer = true
         readyGlyph.wantsLayer = true
         // The flash row joins them whenever it is drawn bare — with no blur under
@@ -3700,9 +3674,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             localNowInfo.shadow = Self.halo()
             localNowInfo.textColor = .white
             localNowGlyph.shadow = Self.halo()
-            heldInfo.shadow = Self.halo()
-            heldInfo.textColor = .white
-            heldGlyph.shadow = Self.halo()
             readyInfo.shadow = Self.halo()
             readyInfo.textColor = .white
             readyGlyph.shadow = Self.halo()
@@ -3760,9 +3731,6 @@ private let heardLabel = NSTextField(labelWithString: "")
             localNowInfo.shadow = nil
             localNowInfo.textColor = .secondaryLabelColor
             localNowGlyph.shadow = nil
-            heldInfo.shadow = nil
-            heldInfo.textColor = .secondaryLabelColor
-            heldGlyph.shadow = nil
             readyInfo.shadow = nil
             readyInfo.textColor = .secondaryLabelColor
             readyGlyph.shadow = nil
@@ -4368,8 +4336,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // **The caret is the pin alone** (2026-10-22, Victor: *"nu mai vreau să
         // scrie efectiv caret, doar să apară acea iconiță. E evident că ăla
         // este … locul în care se inseră"*) — the label stays set, so the row
-        // and the destination are still there, only unsaid. `bind to send` wears
-        // the same pin and keeps its words: no place is there to point at yet.
+        // and the destination are still there, only unsaid.
         if let spawn = spawnLabel { return spawn == "caret" && spawnIcon === Self.pinGlyph ? "" : spawn }
         guard boundLabel != nil else { return "🤖 \(SessionLabel.value)" }
         // The terminal's own title first — `✳ walkie-talkie — Fix the tax
@@ -4401,7 +4368,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// the task its tab title carries — the reply pop-up's header wording
     /// (`ActiveTerminals.task`): the title alone (`✳ Fix the tax rounding`) did
     /// not say which folder the session started in. Nil for every other
-    /// destination (caret, ⚡, bind to send), which keeps its own row.
+    /// destination (caret, ⚡), which keeps its own row.
     ///
     /// **A spawn's folder comes with the prompt, not off the chip** (2026-10-20,
     /// Victor: *"it displayed a robot icon and a slash that made no sense"*): the
@@ -5227,17 +5194,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         func r(_ f: NSRect) -> [String: Double] { ["x": f.minX, "y": f.minY, "w": f.width, "h": f.height] }
         return ["panel": r(panel.frame), "skip": heldSkip.frame.map(r) ?? NSNull(), "held": spawnPanelHeld]
     }
-
-    /// How many sentences wait for a bind — see `heldRow`. Zero takes the row down.
-    private(set) var heldCount = 0
-
-    func setHeldCount(_ n: Int) {
-        guard heldCount != n else { return }
-        heldCount = n
-        layoutContent()
-    }
-
-    static func heldText(_ n: Int) -> String { "\(n) waiting — bind to send" }
 
     /// A new sentence may start now — see `readyRow`.
     private(set) var readyForNext = false

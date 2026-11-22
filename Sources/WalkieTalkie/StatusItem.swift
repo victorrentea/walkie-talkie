@@ -2097,7 +2097,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// under it with nothing to be about.
     ///
     /// **`Glyphs.mapPin`, not 📍** — the drawn teardrop marker, the same image
-    /// the chip's title row and the *bind to send* hint carry, so the two places
+    /// the chip's title row and the caret's destination row carry, so the two places
     /// the binding is named wear one mark. See `Glyphs`.
     private func applyHeader() {
         header.title = destination ?? "Unbound"

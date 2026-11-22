@@ -531,7 +531,7 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   keeps it through the fade. Log `⏪ the rewind aims at the middle of <addr> (x, y)`.
   **No window → the middle of the pointer's screen** (2026-10-01: *"când n-ai pe ce centra tunelul
   … pe centrul ecranului pe care e mouse-ul"*) — a spawn (🔼 ↑, its terminal does not exist yet), a
-  held sentence (set at once), or a window that did not answer (set when the read comes back). Log
+  sentence whose terminal is no longer bound (set at once), or a window that did not answer (set when the read comes back). Log
   `⏪ the rewind aims at the middle of the pointer's screen (x, y) — …`.
 - **Visible from the start at 20 %, as tall as the screen, on the window at half the prediction**
   (2026-10-04, Victor: *"un reverse tunnel vizibil deja … douăzeci la sută opac … de diametru egal
@@ -1089,8 +1089,7 @@ e nou — să afișeze pentru trei secunde, cu opțiunea de 80% pentru două sec
 
 - **Every delivery, whatever the destination** (2026-09-23): the caret (`deliver`, as the ⌘V goes
   out), a bound terminal and a new session (`commit`, after `deliverToTerminal` / `spawnClaude`),
-  a sentence held for a bind **when it is released** (it comes back through `commit`; the hold
-  itself gets nothing — it has landed nowhere yet), and Wispr Flow's dictations routed by the
+  (a prompt kept undelivered gets none — its flash names ⌘V; the hold for a bind is gone, 2026-11-22), and Wispr Flow's dictations routed by the
   relay (they reach `deliver` like any other, plus its two *inserted it itself* branches). And a
   cancelled **prompt**, as before. **Superseded: *two moments only*.** That was reasoned as *the
   caret is the one delivery the app cannot read back* — but reading a terminal back answers *did it

@@ -19,7 +19,7 @@ FLAGS_300 (run immediately after CHORD, as one command):
   sleep 0.3; curl -s -m5 $B/test/state | python3 -c 'import json,sys;print(json.dumps(json.load(sys.stdin)["sessionFlags"]))'
 
 BOUND:
-  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"tty":b.get("tty"),"awaitingBind":d["awaitingBind"],"busy":d["busy"]}))'
+  curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"tty":b.get("tty"),"awaitingBind":d.get("awaitingBind", False),"busy":d["busy"]}))'
 
 All tty comparisons below ignore a leading "/dev/".
 

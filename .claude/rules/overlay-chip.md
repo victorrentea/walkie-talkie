@@ -57,7 +57,7 @@ yields to `--label`).
 
 | state | label |
 |---|---|
-| idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound*. **The one exception: a sentence waiting for a bind** — `📨 N waiting — bind to send` (2026-09-26) |
+| idle **and unbound** | **nothing at all — no window on screen.** See *The pointer is clean when nothing is bound*. No exception since 2026-11-22 (the `📨 N waiting — bind to send` row of 2026-09-26 is gone with the hold) |
 | idle, bound | the destination app's icon + `petclinic@main` — no state word: "standing by" is what he can already infer from nothing happening |
 | dictating | `🤖 ai@master`, unchanged, **plus the recording row below it** |
 | bound to a terminal | the destination app's icon + `petclinic@main`; the 🤖 is *replaced*. See *What the chip says when bound* |
@@ -65,7 +65,7 @@ yields to `--label`).
 | dictating | `🎤 Prompting → ⬮...` — the device emoji, then the recogniser's logo (see *The microphone breathes in front of the word*, below); **which microphone is hearing him** (2026-09-22 evening; `Listening(<glyph>/<letter>)...` from 2026-09-19, the letter alone from 2026-09-18). 🎙️ Elgato Wave XLR · 💻 the built-in · 🎤 the DJI receiver · 🎧 Bose. A device that is none of the four leaves the mark empty and the row is the plain `Listening...` — *listening to* with nothing after it is worse than not saying it. **Pushed in as a string by `AppDelegate`** — the chip may not ask which device it means (`RelayWindow.setMicMark`), and it is re-read at every `dictationBegan`, because cables move between sentences. **The glyph is drawn as a picture** (`Glyphs.emoji` → `inline`, cached in `wordGlyphs`), never as a character in the string, and it is **always lit** while the letters ramp: a picture has no unlit state that reads as *not yet*, and dimming it by alpha is the halo problem the opaque grey exists to avoid |
 | transcribing | `Transcribing via <logo>...` for a cloud engine, **the plain `Transcribing...` when the local model reads it** (2026-11-22; `via 💻` until then) — **which recogniser is actually reading it** (2026-09-22 evening). The logo is drawn in **exactly the row's ink** (`Glyphs.Engine` → `Glyphs.engine`, cached per colour in `wordGlyphs`): ElevenLabs' pause-in-a-ring, Wispr Flow's five bars traced off its own icon. Then `✍️ Redacting...` while the Redactor rewrites a plain dictation. Pushed as a string by `AppDelegate` (`setEngineMark`), carried as a **private-use character** so the chip still cannot branch on which engine it is; `transcribeString` gained `applyEngineText`'s *non-ASCII is a picture* branch the day the mark landed on this row, because until then every character in it was ASCII |
 | the dictation was cancelled | `🗑️ Cancelled` in the row `Listening…` was in — 1.5 s, swapped in and out **in one frame**; the oblique wipe that used to carry it both ways was removed on 2026-09-18 (*The chip swaps in one frame*). The 🗑️ came back on 2026-09-02: it was dropped while a flash still drew the lone 🎙️ title row above it, where Apple's lid-flying-off bin read as a second glyph on a two-glyph line; that row no longer appears under a flash, so the bin is the row's only picture |
-| dictating in Replace Wispr | **the drawn map pin alone** (2026-10-22, *"nu mai vreau să scrie efectiv caret, doar să apară acea iconiță"* — `identity` answers `""` for `caret` behind `pinGlyph` — `bind to send` keeps its words; `caret` behind it until then, `at caret` until 2026-10-04) — the same slot a spawn takes, and for the same reason |
+| dictating in Replace Wispr | **the drawn map pin alone** (2026-10-22, *"nu mai vreau să scrie efectiv caret, doar să apară acea iconiță"* — `identity` answers `""` for `caret` behind `pinGlyph`; `caret` behind it until then, `at caret` until 2026-10-04) — the same slot a spawn takes, and for the same reason |
 
 - **Dictating has no title of its own.** The top line stays `🤖 folder@branch` through the whole
   dictation; what changes lives one row down. Liveness is the pulsing 🔴 — a frozen recording row is
@@ -81,7 +81,7 @@ yields to `--label`).
 - **Row order, top to bottom: the dictation's state, the shots, the quoted highlight, Chrome, and
   the destination last** (2026-10-26, Victor: *"mută simbolul de caret care apare în tooltip mereu să
   vină ultimul, sub toate celelalte … cum are label"*): the row with the map pin or the terminal's
-  icon and its `folder@branch` (`titleRow`, and `heldRow` right under it) is the foot of the chip —
+  icon and its `folder@branch` (`titleRow`) is the foot of the chip —
   it holds still for the whole sentence; the rows that change stay together at the top. From
   2026-09-07 to 2026-10-26 it was the second row, Chrome the last. *"citatul să apară mereu deasupra
   Chrome-ului"* still holds: a highlight belongs to this message; the ⌘⇧ row outlives it.
@@ -192,7 +192,7 @@ yields to `--label`).
   `Fell back` for `via: local-fallback` (the engine failed) and `local-auto` (its budget ran out),
   `Used local` for `local-forced` (⌘⌃X). Fired from `AppDelegate.recordDelivery` — every route's
   landing (caret, bound terminal, spawn, ⚡) — hopped to main so it outlasts the same turn's
-  `🎙️ sent`; not for `held` (its own flash; the notice comes at the bind's delivery). No engine's
+  `🎙️ sent`; not for `undelivered` (its own flash says where the prompt is). No engine's
   name. Shot `flash-local-fallback`.
 
 - **`🌐 Foreign words fixed` — 3 s, once a sentence heard in another language has landed mended**
@@ -571,7 +571,7 @@ yields to `--label`).
   session` (the picked folder as its menu row spells it, `workspace` unpicked; the ✨ is the row's
   icon either way — `panelSpawning`), a bound terminal `<folder@branch> — <task>` (`ActiveTerminals.task`
   off the tab title, the reply pop-up's header wording; the folder alone with no task). Caret, ⚡ and
-  *bind to send* keep their rows. The chip beside the pointer is unchanged. Shots `prompt-recipient`,
+  keep their rows. The chip beside the pointer is unchanged. Shots `prompt-recipient`,
   `prompt-spawn`. **The spawn's folder is handed to `showSentPrompt(spawnFolder:)`, never read off
   `spawnLabel`** (2026-10-20, Victor: *"a robot icon and a slash that made no sense"*): the spawn is
   consumed as the words leave, the chip lets its label go, and the panel fell through to the
@@ -700,12 +700,13 @@ yields to `--label`).
   corner (it swelled out of the pointer until then); `hoverPauseSettle` follows it. → journal: *Two shapes: the chip and the panel*
 - **Unbound and idle, there is no overlay window at all.** `layoutContent` omits the title row when
   there is no destination, and `refreshPresence` counts any row as a reason to be on screen (not
-  `rowCount > 1`). **The documented exception (2026-09-26): `📨 N waiting — bind to send`**
-  (`heldRow`, `setHeldCount`, driven by `AppDelegate.awaitingBind`'s `didSet`) — up while a sentence
-  spoken unbound is held in memory (Victor's Q1: *"mi-ar trebui un cue vizual să știu că trebuie să
-  las mesajul din memorie"*), on the idle chip too, announced once by the flash `📨 held — bind a
-  terminal to send it`. It is something to say, not a chip at rest; it goes with the bind. Shots
-  `held-waiting`, `held-waiting-dictating`, `flash-held`. The `🛞 bind` row was tried and reverted within the hour (*"mă încurcă, mă
+  `rowCount > 1`). **No exception since 2026-11-22**: the
+  `📨 N waiting — bind to send` row (2026-09-26, `heldRow`) went with the hold for a bind. With nothing
+  bound the chip only ever flashes: `📍 Nothing bound — ⌘⌃B binds the terminal in front` (a bound
+  prompt refused, or 🔼 → mid-sentence with no terminal to flip to — Shot `flash-nothing-bound`) and
+  `⚠️ Terminal closed — find the prompt in Prompt History or ⌘V` (a prompt that reached nobody — Shot
+  `flash-undelivered`; one line holds ~60 characters, the first wording lost its end). Both strings are
+  `BoundPromptGate`'s; rules in `destinations-and-outbox.md`, *Nothing bound*. The `🛞 bind` row was tried and reverted within the hour (*"mă încurcă, mă
   enervează"*); as a login item the launch directory is `/`, so the old chip read `🤖 /` beside the
   pointer every waking hour. → journal: *The pointer is clean when nothing is bound*
 - **`orderOut`, not `alphaValue = 0`.** An invisible panel still sits 10 pt right and 22 pt below

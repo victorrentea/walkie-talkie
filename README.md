@@ -32,8 +32,6 @@ elements you pointed at while talking.
 
 - ✨ **Start a new session by voice.** A new Terminal opens Claude Code with your sentence as its first prompt, in `~/workspace` or a folder you pick.
   <br><img src="docs/readme/spawn-folder.png" width="275" alt="A dictation aimed at a new session in training-assistant">
-- 🕐 **Nothing bound? Talk anyway.** The sentence waits 5 minutes for you to bind a terminal.
-  <br><img src="docs/readme/bind-to-send.png" width="255" alt="Dictating with nothing bound: bind to send">
 - 💻 **The cloud is slow?** <kbd>⌘⌃X</kbd> transcribes on this Mac, right away.
 - 🎵 **Your music pauses** in Chrome while you talk, and resumes after.
 - 📋 **The clipboard always holds the last sentence**, so <kbd>⌘V</kbd> pastes it again.
@@ -101,8 +99,8 @@ and cannot ask anything back, because you are not reading the terminal.
 | **a new Claude Code session** | 🔼 ↑ | a new Terminal window starts `claude "<your words>"`, then gets bound |
 | **the caret** | 🔼 (forward click) | pasted where you are typing; submitted if that is a Claude Code prompt |
 
-- **Nothing bound? The sentence is held**, five minutes each, in order, and delivered on the next bind. The chip says `bind to send`; on expiry it says `⌘V to paste it`.
-- **The recipient is fixed when the microphone closes.** Binding something else afterwards does not redirect a sentence already said. If its terminal is gone at delivery, the words go to the caret.
+- **Nothing bound? A prompt for the bound terminal does not start**: the chip says `Nothing bound — ⌘⌃B binds the terminal in front`. The caret prompt, a new session and plain dictation work without a binding.
+- **The recipient is fixed when the microphone closes.** Binding something else afterwards does not redirect a sentence already said. If its terminal closes while you talk, keep talking: the prompt is not sent anywhere else, it stays in **Prompt History** and on the clipboard, and the chip says so.
 - **The clipboard always holds the last finished sentence**, so <kbd>⌘V</kbd> pastes it again.
 
 ### Bound terminals

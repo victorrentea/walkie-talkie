@@ -41,7 +41,7 @@
 #    transcribing on any engine (`GET /test/state.busy` — the app's own
 #    `restartBlockers`: every microphone, the recogniser, the local fallback, the
 #    sentence queue, the live caption, a Wispr sentence behind the firewall, the
-#    prompt on screen, a sentence held for a bind, the words being typed, a spawn
+#    prompt on screen, the words being typed, a spawn
 #    until its window is bound, audio staged for Recover — plus Wispr Flow's own
 #    microphone and a History row it is still working on, also read by the gate
 #    itself for older builds), then five seconds since the last ended dictation

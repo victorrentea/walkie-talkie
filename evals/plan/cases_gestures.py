@@ -155,10 +155,8 @@ def need_audio():
         return f"no Loopback / sounddevice: {type(e).__name__}: {e}"
 
 def flush_held():
-    """A sentence held for a bind is delivered into the witness (a `cat`) — never left behind."""
-    bind_witness()
-    wait_for(lambda: not st().get("awaitingBind", True), 10, 0.2)
-    unbind()
+    """Retired 2026-11-22: nothing is held for a bind any more (kept as a no-op for its callers)."""
+    return
 
 def quiesce(timeout=45):
     """Nothing in flight: cancel an open sentence, wait out the settle / panel / delivery, flush a
@@ -905,41 +903,10 @@ def tg17():
 
 
 @case("TG18", tags=("gesture", "audio"),
-      expect="an unbound sentence bound during its upload goes to the terminal just bound. Predicted defect "
-             "(§3.3): the chip said `bind to send`, the destination latched at mic close, `lastDelivery.to == caret`")
+      expect="retired 2026-11-22 — a bound prompt does not start with nothing bound, so there is no unbound "
+             "sentence to bind during its upload (the refusal: BoundPromptGateTests, test_gesture_spec 🔼 →)")
 def tg18():
-    """Bind during the upload → still pasted at the caret."""
-    with G("TG18") as g:
-        why = need_el() or need_audio()
-        if why:
-            return g.skip(why)
-        tty = witness_open()
-        g.key_sink()
-        m = log_mark()
-        g.step("forward-right")
-        if not wait_mic(m, 8):
-            return g.done("FAIL", "the microphone never opened")
-        time.sleep(0.4)
-        chip = chip_text(st())
-        play(CLIP_EN)
-        time.sleep(1.0)
-        g.step("forward-click")
-        if not wait_stopped(m):
-            return g.done("FAIL", "the F7 stop did not land")
-        early = "📦 delivery:" in log_since(m)
-        bind_witness()
-        wait_delivery(m, 40)
-        wait_for(lambda: (st().get("lastDelivery") or {}).get("to", "").startswith(("terminal:", "caret")), 10, 0.3)
-        s = st()
-        to = (s.get("lastDelivery") or {}).get("to", "")
-        msg = f"chip at the start «{chip[:60]}»; lastDelivery.to={to!r} (bound {tty} during the upload)"
-        if early:
-            return g.done("FAIL", "delivered before the bind landed — inconclusive · " + msg)
-        if to == "caret":
-            return g.done("BUG", msg)
-        if to.endswith(tty):
-            return g.done("PASS", msg)
-        return g.done("FAIL", msg)
+    return "SKIP", "a bound prompt with nothing bound is refused at the gesture since 2026-11-22"
 
 
 @case("TG19", tags=("tty",),

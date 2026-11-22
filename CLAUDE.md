@@ -119,20 +119,20 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   the clean words for a plain one, whatever the engine or destination; never restored. ⌘V re-pastes.
 - **Side buttons** (Options+ → ⌃⌥⌘F3…F12, duplicated in `HotkeyTap`, must not drift;
   `evals/test_gesture_spec.py` is the spec): 🔼 = prompt at the caret (full envelope); 🔼 → at the
-  bound terminal (mid-sentence: flips bound ⇄ caret, 2026-10-05 — 🔼 ends it); 🔼 ← cancel (**🔽 ← too while a microphone is open**, 2026-10-21 — at rest 🔽 ← is **the Codex app's voice, full screen, a new chat each time, on / off**, 2026-11-16 (the voice panel is Link's and the wake word's); **since the same evening he asks this app first** — a ⚡-like sentence, 🔼 ends it, its words open the new chat as text and then the voice (`mouse-gestures.md`) — Return until then; **🔼 ← at rest: a ⚡ quick question** — Opus via a pre-started `claude -p`, answer in the reply pop-up, 2026-10-09; then 🔎 web check + 🧐 adversarial review, ✕ stops them, 2026-10-10; **a prompt since 2026-10-15** — pictures, crops, highlights — and **🔼 → over its pop-up asks a follow-up** with the conversation); 🔼 ↑ new session; 🔼 ↓ kamikaze (**over a ⚡ question: Google it *and* answer it**, 2026-11-11 — 🔽 → there Googles only); ◀️-held + 🔼 bind; **🔽 and 🔽 →
+  bound terminal (mid-sentence: flips bound ⇄ caret, 2026-10-05 — 🔼 ends it; nothing bound: no start, 2026-11-22); 🔼 ← cancel (**🔽 ← too while a microphone is open**, 2026-10-21 — at rest 🔽 ← is **the Codex app's voice, full screen, a new chat each time, on / off**, 2026-11-16 (the voice panel is Link's and the wake word's); **since the same evening he asks this app first** — a ⚡-like sentence, 🔼 ends it, its words open the new chat as text and then the voice (`mouse-gestures.md`) — Return until then; **🔼 ← at rest: a ⚡ quick question** — Opus via a pre-started `claude -p`, answer in the reply pop-up, 2026-10-09; then 🔎 web check + 🧐 adversarial review, ✕ stops them, 2026-10-10; **a prompt since 2026-10-15** — pictures, crops, highlights — and **🔼 → over its pop-up asks a follow-up** with the conversation); 🔼 ↑ new session; 🔼 ↓ kamikaze (**over a ⚡ question: Google it *and* answer it**, 2026-11-11 — 🔽 → there Googles only); ◀️-held + 🔼 bind; **🔽 and 🔽 →
   = plain dictation** (start/stop; words only, follows the Engine; **every stop inserts, then
   Return** — 2026-10-05: the bare 🔽 at rest is no longer Return); 🔽 is the shutter while a prompt
   records; **🔽 ↓ while a prompt records = the typing box** (`[typed: "…"]` inline, 2026-10-07 —
   `mouse-gestures.md`). A prompt with a `?` asks the agent for `walkie-reply`, shown beside the
   pointer (`destinations-and-outbox.md`).
-- **Unbound, everything still works:** the sentence is held 5 min for the next bind.
+- **Nothing bound ⇒ no bound prompt** (2026-11-22, `BoundPromptGate`; supersedes 2026-09-26's *held 5 min for the next bind*): 🔼 → opens nothing and flashes `📍 Nothing bound — ⌘⌃B binds the terminal in front`; mid-sentence it leaves a caret sentence at the caret. The caret prompt, new session, plain dictation, ⚡ and the wake word work unbound. **A bound terminal that closes mid-dictation does not stop it**; at the end the prompt is not delivered, not pasted at the caret, not held: an `undelivered` outbox row (Prompt History), the clipboard, and `⚠️ Terminal closed — find the prompt in Prompt History or ⌘V` (`destinations-and-outbox.md`).
 - **The recipient is latched when the microphone closes — which terminal, not only *not the caret*.**
   A deliberate bind mid-sentence redirects; the 10 s poll never may; a bind or unbind after the close
   changes nothing (Q2, 2026-09-26).
 
 ## Never reintroduce
 
-- **Pause** — Disconnect is the hand-back; `holdsForBind` is never a menu tick.
+- **Pause** — Disconnect is the hand-back. **The hold for a bind** (`holdsForBind`, `awaitingBind`, the `bind to send` row — removed 2026-11-22) and **the caret as a fallback for an agent's prompt** (Q4).
 - **⌘⇧P re-paste** (or any re-paste key) — the clipboard holds the sentence instead (Q17, 2026-09-28).
 - **Wispr's DB as a recogniser**, **`copy_last_text` by default**, **focus-stealing as the Wispr
   wrap**, **revoking Wispr's Accessibility**, **`open -a "Wispr Flow"`** — why: `dictation-source.md`.

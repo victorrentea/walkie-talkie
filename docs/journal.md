@@ -21,6 +21,7 @@ The journal contradicts itself over time, because it was written as things chang
 
 - *The chip teaches nothing; the menu does*, *Every row has an icon, and two alphabets share the column*, *The About page becomes a window* — superseded 2026-11-12: the menu's legend rows and one-glyph chords are gone and `AboutWindow` with them; the gestures are taught by the animated Gesture Guide (*The menu teaches nothing; the Gesture Guide does*)
 - The reply pop-up's *"the text shouldn't be selectable"* (2026-10-08, *The panel is a surface*) — superseded 2026-10-29 for the words: they select and copy on release; the rest still drags (*The reply pop-up's words are selectable*)
+- `holdsForBind` (2026-09-11: *with nothing bound the app holds the sentence for a bind*), Q1 and Q3 (2026-09-26: *held 5 min for the next bind*, a queue, the `📨 N waiting — bind to send` row), Q4 (2026-09-26: *a dead terminal at delivery → pasted at the caret*) and *🔼 → with nothing bound aims at the terminal bound last* (2026-10-01) — superseded 2026-11-22 by *A bound prompt needs a bound terminal*: no bound prompt starts unbound, a caret sentence stays at the caret, and a prompt that reaches nobody is kept (an `undelivered` outbox row for Prompt History + the clipboard), never held and never pasted at the caret
 - *Unbound is inert*, *What the rule was, and why the premise expired*, *`awaitingBind`* — retired 2026-09-11 — with nothing bound the app does everything and holds the sentence for a bind (`holdsForBind`)
 - *The order of the rows, and Chrome is last (2026-09-09)*'s destination-second — superseded 2026-10-26: the destination row (pin or terminal icon + `folder@branch`) is the chip's last row (*The destination row is the chip's foot, on black bands*)
 - *The heads converge on the caret, and its window wears an orange outline (2026-10-13)* — the outline is the map pin's `systemRed` since 2026-10-26 (*"aceeași culoare cu pin-ul roșu"*)
@@ -12260,6 +12261,7 @@ nu cuvânt cu cuvânt."* Then: *"fă-mi un video să-mi arăți cum se vede acum
 After phases A–C of `docs/test-plan.md` (reports in `evals/plan/report-*.md`), Victor answered the
 open questions. These rule every fix that follows; the later date wins over older rules.
 
+- *(Q1 superseded 2026-11-22 — see* A bound prompt needs a bound terminal*: nothing is held; a bound prompt does not start unbound.)*
 - **Q1 — nothing bound → the sentence is HELD** (*"bind to send memory"*), never pasted at the
   caret. **A visual cue must say a sentence is waiting in memory** (*"mi-ar trebui un cue vizual să
   știu că trebuie să las mesajul din memorie"*). The chip's `bind to send` and the code's caret
@@ -12448,6 +12450,8 @@ that was bound while he spoke"* — *"vechi, ca poate vreau să deschid altă di
   separate change.
 
 ### 2. Nothing bound when the microphone closes: held, never the caret — and a cue that says so
+
+*(Superseded 2026-11-22 —* A bound prompt needs a bound terminal*: the hold is gone; "never pasted at the caret" stands.)*
 
 Victor, Q1: *"nothing bound → the sentence is HELD (bind to send memory), never pasted at the
 caret. A visual cue must say a sentence is waiting in memory"* — *"mi-ar trebui un cue vizual să
@@ -16773,3 +16777,82 @@ over `MicRecorder.hangOpensForTest`: failed while recording, stopped-behind-the-
 cancel answered at once), `QuitGateTests`. **Not verified:** the app end to end (`POST
 /test/mic-hang` exists for it) — he was dictating with the installed build; `WisprFlowSource`'s
 meter queue has no deadline yet; whether a fresh engine opens while an old one is still looping.
+
+## 2026-11-22 — 📍 A bound prompt needs a bound terminal; nothing is held for a bind
+
+Victor (dictated): *"Dacă n-am niciun terminal legat, bound, deci nu pot să pornesc o dictare bound.
+Ideea asta de «bind to send/paste» e stupidă. Să nici nu pornească în modul de bound dacă n-am
+terminal legat. Și când mi s-a închis terminalul legat în timp ce vorbeam, pot oricum să fac Recover
+Dictation … este un corner case ciudat: dacă mi se închide terminalul legat în timp ce vorbesc, nu
+trebuie să mi se oprească dictarea, dar când o închid, să mi se spună: terminalul a murit, o poți
+recupera din istorie."*
+
+**Supersedes** `holdsForBind` (2026-09-11), Q1 / Q3 (2026-09-26: the sentence held 5 min for the next
+bind, a queue, `📨 N waiting — bind to send`), Q4 (2026-09-26: a terminal gone at delivery → the
+envelope pasted at the caret) and 2026-10-01's *🔼 → with nothing bound re-binds the terminal bound
+last*.
+
+**What each gesture does with nothing bound**
+
+| gesture | before | now |
+|---|---|---|
+| 🔼 → at rest (and the wheel in Gestures: Wheel, `/test/gesture forward-right`) | microphone open, chip `bind to send`, the sentence held 5 min | **nothing opens** — flash `📍 Nothing bound — ⌘⌃B binds the terminal in front` (3 s) |
+| 🔼 → at rest while ⌘⌃B is still resolving (1–2 s) | opened, held, released by the bind | the press is banked (`recordWhenBound`); the bind's landing opens the microphone |
+| 🔼 → mid-sentence on a caret prompt / plain dictation / ⚡ question | re-bound the terminal bound last and aimed at it (held if the bind was slow); with no history: ended the sentence | **stays as it is**, same flash; ⌘⌃B mid-sentence still redirects |
+| 🔼 → mid-sentence on a terminal sentence whose terminal was unbound under him | ended it (→ held) | to the caret, as for a bound one |
+| 🔼, 🔼 ↑, 🔽 / right ⌘ ×2, 🔼 ←, wake word, ◀️ + 🔼 →, 🔼 → over a reply pop-up | worked | unchanged |
+| wheel double click (Gestures: Wheel) | first click opened a held sentence, second converted it to a spawn | first click opens nothing, the second opens the spawn |
+
+**The bound terminal closes while he dictates.** Nothing stops: liveness is not polled while a
+sentence is in the air, shots keep attaching. At his stop the words are transcribed as ever, the
+delivery finds `.targetGone`, and `AppDelegate.keepUndelivered` (a) writes the outbox row with the
+whole envelope and `delivery {to: "undelivered", wanted: "terminal:ttysNNN", why}` — the menu's
+`Prompt History` reads the outbox, so the prompt is there with its pictures and Copy, marked `not
+delivered — was for terminal:ttysNNN`, and `Paste last prompt` finds it after a restart; (b) puts
+the envelope on the clipboard again; (c) flashes for 6 s `⚠️ Terminal closed — find the prompt in
+Prompt History or ⌘V`. `lastDelivery.to == "undelivered"`. The binding is let go (one flash, not
+two). Same ending for a terminal already dead at delivery; `Nothing bound — …` when it was unbound
+mid-sentence (nobody latched, nothing bound at `commit`); `No new session — …` when a spawn fails to
+open (until now: only `⚠️ <why>`, the words on the clipboard alone). The first wording, *your prompt
+is in Prompt History and on the clipboard*, lost its end on the states page — a flash line holds
+~60 characters.
+
+`Recover Dictation` is not this prompt's door: it re-transcribes the audio of a *cancelled* take. An
+undelivered prompt already has its words.
+
+**Why an outbox row, against *written at delivery, never before*.** The 2026-08-27 rule protects one
+thing: a relay left unbound all day must not log his private dictation. It still does not — an
+unbound bound-prompt never starts, and caret and plain sentences write no row. The undelivered row
+is a prompt he addressed to an agent, written after its delivery failed, and it cannot be read as a
+receipt (`to: undelivered`).
+
+**Removed.** `AppDelegate.holdsForBind`, `hasDestination` (its five guards: the question is asked
+once, at the start), `awaitingBind` / `Held` / `holdForBind` / `releaseAwaitingBind` and its call in
+`showBound`, the five-minute expiry, the flashes `📨 held — bind a terminal to send it`, `⏳ held
+dictation expired — ⌘V to paste it`, `🎙️ sent — the sentence you were holding`, `⚠️ … — pasted at
+the caret instead`, `⚠️ <label> is closed — bind a terminal`, `☠️ Kamikaze — goes with it at the
+bind`; `aimAtPreviousTerminal`; the chip's `bind to send` row and `RelayWindow.heldRow` /
+`setHeldCount` / `heldText`; `GET /test/state.awaitingBind` / `awaitingBindCount`; `busyWhy`'s `held
+for a bind`; Shots `bind-to-send`, `held-waiting`, `held-waiting-dictating`, `flash-held`; the
+README's *Nothing bound? Talk anyway* and its picture.
+
+**Kept, renamed.** An *Active Terminals* pick whose bind is still resolving is the only thing a
+sentence may wait for: `pickWaiting` (was the hold queue's last element + `pickHeld`), sent by
+`redirectSpawn`'s own answer; `busyWhy`: `waiting for a picked terminal's bind`.
+
+**Added.** `BoundPromptGate` (the start and the flip as pure functions, the two strings);
+`MessageLog.Entry.undelivered`; Shots `flash-nothing-bound`, `flash-undelivered`; the Gesture Guide's
+line *Nothing bound: it does not start*.
+
+**Verified by:** `BoundPromptGateTests` (the start table, the flip table, the strings and their
+length, Prompt History's mark, and that the hold's identifiers are gone from the sources); the whole
+`swift test` suite; `evals/test_gesture_spec.py`'s 🔼 → row (five checks, three new mutations — the
+spec's eight other failing checks predate this change and are not its rows); the states page.
+`evals/plan`: TD2, TD31, TR20 rewritten for the new ending; TD3, TD10, TD22×3, TD23, TL26–28, TK2,
+TG18 retired. **Not verified:** the app end to end — Victor was dictating with the installed build,
+and a desk run of TR20 opens Terminal tabs on his screen; the rewritten lab cases were not run.
+
+**Judgment calls to confirm.** (1) 🔼 → mid-sentence with nothing bound no longer re-binds the
+terminal bound last (his 2026-10-01 ask). (2) A deliberate unbind mid-sentence ends *kept
+undelivered*, like a closed terminal. (3) An undelivered prompt writes an outbox row. (4)
+`.wouldRunAsShell` / `.failed` deliveries keep their own flash and write no row.

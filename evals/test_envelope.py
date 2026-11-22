@@ -184,11 +184,11 @@ class EnvelopeShape(unittest.TestCase):
         _post(BASE, "/bind", {"tty": _nowhere()})
         _post(BASE, "/test/dictation", {"text": cls.marker})
 
-        # **Bind again until the line appears.** With nothing bound the sentence
-        # is *held* rather than dropped (`holdsForBind`) and no outbox line is
-        # written — and the bogus tty unbinds itself the moment delivery finds no
-        # tab behind it, so a sentence that arrived a beat late is waiting for a
-        # bind that is already gone. Each re-bind releases whatever is waiting.
+        # **The line appears with nothing bound** (2026-11-22): the bogus tty is refused, so
+        # the sentence reaches nobody and is kept — an `undelivered` outbox row carrying the
+        # whole envelope (`AppDelegate.keepUndelivered`), which is the line this class reads.
+        # (Until then it was *held* for a bind and each re-bind below released it; the
+        # re-binds are harmless and stay for a build older than that.)
         for _ in range(10):
             time.sleep(1)
             entry = _last_line()

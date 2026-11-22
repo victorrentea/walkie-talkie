@@ -23,7 +23,7 @@ prefer the local engine.
 | `POST /bind {"tty": "ttys004"}` | bind that session — no toggle, flight or flash (the restart's restore) |
 | `POST /unbind` · `GET /target` | let go · current binding (`guarded`: does the shell guard apply) |
 | `GET /engine` | live source, readiness, `wrapMode`·`wrapWhy`·`scratchpadChord`, local model state, `mic`; `wisprShortcuts` (Wispr's `config.json` action → chord, e.g. `ptt: "61+60"`), `wisprStandalone`, `wisprPttCoherent` (standalone ⇒ Wispr's ptt is off 54+61; W-C7) |
-| `POST /test/dictation {"text", "words"?}` | fabricated transcript entering where a real one does; with `words` (`{text,start,end,type}`) `ShotMarker.place` runs for real |
+| `POST /test/dictation {"text", "words"?}` | fabricated transcript entering where a real one does (**nothing bound → kept undelivered**, 2026-11-22: `lastDelivery.to == "undelivered"`, an outbox row, the flash — the desk's way to that ending; a terminal closed after `/test/dictation/start` is TR20); with `words` (`{text,start,end,type}`) `ShotMarker.place` runs for real |
 | `POST /test/dictation/start {"clock"?, "clean"?}` | open a dictation without talking; `clock` installs a wall-clock marker clock (no mic ⇒ no offsets otherwise); `clean` (2026-10-08) opens the **plain** sentence at the caret — attachments refused until `forward-right` (direct) promotes it |
 | `POST /test/selection {"text"}` | file a highlight via `fileSelection`; 409 outside a dictation |
 | `POST /test/area {x,y,w,h, "to"?}` | the wheel drag without the wheel (global Cocoa points; `to` = the ⇧-drag's move); only the crop overlay is skipped |
@@ -80,8 +80,8 @@ prefer the local engine.
 `listening` · `settling` · `speculative` · `capturing` · `isRecording` · `phase`/`phaseStatus` ·
 `wispr` (`state, since, status, row, lags, transitions`) · `wisprHearing` · `wrapMode`/`wrapWhy` ·
 `relayStarted`/`startedMode`/`intercepting` · `scratchpad…` · `historyRoute` · `ringUp` · `arrowsUp` ·
-`pasteHint` · `halo` · `chip` (rows as strings) · `pasteMode`/`atCaret`/`spawnPending`/`awaitingBind`/
-`bound` · `historyRow` · `source` · `sinkOpen` · `sessionFlags` (modifiers the window server thinks
+`pasteHint` · `halo` · `chip` (rows as strings) · `pasteMode`/`atCaret`/`spawnPending`/
+`bound` (`awaitingBind` / `awaitingBindCount` removed 2026-11-22 — nothing is held for a bind) · `historyRow` · `source` · `sinkOpen` · `sessionFlags` (modifiers the window server thinks
 are held — read this, never infer) · `keyTrace` · `keyRedirect` · `lastRingDown` · `lastSettled` ·
 `lastDelivery` · `backStopsWispr` · `busy`/`busyWhy`/`quitPending`/`pid`/`dictationStartedAt` · since 2026-09-26 (G7):
 `liveCaption` (the band's ticker) · `fallingBack` · `autosend` · `lastFailure {why, engine, at}` · `recoverable {path,
@@ -111,7 +111,7 @@ upload made n ms late (Q12's order cases); `delayx2` delays the next two.
 - **`delivery`** (outbox line and `lastDelivery`): `{via: wispr-cmdv｜wispr-history｜wispr-notes｜
   pasteboard｜local-whisper｜elevenlabs-scribe｜local-fallback｜local-forced (⌘⌃X)｜local-auto (the budget ran out —
   2026-09-28 22:25 → 09-29 07:40, and again since 2026-10-06)｜test, kind: route｜alreadyInserted｜insertedElsewhere, to: terminal:ttysNNN｜
-  caret｜spawn:<folder>｜held, at}`. It records, never decides; caret/held/elsewhere write no outbox line.
+  caret｜spawn:<folder>｜undelivered (+ `wanted`, `why`; `held` until 2026-11-22), at}`. It records, never decides; caret/elsewhere write no outbox line, `undelivered` writes one (Prompt History reads it).
 - **`WisprSink` is the one exception to *never `NSApp.activate`*** — it must be the key window to
   answer what one receives. Never bindable, never in `docs/states/`. With the swallow armed at the
   start chord a correct run leaves it empty.

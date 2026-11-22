@@ -27,7 +27,7 @@ IGNORED = "☠️ kamikaze gesture with no sentence in flight — ignored"
 QUEUED = "☠️ kamikaze — queued on the prompt on its way"
 LANDED_QUEUED = "with a kamikaze queued on it while it travelled"
 SENT_ALONE = "☠️ kamikaze — sent alone, after the prompt, to "
-HELD_ON = "☠️ kamikaze — the sentence held for a bind closes its agent when done"
+HELD_ON = "☠️ kamikaze — the sentence held for a bind closes its agent when done"  # log line gone 2026-11-22 (TK2 retired)
 
 
 def flick():
@@ -58,8 +58,6 @@ class K:
         try:
             if (state().get("prompt") or {}).get("held"):
                 post("/test/prompt", {"do": "send"})
-            if state().get("awaitingBind"):
-                bind_witness()
             wait_for(lambda: not state().get("busy"), 15, 0.2)
         except Exception as e:
             print(f"    {self.cid} cleanup: {type(e).__name__}: {e}")
@@ -145,31 +143,9 @@ def tk1():
 
 
 @case("TK2", tags=("delivery",),
-      expect="🔼↓ with the prompt held for a bind puts the word on that prompt; the bind delivers it with "
-             "`kamikaze` on its last line. Predicted defect: ignored, or sent to the last prompted terminal")
+      expect="retired 2026-11-22 — no prompt is held for a bind, so 🔼↓ has no held prompt to mark")
 def tk2():
-    """Flick on a sentence held for a bind."""
-    with K("TK2") as k:
-        unbind()
-        time.sleep(0.3)
-        if not panel_then_send("walkie-talkie TK2 held prompt, ignore it"):
-            return "SKIP", "the prompt panel was never seen"
-        if not wait_for(lambda: state().get("awaitingBind"), 4, 0.05):
-            return "FAIL", f"not held for a bind: busyWhy {state().get('busyWhy')}"
-        m = log_mark()
-        flick()
-        time.sleep(0.4)
-        witness_clear()
-        bind_witness()
-        wait_for(lambda: "TK2 held prompt" in witness_text(), 10, 0.1)
-        time.sleep(1.0)
-        L, w = log_since(m), witness_text()
-        msg = f"marked={HELD_ON in L}; ignored={IGNORED in L}; witness tail {w.strip()[-60:]!r}"
-        if HELD_ON in L and kamikaze_lines(w) == 1:
-            return "PASS", msg
-        if IGNORED in L or SENT_ALONE in L:
-            return "BUG", msg
-        return "FAIL", msg
+    return "SKIP", "the hold for a bind was removed 2026-11-22 — a bound prompt does not start unbound, a prompt that reaches nobody is kept `undelivered`"
 
 
 @case("TK3", tags=("delivery",),

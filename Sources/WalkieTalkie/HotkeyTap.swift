@@ -1194,7 +1194,7 @@ final class HotkeyTap {
 
     /// **Has the relay's own engine got a sentence open right now?** (2026-09-18)
     ///
-    /// Broader than `dictating`, which is `hasDestination && listening` and
+    /// Broader than `dictating`, which is `listening` (`hasDestination &&` until 2026-11-22) and
     /// therefore answers *is mouse 4 ours*. This one answers *would a second
     /// recogniser now be listening alongside the first* — so it covers the
     /// speculative ring and the settle as well, and it does not care whether
@@ -3465,9 +3465,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 // The unbound double-click branch further down is unreachable
                 // through it — the first click now opens a dictation and sets
                 // `wheelDictateAt`, so the second converts it to a spawn up here,
-                // which is the same gesture arriving at the same place. It is left
-                // standing because it is what has to work again if `holdsForBind`
-                // is ever flipped back.
+                // which is the same gesture arriving at the same place. **Unbound
+                // since 2026-11-22 the first click opens nothing** (a bound prompt
+                // needs a binding) and the second still arrives up here:
+                // `onWheelDoubleSpawn` then opens the spawn itself.
                 //
                 // **⌘ + the wheel used to ride this same branch** and mean "and open
                 // somewhere to put it" — the spawn, without the keyboard-free chord.

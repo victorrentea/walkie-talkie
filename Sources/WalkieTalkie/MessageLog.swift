@@ -71,6 +71,11 @@ enum MessageLog {
         var shots: [String]
         /// Shot base name → what was in front when it was taken.
         var sources: [String: String]
+        /// **A prompt that reached nobody** (2026-11-22, `AppDelegate.keepUndelivered`):
+        /// where it was going (`terminal:ttys004`, `spawn:<folder>`), from the
+        /// row's `delivery {to: "undelivered", wanted}`. Nil for a delivered one.
+        /// The page marks it `not delivered`, so the row is not read as a receipt.
+        var undelivered: String? = nil
     }
 
     /// The last `window` seconds of the outbox, newest first.
@@ -110,9 +115,17 @@ enum MessageLog {
                                  line: (obj["line"] as? String)?.isEmpty == false
                                      ? (obj["line"] as? String) : nil,
                                  shots: shots,
-                                 sources: (obj["sources"] as? [String: String]) ?? [:]))
+                                 sources: (obj["sources"] as? [String: String]) ?? [:],
+                                 undelivered: undelivered(obj["delivery"] as? [String: Any])))
         }
         return entries.sorted { $0.date > $1.date }
+    }
+
+    /// The `wanted` of an `undelivered` delivery record (an empty string when it
+    /// names none), nil for every other row.
+    static func undelivered(_ delivery: [String: Any]?) -> String? {
+        guard let delivery, delivery["to"] as? String == BoundPromptGate.undeliveredTo else { return nil }
+        return (delivery["wanted"] as? String) ?? ""
     }
 
     /// `ts` is written by `ISO8601DateFormatter()` with its default options, so
@@ -272,6 +285,9 @@ enum MessageLog {
         }
         if !entry.kind.isEmpty, entry.kind != "dictation" {
             out += "<span class=\"kind\">\(esc(entry.kind))</span>"
+        }
+        if let wanted = entry.undelivered {
+            out += "<span class=\"kind\">not delivered\(wanted.isEmpty ? "" : " — was for \(esc(wanted))")</span>"
         }
         // **The copy button, and the whole message behind it.** The page is read
         // to *find* a sentence, and what happens next is that it is pasted

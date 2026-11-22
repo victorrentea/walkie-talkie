@@ -157,32 +157,6 @@ enum OverlayStates {
                 o.setShotCount(1)
             },
 
-            Shot(slug: "bind-to-send", group: "Dictating", title: "Nothing is bound, and he is talking anyway",
-                 when: "Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.",
-                 note: "**The destination row names a gesture rather than a place**, because that is what this destination still is: *bind to send*, behind the same drawn pin `at caret` rides behind. It is the fourth answer to *where do these words go* — a terminal already bound, one it is about to open for itself, the caret, and now **later** (`AppDelegate.holdsForBind`). The sentence is recorded, shown and read exactly as a bound one is, and `commit` parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says `📨 held — bind a terminal to send it` once the words have left the dictation, and `📨 1 waiting — bind to send` until a bind sends it (next shot). **The icon form and not the ✨'s mark form**: a mark with no icon is `spawnCollapsed`, which drops the row and rides the glyph in front of `Listening...`, so the words would never have been drawn.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
-                o.setListening(true)
-                o.setShotCount(1)
-            },
-
-            Shot(slug: "held-waiting", group: "At rest", title: "Unbound, with sentences waiting for a bind",
-                 when: "A sentence was spoken with nothing bound (Victor's Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.",
-                 note: "**The one chip an unbound pointer may carry.** *The pointer is clean when nothing is bound* still holds for a relay with nothing to say; this row is something to say — *\"mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie\"*. It counts what `awaitingBind` holds, so a second sentence says `2`, and it goes the instant a bind delivers them. Built like `☠️ Kamikaze`: an emoji in the icon column, words beside it. It is announced once with a flash, `📨 held — bind a terminal to send it`.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setHeldCount(2)
-            },
-
-            Shot(slug: "held-waiting-dictating", group: "Dictating", title: "Talking again, with one already waiting",
-                 when: "A new dictation while a held sentence waits — still nothing bound.",
-                 note: "The row stays under the destination while he talks: the new sentence will join the queue behind it, and both go, oldest first, on the next bind.",
-                 shape: "chip", alpha: 0.80) { o in
-                o.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
-                o.setListening(true)
-                o.setShotCount(1)
-                o.setHeldCount(1)
-            },
-
             Shot(slug: "replace-wispr", group: "At rest", title: "Replace Wispr — this one goes to the caret",
                  when: "The forward side button, while the mode is ticked in the menu: a dictation that is typed where the caret is instead of at an agent.",
                  note: "The caret is a destination like any other, and it takes the line a spawn takes — the bound terminal is still there, and for the length of this sentence the words are not going to it. Bare, it looks like this: no shots row, because this mode still takes no picture of its own — the row appears the moment he takes one — and no ⌘⇧ hint (the extension draws that one in the page).",
@@ -482,17 +456,23 @@ enum OverlayStates {
                 o.flash("🎙️ sent + 2 📸", duration: 60)
             },
 
-            Shot(slug: "flash-held", group: "Flashes", title: "Flash — held for a bind",
-                 when: "Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The `📨 N waiting` row stays after it.",
-                 note: "Said once, when it happens, under the `📨 N waiting` row — which is what stays when the flash has gone.",
+            Shot(slug: "flash-nothing-bound", group: "Flashes", title: "Flash — nothing bound, so no bound prompt",
+                 when: "Three seconds, on 🔼 → (or any other start of a bound prompt) with no terminal bound, and on 🔼 → mid-sentence when there is no terminal to flip to (2026-11-22).",
+                 note: "**No microphone, no ring, no edge — only this.** Victor: *\"Să nici nu pornească în modul de bound dacă n-am terminal legat.\"* It replaces `bind to send`, the `📨 N waiting` row and the five-minute hold (2026-09-26). The caret prompt, the new session, the plain dictation and the ⚡ question never show it. On an unbound pointer, so the flash is the whole chip.",
                  shape: "flash", alpha: 0.80) { o in
-                o.setHeldCount(1)
-                o.flash("📨 held — bind a terminal to send it", duration: 60)
+                o.flash(BoundPromptGate.nothingBound, duration: 60)
+            },
+
+            Shot(slug: "flash-undelivered", group: "Flashes", title: "Flash — the terminal closed, the prompt is kept",
+                 when: "Six seconds, when a prompt's terminal turns out to be gone at delivery — closed while he was talking, or before (2026-11-22). The dictation itself was never stopped.",
+                 note: "**Not pasted at the caret, not held for a bind.** The envelope is an `undelivered` row in the outbox (so `Prompt History` shows it, pictures and Copy included) and on the clipboard again; the binding is let go. The same words with `Nothing bound` when the terminal was unbound mid-sentence, and with `No new session` for a spawn that failed. ⌘V because the clipboard holds it.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.flash(BoundPromptGate.undelivered("Terminal closed"), duration: 60)
             },
 
             Shot(slug: "flash-kamikaze-queued", group: "Flashes", title: "Flash — kamikaze queued on a prompt on its way",
                  when: "1.5 s, on 🔼 ↓ after the words are done but before the prompt has landed — a spawn opening, a bound delivery still typing, a caret prompt still pressing Return (2026-10-10).",
-                 note: "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. On a sentence held for a bind the flash says `☠️ Kamikaze — goes with it at the bind`; with no prompt anywhere, `☠️ No prompt to kamikaze`.",
+                 note: "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. With no prompt anywhere, `☠️ No prompt to kamikaze`.",
                  shape: "flash", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.flash("☠️ Kamikaze — once it lands", duration: 60)
@@ -886,7 +866,6 @@ enum OverlayStates {
         o.setModelSwitch(nil)
         o.setLocalNow(false)
         o.setPasteHint(false)
-        o.setHeldCount(0)
         o.setReadyForNext(false)
         o.unpinChangePulse()
         o.setFilming(false)

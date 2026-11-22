@@ -70,7 +70,7 @@ STEPS
 
 S3.0 precondition.
   CHECK: AUTOSEND_READ
-         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"busy":d["busy"],"awaitingBind":d["awaitingBind"],"bound":b.get("tty")}))'
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);b=d["bound"] or {};print(json.dumps({"busy":d["busy"],"awaitingBind":d.get("awaitingBind", False),"bound":b.get("tty")}))'
          cat @W@/witness.tty
   EXPECT: defaults 1, autosend True, busy false, awaitingBind false, bound tty equal to the witness tty (compare without any leading "/dev/"). Save the tty as WTTY.
 
@@ -83,7 +83,7 @@ S3.2 Cancel on the panel.
   DO: TOK=S3CANCEL$(date +%s); then PANEL_CLICK $TOK cancel. Save its JSON as CANCELCLICK.
   sleep 9    (past the 7 s hold: if Cancel missed, the countdown would have sent it by now)
   CHECK: grep -c "$TOK" @W@/witness.txt ; grep -c "$TOK" ~/.walkie-talkie/outbox.jsonl ; PANEL_RECT
-         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(json.dumps({"busy":d["busy"],"awaitingBind":d["awaitingBind"],"lastDelivery":d["lastDelivery"]}))'
+         curl -s -m5 $B/test/state | python3 -c 'import json,sys;d=json.load(sys.stdin);print(json.dumps({"busy":d["busy"],"awaitingBind":d.get("awaitingBind", False),"lastDelivery":d["lastDelivery"]}))'
   EXPECT: CANCELCLICK ok true and clickAt < 4; both greps 0; PANEL_RECT []; busy false; awaitingBind false.
 
 S3.3 Send on the panel.

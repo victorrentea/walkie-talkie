@@ -1263,12 +1263,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// and its microphone whatever happens to the binding under it, and its
     /// ending is `keepUndelivered`. The caret prompt, the new session, the plain
     /// dictation, the ⚡ question and the wake word never ask.
-    static let nothingBoundFlash = "📍 Nothing bound — ⌘⌃B binds the terminal in front"
-
+    /// The decisions and the sentences are `BoundPromptGate`'s.
     /// The refusal, said on the chip and in the log.
     private func refuseUnbound(_ what: String) {
         Log.info("🚫 \(what) — nothing is bound (no microphone, no ring; ⌘⌃B binds the terminal in front)")
-        overlay.flash(Self.nothingBoundFlash, duration: 3)
+        overlay.flash(BoundPromptGate.nothingBound, duration: 3)
     }
 
     /// **When the last bind Victor actually pressed for landed**, and the grace
@@ -1306,7 +1305,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// seconds of `osascript` working out what it is looking at (measured:
     /// 11:50:15 pressed, 11:50:17 bound), and for the whole of that `isBound` is
     /// false — so a dictate gesture made in that window fell through
-    /// `hasDestination` and did nothing at all, with nothing said about it. That
+    /// `hasDestination` (gone 2026-11-22) and did nothing at all, with nothing said about it. That
     /// is the other half of the same complaint, and the literal race in it.
     private var bindInFlight = false
 
@@ -3054,7 +3053,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **The same double click made at rest** — nothing bound, no dictation
         // to convert, so this one *opens* one that is a spawn from its first
         // sample. `startLocalRecording(spawn:)` is the whole implementation:
-        // `spawnPending` is set before the `hasDestination` gate is read, which
+        // `spawnPending` is set before the `hasDestination` (gone 2026-11-22) gate is read, which
         // is exactly how a spawn is allowed through the gate a bare dictation is
         // not — see its doc comment. `deferContext` is on for the same reason it
         // is on the bare wheel: the picture wanted is the screen his finger
@@ -3067,7 +3066,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         hotkeys.onWheelDoubleSpawn = { [weak self] in
-            DispatchQueue.main.async { self?.convertDictationToSpawn() }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Nothing to convert: the first click was a bound prompt with
+                // nothing bound, which no longer opens (2026-11-22) — so the
+                // double click is the spawn it has always meant.
+                if !self.convertDictationToSpawn(), !self.listening {
+                    self.startDictation(spawn: true, deferContext: true)
+                }
+            }
         }
         // The deferred context shot's cue — see `onWheelDictate`.
         hotkeys.onWheelRelease = { [weak self] in
@@ -3219,7 +3226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // route falls at `captureContext`'s first gate whenever nothing is
             // bound, which is exactly the state this mode is designed to be used
             // in. It mirrors `startLocalRecording(paste:)`: the flag first,
-            // because `hasDestination` is what the gates below ask, then the
+            // because `hasDestination` (gone 2026-11-22) is what the gates below ask, then the
             // bookkeeping that makes a shot attach rather than fly off on its
             // own, and no context frame and no ⌘C.
             // **`clean`: the plain sentence 🔽 → opens** (2026-10-08) — at the
@@ -3316,7 +3323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let line = self.caretLine(words: text)
                 // Consumed here the way `stopLocalRecording` consumes it, so a
                 // route that opened a caret dictation does not leave the flag —
-                // and with it `hasDestination` — standing after the words land.
+                // and with it `hasDestination` (gone 2026-11-22) — standing after the words land.
                 self.pasteMode = false
                 DispatchQueue.main.async {
                     self.listening = false
@@ -6153,7 +6160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **No window to aim at — the middle of the pointer's screen** (2026-10-01).
     /// Victor: *"când n-ai pe ce centra tunelul … pe centrul ecranului pe care e
     /// mouse-ul"* — a new session (🔼 ↑: its terminal does not exist yet), a
-    /// sentence held for a bind, or a window that did not answer.
+    /// sentence whose terminal is no longer bound, or a window that did not answer.
     private func aimRewind() {
         rewindAimToken &+= 1
         let token = rewindAimToken
@@ -6341,8 +6348,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// refused to widen when the spawn and the caret were let through: those two
     /// bypass the flag in the tap, where the bare wheel cannot. The argument was
     /// that a recording with nowhere to go is a room taped for nobody, and
-    /// `holdsForBind` is what took the premise away — the words now wait for the
-    /// terminal instead of being dropped on the floor.
+    /// `holdsForBind` took the premise away (the words waited for the terminal).
+    /// The hold went on 2026-11-22 — a bound prompt with nothing bound is refused
+    /// in `startDictation` — and the wheel stays captured: its double click is
+    /// the new session, bound or not (`onWheelDoubleSpawn`).
     ///
     /// **It has a price and the price is outside this app**: with *Use Logi
     /// Gestures* unticked, the wheel is the relay's for as long as the relay is
@@ -6408,53 +6417,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // transcription at caret, if I do the gesture to start a bound
         // transcription … then it should turn into a bound transcription to the
         // terminal that is currently bound instead of being a free transcription
-        // at the caret"*.
+        // at the caret"*. It is the rule the relay already keeps — *the recipient
+        // is whoever the relay is pointed at when the microphone closes*.
         //
-        // It is the rule the relay already keeps, applied to the one destination
-        // that could not be changed: *the recipient is whoever the relay is
-        // pointed at when the microphone closes*, which is why a deliberate bind
-        // mid-sentence redirects the words. The caret was the exception, because
-        // the only gesture that could have said *not the caret, the terminal*
-        // was spending itself as the stop.
-        //
-        // ~~Nothing else moves: the gesture keeps its stop for a dictation
-        // already aimed at a terminal~~ — since 2026-10-05 🔼 → flips that one to
-        // the caret (below); ⌘⌃D still stops it.
-        if pasteMode, isBound {
-            aimAtBoundTerminal()
-            return
-        }
-        // **…and with nothing bound it stays at the caret** (2026-11-22, Victor:
-        // *"Să nici nu pornească în modul de bound dacă n-am terminal legat"*).
-        // From 2026-10-01 this re-bound the terminal bound last and aimed the
-        // sentence at it, the words held for that bind if it was slow or failed
-        // (`aimAtPreviousTerminal`, gone with the hold). Now nothing flips into
-        // *bound* without a binding: the sentence goes on as it was — caret
-        // prompt, plain words or ⚡ question — and the chip says which key
-        // would give it a terminal. ⌘⌃B mid-sentence still redirects it
-        // (`showBound`, deliberate). Only the gesture: the wheel's toggle
-        // (`onLocalToggle`) keeps its stop.
-        if flipsDestination, pasteMode, !isBound {
-            Log.info("↪️ 🔼 → mid-sentence with nothing bound — the sentence stays where it was going (no flip to a terminal that is not there)")
-            overlay.flash(Self.nothingBoundFlash, duration: 3)
-            return
-        }
         // **…and 🔼 → on a bound sentence takes it to the caret, so the gesture
         // is a toggle** (2026-10-05). Victor: *"If, during a bound dictation, I
         // do the gesture again to start a bound dictation, that dictation
         // becomes a caret. If I'm repeating it one more time, it gets back to
-        // the bound status, so it's a toggle, just like kamikaze is."* The
-        // branch above is the way back. 🔼 is the stop now; ⌘⌃D keeps its own
-        // (`flipsDestination` is the gesture's alone), and a spawn is not a
-        // bound sentence — 🔼 ↑ owns its destination.
-        // **Whether or not its terminal is still bound** (2026-11-22): a bound
-        // sentence unbound under him is the one that most needs the caret, and
-        // the way back answers with the hint above.
-        if flipsDestination, !pasteMode, !spawnPending {
+        // the bound status, so it's a toggle, just like kamikaze is."* 🔼 is the
+        // stop; the wheel's toggle keeps its own (`flipsDestination` is the
+        // gesture's alone), and a spawn is not a bound sentence — 🔼 ↑ owns its
+        // destination. **Whether or not its terminal is still bound**
+        // (2026-11-22): unbound under him is when he most needs the caret.
+        //
+        // **…and with nothing bound a caret sentence stays at the caret**
+        // (2026-11-22, Victor: *"Să nici nu pornească în modul de bound dacă
+        // n-am terminal legat"*). From 2026-10-01 this re-bound the terminal
+        // bound last and aimed the sentence at it, the words held for that bind
+        // if it was slow or failed (`aimAtPreviousTerminal`, gone with the
+        // hold). Now nothing flips into *bound* without a binding: the sentence
+        // goes on as it was — caret prompt, plain words or ⚡ question — and the
+        // chip says which key would give it a terminal. ⌘⌃B mid-sentence still
+        // redirects it (`showBound`, deliberate).
+        //
+        // The table is `BoundPromptGate.flip` (unit-tested).
+        switch BoundPromptGate.flip(gesture: flipsDestination, atCaret: pasteMode, spawn: spawnPending,
+                                    pickInFlight: spawnPickInFlight != nil, bound: isBound) {
+        case .toBound:
+            aimAtBoundTerminal()
+        case .toCaret:
             aimAtCaret()
-            return
+        case .stay:
+            Log.info("↪️ 🔼 → mid-sentence with nothing bound — the sentence stays where it was going (no flip to a terminal that is not there)")
+            overlay.flash(BoundPromptGate.nothingBound, duration: 3)
+        case .end:
+            endDictation()
         }
-        endDictation()
     }
 
     /// **A plain dictation started over a Claude Code terminal binds it and goes
@@ -6629,13 +6627,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // a second ago, `osascript` not back yet) banks the press instead: the
         // bind's landing opens the microphone, its failure drops it with its
         // own flash.
-        if !spawn, !paste, !isBound, !(listening || source.isRecording) {
-            if bindInFlight {
+        if !(listening || source.isRecording) {
+            switch BoundPromptGate.start(spawn: spawn, paste: paste, bound: isBound, bindInFlight: bindInFlight) {
+            case .open: break
+            case .bank:
                 recordWhenBound = true
                 Log.info("🎙️ a bound prompt asked while the bind is still resolving — banked; the microphone opens when it lands")
                 return
+            case .refuse:
+                return refuseUnbound("bound prompt not started")
             }
-            return refuseUnbound("bound prompt not started")
         }
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
@@ -6726,7 +6727,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if liveInFlight { parkLiveSentence(); parkedHere = parkedSentence === live }
             else { live.finished = true; parkedHere = false }
         } else { parkedHere = false }
-        // Set before the gate below and before anything reads `hasDestination`:
+        // Set before the gate below and before anything reads `hasDestination` (gone 2026-11-22):
         // it *is* the answer for a spawn.
         spawnPending = spawn
         // A folder chosen for a previous sentence must never ride this one.
@@ -7169,29 +7170,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **And the words wait for the bind** (`spawnPickInFlight`): the bind is an
     /// `osascript` off the main thread, and words arriving inside it would
     /// otherwise go to whatever was bound *before* — a terminal he did not pick.
-    /// `commit` holds them exactly as it holds an unbound sentence, and
-    /// `showBound` releases them once the pick lands. One sentence, one
-    /// destination: nothing is dropped, nothing is sent twice.
+    /// `commit` parks them in `pickWaiting` and the bind's answer here sends
+    /// them. One sentence, one destination: nothing is dropped, nothing is
+    /// sent twice.
     ///
     /// **A pick that cannot bind leaves the spawn standing.** The terminal can
     /// close between the listing and the click; then the sentence goes where it
     /// was going before he touched the submenu — a new session, in the folder
-    /// he had picked if he had — rather than into the terminal bound before, or
-    /// into a five-minute hold whose release the 10 s poll would aim there.
+    /// he had picked if he had — rather than into the terminal bound before.
     private func redirectSpawn(toTTY tty: String) {
         Log.info("🖥️ spawn → \(tty), picked from the folder menu (\(listening ? "mid-sentence" : "during the settle"))")
         let folder = spawnFolder
         clearSpawn()
         spawnPickInFlight = tty
-        pickHeld = false
+        pickWaiting = []
         DispatchQueue.global(qos: .userInitiated).async {
             let bound = self.terminal.bind(tty: tty)
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
-                let held = self.pickHeld
-                if self.spawnPickInFlight == tty { self.spawnPickInFlight = nil; self.pickHeld = false }
+                var waiting: [Message] = []
+                if self.spawnPickInFlight == tty {
+                    self.spawnPickInFlight = nil
+                    waiting = self.pickWaiting
+                    self.pickWaiting = []
+                }
                 guard let bound = bound else {
-                    self.spawnAfterFailedPick(tty: tty, folder: folder, held: held)
+                    self.spawnAfterFailedPick(tty: tty, folder: folder, waiting: waiting)
                     return
                 }
                 Log.info("📍 re-bound to \(bound.address) from the folder menu")
@@ -7199,6 +7203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // application pops in front. It should not … I usually don't
                 // care where it is"*). The words reach it wherever it sits.
                 self.showBound(bound)
+                // The words that arrived while the bind resolved go to the pick.
+                for var m in waiting {
+                    Log.info("🖥️ the pick's bind landed — sending the sentence that waited for it")
+                    m.target = bound
+                    self.commit(m)
+                }
             }
         }
     }
@@ -7206,17 +7216,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The fallback `redirectSpawn` promises: the spawn back, however far the
     /// sentence has got — held (its words arrived during the pick), still being
     /// spoken or being transcribed, or already gone somewhere (nothing to do).
-    private func spawnAfterFailedPick(tty: String, folder: String?, held: Bool) {
+    private func spawnAfterFailedPick(tty: String, folder: String?, waiting: [Message]) {
         Log.error("🖥️ \(tty) could not be bound — the sentence stays a new session")
-        // The held sentence is the pick's own — the newest in the queue; any
-        // older ones keep waiting for a bind.
-        if held, let h = awaitingBind.popLast() {
-            h.expiry.cancel()
-            var m = h.m
-            m.spawn = true
-            m.directory = folder ?? Self.spawnDirectory
+        // Its words arrived while the bind resolved: they open the session.
+        if !waiting.isEmpty {
             overlay.flash("⚠️ no terminal on \(tty) — opened a new session", duration: 4)
-            commit(m)
+            for var m in waiting {
+                m.spawn = true
+                m.directory = folder ?? Self.spawnDirectory
+                commit(m)
+            }
             return
         }
         guard listening || settling else {
@@ -7237,10 +7246,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The tty an *Active Terminals* pick is binding right now — see
     /// `redirectSpawn`. Main thread only.
     private var spawnPickInFlight: String?
-    /// Whether `commit` held this pick's sentence for it — the one held message
-    /// a failed pick may turn back into a spawn (a hold from before the spawn
-    /// began is not this sentence).
-    private var pickHeld = false
+    /// The pick's own sentence, when its words arrived before the pick's bind
+    /// (one or two seconds of `osascript`) — sent to the pick when the bind
+    /// lands, opened as the new session it was when it fails (`redirectSpawn`).
+    /// The only wait left for a binding since 2026-11-22: bounded by that bind,
+    /// no clock, no chip row. Main thread only.
+    private var pickWaiting: [Message] = []
 
     /// **A rebind picked from a list — `Rebind to…`, or the spawn menu's open
     /// terminals — and the window it names brought forward, focused** (Victor,
@@ -8476,9 +8487,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **The gate is *a dictation is open*, and nothing more.** Victor,
     /// 2026-09-18: *"poți să faci video oricând dictarea e pornită. Da, legată,
     /// nelegată, cu folder nou, nu contează."* So it is deliberately **not**
-    /// `hasDestination`: an unbound sentence is held for five minutes and
-    /// delivered when a bind lands (`holdsForBind`), and a film made during it
-    /// has to travel with it exactly as its screenshots do. The only thing a
+    /// a question about the binding: a film made during a caret prompt or a new
+    /// session travels with it exactly as its screenshots do. The only thing a
     /// recording needs is a sentence to belong to.
     ///
     /// The settle is excluded on purpose — between the microphone closing and
@@ -8763,7 +8773,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // sentence; with the sentence over there is nothing left to attach it to.
         if !live { CropSelectionOverlay.cancelIfParked() }
         // **The wider question, for the engine exclusion** — see
-        // `HotkeyTap.ownDictation`. `live` is `hasDestination && listening` and
+        // `HotkeyTap.ownDictation`. `live` is `listening` (`hasDestination &&` until 2026-11-22) and
         // answers *is mouse 4 ours*; this one answers *would a second recogniser
         // now be listening alongside the first*, so it covers the speculative
         // ring and the settle and does not care where the words are going.
@@ -8868,8 +8878,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // audio and only true of where the code looked: `wisprSource.meter` is
         // open for the whole of such a sentence, and it was `source.meter` — the
         // wired engine's, idle — that was being asked. See `liveMeter`.
-        // No `listening && !isBound` clause since 2026-09-26: an unbound
-        // sentence is held for a bind (Q1), and the heads promise a caret.
+        // No `listening && !isBound` clause since 2026-09-26 (Q1): a bound
+        // sentence unbound under him does not go to the caret (kept instead,
+        // 2026-11-22), and the heads promise a caret.
         let atCaret = !foreignMic && (pasteMode
             || (speculative && !listening)
             || (settling && settlingAtCaret))
@@ -9401,12 +9412,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             pasteMode = false
             overlay.setSpawnDestination(nil)
         }
-        // **`bind to send — ⌘⌃B` is the row he has just answered.** It goes on
-        // any bind rather than on a deliberate one: unlike the two above, this
-        // row claims nothing about *which* terminal, so there is no destination
-        // for a poll to steal — and it must not be left standing on a dictation
-        // that now has somewhere to go. The row only ever exists while a
-        // dictation is running, so a bind at rest passes through this untouched.
+        // A destination row left on a sentence that now has a terminal goes, on
+        // any bind (it claims nothing about *which* terminal, so there is
+        // nothing for the poll to steal).
         if listening, !pasteMode, !spawnPending {
             overlay.setSpawnDestination(nil)
         }
@@ -9419,14 +9427,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // published here: this is the one method every route into and out of one
         // passes through, so the file cannot drift from the chip.
         publishBinding(target)
-        // **And for exactly that reason, this is where a held sentence goes
-        // out.** Every way a terminal can become the destination ends here, and
-        // what the words have been waiting for is a terminal — not a particular
-        // gesture. Dispatched rather than called inline: `showBound` runs on the
-        // bind's own thread and a delivery is `osascript`.
-        // Unconditionally dispatched: `awaitingBind` is main-thread state and this
-        // may run on the bind's thread; `releaseAwaitingBind` checks on main.
-        DispatchQueue.main.async { [weak self] in self?.releaseAwaitingBind() }
+        // (Until 2026-11-22 this is where a sentence held for a bind went out —
+        // `releaseAwaitingBind`. Nothing waits for a bind any more.)
     }
 
     /// Write the marker the status line reads — see `Outbox.publishBound`.
@@ -9532,8 +9534,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "pasteMode": pasteMode,
             "atCaret": latchedAtCaret,
             "spawnPending": spawnPending,
-            "awaitingBind": !awaitingBind.isEmpty,
-            "awaitingBindCount": awaitingBind.count,
             "source": source.name,
             "wrapWispr": wisprSource.wrapWispr,
             "wrapMode": wisprSource.wrapMode.rawValue,
@@ -9797,11 +9797,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     // now, and the warning below takes the chip.
                     self.overlay.promptFarewell = nil
                     self.overlay.releaseSpawnPanel(fadeOver: 0.2)
-                    // No outbox line: it is written when the window is bound, and
-                    // there is no window — this flash is the only place he would
-                    // learn the words went nowhere (⌘⇧P still has them).
+                    // No receipt — there is no window. Since 2026-11-22 the prompt
+                    // is kept like any other that reached nobody: an `undelivered`
+                    // row for Prompt History, the clipboard, and the flash.
                     Log.error("✨ spawn failed: \(why)")
-                    self.overlay.flash("⚠️ \(why)", duration: 8)
+                    if m.kind == "dictation" {
+                        self.keepUndelivered(m, line: line, wanted: "spawn:\(m.directory ?? Self.spawnDirectory)",
+                                             lost: "No new session", why: why)
+                    } else {
+                        self.overlay.flash("⚠️ \(why)", duration: 8)
+                    }
                 }
             }
         }
@@ -10260,12 +10265,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Off the main thread for the same reason binding is: this is subprocesses
     /// all the way down. **The outbox line and `lastDelivery` are written here, on
     /// `.delivered` only** (2026-09-26) — see `commit`. Everything else is said by
-    /// `report`, and a terminal that turned out to be gone gets the words at the
-    /// caret instead (Victor's Q4).
+    /// `report`, and a terminal that turned out to be gone leaves the prompt in
+    /// Prompt History and on the clipboard (`keepUndelivered`, 2026-11-22).
     ///
     /// **`to` is the recipient latched at the close** (Q2), which need not be
     /// the terminal bound now: a bind since then does not redirect the sentence,
-    /// an unbind does not hold it.
+    /// an unbind does not stop it.
     private func deliverToTerminal(_ m: Message, line: String, to target: TerminalBinding.Target) {
         guard !line.isEmpty else { return }
         let to = "terminal:\(target.handle.tty ?? target.address)"
@@ -10311,23 +10316,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             self?.sendKamikaze(to: target)
                         }
                     }
-                case .targetGone:
-                    // **Q4 — a dead terminal at delivery: paste at the caret**
-                    // (Victor, 2026-09-26), not held. The binding goes
-                    // (`report`); the sentence does not go with it. The whole
-                    // envelope, since it was addressed to an agent. No outbox
-                    // line, as for every caret sentence; `lastDelivery` says
-                    // `caret`. Measured before: TR20, the tab closed while he
-                    // spoke → `targetGone` and a `delivered` row for a dead tty.
+                case .targetGone(let what):
+                    // **A dead terminal at delivery: not delivered, kept**
+                    // (2026-11-22, Victor: *"să mi se spună: terminalul a murit,
+                    // o poți recupera din istorie"*) — whether it closed while he
+                    // spoke or before. Until this day Q4 (2026-09-26) pasted the
+                    // envelope at the caret. The binding goes (`report`).
                     if m.kind == "dictation" {
-                        self.recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: "caret")
-                        // The sentence's settle ended at `deliver`; one standing now is the next's (Q12).
-                        self.pasteText(line, settles: false)
+                        self.keepUndelivered(m, line: line, wanted: to, lost: "Terminal closed", why: what)
                     }
                 default:
                     break
                 }
-                self.report(outcome, pastedAtCaret: m.kind == "dictation")
+                self.report(outcome, kept: m.kind == "dictation")
             }
         }
     }
@@ -10339,19 +10340,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// saying the same thing would be a panel thrown across Victor's work to
     /// repeat what the target already shows. Every other outcome is a message
     /// that goes nowhere unless this says so.
-    private func report(_ outcome: TerminalBinding.Outcome, pastedAtCaret: Bool = false) {
+    private func report(_ outcome: TerminalBinding.Outcome, kept: Bool = false) {
         switch outcome {
         case .delivered:
             Log.info("⌨️ delivered to the bound terminal")
         case .noTarget:
             break
         case .targetGone(let what):
-            Log.error("⌨️ \(what) — unbound" + (pastedAtCaret ? "; the sentence was pasted at the caret instead" : ""))
+            Log.error("⌨️ \(what) — unbound" + (kept ? "; the prompt is kept (Prompt History, clipboard)" : ""))
             // Only when it was the binding: a latched A found dead leaves the B
             // bound since where it is (`TerminalBinding.deliver(_:to:)`).
             if terminal.target == nil { showBound(nil) }
-            overlay.flash(pastedAtCaret ? "⚠️ \(what) — pasted at the caret instead"
-                                        : "⚠️ \(what) — unbound", duration: 6)
+            // A dictation's flash is `keepUndelivered`'s — one message, not two.
+            if !kept { overlay.flash("⚠️ \(what) — unbound", duration: 6) }
         case .wouldRunAsShell(let command):
             // A shell at its prompt, or since 2026-09-26 a program that hands the
             // line to one (`TerminalBinding.shellCarriers`, Victor's Q5). Nothing
@@ -10922,16 +10923,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// lost (17:26:32, a 🔼 ↑) fell between two owners: the panel had gone and
     /// the words were done, so the sentence no longer took it, and the spawned
     /// window was not bound yet, so there was no offer — `ignored`. A bound
-    /// delivery's keystrokes, a caret prompt's Return retries (up to ~6 s) and
-    /// a sentence held for a bind were the same hole — and with an older offer
+    /// delivery's keystrokes and a caret prompt's Return retries (up to ~6 s)
+    /// were the same hole — and with an older offer
     /// standing, the flick went to *that* terminal instead.
     ///
     /// So every prompt has a serial, and the flick goes to the newest of:
     /// - **a prompt on its way** (`leavingPrompt`, from the route taking it to
     ///   the route answering) — queued on it, again = taken back; its offer
     ///   takes it the moment it lands, so the word goes alone after it;
-    /// - **a prompt held for a bind** — the word goes on its text, as on the
-    ///   panel (`toggleHeldKamikaze`), and travels with it;
     /// - **the offer** (`takeKamikazeOffer`).
     private var leavingPrompt: (serial: Int, since: Date)?
     private var kamikazeQueued: Set<Int> = []
@@ -10959,8 +10958,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The flick with no sentence of its own to mark (see the MARK above).
     private func kamikazeAfterTheWords() {
         let leaving = leavingPrompt.flatMap { Date().timeIntervalSince($0.since) < Self.leavingCeiling ? $0.serial : nil }
-        let heldSerial = awaitingBind.last?.serial
-        let newest = [leaving, heldSerial, kamikazeOffer?.serial].compactMap { $0 }.max()
+        let newest = [leaving, kamikazeOffer?.serial].compactMap { $0 }.max()
         switch newest {
         case nil:
             Log.info("☠️ kamikaze gesture with no sentence in flight — ignored")
@@ -10978,16 +10976,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.promptWentNowhere(s, why: "the prompt never landed")
                 }
             }
-        case heldSerial:
-            let marker = "\n\nkamikaze"
-            var h = awaitingBind[awaitingBind.count - 1]
-            let text = h.m.text ?? ""
-            let on = !text.hasSuffix(marker)
-            h.m.text = on ? text + marker : String(text.dropLast(marker.count))
-            awaitingBind[awaitingBind.count - 1] = h
-            Log.info(on ? "☠️ kamikaze — the sentence held for a bind closes its agent when done"
-                        : "☠️ kamikaze taken back off the sentence held for a bind")
-            overlay.flash(on ? "☠️ Kamikaze — goes with it at the bind" : "☠️ Kamikaze taken back", duration: 1.5)
         default:
             _ = takeKamikazeOffer()
         }
@@ -13075,7 +13063,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             why.append("an earlier sentence in flight")
         }
         if overlay?.isHoldingPrompt ?? false { why.append("prompt on screen") }
-        if !awaitingBind.isEmpty { why.append("held for a bind") }
+        if !pickWaiting.isEmpty { why.append("waiting for a picked terminal's bind") }
         if deliveriesInFlight > 0 || caretHalo.delivering { why.append("delivering") }
         // A plain sentence waiting for its ✍️ edit has not been pasted yet (review 2026-10-22).
         if DictationEditor.shared.inFlight > 0 { why.append("editing") }
@@ -13307,10 +13295,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if kind == "dictation" { spawnPending = false; spawnFolder = nil
                                  pendingVia = nil; pendingEngine = nil; pendingHeard = nil
                                  pendingDeliveryKind = nil; pendingAffect = nil }
-        // **A dictation is never dropped for want of a binding any more**
-        // (`holdsForBind`): it is built, shown and read exactly as a bound one
-        // is, and `commit` parks it for the terminal Victor is about to point
-        // at. Everything else here still is — `session_start`, `session_end` and
+        // **A dictation is never dropped here for want of a binding**: it is
+        // built, shown and read exactly as a bound one is, and `commit` gives it
+        // its ending (`keepUndelivered` when nothing is bound — 2026-11-22).
+        // Everything else here still is — `session_start`, `session_end` and
         // a bare screenshot are addressed to a watcher of the outbox, and an
         // outbox with nothing bound is the one thing the 2026-08-27 rule was
         // actually protecting.
@@ -13583,8 +13571,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// It is kept for the deliveries that write no outbox line at all, which is
     /// the half the log was worst at: a caret paste, a sentence Wispr had
     /// already inserted (`.alreadyInserted`), one it inserted somewhere else
-    /// (`.insertedElsewhere`), and a sentence held for a bind that has not
-    /// landed. On 2026-09-13 the words went into Word and into a Terminal that
+    /// (`.insertedElsewhere`), and a prompt that reached nobody
+    /// (`undelivered`). On 2026-09-13 the words went into Word and into a Terminal that
     /// was merely in front, and neither left a line anywhere.
     ///
     /// Written on the main thread, read on the listener queue, hence the lock.
@@ -13607,8 +13595,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // promptare"*) — the route the words came by, the panel's `Engine:` row,
         // so a fallback or ⌘⌃X says so where the Engine setting would not.
         lastEngineUsed = Self.engineName(via: via, engineLabel: engine)
-        let stockCut = to == "held" ? nil : pendingStockCut
-        if to != "held" { pendingStockCut = nil }
+        let stockCut = to == Self.undelivered ? nil : pendingStockCut
+        if to != Self.undelivered { pendingStockCut = nil }
         deliveryLock.unlock()
         Log.info("📦 delivery: \(via) → \(to) (\(Self.deliveryName(kind)))")
         // **A made-up sign-off was cut off the end** (2026-11-12) — said over the
@@ -13623,10 +13611,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // seconds … If something else like Wispr was selected, fall back to local
         // mode. I want to know that."*). Here because every route records its
         // landing here — caret, bound terminal, spawn, ⚡ — and a caret sentence
-        // has no panel to carry the `Engine:` row. Not for `held`: its own flash
-        // says so, and this one comes when the bind delivers it. Hopped, so it
+        // has no panel to carry the `Engine:` row. Not for an undelivered one: its
+        // own flash says where the prompt is. Hopped, so it
         // lands after the `🎙️ sent` flash of the same turn instead of under it.
-        if to != "held", let notice = Self.localNotice(via: via) {
+        if to != Self.undelivered, let notice = Self.localNotice(via: via) {
             DispatchQueue.main.async { [weak self] in self?.overlay.flash(notice, duration: 3) }
         }
         return obj
@@ -13660,7 +13648,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if atCaret { return "caret" }
         if spawn || spawnPending { return "spawn:\(directory ?? spawnFolder ?? Self.spawnDirectory)" }
         if let t = terminal.target { return "terminal:\(t.handle.tty ?? t.address)" }
-        return "held"
+        return Self.undelivered
     }
 
     /// The route and the case the sentence being assembled arrived by, taken off
@@ -13731,38 +13719,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             lastDictation = line
             pastable = true
             // **Q17: the clipboard holds the finished prompt** — bound, spawned
-            // or held for a bind, the envelope the agent gets is one ⌘V away.
+            // or kept undelivered, the envelope the agent gets is one ⌘V away.
             holdOnClipboard(line, why: m.spawn ? "the prompt (new session)" : "the prompt")
         }
-        // **Nothing is written before there is somewhere to write it to.** A
-        // dictation spoken with nothing bound goes to `awaitingBind` and comes
-        // back through this same method the moment a binding lands, at which
-        // point the branch below is taken and the outbox line is the delivered
-        // one. That ordering is the whole of what survives from the 2026-08-27
-        // decision — see `holdsForBind`: the words wait, the log does not fill
-        // up with them. ⌘⇧P still has them, because `lastDictation` is set
-        // above: he said it, so he can paste it, bound or not.
-        // **Held too while an *Active Terminals* pick is still binding**
-        // (`spawnPickInFlight`): the terminal bound right now is the one he
-        // just turned away from, and the pick's `showBound` releases this.
-        // **A latched terminal is not held**, even if it has been unbound since
-        // (Q2, TD29): the words go to it while it lives, else to the caret. Nil
-        // is *the next bind* — now, if one has landed since the close (TG18),
-        // else held for it (Q1).
-        // The pick clause only for a sentence with no latched terminal: a queued
-        // older sentence (Q12) keeps the terminal it latched at its close.
-        if m.kind == "dictation", !m.spawn, m.target == nil && (!isBound || spawnPickInFlight != nil) {
-            // **Recorded even though nothing is written** — that is the point of
-            // the record. A held sentence lives in memory and nowhere else
-            // (*When the outbox is written*), so `held` is the one destination
-            // the file could never name.
-            recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: "held")
-            if spawnPickInFlight != nil { pickHeld = true }
-            // Whatever it was addressed to, it now waits for the bind — the
-            // pick's, or the next one.
-            var m = m
-            m.target = nil
-            return holdForBind(m, quietly: spawnPickInFlight != nil)
+        // **Its words arrived while an *Active Terminals* pick is still binding**
+        // (`spawnPickInFlight`): the terminal bound right now is the one he just
+        // turned away from, so the sentence waits for the pick's answer — a
+        // second or two (`redirectSpawn`). Only for a sentence with no latched
+        // terminal: a queued older one (Q12) keeps the terminal of its close.
+        if m.kind == "dictation", !m.spawn, m.target == nil, spawnPickInFlight != nil {
+            Log.info("🖥️ the words arrived before the picked terminal's bind — waiting for it")
+            pickWaiting.append(m)
+            return
+        }
+        // **Nothing bound, and nobody latched: not delivered, kept** (2026-11-22).
+        // A bound prompt cannot start unbound any more, so this is a sentence
+        // whose terminal was let go while he spoke (or a fabricated one,
+        // `POST /test/dictation`). A latched terminal is tried even if it has
+        // been unbound since (Q2, TD29); nil with a binding landed since the
+        // close goes to that binding (TG18). Until this day: held 5 min for the
+        // next bind (`awaitingBind`, Q1/Q3 of 2026-09-26).
+        if m.kind == "dictation", !m.spawn, m.target == nil, !isBound {
+            return keepUndelivered(m, line: line, wanted: "the bound terminal",
+                                   lost: "Nothing bound", why: "nothing was bound when its words arrived")
         }
         // **A bound terminal gets its outbox line after the words went in, never
         // before** (2026-09-26, the test plan's §3.11: TR21, TD15, TD16). Written
@@ -13836,98 +13815,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     line: line, delivery: delivery, affect: m.affect?.json)
     }
 
-    // MARK: - Said now, bound later
+    // MARK: - Not delivered, kept (2026-11-22)
 
-    /// **A sentence spoken with nothing bound, and the clock it is kept under.**
-    ///
-    /// Victor's ask, 2026-09-11: *"tot ce pot să fac când sunt legat de un
-    /// terminal să pot să fac și atunci când sunt nelegat, urmând a mă lega
-    /// ulterior"* — the second half is the feature. He has a thought before he
-    /// has a window for it, and until now the app's answer was to refuse the
-    /// gesture outright (*Unbound is inert*), which meant the thought had to
-    /// survive the trip to the terminal in his head instead.
-    ///
-    /// **A queue, delivered in order** (Victor's Q3, 2026-09-26: *two held
-    /// sentences — both are kept*). It was one sentence until then — a second
-    /// dictation replaced the first, silently (TD2: the bind delivered BRAVO and
-    /// ALFA was gone; ⌘⇧P had it, and nobody was told). Each sentence keeps its
-    /// own five minutes.
-    ///
-    /// **Five minutes**, the same net `Recover Cancelled Dictation` is kept
-    /// under and for the same reason: long enough to cross the room and open a
-    /// terminal, short enough that a sentence from this morning cannot land in
-    /// an agent he binds this afternoon for something else. A held message
-    /// arriving in the wrong session is worse than one he has to say again.
-    private struct Held {
-        let id: Int
-        /// Its place among the prompts, for 🔼 ↓ (`kamikazeAfterTheWords`).
-        let serial: Int
-        var m: Message
-        let expiry: DispatchWorkItem
-    }
-    /// **The chip counts them** (`📨 N waiting — bind to send`, Q1's visual
-    /// cue) — every change, whoever made it, lands here.
-    private var awaitingBind: [Held] = [] {
-        didSet { overlay?.setHeldCount(awaitingBind.count) }
-    }
-    private var heldSerial = 0
-    private static let bindWait: TimeInterval = 5 * 60
+    /// `lastDelivery.to` (and the outbox row's `delivery.to`) for a prompt that
+    /// reached no destination — `keepUndelivered`.
+    static let undelivered = BoundPromptGate.undeliveredTo
 
-    /// `quietly`: the bind is already on its way (an *Active Terminals* pick),
-    /// so *bind a terminal to send it* would be asking for what he just did.
-    private func holdForBind(_ m: Message, quietly: Bool = false) {
-        // The words have left the dictation, so the row that named where they
-        // were going has nothing left to say — the flash below says the rest,
-        // and after it the chip goes back to being a chip with nothing bound.
-        overlay.setSpawnDestination(nil)
-        heldSerial += 1
-        let id = heldSerial
-        let expiry = DispatchWorkItem { [weak self] in
-            guard let self = self, let i = self.awaitingBind.firstIndex(where: { $0.id == id }) else { return }
-            self.awaitingBind.remove(at: i)
-            Log.info("⏳ held dictation expired — never bound (\(self.awaitingBind.count) still held)")
-            // Said out loud, because the alternative is a sentence he believes
-            // is still going to arrive somewhere. ⌘⇧P is the way back to it.
-            self.overlay.flash("⏳ held dictation expired — ⌘V to paste it", duration: 4)
-        }
-        promptSerial += 1
-        awaitingBind.append(Held(id: id, serial: promptSerial, m: m, expiry: expiry))
+    /// **A prompt that reached nobody is kept, not re-routed and not held.**
+    ///
+    /// Victor, 2026-11-22: *"dacă mi se închide terminalul legat în timp ce
+    /// vorbesc, nu trebuie să mi se oprească dictarea, dar când o închid, să mi
+    /// se spună: terminalul a murit, o poți recupera din istorie."* The
+    /// dictation runs to his own stop (nothing here is reached before the words
+    /// exist); then the envelope — words, pictures' paths, everything the agent
+    /// would have read — is:
+    ///
+    /// - **written to the outbox**, so the menu's `Prompt History` page shows
+    ///   it with its pictures and its Copy button, and `Paste last prompt`
+    ///   finds it after a restart. `delivery.to` is `undelivered`, with
+    ///   `wanted` (where it was going) and `why` beside it, so the row can
+    ///   never be read as a receipt;
+    /// - **put on the clipboard again** (Q17 put it there at `commit`; a
+    ///   sentence finished since may have replaced it);
+    /// - **said on the chip** for six seconds.
+    ///
+    /// Never the caret (Q4 of 2026-09-26 pasted it there — an envelope addressed
+    /// to an agent landing in whatever had the focus), never a wait for the
+    /// next bind (Q1, the same day — *"ideea asta de «bind to send/paste» e
+    /// stupidă"*). Main thread.
+    private func keepUndelivered(_ m: Message, line: String, wanted: String, lost: String, why: String) {
+        var delivery = recordDelivery(via: m.via, engine: m.engine, kind: m.deliveryKind, to: Self.undelivered)
+        delivery["wanted"] = wanted
+        delivery["why"] = why
+        writeOutbox(m, line: line, delivery: delivery)
+        holdOnClipboard(line, why: "the undelivered prompt")
         let words = (m.text ?? "").split(whereSeparator: { $0.isWhitespace }).count
-        let n = awaitingBind.count
-        Log.info("⏳ nothing bound — holding \(words) words for the next bind, \(Int(Self.bindWait / 60)) min"
-                 + (n > 1 ? " (\(n) sentences held, delivered in order)" : ""))
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.bindWait, execute: expiry)
-        if !quietly {
-            overlay.flash(n > 1 ? "📨 \(n) held — bind a terminal to send them"
-                                : "📨 held — bind a terminal to send it", duration: 3)
-        }
-    }
-
-    /// Called from `showBound`, which is the one place every route into a
-    /// binding passes through — ⌘⌃B, the chords, `POST /bind`, the restart's
-    /// restore and a spawned window adopting itself. All of them are a terminal
-    /// appearing, which is the only thing the held sentences were waiting for.
-    ///
-    /// **Deliberate or not.** The 10s poll calls `showBound` with a binding
-    /// already in place and passes `false`, which is what stops it stealing a
-    /// spawn's destination — but it cannot produce a binding out of nothing, so
-    /// it can never be the call that releases this. Any call that arrives with a
-    /// target when there was none is a bind that happened.
-    ///
-    /// **All of them, oldest first** (Q3). `deliverToTerminal` runs on one serial
-    /// queue, so the order they are committed in is the order they are typed.
-    private func releaseAwaitingBind() {
-        guard !awaitingBind.isEmpty, isBound else { return }
-        let held = awaitingBind
-        awaitingBind = []
-        for h in held { h.expiry.cancel() }
-        Log.info("⏳ bound — sending the \(held.count == 1 ? "sentence" : "\(held.count) sentences") that \(held.count == 1 ? "was" : "were") waiting")
-        // Through `commit` again rather than straight to `deliverToTerminal`:
-        // the outbox line has still not been written, and writing it is the
-        // first half of what a delivery is.
-        for h in held { commit(h.m) }
-        overlay.flash(held.count == 1 ? "🎙️ sent — the sentence you were holding"
-                                      : "🎙️ sent — the \(held.count) sentences you were holding", duration: 3)
+        Log.error("📭 not delivered — \(why); \(words) words kept: an outbox row for Prompt History (delivery.to = undelivered, wanted \(wanted)) and the clipboard")
+        overlay.setSpawnDestination(nil)
+        overlay.flash(BoundPromptGate.undelivered(lost), duration: 6)
     }
 
     /// **⌘⇧P — the last dictation, again, wherever the caret is.**

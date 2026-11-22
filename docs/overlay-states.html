@@ -101,7 +101,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 77 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 75 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -124,7 +124,7 @@
     by hand.
   </div>
 </header>
-<nav><a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#Flashes">Flashes</a> <a href="#The held prompt">The held prompt</a></nav>
+<nav><a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#Flashes">Flashes</a> <a href="#The held prompt">The held prompt</a></nav>
     <h2 id="At rest">At rest</h2>
     <div class="grid">
       <section class="card" id="unbound-idle">
@@ -235,42 +235,6 @@
         <p class="when">After clicking a row in the folder menu, for the rest of that dictation.</p>
         <p class="note"><strong>The chosen folder gets the row a binding would have taken</strong>, behind the ✨ (Terminal&#x27;s icon until 2026-10-07, <em>&quot;the new [✨] should be there instead of that console icon&quot;</em>) — Victor&#x27;s ask, 2026-09-07: <em>&quot;ca și cum aș fi fost deja bind-uit la un alt astfel de terminal … să știu dacă am setat ce trebuie&quot;</em>. The argument that removed this row was that the folder is <em>always</em> <code>~/workspace</code>, so it said nothing; that holds until he picks one out of five, at which point the only place the choice could be checked was a label that had already gone. Since 2026-10-07 the ✨ is that row&#x27;s icon and leaves <code>Listening...</code>: <em>not yet running</em> is said once, beside the folder it will run in.</p>
         <code class="slug">spawn-folder</code>
-      </section>
-      <section class="card" id="bind-to-send">
-        <header>
-          <h3>Nothing is bound, and he is talking anyway</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">215×93 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/bind-to-send.png" width="215" height="93" style="opacity:0.8" alt="Nothing is bound, and he is talking anyway"></div>
-        <p class="when">Any dictation started with no terminal bound — which the app refused outright until 2026-09-11, and now holds for the bind that follows it.</p>
-        <p class="note"><strong>The destination row names a gesture rather than a place</strong>, because that is what this destination still is: <em>bind to send</em>, behind the same drawn pin <code>at caret</code> rides behind. It is the fourth answer to <em>where do these words go</em> — a terminal already bound, one it is about to open for itself, the caret, and now <strong>later</strong> (<code>AppDelegate.holdsForBind</code>). The sentence is recorded, shown and read exactly as a bound one is, and <code>commit</code> parks it for five minutes; the outbox line is written at delivery and not before, which is the whole of what survives from the 2026-08-27 decision that unbound means silent. The row comes down the instant a bind lands, and the chip says <code>📨 held — bind a terminal to send it</code> once the words have left the dictation, and <code>📨 1 waiting — bind to send</code> until a bind sends it (next shot). <strong>The icon form and not the ✨&#x27;s mark form</strong>: a mark with no icon is <code>spawnCollapsed</code>, which drops the row and rides the glyph in front of <code>Listening...</code>, so the words would never have been drawn.</p>
-        <code class="slug">bind-to-send</code>
-      </section>
-    </div>
-    <h2 id="At rest">At rest</h2>
-    <div class="grid">
-      <section class="card" id="held-waiting">
-        <header>
-          <h3>Unbound, with sentences waiting for a bind</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">239×46 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/held-waiting.png" width="239" height="46" style="opacity:0.8" alt="Unbound, with sentences waiting for a bind"></div>
-        <p class="when">A sentence was spoken with nothing bound (Victor&#x27;s Q1, 2026-09-26: held, never pasted at the caret) — from the moment it is held until a bind sends it or its five minutes run out. Two here.</p>
-        <p class="note"><strong>The one chip an unbound pointer may carry.</strong> <em>The pointer is clean when nothing is bound</em> still holds for a relay with nothing to say; this row is something to say — <em>&quot;mi-ar trebui un cue vizual să știu că trebuie să las mesajul din memorie&quot;</em>. It counts what <code>awaitingBind</code> holds, so a second sentence says <code>2</code>, and it goes the instant a bind delivers them. Built like <code>☠️ Kamikaze</code>: an emoji in the icon column, words beside it. It is announced once with a flash, <code>📨 held — bind a terminal to send it</code>.</p>
-        <code class="slug">held-waiting</code>
-      </section>
-    </div>
-    <h2 id="Dictating">Dictating</h2>
-    <div class="grid">
-      <section class="card" id="held-waiting-dictating">
-        <header>
-          <h3>Talking again, with one already waiting</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">237×117 pt</span></div>
-        </header>
-        <div class="shot"><img src="states/held-waiting-dictating.png" width="237" height="117" style="opacity:0.8" alt="Talking again, with one already waiting"></div>
-        <p class="when">A new dictation while a held sentence waits — still nothing bound.</p>
-        <p class="note">The row stays under the destination while he talks: the new sentence will join the queue behind it, and both go, oldest first, on the next bind.</p>
-        <code class="slug">held-waiting-dictating</code>
       </section>
     </div>
     <h2 id="At rest">At rest</h2>
@@ -571,15 +535,25 @@
         <p class="note">A flash is a panel: blur, rounded rect, shadow — riding beside the pointer like the chip. It dissolves rather than cutting out, because a window vanishing under his hand is an event and <code>🎙️ sent</code> is not.</p>
         <code class="slug">flash-sent</code>
       </section>
-      <section class="card" id="flash-held">
+      <section class="card" id="flash-nothing-bound">
         <header>
-          <h3>Flash — held for a bind</h3>
-          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">295×70 pt</span></div>
+          <h3>Flash — nothing bound, so no bound prompt</h3>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">428×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/flash-held.png" width="295" height="70" style="opacity:0.8" alt="Flash — held for a bind"></div>
-        <p class="when">Three seconds, the moment a sentence spoken with nothing bound is held (Q1). The <code>📨 N waiting</code> row stays after it.</p>
-        <p class="note">Said once, when it happens, under the <code>📨 N waiting</code> row — which is what stays when the flash has gone.</p>
-        <code class="slug">flash-held</code>
+        <div class="shot"><img src="states/flash-nothing-bound.png" width="428" height="46" style="opacity:0.8" alt="Flash — nothing bound, so no bound prompt"></div>
+        <p class="when">Three seconds, on 🔼 → (or any other start of a bound prompt) with no terminal bound, and on 🔼 → mid-sentence when there is no terminal to flip to (2026-11-22).</p>
+        <p class="note"><strong>No microphone, no ring, no edge — only this.</strong> Victor: <em>&quot;Să nici nu pornească în modul de bound dacă n-am terminal legat.&quot;</em> It replaces <code>bind to send</code>, the <code>📨 N waiting</code> row and the five-minute hold (2026-09-26). The caret prompt, the new session, the plain dictation and the ⚡ question never show it. On an unbound pointer, so the flash is the whole chip.</p>
+        <code class="slug">flash-nothing-bound</code>
+      </section>
+      <section class="card" id="flash-undelivered">
+        <header>
+          <h3>Flash — the terminal closed, the prompt is kept</h3>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">499×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/flash-undelivered.png" width="499" height="46" style="opacity:0.8" alt="Flash — the terminal closed, the prompt is kept"></div>
+        <p class="when">Six seconds, when a prompt&#x27;s terminal turns out to be gone at delivery — closed while he was talking, or before (2026-11-22). The dictation itself was never stopped.</p>
+        <p class="note"><strong>Not pasted at the caret, not held for a bind.</strong> The envelope is an <code>undelivered</code> row in the outbox (so <code>Prompt History</code> shows it, pictures and Copy included) and on the clipboard again; the binding is let go. The same words with <code>Nothing bound</code> when the terminal was unbound mid-sentence, and with <code>No new session</code> for a spawn that failed. ⌘V because the clipboard holds it.</p>
+        <code class="slug">flash-undelivered</code>
       </section>
       <section class="card" id="flash-kamikaze-queued">
         <header>
@@ -588,7 +562,7 @@
         </header>
         <div class="shot"><img src="states/flash-kamikaze-queued.png" width="244" height="46" style="opacity:0.8" alt="Flash — kamikaze queued on a prompt on its way"></div>
         <p class="when">1.5 s, on 🔼 ↓ after the words are done but before the prompt has landed — a spawn opening, a bound delivery still typing, a caret prompt still pressing Return (2026-10-10).</p>
-        <p class="note">The word goes alone the moment the prompt lands, by the route it took. Again = <code>☠️ Kamikaze taken back</code>. On a sentence held for a bind the flash says <code>☠️ Kamikaze — goes with it at the bind</code>; with no prompt anywhere, <code>☠️ No prompt to kamikaze</code>.</p>
+        <p class="note">The word goes alone the moment the prompt lands, by the route it took. Again = <code>☠️ Kamikaze taken back</code>. With no prompt anywhere, <code>☠️ No prompt to kamikaze</code>.</p>
         <code class="slug">flash-kamikaze-queued</code>
       </section>
       <section class="card" id="flash-unguarded">
@@ -926,7 +900,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 2dba6aaf · 22 Nov 2026 · built 22 Nov 2026, 14:03
+  Generated from <code>OverlayStates.swift</code> · repo at c8687e54 · 22 Nov 2026 · built 22 Nov 2026, 14:11
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>
