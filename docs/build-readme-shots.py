@@ -82,4 +82,15 @@ if __name__ == "__main__":
     for n in ["listening", "listening-selection",
               "prompt-shots", "spawn-folder"]:
         single(n)
+    # The corner hint bar's titled sheets: drawn by the shooter itself
+    # (`GestureHintBar.writeSheets`), copied as they are. `hint-bar.txt` says what
+    # they show; `GestureHintBarTests` fails when the code says something else.
+    import shutil
+    import sys
+    sheets = ["hint-bar.png", "hint-bar-keyboard.png", "hint-bar-crop.png", "hint-bar.txt"]
+    missing = [n for n in sheets if not (STATES / n).exists()]
+    if missing:
+        sys.exit(f"✗ the shoot wrote no {', '.join(missing)} — the README's hint bar sheets would go stale")
+    for n in sheets:
+        shutil.copyfile(STATES / n, OUT / n)
     print(f"→ {OUT.relative_to(DOCS.parent)}/")

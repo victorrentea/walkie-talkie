@@ -55,7 +55,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// prompt's kamikaze, 🔽 ← cancels.
     func testAPlainDictationShowsEveryGestureItAnswers() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false)), [
-            Cross(click: "⏹️", up: "✨ new", down: "☠️ last", left: "🗑️ discard", right: "💻 terminal"),
+            Cross(click: "⏹️", up: "✨ new", down: "☠️ last", left: "🗑️ discard", right: GestureHintBar.terminal + " terminal"),
             Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "", right: "⏹️ ⌘⌘"),
         ])
     }
@@ -66,7 +66,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// Googles it. 2026-11-11: 🔼 ↓ Googles it and answers it.
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
-            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: "💻 terminal"),
+            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: GestureHintBar.terminal + " terminal"),
             Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "", right: GestureHintBar.google + " Google"),
         ])
     }
@@ -80,9 +80,9 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false)),
                        ["💬 prompt ⌃P", GestureHintBar.copyKey])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true)),
-                       [GestureHintBar.copyKey, GestureHintBar.selectKey])
+                       [GestureHintBar.selectKey, GestureHintBar.copyKey])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false, quick: true)),
-                       [GestureHintBar.copyKey, GestureHintBar.selectKey])
+                       [GestureHintBar.selectKey, GestureHintBar.copyKey])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true, crop: .selecting)), [])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false, held: true)), [])
     }
@@ -152,7 +152,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
             Cross(click: "🏁", up: "✨", down: "☠️", left: "🗑️", right: nil),
             Cross(click: "📸", up: "🔴", down: "⌨️", left: "", right: "🧠"),
         ])
-        XCTAssertEqual(mouse.keys, [GestureHintBar.copyKey, GestureHintBar.selectKey])
+        XCTAssertEqual(mouse.keys, [GestureHintBar.selectKey, GestureHintBar.copyKey])
 
         // No Logitech mouse: the trackpad's crosses, the keys back in their badges.
         let none = GestureHintBar.bar(for: .init(listening: true, prompting: true, noMouse: true))
@@ -160,7 +160,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
             Cross(click: "🏁 / ⌘⌘", up: "✨", down: "☠️", left: "🗑️", right: nil, corner: "☝️"),
             Cross(click: "📸 / ⌃P", up: "🔴", down: "⌨️", left: "", right: "🧠", corner: "✌️"),
         ])
-        XCTAssertEqual(none.keys, [GestureHintBar.copyKey, GestureHintBar.selectKey])
+        XCTAssertEqual(none.keys, [GestureHintBar.selectKey, GestureHintBar.copyKey])
     }
 
     /// `💬 prompt ⌃P` is a key with no gesture behind it: without the mouse it
@@ -168,7 +168,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     func testAPlainDictationsBarWithTheMouseAndWithout() {
         let mouse = GestureHintBar.bar(for: .init(listening: true, prompting: false))
         XCTAssertEqual(mouse.crosses, [
-            Cross(click: "⏹️", up: "✨", down: "☠️", left: "🗑️", right: "💻"),
+            Cross(click: "⏹️", up: "✨", down: "☠️", left: "🗑️", right: GestureHintBar.terminal),
             Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "", right: "⏹️"),
         ])
         XCTAssertEqual(mouse.keys, [GestureHintBar.copyKey])
@@ -188,7 +188,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// and with none.
     func testTheFingersAtRestWithTheMouseAndWithout() {
         XCTAssertEqual(GestureHintBar.bar(for: .init(fingers: true)).crosses, [
-            Cross(click: "💬", up: "✨", down: "☠️", left: "⚡", right: "💻", corner: "☝️"),
+            Cross(click: "💬", up: "✨", down: "☠️", left: "⚡", right: GestureHintBar.terminal, corner: "☝️"),
             Cross(click: "🎙️", up: "", down: "🔌", left: "⏎", right: "🎙️", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.bar(for: .init(fingers: true, noMouse: true)).crosses[1].click, "🎙️ / ⌘⌘")
@@ -200,6 +200,44 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         XCTAssertLessThanOrEqual(GestureHintBar.Board.size(for: bar.crosses, mouse: bar.mouse, keys: bar.keys).width, 130)
     }
 
+    /// *"copy să fie mereu în colț dreapta jos"*: in every stage that has a
+    /// keys row, mouse or none, the Copy icon is the last badge — and the row
+    /// is right-aligned, so that is the bar's bottom-right corner.
+    func testCopyIsAlwaysTheBottomRightBadge() {
+        for noMouse in [false, true] {
+            for (prompting, quick) in [(true, false), (false, false), (false, true)] {
+                let bar = GestureHintBar.bar(for: .init(listening: true, prompting: prompting, quick: quick, noMouse: noMouse))
+                XCTAssertEqual(bar.keys.last, GestureHintBar.copyKey)
+                XCTAssertEqual(GestureHintBar.Board.keyColumn(bar.keys.count - 1, of: bar.keys.count), 2)
+                if prompting || quick {
+                    XCTAssertEqual(bar.keys, [GestureHintBar.selectKey, GestureHintBar.copyKey])
+                    XCTAssertEqual(GestureHintBar.Board.keyColumn(0, of: 2), 1, "select in the centre column")
+                }
+            }
+        }
+    }
+
+    /// **The README's sheets are the code's** (`docs/readme/hint-bar*.png`):
+    /// the shoot writes `hint-bar.txt` beside them — every column's title and
+    /// badges — and this fails when the bar has since changed, or a picture or
+    /// its place in the README is gone. The fix is `./docs/shoot-overlay-states.sh`.
+    func testTheReadmesSheetsAreThereAndCurrent() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let readme = root.appendingPathComponent("docs/readme")
+        let committed = try String(contentsOf: readme.appendingPathComponent(GestureHintBar.sheetSpecName), encoding: .utf8)
+        XCTAssertEqual(committed, GestureHintBar.sheetSpec(),
+                       "the hint bar changed since its README sheets were drawn — run ./docs/shoot-overlay-states.sh")
+        let text = try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
+        for sheet in GestureHintBar.sheets {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: readme.appendingPathComponent(sheet.name + ".png").path),
+                          "docs/readme/\(sheet.name).png is missing")
+        }
+        for shown in ["hint-bar.png", "hint-bar-keyboard.png"] {
+            XCTAssertTrue(text.contains("docs/readme/\(shown)"), "README.md does not show \(shown)")
+        }
+    }
+
     func testNothingWhileRightCmdOptIsHeld() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, held: true)), [])
     }
@@ -208,7 +246,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// at rest what each gesture starts, mid-sentence the side buttons' own (2026-10-20).
     func testTheTrackpadsCrossesCarryTheFingers() {
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(fingers: true)), [
-            Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal", corner: "☝️"),
+            Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: GestureHintBar.terminal + " terminal", corner: "☝️"),
             Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
@@ -268,6 +306,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
 
     func testRenderForReview() throws {
         guard let dir = ProcessInfo.processInfo.environment["HINT_BAR_PNG"] else { return }
+        GestureHintBar.writeSheets(into: dir)
         let stages: [(String, GestureHintBar.Stage)] = [
             ("prompt", .init(listening: true, prompting: true)),
             ("prompt-area", .init(listening: true, prompting: true, areaFilm: true)),

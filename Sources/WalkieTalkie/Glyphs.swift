@@ -1061,6 +1061,39 @@ extension Glyphs {
         }
     }
 
+    // MARK: - Terminal (2026-11-22)
+
+    /// **A terminal window: a rounded frame, a `>` prompt and its cursor bar**
+    /// (2026-11-22, Victor, looking at the wordless hint bar: *"ce înseamnă 💻 în
+    /// aceste poze?"*). 💻 is the local model on the chip; *to the bound
+    /// terminal* needed a mark of its own, and no emoji draws `>_`.
+    ///
+    /// On a grid of `height`, y up, `terminalAspect` wide: the frame is stroked
+    /// `0.09` thick with `0.18` corners; the chevron runs `(0.26, 0.70)` →
+    /// `(0.50, 0.50)` → `(0.26, 0.30)`, the cursor bar `0.60…0.96` at `0.30`.
+    static let terminalAspect: CGFloat = 1.3
+    static func terminal(height h: CGFloat, ink: NSColor = .white) -> NSImage {
+        NSImage(size: NSSize(width: h * terminalAspect, height: h), flipped: false) { rect in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let t = h * 0.09
+            ctx.setStrokeColor(ink.cgColor)
+            ctx.setLineWidth(t)
+            ctx.setLineCap(.round)
+            ctx.setLineJoin(.round)
+            ctx.addPath(CGPath(roundedRect: rect.insetBy(dx: t / 2, dy: t / 2),
+                               cornerWidth: h * 0.18, cornerHeight: h * 0.18, transform: nil))
+            ctx.strokePath()
+            ctx.setLineWidth(h * 0.11)
+            ctx.move(to: CGPoint(x: 0.26 * h, y: 0.70 * h))
+            ctx.addLine(to: CGPoint(x: 0.50 * h, y: 0.50 * h))
+            ctx.addLine(to: CGPoint(x: 0.26 * h, y: 0.30 * h))
+            ctx.move(to: CGPoint(x: 0.62 * h, y: 0.30 * h))
+            ctx.addLine(to: CGPoint(x: 0.96 * h, y: 0.30 * h))
+            ctx.strokePath()
+            return true
+        }
+    }
+
     // MARK: - Select (2026-11-22)
 
     /// **A selection being dragged: three lines of text, a stretch of the middle

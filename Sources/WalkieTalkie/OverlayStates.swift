@@ -820,7 +820,7 @@ enum OverlayStates {
         return [
             bar("bar-prompt-mouse", "A prompt — the mouse attached",
                 when: "While a prompt records, on the secondary screen beside the Retina (three times this size there; the picture is at two).",
-                note: "Two crosses, 🔼 over 🔽: the centre is the click, the arms are the swipes. **Glyphs alone since 2026-11-22** — Victor: *\"afișează tastele … doar dacă nu e mouse-ul conectat … lasă doar emoji-urile … mai puțin late acele badge-uri\"*. 🏁 end, ✨ new session, ☠️ kamikaze, 🗑️ discard; 📸 shot, 🔴 film, ⌨️ typing box, 🧠 model. Under them what the ordinary mouse does meanwhile: the Copy icon (a copy rides along — no word, no ⌘C) and the new **select** badge, a caret dragged over lines of text (`Glyphs.select`). 122 pt wide; 260 with the words.",
+                note: "Two crosses, 🔼 over 🔽: the centre is the click, the arms are the swipes. **Glyphs alone since 2026-11-22** — Victor: *\"afișează tastele … doar dacă nu e mouse-ul conectat … lasă doar emoji-urile … mai puțin late acele badge-uri\"*. 🏁 end, ✨ new session, ☠️ kamikaze, 🗑️ discard; 📸 shot, 🔴 film, ⌨️ typing box, 🧠 model. Under them what the ordinary mouse does meanwhile: the new **select** badge, a caret dragged over lines of text (`Glyphs.select`), and in the corner the Copy icon (a copy rides along — no word, no ⌘C). 122 pt wide; 260 with the words.",
                 .init(listening: true, prompting: true)),
             bar("bar-prompt-no-mouse", "A prompt — no Logitech mouse",
                 when: "The same moment with no Logitech mouse in the registry (`MouseDevices`): the crosses are the trackpad's, ☝️ one finger and ✌️ two under left ⌃⌥⌘.",
@@ -828,7 +828,7 @@ enum OverlayStates {
                 .init(listening: true, prompting: true, noMouse: true)),
             bar("bar-plain-mouse", "A plain dictation — the mouse attached",
                 when: "While a plain dictation records (🔽 / 🔽 →).",
-                note: "⏹️ stops it, `⏹️ + ⏎` stops it and presses Return, 💻 makes it a prompt to the terminal, ✨ a new session's, ☠️ is the last prompt's kamikaze. One badge under the crosses: a copy is gathered for the moment the sentence becomes a prompt. **No select badge** — a plain dictation files no highlight — and `💬 / ⌃P` is a key, so it waits for the bar below.",
+                note: "⏹️ stops it, `⏹️ + ⏎` stops it and presses Return, the drawn `>_` window makes it a prompt to the bound terminal (💻 until the same evening — *\"ce înseamnă 💻 în aceste poze?\"*), ✨ a new session's, ☠️ is the last prompt's kamikaze. One badge under the crosses: a copy is gathered for the moment the sentence becomes a prompt. **No select badge** — a plain dictation files no highlight — and `💬 / ⌃P` is a key, so it waits for the bar below.",
                 .init(listening: true, prompting: false)),
             bar("bar-plain-no-mouse", "A plain dictation — no Logitech mouse",
                 when: "The same moment without the mouse.",
@@ -836,7 +836,7 @@ enum OverlayStates {
                 .init(listening: true, prompting: false, noMouse: true)),
             bar("bar-question-mouse", "A ⚡ question — the mouse attached",
                 when: "While a quick question records (🔼 ← at rest).",
-                note: "⚡ asks, 💻 sends it to the terminal instead, Google's G searches it, `G + ⚡` does both. It is a prompt, so copy and select both ride.",
+                note: "⚡ asks, the `>_` window sends it to the bound terminal instead, Google's G searches it, `G + ⚡` does both. It is a prompt, so copy and select both ride.",
                 .init(listening: true, prompting: false, quick: true)),
             bar("bar-crop-mouse", "A wheel crop — the mouse attached",
                 when: "From the wheel press until the crop lands: the bar draws the mouse, because that is the hand the crop is in.",
@@ -844,7 +844,7 @@ enum OverlayStates {
                 .init(listening: true, prompting: true, crop: .selecting)),
             bar("bar-fingers-rest-no-mouse", "At rest, left ⌃⌥⌘ held — no Logitech mouse",
                 when: "0.3 s into holding left ⌃⌥⌘ with no sentence open: what each trackpad gesture starts.",
-                note: "☝️: 💬 a prompt at the caret, ✨ a new session, ⚡ a question, 💻 a prompt at the bound terminal, ☠️ kamikaze. ✌️: `🎙️ / ⌘⌘` a plain dictation (right ⌘ twice is its key), ⏎ Return, 🔌 unbind. With the mouse attached the same bar loses the `/ ⌘⌘`.",
+                note: "☝️: 💬 a prompt at the caret, ✨ a new session, ⚡ a question, `>_` a prompt at the bound terminal, ☠️ kamikaze. ✌️: `🎙️ / ⌘⌘` a plain dictation (right ⌘ twice is its key), ⏎ Return, 🔌 unbind. With the mouse attached the same bar loses the `/ ⌘⌘`.",
                 .init(fingers: true, noMouse: true)),
         ]
     }
@@ -893,6 +893,8 @@ enum OverlayStates {
     }
 
     private static func finish(_ manifest: [[String: Any]], dir: String) {
+        // The README's titled sheets of the corner hint bar ride every shoot.
+        GestureHintBar.writeSheets(into: dir)
         let path = (dir as NSString).appendingPathComponent("states.json")
         if let data = try? JSONSerialization.data(withJSONObject: manifest,
                                                   options: [.prettyPrinted, .sortedKeys]) {

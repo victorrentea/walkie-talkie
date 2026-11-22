@@ -1,0 +1,20 @@
+font 15.0 box 26.0×38.0 sheet ×2.0
+# hint-bar.png
+Prompt: [· 🏁, ↑ ✨, ↓ ☠️, ← 🗑️] [· 📸, ↑ 🔴, ↓ ⌨️, → 🧠] keys[‹select›|‹copy›]
+Prompt (light backdrop) ☀: [· 🏁, ↑ ✨, ↓ ☠️, ← 🗑️] [· 📸, ↑ 🔴, ↓ ⌨️, → 🧠] keys[‹select›|‹copy›]
+Plain dictation: [· ⏹️, ↑ ✨, ↓ ☠️, ← 🗑️, → ‹terminal›] [· ⏹️ + ⏎, ↓ ⏹️, → ⏹️] keys[‹copy›]
+⚡ Question: [· ⚡, ↑ ✨, ↓ ‹G› + ⚡, ← 🗑️, → ‹terminal›] [· 📸, ↓ ⌨️, → ‹G›] keys[‹select›|‹copy›]
+Prompt after a crop: [· 🏁, ↑ ✨, ↓ ☠️, ← 🗑️] [· 📸, ↑ 🔴 ✂️, ↓ ⌨️, → 🧠] keys[‹select›|‹copy›]
+Filming, kamikaze on, to a new session: [· 🏁, ↑ 📂, ↓ ~☠️, ← 🗑️, → 🏁] [· ⏹️, ↑ ⏹️, ↓ ⌨️, → 🧠] keys[‹select›|‹copy›]
+# hint-bar-keyboard.png
+No mouse: prompt: [☝️ · 🏁 / ⌘⌘, ↑ ✨, ↓ ☠️, ← 🗑️] [✌️ · 📸 / ⌃P, ↑ 🔴, ↓ ⌨️, → 🧠] keys[‹select›|‹copy›]
+No mouse: prompt (light backdrop) ☀: [☝️ · 🏁 / ⌘⌘, ↑ ✨, ↓ ☠️, ← 🗑️] [✌️ · 📸 / ⌃P, ↑ 🔴, ↓ ⌨️, → 🧠] keys[‹select›|‹copy›]
+No mouse: plain dictation: [☝️ · ⏹️, ↑ ✨, ↓ ☠️, ← 🗑️, → ‹terminal›] [✌️ · ⏹️ + ⏎, ↓ ⏹️, → ⏹️ / ⌘⌘] keys[💬 / ⌃P|‹copy›]
+No mouse: ⚡ question: [☝️ · ⚡ / ⌘⌘, ↑ ✨, ↓ ‹G› + ⚡, ← 🗑️, → ‹terminal›] [✌️ · 📸 / ⌃P, ↓ ⌨️, → ‹G›] keys[‹select›|‹copy›]
+No mouse: trackpad at rest, left ⌃⌥⌘ held: [☝️ · 💬, ↑ ✨, ↓ ☠️, ← ⚡, → ‹terminal›] [✌️ · 🎙️ / ⌘⌘, ↓ 🔌, ← ⏎, → 🎙️]
+# hint-bar-crop.png
+Crop: drag: mouse[|✂️|➡️|]
+Crop: drag (light backdrop) ☀: mouse[|✂️|➡️|]
+Crop: locked: mouse[|⬆️|↩️|]
+Crop: parked: mouse[📍|🎯|🗑️|]
+No mouse: crop, drag: mouse[|✂️|➡️|Esc cancel]

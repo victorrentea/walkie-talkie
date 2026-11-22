@@ -173,7 +173,7 @@ final class GestureHintBar {
             front.click = "⚡ ask"
             // 🔼 ↓ Googles it AND answers it (2026-11-11, `quickGoogleToo`).
             front.down = Self.google + " + ⚡"
-            front.right = "💻 terminal"
+            front.right = Self.terminal + " terminal"
             back.click = "📸 shot"
             back.up = ""
             back.down = "⌨️ type"
@@ -184,7 +184,7 @@ final class GestureHintBar {
             // kamikaze (`kamikazeAfterTheWords`).
             front.click = "⏹️"
             front.down = "☠️ last"
-            front.right = "💻 terminal"
+            front.right = Self.terminal + " terminal"
             back.click = "⏹️ + ⏎"
             back.down = "⏹️"
             back.right = "⏹️"
@@ -216,7 +216,10 @@ final class GestureHintBar {
         // A prompt (a ⚡ question is one) files what he highlights too — the
         // selection watcher runs on `attachable`, which a plain sentence is not
         // (`AppDelegate.syncBorrowedGestures`); the clipboard's runs for both.
-        if s.prompting || s.quick { return [copyKey, selectKey] }
+        // **Copy always in the bottom-right corner, select in the centre**
+        // (2026-11-22, Victor: *"copy să fie mereu în colț dreapta jos. text
+        // selection să vină pe centru"*) — the row is right-aligned, so last = corner.
+        if s.prompting || s.quick { return [selectKey, copyKey] }
         return [promptKey, copyKey]
     }
 
@@ -231,6 +234,10 @@ final class GestureHintBar {
     /// pune-mi încă un badge … select. Să aibă un caret și niște texte pe care
     /// tragi"*) — `Glyphs.select`, painted where this character stands.
     static let selectKey = "\u{E0A2}"
+    /// **To the bound terminal: a drawn `>_` window, not 💻** (2026-11-22,
+    /// Victor: *"ce înseamnă 💻 în aceste poze?"* — and 💻 is the local model on
+    /// the chip). `Glyphs.terminal`, painted where this character stands.
+    static let terminal = "\u{E0A3}"
 
     // MARK: glyphs with the mouse, keys without it (2026-11-22)
 
@@ -328,7 +335,7 @@ final class GestureHintBar {
                                    interruptible: s.interruptible, interrupt: s.interrupt,
                                    spawn: s.spawn, quick: s.quick))
         } else {
-            c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: "💻 terminal"),
+            c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: Self.terminal + " terminal"),
                  Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
         }
         c[0].corner = oneFinger
@@ -368,6 +375,8 @@ final class GestureHintBar {
         .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .medium)
             .applying(.init(paletteColors: [ink])))
     /// The drawn selection (`selectKey`), made once.
+    /// The drawn terminal window (`terminal`), made once.
+    fileprivate static let terminalImage = Glyphs.terminal(height: (font.pointSize * 1.15).rounded(), ink: ink)
     fileprivate static let selectImage = Glyphs.select(height: (font.pointSize * 1.25).rounded(), ink: ink)
 
     /// **The pictures a label can carry**: the size of what is painted where a
@@ -378,6 +387,7 @@ final class GestureHintBar {
         case google: let g = font.capHeight + 4; return NSSize(width: g, height: g)
         case copyKey: return copyImage?.size
         case selectKey: return selectImage.size
+        case terminal: return terminalImage.size
         default: return nil
         }
     }
@@ -556,6 +566,150 @@ final class GestureHintBar {
         guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
         try? png.write(to: URL(fileURLWithPath: path))
         return size
+    }
+
+    // MARK: the README's sheets (2026-11-22)
+
+    /// One bar on a sheet: the situation it belongs to, said above it.
+    struct SheetColumn {
+        var title: String
+        var stage: Stage
+        var light = false
+    }
+
+    /// **The bars side by side, each under its situation's name** (2026-11-22,
+    /// Victor: *"pune pe fiecare coloană un titlu ce reprezintă … și imaginea
+    /// asta să fie generată și pusă și în README.md pe GitHub mereu"*). Written by
+    /// every states-page shoot (`OverlayStates.finish` → `writeSheets`), copied to
+    /// `docs/readme/` by `build-readme-shots.py`; `sheetSpec` beside them is what
+    /// `GestureHintBarTests` holds the committed pictures to.
+    static let sheets: [(name: String, columns: [SheetColumn])] = [
+        ("hint-bar", [
+            .init(title: "Prompt", stage: .init(listening: true, prompting: true)),
+            .init(title: "Prompt (light backdrop)", stage: .init(listening: true, prompting: true), light: true),
+            .init(title: "Plain dictation", stage: .init(listening: true, prompting: false)),
+            .init(title: "⚡ Question", stage: .init(listening: true, prompting: false, quick: true)),
+            .init(title: "Prompt after a crop", stage: .init(listening: true, prompting: true, areaFilm: true)),
+            .init(title: "Filming, kamikaze on, to a new session",
+                  stage: .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true)),
+        ]),
+        ("hint-bar-keyboard", [
+            .init(title: "No mouse: prompt", stage: .init(listening: true, prompting: true, noMouse: true)),
+            .init(title: "No mouse: prompt (light backdrop)",
+                  stage: .init(listening: true, prompting: true, noMouse: true), light: true),
+            .init(title: "No mouse: plain dictation", stage: .init(listening: true, prompting: false, noMouse: true)),
+            .init(title: "No mouse: ⚡ question",
+                  stage: .init(listening: true, prompting: false, quick: true, noMouse: true)),
+            .init(title: "No mouse: trackpad at rest, left ⌃⌥⌘ held", stage: .init(fingers: true, noMouse: true)),
+        ]),
+        ("hint-bar-crop", [
+            .init(title: "Crop: drag", stage: .init(listening: true, prompting: true, crop: .selecting)),
+            .init(title: "Crop: drag (light backdrop)",
+                  stage: .init(listening: true, prompting: true, crop: .selecting), light: true),
+            .init(title: "Crop: locked", stage: .init(listening: true, prompting: true, crop: .locked)),
+            .init(title: "Crop: parked", stage: .init(listening: true, prompting: true, crop: .parked)),
+            .init(title: "No mouse: crop, drag", stage: .init(listening: true, prompting: true, crop: .selecting, noMouse: true)),
+        ]),
+    ]
+
+    /// What the sheets show, as text: every column's title and badges, plus the
+    /// numbers the drawing is sized by. A change to any of them changes this —
+    /// and the committed `docs/readme/hint-bar.txt` then fails the test until
+    /// `./docs/shoot-overlay-states.sh` has drawn the pictures again.
+    static func sheetSpec() -> String {
+        var lines = ["font \(font.pointSize) box \(boxHeight)×\(minBoxWidth) sheet ×\(sheetScale)"]
+        for sheet in sheets {
+            lines.append("# \(sheet.name).png")
+            for column in sheet.columns {
+                let bar = bar(for: column.stage)
+                var parts = bar.crosses.map { "[" + ($0.corner.map { $0 + " " } ?? "") + describe($0) + "]" }
+                if let m = bar.mouse { parts.append("mouse[\(m.left)|\(m.wheel)|\(m.right)|\(m.body)]") }
+                if !bar.keys.isEmpty { parts.append("keys[" + bar.keys.joined(separator: "|") + "]") }
+                lines.append("\(column.title)\(column.light ? " ☀" : ""): " + parts.joined(separator: " "))
+            }
+        }
+        // The drawn glyphs by name — a private-use character prints as nothing.
+        return [(google, "‹G›"), (copyKey, "‹copy›"), (selectKey, "‹select›"), (terminal, "‹terminal›")]
+            .reduce(lines.joined(separator: "\n") + "\n") { $0.replacingOccurrences(of: $1.0, with: $1.1) }
+    }
+
+    static let sheetSpecName = "hint-bar.txt"
+    /// The sheets draw each bar at this many times its Retina size.
+    static let sheetScale: CGFloat = 2
+
+    /// Every sheet as `<dir>/<name>.png`, and `sheetSpec` beside them.
+    static func writeSheets(into dir: String) {
+        for sheet in sheets {
+            let view = SheetView(columns: sheet.columns)
+            guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(view.bounds.width),
+                                             pixelsHigh: Int(view.bounds.height), bitsPerSample: 8, samplesPerPixel: 4,
+                                             hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                             bytesPerRow: 0, bitsPerPixel: 0) else { continue }
+            rep.size = view.bounds.size
+            view.cacheDisplay(in: view.bounds, to: rep)
+            try? rep.representation(using: .png, properties: [:])?
+                .write(to: URL(fileURLWithPath: dir).appendingPathComponent(sheet.name + ".png"))
+        }
+        try? sheetSpec().write(toFile: (dir as NSString).appendingPathComponent(sheetSpecName),
+                               atomically: true, encoding: .utf8)
+    }
+
+    /// A sheet: one panel per column — the title, then the bar, solid as across
+    /// the seam, on a dark desktop or a light one.
+    private final class SheetView: NSView {
+        private var panels: [(rect: NSRect, column: SheetColumn)] = []
+        private static let pad: CGFloat = 28, gap: CGFloat = 14, titleHeight: CGFloat = 52, minPanel: CGFloat = 250
+        private static let titleFont = NSFont.systemFont(ofSize: 18, weight: .semibold)
+
+        override var isFlipped: Bool { true }
+
+        init(columns: [SheetColumn]) {
+            super.init(frame: .zero)
+            let k = GestureHintBar.sheetScale
+            let bars = columns.map { column -> (Bar, NSSize) in
+                let bar = GestureHintBar.bar(for: column.stage)
+                let base = Board.size(for: bar.crosses, mouse: bar.mouse, keys: bar.keys)
+                return (bar, NSSize(width: base.width * k, height: base.height * k))
+            }
+            let tallest = bars.map(\.1.height).max() ?? 0
+            let height = Self.titleHeight + tallest + Self.pad * 2
+            var x: CGFloat = 0
+            for (column, (bar, size)) in zip(columns, bars) {
+                let width = max(Self.minPanel, size.width + Self.pad * 2)
+                let panel = NSRect(x: x, y: 0, width: width, height: height)
+                panels.append((panel, column))
+                let board = Board(frame: NSRect(x: panel.midX - size.width / 2, y: Self.titleHeight + Self.pad,
+                                                width: size.width, height: size.height))
+                board.crosses = bar.crosses
+                board.mouse = bar.mouse
+                board.keys = bar.keys
+                board.scale = k
+                board.opacity = GestureHintBar.acrossOpacity
+                addSubview(board)
+                x += width + Self.gap
+            }
+            frame = NSRect(x: 0, y: 0, width: x - Self.gap, height: height)
+        }
+
+        required init?(coder: NSCoder) { fatalError() }
+
+        override func draw(_ dirtyRect: NSRect) {
+            let style = NSMutableParagraphStyle()
+            style.alignment = .center
+            style.lineBreakMode = .byWordWrapping
+            for (rect, column) in panels {
+                NSColor(white: column.light ? 0.93 : 0.12, alpha: 1).setFill()
+                NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
+                let title = NSAttributedString(string: column.title, attributes: [
+                    .font: Self.titleFont, .paragraphStyle: style,
+                    .foregroundColor: NSColor(white: column.light ? 0.1 : 0.95, alpha: 1),
+                ])
+                let box = NSRect(x: rect.minX + 10, y: 0, width: rect.width - 20, height: Self.titleHeight + Self.pad)
+                let needed = title.boundingRect(with: box.size, options: [.usesLineFragmentOrigin]).height
+                title.draw(with: NSRect(x: box.minX, y: box.midY - needed / 2, width: box.width, height: needed),
+                           options: [.usesLineFragmentOrigin])
+            }
+        }
     }
 
     private static func describe(_ c: Cross) -> String {
@@ -900,6 +1054,9 @@ final class GestureHintBar {
                         case GestureHintBar.copyKey:
                             GestureHintBar.copyImage?.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1,
                                                            respectFlipped: true, hints: nil)
+                        case GestureHintBar.terminal:
+                            GestureHintBar.terminalImage.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1,
+                                                              respectFlipped: true, hints: nil)
                         default:
                             GestureHintBar.selectImage.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1,
                                                             respectFlipped: true, hints: nil)

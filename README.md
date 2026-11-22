@@ -255,6 +255,22 @@ Logi Options+, and the app takes no mouse button at all.
 | 🔽 ← | a microphone open: cancel; at rest: Codex voice in the app's window, full screen, a new chat each time; again ends it |
 | 🔽 ↓ | during a plain dictation: stop it, no Return; otherwise unbind |
 
+**While you dictate, a bar on the second screen shows what each flick does right now.** Two crosses, as
+the buttons sit on the mouse: the forward button 🔼 above, the back button 🔽 below. The centre badge is
+the click, each arm the flick in that direction; a grey box is a flick with nothing to do at this moment.
+Under the crosses, what the ordinary mouse adds meanwhile: select text, copy.
+
+<p align="center">
+  <img src="docs/readme/hint-bar.png" width="1000" alt="The corner hint bar with the mouse attached, one column per situation: prompt, plain dictation, question, after a crop, filming">
+</p>
+
+With no Logitech mouse attached the crosses are the trackpad's (☝️ one finger, ✌️ two, under left ⌃⌥⌘)
+and the keys that do the same are back in their badges:
+
+<p align="center">
+  <img src="docs/readme/hint-bar-keyboard.png" width="1000" alt="The same bar with no mouse attached: the trackpad's crosses, with ⌘⌘ and ⌃P in the badges">
+</p>
+
 **Wheel mode** needs no Logitech software: click the wheel to start and stop, hold 2 s to cancel,
 left button held plus a wheel click to bind, right button held plus a wheel click to unbind, the
 back button as the shutter.

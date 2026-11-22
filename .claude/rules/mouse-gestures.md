@@ -404,6 +404,22 @@ pe care tragi, ca simbol, ca să înțeleg ce pot să fac în momentul acela al 
   **prompt and ⚡ `copy · select`, plain `copy`** (the selection watcher runs on `attachable`, which a plain
   sentence is not; the clipboard's runs for both — `syncBorrowedGestures`). `AutoAttach`'s two switches are not
   read: the badges stay when one is off.
+- **Copy is always the bar's bottom-right badge, select in the centre column** (same day, Victor: *"copy să fie
+  mereu în colț dreapta jos. text selection să vină pe centru"*): `keys(for:)` ends with `copyKey` in every stage
+  and the row is right-aligned (`Board.keyColumn`); pinned by `testCopyIsAlwaysTheBottomRightBadge`.
+- **To the bound terminal is a drawn `>_` window, not 💻** (same day, Victor, at the wordless bar: *"ce înseamnă
+  💻 în aceste poze?"* — and 💻 is the local model on the chip): `GestureHintBar.terminal` → `Glyphs.terminal`,
+  on 🔼 → of a plain dictation, a ⚡ question and the trackpad's rest set. Read `💻 terminal` below as that.
+- **The README shows the bar, and cannot drift** (same day, Victor: *"pune pe fiecare coloană un titlu ce
+  reprezintă … și imaginea asta să fie generată și pusă și în README.md pe GitHub mereu"*).
+  `GestureHintBar.sheets` — `hint-bar` (mouse attached), `hint-bar-keyboard` (none), `hint-bar-crop` — are the
+  bars side by side, each under its situation's title, drawn by every shoot (`OverlayStates.finish` →
+  `writeSheets` into `docs/states/`, copied to `docs/readme/` by `build-readme-shots.py`, which exits non-zero
+  when one is missing). `docs/readme/hint-bar.txt` is `sheetSpec()` — every column's title and badges, the font
+  and box sizes; `testTheReadmesSheetsAreThereAndCurrent` fails when the code's spec differs from the committed
+  one, a PNG is gone, or `README.md` no longer shows the first two. **A red test there = run
+  `./docs/shoot-overlay-states.sh` and commit `docs/readme/hint-bar*`.** A new situation worth showing is a
+  `SheetColumn`.
 - **Narrower, and the glyphs bigger**: font 12 → 15 pt, box 24 → 26 tall, the box's floor 68 → 38, and **each
   column is as wide as its own widest badge** (`Board.columnWidths`; all three took the widest label's until
   then). Prompt 260 → 122 pt wide (× 3 across the seam), plain 299 → 150, ⚡ 260 → 149, a crop 245 → 122; without

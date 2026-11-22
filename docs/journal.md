@@ -16971,3 +16971,17 @@ care tragi, ca simbol, ca să înțeleg ce pot să fac în momentul acela al dic
 - **On the states page for the first time** — seven `bar-*` shots, both cases — and `HINT_BAR_PNG` renders
   through `bar(for:)` at the secondary's size.
 - Not measured: how the glyph-only crop reads to him mid-drag (`➡️`, `⬆️`, `↩️`, `🎯` with no word).
+
+## 2026-11-22 — ⌨️ Hint bar, second pass: copy in the corner, a drawn terminal, titled sheets in the README
+
+Victor, at the first contact sheet: *"copy să fie mereu în colț dreapta jos. text selection să vină pe centru"*;
+*"ce înseamnă 💻 în aceste poze?"*; *"pune pe fiecare coloană un titlu ce reprezintă"*; *"și imaginea asta să fie
+generată și pusă și în README.md pe GitHub mereu"*.
+
+- The row under the crosses is `select · copy`, copy last in every stage (it was `copy · select`).
+- 💻 on 🔼 → meant *to the bound terminal* and nothing said so once the word was gone — and on the chip 💻 is
+  the local model. `Glyphs.terminal`: a rounded window with `>_`, in the bar's ink.
+- `GestureHintBar.sheets` / `writeSheets`: three titled sheets drawn by the states-page shoot, two of them in the
+  README's *Gestures*. The guard is text, not pixels: the shoot writes `docs/readme/hint-bar.txt` (titles, badges,
+  sizes) and a unit test compares it with what the code would draw now. A pixel compare would fail on an emoji
+  font update; this fails on exactly the changes that make the picture a lie.
