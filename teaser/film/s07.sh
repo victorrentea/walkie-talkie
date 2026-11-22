@@ -46,12 +46,12 @@ d)
   gsh 'printf "Resilience4j\nresilience for jay → Resilience4j\n" > ~/.walkie-talkie/vocabulary.txt'
   g osascript -e 'tell application "Safari" to set miniaturized of every window to false' -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/chat.html"' >/dev/null; g open -a Safari; sleep 1.5
   mouse '[["move",600,640,0.4],["click"]]'                 # the caret into the message box
-  rec_start s07d
-  mouse '[["move",760,560,0.5]]'
+  rec_start s07d; sleep 1
+  mouse '[["move",700,585,0.5]]'; mark dictation_starts
   api test/gesture '{"name":"back-click"}' >/dev/null      # 🔽 : plain dictation
   speak s07d 0.3
   api test/gesture '{"name":"back-click"}' >/dev/null
   sleep 2; wait_state "d.get('phase')=='done' and not any('Redact' in c or 'Transcrib' in c for c in d.get('chip') or [])" 20; mark text_landed
-  mouse '[["move",900,300,0.6]]'; sleep 5
+  sleep 5.5
   kill -INT $REC_PID; wait $REC_PID; cat $RAW/s07d.log ;;
 esac

@@ -58,9 +58,9 @@ s04)  # a Chrome window with an image search (left): click a picture, right-clic
   mouse '[["move",722,225,0.7],["sleep",0.15]]'; mark crop_start
   mouse '[["down","middle"],["drag",1216,475,1.3,"middle"],["sleep",0.35],["up","middle"]]'; mark crop_end
   mouse '[["sleep",2.3]]'; wait $SPEAK; mark crop_flight_end
-  mouse '[["move",371,335,0.9],["sleep",0.3]]'; mark selection_start
-  speak s04c 0.2 & SPEAK=$!
-  mouse '[["down","left"],["drag",452,335,1.3,"left"],["up","left"]]'; mark selection_end
+  speak s04c 0 & SPEAK=$!            # say.py needs ~2 s to start: launched now, the words begin as the drag does
+  mouse '[["move",371,335,0.9],["sleep",0.9]]'; mark selection_start
+  mouse '[["down","left"],["drag",452,335,1.05,"left"],["up","left"]]'; mark selection_end
   mouse '[["sleep",2.6]]'; wait $SPEAK; mark selection_flight_end
   api test/gesture '{"name":"forward-click"}' >/dev/null
   wait_state "(d.get('prompt') or {}).get('held')" 25

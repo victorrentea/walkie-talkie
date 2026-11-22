@@ -3,7 +3,7 @@
 source "$(dirname "$0")/lib.sh"
 api test/quick '{"close":true}' >/dev/null 2>&1; api unbind '{}' >/dev/null 2>&1
 fake_claude off
-g defaults delete ro.victorrentea.wispr-relay hintBarHidden
+g defaults delete ro.victorrentea.wispr-relay hintBarHidden; g defaults delete ro.victorrentea.wispr-relay cropReadoutsHidden; g defaults delete ro.victorrentea.wispr-relay edgeDust.marksBoost
 g osascript -e 'tell application "System Events" to set picture of every desktop to "/System/Library/CoreServices/DefaultDesktop.heic"' >/dev/null
 gsh 'kill $(cat /tmp/fakecursor.pid) 2>/dev/null; /opt/homebrew/bin/tmux kill-session -t site 2>/dev/null; pkill -f "http.server 8000"; pkill -f film/agent.py; sudo pkill -x login; sleep 1
      osascript -e "tell application \"Terminal\" to close every window" -e "tell application \"Safari\" to quit" >/dev/null 2>&1

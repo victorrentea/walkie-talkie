@@ -11,6 +11,7 @@ STATE = os.path.expanduser("~/film/demo-site/state.json")
 MOVE = re.compile(r"(\d+),(\d+)\D+\d+,\d+\)?\s*(?:should move to the box|moved to)\s*\(?(\d+),(\d+)")   # short and long envelope
 RULES = [("header", {"header-dark": 1, "button-orange": 1}),
          ("broken", {"card-fixed": 1}),
+         ("add a test", {}),
          ("moved to", None), ("user-drawn move", None),                          # the ✂️ row of a moved area: its real coordinates
          ("picture", {"picture": 1, "typo-fixed": 1}),
          ("flicker", {"flicker": 0, "menu-open": 1}),

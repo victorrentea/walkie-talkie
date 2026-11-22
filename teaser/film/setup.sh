@@ -8,6 +8,7 @@ tart set $VM --display 1920x1080
 vm_up_vnc
 g mkdir -p /Users/admin/film/voice
 for f in dispmode.swift mouse.py say.py fakecursor.py agent.py claude_p.py oneterm.sh termprofile.sh; do push "$FILM_DIR/$f" /Users/admin/film/$f; done
+g defaults write ro.victorrentea.wispr-relay cropReadoutsHidden -bool true; g defaults write ro.victorrentea.wispr-relay edgeDust.marksBoost -float 2
 g defaults write ro.victorrentea.wispr-relay hintBarHidden -bool true     # no corner hint bar in the footage (teardown removes the key)
 gsh 'cd ~/film && swiftc -O dispmode.swift -o dispmode 2>/dev/null; ./dispmode 1280 720 1
      defaults write com.apple.finder CreateDesktop -bool false; killall Finder

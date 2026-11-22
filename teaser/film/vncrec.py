@@ -113,6 +113,10 @@ def main():
         if due > now: time.sleep(due - now)
         with lock: frame = fb.tobytes()
         ff.stdin.write(frame); n += 1
+        # Never fall behind the wall clock: a slow encoder used to make the film shorter than the take (every
+        # event then showed EARLIER in the clip than its mark said, by seconds). Late ⇒ the frame is repeated.
+        while n < (time.monotonic() - t0) * a.fps - 1:
+            ff.stdin.write(frame); n += 1
     stop.set(); ff.stdin.close(); ff.wait()
     print(f"{n} frames, {n / a.fps:.1f} s, {stats['updates']} vnc updates ({stats['updates'] / max(1, n / a.fps):.0f}/s)")
 
