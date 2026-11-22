@@ -218,15 +218,36 @@ and of the bar *"ce sens are copy în plain dictation?? … scoate, că nu are s
   `evals/test_gesture_spec.py` rows *any flick but 🔼 ← during a plain dictation*, *right ⌘ ×2 during a
   plain dictation*. **Not made by hand on the mouse yet.**
 
-## A ⚡ question's bar offers neither ✨ nor the terminal (2026-11-22)
+## A ⚡ question is not redirected: 🔼 ↑ and 🔼 → do nothing over it (2026-11-22)
 
-Victor: *"din modul question nu are sens să am ✨ sau prompt bound."* `GestureHintBar.crosses`: 🔼 ↑ and
-🔼 → are grey boxes over a question, mouse or none. **The bar only** — both flicks still act:
-🔼 ↑ → `convertDictationToSpawn` (the question is dropped, `dropQuestion(for: "a new session")`, folder
-menu, the envelope goes to a new session as a prompt, no answer pop-up); 🔼 → → `toggleDictation(flipsDestination:)`
-→ with something bound `aimAtBoundTerminal` → `retarget` → `dropQuestion` (a prompt to the bound terminal,
-flash `↪️ to <label>`), with nothing bound it stays a question and flashes `📍 Nothing bound — …`. Whether
-they should do nothing is his call.
+Victor: *"din modul question nu are sens să am ✨ sau prompt bound."* — first the bar, then, asked whether
+the flicks should go too, *"și-și"*. **Supersedes, for a question, 2026-10-15's *🔼 → / 🔼 ↑ mid-sentence
+make it a terminal / spawn prompt* and every row above that redirects one.**
+
+| while a ⚡ question records | does |
+|---|---|
+| 🔼 | asks it |
+| 🔼 ← | cancel |
+| 🔼 ↓ | Google it and answer it |
+| 🔽 → | Google only |
+| 🔽 · 🔽 ↓ | shutter · typing box (a question is a prompt) |
+| 🔼 → · 🔼 ↑ | nothing — swallowed, no flash |
+
+- **The bar**: `GestureHintBar.crosses` — both arms grey boxes over a question, mouse or none.
+- **The gate, in the tap**: `HotkeyTap.questionIgnores` (F10, F8) swallowed right after `plainIgnores`, before
+  the gesture switch, whenever `relayQuickOpen` (`listening && quickAsk`, so the 🔽 ← Codex question too);
+  log `⚡ <gesture> over a question — nothing`. Ahead of F10's left-held bind chord, so ◀️ + 🔼 → over a
+  question is nothing either. The trackpad's ☝️ → / ☝️ ↑ and a Custom trigger are the same chords.
+- **🔼 → over the answer's pop-up is untouched**: no question is open then (`relayQuickOpen` false), the
+  flick reaches `onForwardRight` → `askFollowUp`. Once the follow-up records, the gate holds again.
+- **Left in the code**: `dropQuestion` and its two callers (`retarget`, `convertDictationToSpawn`). No
+  side-button flick reaches them with a question open any more, but they are not dead: the desk's
+  `POST /test/gesture {"name": "forward-right" | "forward-up", "direct": true}` and Wheel mode's double
+  click (`onWheelDoubleSpawn`) call the handlers round the tap's gate, and there `dropQuestion` keeps a
+  redirected sentence from also being answered as a question.
+- Tests: `HotkeyTapGestureTests.testAQuestionIgnoresTheTerminalAndTheNewSession`,
+  `testForwardRightAndUpStillActWithNoQuestionOpen`; spec row *🔼 forward · drag right / drag up over a ⚡
+  question*. **Not made by hand on the mouse.**
 
 ## 🔽 ← mid-sentence does nothing (2026-11-21)
 
@@ -527,7 +548,7 @@ to its handler per stage and `GestureHintBar.crosses` now says what the code doe
   once a spawn (its folder menu again).
 - **prompt**: 🔽 `⏹️ / ⌃P` while a film runs (the shutter is its stop); 🔼 → `🏁 end` on a spawn
   (nothing to flip to), else no box as before.
-- **⚡ question**: 🔼 → `💻 terminal` (`dropQuestion`), 🔽 → `Ⓖ Google`, 🔼 ↓ `Ⓖ + ⚡` (2026-11-11 — Ⓖ is Google's four-colour G, painted by `drawGoogleG` where `GestureHintBar.google` stands; Victor: *"iconița Google … nu doar o lupă"*); 🔽 ↑ stays grey and
+- **⚡ question**: 🔼 → `💻 terminal` (`dropQuestion` — a grey box and a swallowed flick since 2026-11-22), 🔽 → `Ⓖ Google`, 🔼 ↓ `Ⓖ + ⚡` (2026-11-11 — Ⓖ is Google's four-colour G, painted by `drawGoogleG` where `GestureHintBar.google` stands; Victor: *"iconița Google … nu doar o lupă"*); 🔽 ↑ stays grey and
   **`toggleFilm` refuses over a question** — a film there was never sent and kept running.
 - **plain**: 🔼 `⏹️`, 🔽 ↓ `⏹️`, 🔼 → `💻 terminal`, 🔼 ↓ `☠️ last` (`kamikazeAfterTheWords`).
 - **crop, drawing the destination**: right `🗑️ discard`.

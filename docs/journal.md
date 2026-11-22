@@ -13,6 +13,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 
 ## Superseded on the way
 
+- *🔼 → / 🔼 ↑ mid-sentence make a ⚡ question a terminal / spawn prompt* (2026-10-15, `dropQuestion`) and *Only the bar* (2026-11-22, *A question's bar offers neither ✨ nor the terminal*) — superseded 2026-11-22: both flicks are swallowed over a question (*⚡ 🔼 ↑ and 🔼 → do nothing over a question*)
 - *🔽 ↑ after a wheel crop films that area alone* (2026-11-21, in `.claude/rules/screenshots-and-selection.md`) — superseded 2026-11-22: a box is filmed by 🔽 ↑ made **inside** its wheel drag, the film only; outside a live drag 🔽 ↑ films the whole display (*🎬 The box is filmed from inside its drag*)
 - *🔽 → starts the plain dictation* (2026-09-28), *🔽 → / 🔽 ↓ stop a plain dictation without a Return* (2026-10-07), *🔼 → / 🔼 ↑ make a plain dictation a prompt* (2026-10-08), *⌃P over a plain dictation makes it a prompt* and *a plain dictation gathers copies* (2026-10-22), *a plain sentence passes 🔼 ↓ to the last prompt* (2026-10-10) — all superseded 2026-11-22: a plain dictation has a cancel (🔼 ←) and a stop (🔼, 🔽, right ⌘ ×2 — every one ends in Return), every other flick does nothing over it, ⌃P is not taken, nothing is gathered, and 🔽 → starts nothing at rest (*🎙️ A plain dictation has a cancel and a stop*). *🔼 → mid-sentence flips bound ⇄ caret* (2026-10-05) stands — for prompts
 - *The edge is always on the Retina* (2026-11-21, in `.claude/rules/replace-wispr-and-halo.md`) — superseded 2026-11-22: the edge is on the pointer's screen and follows it after 0.3 s there (*🌫️ The edge follows the pointer's screen*)
@@ -17104,3 +17105,24 @@ echivalente la gesturile mele Logi."*
 - **Open**: `Edit Custom Gestures…` was not asked for (unticking and ticking again also reopens); the hint
   bar and the Gesture Guide still draw the Logi mouse for a Custom user; a trigger whose branch posts keys
   while the modifiers are still held is unmeasured; nothing was made by hand on a mouse.
+
+## 2026-11-22 — ⚡ 🔼 ↑ and 🔼 → do nothing over a question; the Gesture Guide catches up
+
+Victor, asked whether the two flicks the question's bar stopped offering should stop acting too: *"și-și"*.
+
+- **The gate**: `HotkeyTap.questionIgnores` (F10, F8), swallowed with no flash while `relayQuickOpen`, beside
+  `plainIgnores` and ahead of every branch (the left-held bind chord too). Trackpad swipes and Custom triggers
+  are those chords. Kept: 🔼 asks, 🔼 ← cancels, 🔼 ↓ Google + answer, 🔽 → Google, and 🔼 → over the answer's
+  pop-up (at rest, so not gated) asks the follow-up. Supersedes *Only the bar* in the entry above.
+- **Left**: `dropQuestion` and its callers `retarget` / `convertDictationToSpawn` — still reached round the
+  tap's gate by the desk's `{"direct": true}` route and Wheel mode's double click.
+- **`GestureGuide.cards`** described the plain dictation of before today. Now: Back section's lede says it has a
+  cancel and a stop; `Dictate, no Return` → `Switch the model — or Google it` (at rest: nothing);
+  `Stop — type — unbind` → `Type — or unbind`; `Dictate, then Return` → `Dictate — or screenshot`; ⌃P is
+  `Screenshot` alone; right ⌘ ×2 ends in Return; Back-up and the wheel drag name the box film; 🔼 → / 🔼 ↑ say
+  *nothing* over a question. The three Back titles are now the `CustomGestures` rows' own (those were already
+  right, so the window and its PNGs are unchanged); `GestureGuideTests.testTheCardsFollowTheGestureTable`
+  holds every Custom row's title to a guide card.
+- `evals/test_gesture_spec.py`: new row and two mutations; the eight checks red at HEAD are still the only red.
+- Not made by hand on the mouse; the guide read as HTML (`GUIDE_HTML`), not looked at in a window.
+

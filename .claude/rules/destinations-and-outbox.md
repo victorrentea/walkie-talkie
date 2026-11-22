@@ -467,8 +467,8 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   Supersedes *clean sentence … words only, no picture* above: 🔼 ← opens `startDictation(paste: true,
   quick: true)` — the caret prompt's envelope (`caretLine(full: true)`, minus `questionHint`) goes to
   `QuickAsk` with every frame as a content block (800 px copy, a crop's cut-out; `📸n:` label before
-  each, ≤ 8). 🔼 ends it, 🔽 is the shutter; 🔼 → / 🔼 ↑ mid-sentence make it a terminal / spawn
-  prompt (`dropQuestion`). **🔼 → at rest over a ⚡ pop-up** (`ReplyPanel.quickUnderPointer`) →
+  each, ≤ 8). 🔼 ends it, 🔽 is the shutter; ~~🔼 → / 🔼 ↑ mid-sentence make it a terminal / spawn
+  prompt (`dropQuestion`)~~ (nothing since 2026-11-22: both are swallowed over a question — `mouse-gestures.md`). **🔼 → at rest over a ⚡ pop-up** (`ReplyPanel.quickUnderPointer`) →
   `askFollowUp`: the pop-up stays while he speaks, the answer replaces it under `⚡ ↳ <question>`;
   `quickThread` (≤ 4 turns, each with its pictures and best answer so far) rides as a transcript
   (`QuickAsk.framed`) to all three stages. Chip row: `Asking` (`AppDelegate.askingRow`). The ❓ film

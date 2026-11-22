@@ -27,4 +27,23 @@ final class GestureGuideTests: XCTestCase {
             try frozen.write(to: url.appendingPathComponent("frozen.html"), atomically: true, encoding: .utf8)
         }
     }
+
+    /// The guide follows today's gesture table (2026-11-22): a plain dictation
+    /// has a cancel and a stop, every stop ends in Return, 🔽 → at rest and ⌃P
+    /// over it are nothing, a ⚡ question is not redirected — and the Custom
+    /// gestures window names its rows as the guide's cards.
+    func testTheCardsFollowTheGestureTable() {
+        let html = GestureGuide.page()
+        for gone in ["Dictate, no Return", "Stop — type — unbind", "make it a prompt",
+                     "turns it into a prompt", "stop it, no Return", "Start or stop; only the words"] {
+            XCTAssertFalse(html.contains(gone), "the guide still says “\(gone)”")
+        }
+        for said in ["While a ⚡ question records: nothing.", "the words, then Return",
+                     "film that box alone", "At rest: nothing."] {
+            XCTAssertTrue(html.contains(said), "the guide no longer says “\(said)”")
+        }
+        for action in CustomGestureAction.allCases {
+            XCTAssertTrue(html.contains("<h3>\(action.title)</h3>"), "no guide card titled “\(action.title)”")
+        }
+    }
 }

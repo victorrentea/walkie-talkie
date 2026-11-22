@@ -175,8 +175,8 @@ final class GestureHintBar {
             // pop-up. 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`); 🔼 ↓ does both.
             // **Neither ✨ nor the terminal is offered from a question** (2026-11-22,
             // Victor: *"din modul question nu are sens să am ✨ sau prompt bound"*):
-            // both arms are grey boxes. The bar only — 🔼 ↑ and 🔼 → still redirect
-            // the question (`convertDictationToSpawn`, `retarget` → `dropQuestion`).
+            // both arms are grey boxes, and the tap swallows both flicks
+            // (`HotkeyTap.questionIgnores`).
             front.click = "⚡ ask"
             // 🔼 ↓ Googles it AND answers it (2026-11-11, `quickGoogleToo`).
             front.down = Self.google + " + ⚡"

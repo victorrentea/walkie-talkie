@@ -377,7 +377,9 @@ def spec(src: dict):
                 ("a plain dictation swallows them before any gesture's branch", "HotkeyTap `handle`",
                  lambda: has(src["HotkeyTap.swift"],
                              r"if Self\.plainIgnores\.contains\(keyCode\), cleanSentenceOpen \{\s*Log\.info\([^\n]*\)\s*"
-                             r"return swallow\([^\n]*\)\s*\}\s*switch keyCode \{")),
+                             r"return swallow\([^\n]*\)\s*\}.*?switch keyCode \{")
+                         and before(src["HotkeyTap.swift"], r"if Self\.plainIgnores\.contains\(keyCode\), cleanSentenceOpen \{",
+                                    r"\n            switch keyCode \{\s*// ➡️")),
                 ("⌃P over a plain dictation is not taken (2026-10-22's switch to a prompt is gone)", "HotkeyTap keyDown",
                  lambda: not has(_strip_comments(src["HotkeyTap.swift"]), r"onPlainToPrompt\?\(")),
                 ("…and the prompting mark is a prompt's alone, so Victor Mac keeps ⌃P", "HotkeyTap `relayPlainOpen`",
@@ -466,6 +468,22 @@ def spec(src: dict):
                  lambda: before(closure(src, "hotkeys.onForwardRight"),
                                 r"ReplyPanel\.quickUnderPointer \{\s*return self\.askFollowUp\(\)",
                                 r"self\.toggleDictation\(flipsDestination: true\)")),
+            ],
+        },
+        {
+            # Victor, 2026-11-22: "din modul question nu are sens să am ✨ sau
+            # prompt bound" — first the hint bar, then ("și-și") the flicks too.
+            "row": ("🔼 forward", "drag right / drag up over a ⚡ question"),
+            "does": "NOTHING — swallowed, no flash: a question is not turned into a terminal's or a new session's prompt (🔼 → over the ANSWER's pop-up, at rest, still asks the follow-up)",
+            "checks": [
+                ("the two flicks are named once: F10 and F8", "HotkeyTap `questionIgnores`",
+                 lambda: has(src["HotkeyTap.swift"], r"static let questionIgnores: Set<CGKeyCode> = \[0x6D, 0x64\]")),
+                ("an open question swallows them before any gesture's branch — the bind chord included", "HotkeyTap `handle`",
+                 lambda: has(src["HotkeyTap.swift"],
+                             r"if Self\.questionIgnores\.contains\(keyCode\), relayQuickOpen \{\s*Log\.info\([^\n]*\)\s*"
+                             r"return swallow\([^\n]*\)\s*\}\s*switch keyCode \{")),
+                ("the flag is the open question: listening and ⚡", "AppDelegate `syncBorrowedGestures`",
+                 lambda: has(function(src, ad, "syncBorrowedGestures"), r"hotkeys\.relayQuickOpen = listening && quickAsk")),
             ],
         },
         {
@@ -710,6 +728,10 @@ MUTATIONS = [
      "                    setWisprArm(0)"),
     ("a plain dictation answers every flick again (before 2026-11-22)", "HotkeyTap.swift",
      "if Self.plainIgnores.contains(keyCode), cleanSentenceOpen {", "if false {"),
+    ("🔼 → / 🔼 ↑ redirect a ⚡ question again (before 2026-11-22)", "HotkeyTap.swift",
+     "if Self.questionIgnores.contains(keyCode), relayQuickOpen {", "if false {"),
+    ("🔼 ↑ turns a ⚡ question into a new session again (before 2026-11-22)", "HotkeyTap.swift",
+     "static let questionIgnores: Set<CGKeyCode> = [0x6D, 0x64]", "static let questionIgnores: Set<CGKeyCode> = [0x6D]"),
     ("kamikaze works over a plain dictation again (before 2026-11-22)", "HotkeyTap.swift",
      "[0x6D, 0x64, 0x65, 0x60, 0x63, 0x76, 0x6F]", "[0x6D, 0x64, 0x60, 0x63, 0x76, 0x6F]"),
     ("🔽 → starts the plain dictation at rest again (before 2026-11-22)", "HotkeyTap.swift",

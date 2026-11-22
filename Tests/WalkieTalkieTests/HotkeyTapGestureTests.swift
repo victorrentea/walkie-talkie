@@ -141,6 +141,44 @@ final class HotkeyTapGestureTests: XCTestCase {
         XCTAssertEqual(try? String(contentsOf: HotkeyTap.promptingMark, encoding: .utf8), mark)
     }
 
+    // MARK: A ⚡ question
+
+    /// 🔼 → and 🔼 ↑ over a question are swallowed and redirect nothing — also
+    /// with the left button held (the bind chord); the question's own gestures act.
+    func testAQuestionIgnoresTheTerminalAndTheNewSession() {
+        let tap = HotkeyTap()
+        // Not `relayPromptOpen`: its setter writes ~/.walkie-talkie/prompting, the live app's mark.
+        tap.relayQuickOpen = true
+        var fired: [String] = []
+        tap.onForwardRight = { fired.append("🔼 →") }
+        tap.onGestureSpawn = { fired.append("🔼 ↑") }
+        tap.onGestureBindAndDictate = { fired.append("bind") }
+        tap.onGestureKamikaze = { fired.append("🔼 ↓") }
+        tap.onLocalCancel = { fired.append("🔼 ←") }
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F10, at: 100)))
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F8, at: 105)))
+        wait()
+        XCTAssertEqual(fired, [], "neither flick reaches a handler while a question records")
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F9, at: 110)))
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(0x67, at: 115)))
+        wait()
+        XCTAssertEqual(Set(fired), ["🔼 ↓", "🔼 ←"], "Google + answer and the cancel are the question's still")
+        XCTAssertEqual(HotkeyTap.questionIgnores, [F10, F8])
+    }
+
+    /// At rest — the answer's pop-up is that state — 🔼 → still reaches its
+    /// handler (the follow-up), and so does a prompt's 🔼 ↑.
+    func testForwardRightAndUpStillActWithNoQuestionOpen() {
+        let tap = HotkeyTap()
+        var fired: [String] = []
+        tap.onForwardRight = { fired.append("🔼 →") }
+        tap.onGestureSpawn = { fired.append("🔼 ↑") }
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F10, at: 100)))
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F8, at: 105)))
+        wait()
+        XCTAssertEqual(Set(fired), ["🔼 →", "🔼 ↑"])
+    }
+
     /// 🔽 → at rest starts nothing (2026-11-22) — swallowed, no plain dictation.
     func testBackRightAtRestStartsNothing() {
         let tap = HotkeyTap()
