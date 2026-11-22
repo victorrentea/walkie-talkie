@@ -2,7 +2,7 @@
  "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; line = index of the scene's line this cut starts under (cuts of one line share that line's time and are stretched together to fill it); sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech, with almost no lead or tail.",
  "_target": {
   "s02-site": 6.0,
-  "s03-move": 5.4,
+  "s03-move": 6.0,
   "s06-review": 4.2,
   "s07-modes": 10.0,
   "s10-end": 4.3
@@ -30,24 +30,19 @@
  ],
  "s03-move": [
   {
-   "in": 6.2,
+   "in": 6.6,
    "out": 8.6,
-   "crop": [
-    0,
-    400,
-    768,
-    432
-   ],
+   "speed": 2.4
+  },
+  {
+   "in": 9.2,
+   "out": 12.6,
    "line": 0
   },
   {
-   "in": 9.3,
-   "out": 10.8,
+   "in": 13.4,
+   "out": 14.8,
    "line": 1
-  },
-  {
-   "in": 15.4,
-   "out": 16.2
   },
   {
    "in": 20.8,
