@@ -36,7 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
-CUT_VERSION = 5                    # the file is out/teaser-v<N>.mp4
+CUT_VERSION = 6                    # the file is out/teaser-v<N>.mp4
 sys.path.insert(0, str(HERE))
 import tts  # noqa: E402
 
@@ -176,8 +176,8 @@ def plan() -> tuple[list[dict], float]:
             for l, spec in zip(lines, fixed):
                 if isinstance(spec, list):
                     subs = chunks(l, force=len(spec))
-                    for c, t in zip(subs, spec):
-                        c["shift"] = round(t - (spec[0] + c["at"]), 3)
+                    for c, t in zip(subs, spec):        # null = where the voice puts it
+                        c["shift"] = 0.0 if t is None else round(t - (spec[0] + c["at"]), 3)
                     placed.append({**l, "at": spec[0], "subs": subs})
                 else:
                     placed.append({**l, "at": spec, "subs": chunks(l)})
@@ -617,7 +617,7 @@ def main() -> None:
     mix(scenes, music_start, total, wav)
     run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
          "-i", str(wav), "-map", "0:v", "-map", "1:a", "-c:v", "copy",
-         "-af", f"volume={6 + MASTER_DB}dB,alimiter=limit=0.84:attack=4:release=60:level=false",
+         "-af", f"volume={6 + MASTER_DB}dB,alimiter=limit=0.78:attack=4:release=60:level=false",
          "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(FINAL)])
     small = FINAL.with_name(FINAL.stem + "-720p.mp4")       # the copy that fits in a mail
     run(["ffmpeg", "-y", "-v", "error", "-i", str(FINAL), "-vf", "scale=1280:-2:flags=lanczos",

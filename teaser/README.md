@@ -3,8 +3,8 @@
 A ~60 s promo cut, rebuilt from scratch by one command:
 
 ```
-python3 teaser/build.py          # -> teaser/out/teaser-v5.mp4 (1920x1080, 30 fps, H.264 + AAC)
-                                 #    and teaser-v5-720p.mp4, the copy small enough for a mail
+python3 teaser/build.py          # -> teaser/out/teaser-v6.mp4 (1920x1080, 30 fps, H.264 + AAC)
+                                 #    and teaser-v6-720p.mp4, the copy small enough for a mail
 python3 teaser/build.py --plan   # the timeline only, nothing rendered
 ```
 
