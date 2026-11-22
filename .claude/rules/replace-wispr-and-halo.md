@@ -829,6 +829,27 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   halo (`ProjectMHalo.tunes = false`). The demo route rebuilds the engine, so a `defaults write` +
   `POST /test/corner-tunnel` shows a new knob with no restart. **Photograph the screen the pointer
   is on** — the answer's `frame` says where (the first shot of an empty main screen was that).
+- **A fresh install looks like his Mac: the built-in defaults are his settings** (2026-11-22, Victor,
+  of the teaser filmed in a clean VM: *"Dar de ce e cercul de fulgere? Nu mai vreau. Default trebuie
+  să fie dust, efectul de dust, și cu marginile de edge. Ia setările actuale din aplicația reală
+  instalată pe Mac-ul fizic și setează-le ca default-uri în aplicația Walkie Talkie."*). The dust is a
+  trail and only the native engine draws one, and an unset `haloEngine` read as `web`: so
+  `smoke.isAvailable` was false, `promptsWearDust` was skipped, the prompt took its destination's
+  preset (Tunnel, bound) on butterchurn and that ended as the film — while the Metal edge strips drew
+  fine. His Mac has `haloEngine = native` saved, which is why nobody saw it. Now:
+  `HaloEngine.unset` = native (`defaults write … haloEngine web` still the escape hatch),
+  `HaloVoice.unset` = spectrum, the caret's `fallback` = Smoke, and `FluidTuner.builtIn` carries the
+  two sliders he had moved (Smoke `Size` 0.0012 against the solver's 0.002, Ink `Force` 7401 against
+  12000) — the tuner's Reset returns to those. `FreshInstallLookTests` pins them. **A visual
+  preference he settles on becomes the code's default the same day**; a look that exists only in his
+  `defaults` is a look no one else gets. Proof without his screen or his preferences:
+  `CFFIXED_USER_HOME=<empty dir> RELAY_SHOOT=1 WT_ALLOW_DIRECT=1 WT_PROJECTM_DIR=$PWD/assets/projectm
+  WT_HALO_DEMO=9 WT_HALO_DEMO_DEST=bound WT_HALO_DEMO_AUDIO=clip WT_PM_ORBIT=1 WT_PM_SHOOT=<dir>/pm
+  ./.build/debug/WalkieTalkie` — an empty preferences domain, every window offstage, the engine's own
+  frames as PNGs; the log must say `smoke — Smoke, … in the native engine`. (Without
+  `WT_PROJECTM_DIR` that run does not find `assets/projectm` and draws the film.) Not proven: that
+  projectM's OpenGL context comes up inside the Tart guest — if it does not, `ProjectMHalo.fail`
+  still ends in the film there.
 - **Every prompt wears the dust, and an edge of the screen says which prompt** (2026-11-16, Victor:
   *"besides the clean dictation, all the prompting should use the same dust effect … to distinguish
   the 3 from each other, during the dictation into a new terminal, there should be an effect similar

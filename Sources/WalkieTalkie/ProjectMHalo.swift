@@ -21,8 +21,8 @@ import ImageIO
 ///   pinned centre as `per_frame_` lines appended to our copy of the preset's
 ///   text before it is handed to the engine.
 /// - **Selected by `HaloEngine.current`** (`WT_HALO_ENGINE=native`, or the
-///   `haloEngine` default); the web route (`MilkDropHalo`) stays the default
-///   until this one is judged.
+///   `haloEngine` default); **the default since 2026-11-22** — the web route
+///   (`MilkDropHalo`) was until then.
 /// - **Resolution**: `WT_PM_SCALE` pixels per point of the square. The default
 ///   is the **display's backing scale**, which is what the web route has always
 ///   rendered at; it was a flat `1` until 2026-09-21 and that is what *"mozaic …
@@ -340,6 +340,9 @@ final class ProjectMHalo: NSView, HaloWebHost {
             if preset.pureFluid {
                 // The sliders' saved values over the mode's constants, then the panel.
                 let mode = preset.smoke ? 6 : preset.ink ? 5 : preset.liquid ? 4 : 3
+                // The app's own values over the solver's first, so the tuner's Reset
+                // goes back to what a fresh install shows (`FluidTuner.builtIn`).
+                for knob in FluidTuner.knobs { if let v = FluidTuner.builtIn[mode]?[knob.key] { pmh_set_fluid_param(renderer, knob.id, v) } }
                 let defaults = FluidTuner.knobs.map { pmh_fluid_param(renderer, $0.id) }
                 for knob in FluidTuner.knobs { if let v = FluidTuner.saved(mode: mode, knob: knob) { pmh_set_fluid_param(renderer, knob.id, v) } }
                 for (which, value) in fluidOverrides { pmh_set_fluid_param(renderer, which, value) }
@@ -811,14 +814,25 @@ final class ProjectMHalo: NSView, HaloWebHost {
 
 /// **Which engine draws a preset**: the web route (`MilkDropHalo`, butterchurn
 /// in a `WKWebView`) or the native one (`ProjectMHalo`). `WT_HALO_ENGINE=native`
-/// for a run, the `haloEngine` default otherwise; web until the native one is
-/// judged (`docs/projectm/REPORT.md`).
+/// for a run, the `haloEngine` default otherwise.
+///
+/// **Native when nothing is saved** (2026-11-22; web until then, *"until the
+/// native one is judged"*). The dust every prompt wears (`HaloStyle.smoke`, a
+/// trail) is drawn by the native engine alone, so on a fresh install — the lab
+/// VM the teaser was filmed in — `smoke.isAvailable` was false, the prompt fell
+/// to its destination's preset and that to the film: Victor saw *"cercul de
+/// fulgere"* where his own Mac, with `haloEngine = native` saved,
+/// shows dust. *"Default trebuie să fie dust … ia setările actuale din aplicația
+/// reală … și setează-le ca default-uri."* `defaults write … haloEngine web` is
+/// still the escape hatch.
 enum HaloEngine: String {
     case web, native
     static let defaultsKey = "haloEngine"
     static var current: HaloEngine {
         if let name = ProcessInfo.processInfo.environment["WT_HALO_ENGINE"], let e = HaloEngine(rawValue: name) { return e }
         if let name = UserDefaults.standard.string(forKey: defaultsKey), let e = HaloEngine(rawValue: name) { return e }
-        return .web
+        return unset
     }
+    /// What an unset preference reads as — pinned by `FreshInstallLookTests`.
+    static let unset: HaloEngine = .native
 }

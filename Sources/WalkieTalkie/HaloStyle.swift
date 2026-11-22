@@ -871,7 +871,10 @@ enum HaloDestination: String, CaseIterable {
         // arrangement after the swap and the two stored preferences with them.
         // The caret is the destination he sees most, and Tunnel is the preset
         // that spent the evening needing his voice louder than it is.
-        case .caret: return .milkdrop20   // Tendrils
+        // **Smoke since 2026-11-22** — what his own Mac has saved (`haloStyle.caret
+        // = smoke`), so the caret reads the same with `WT_PROMPT_DUST=0` on a fresh
+        // install. Tendrils until then.
+        case .caret: return .smoke
         case .bound: return .milkdrop7    // Tunnel
         // **Sparks — and "stars" never meant Snowflake** (Victor, 2026-09-21,
         // correcting the same day's guess: *"la dictarea in terminal nou, sa

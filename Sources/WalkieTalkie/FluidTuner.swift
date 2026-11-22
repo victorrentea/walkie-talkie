@@ -100,6 +100,17 @@ final class FluidTuner: NSObject {
         panel?.title = effectTitle
     }
 
+    /// **The app's own value for a knob, where it is not the solver's** (2026-11-22,
+    /// Victor: *"ia setările actuale din aplicația reală instalată pe Mac-ul fizic și
+    /// setează-le ca default-uri"*): the two sliders he had moved, at the values his
+    /// preferences held that day — Smoke's `Size` (the dust every prompt wears; the
+    /// solver's 0.002 is a cloud twice as wide) and Ink's `Force` (12000 in the
+    /// solver). By mode (`pmh_set_canvas`), then `Knob.key`. A saved slider still wins.
+    static let builtIn: [Int: [String: Float]] = [
+        6: ["radius": 0.001196428666423474],
+        5: ["force": 7401.274181547619],
+    ]
+
     static func savedKey(_ mode: Int, _ knob: Knob) -> String { "fluidTune.mode\(mode).\(knob.key)" }
 
     /// The value to start the engine at: the saved one, else the mode's own.

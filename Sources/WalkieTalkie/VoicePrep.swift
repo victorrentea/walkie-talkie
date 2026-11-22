@@ -47,10 +47,14 @@ enum HaloVoice: String, CaseIterable {
     case all
 
     static let defaultsKey = "haloVoice"
+    /// What an unset preference reads as: **`spectrum`, the filter Victor runs**
+    /// (2026-11-22, *"ia setările actuale din aplicația reală … și setează-le ca
+    /// default-uri"*; `direct` until then).
+    static let unset: HaloVoice = .spectrum
     static var current: HaloVoice {
         if let n = ProcessInfo.processInfo.environment["WT_HALO_VOICE"], let v = HaloVoice(rawValue: n) { return v }
         if let n = UserDefaults.standard.string(forKey: defaultsKey), let v = HaloVoice(rawValue: n) { return v }
-        return .direct
+        return unset
     }
     var title: String {
         switch self {
