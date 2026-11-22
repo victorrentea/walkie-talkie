@@ -36,7 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
-CUT_VERSION = 2                    # the file is out/teaser-v<N>.mp4
+CUT_VERSION = 3                    # the file is out/teaser-v<N>.mp4
 sys.path.insert(0, str(HERE))
 import tts  # noqa: E402
 
@@ -158,9 +158,13 @@ def plan() -> tuple[list[dict], float]:
     period, phase = beat_grid()
     music_start = phase % period + MUSIC_SKIP_BEATS * period   # the cut starts on a beat
     scenes, t0 = [], 0                    # t0 in frames
+    edit = json.loads(CUTS.read_text()) if CUTS.is_file() else {}
     for sc in script["scenes"]:
         lines = by_scene.get(sc["id"], [])
-        speech = LEAD + sum(l["dur"] for l in lines) + GAP * max(0, len(lines) - 1) + TAIL
+        tight = sc["id"] in edit.get("_tight", [])
+        lead_in, tail = (0.12, 0.15) if tight else (LEAD, TAIL)
+        sc = {**sc, "target": 0 if tight else edit.get("_target", {}).get(sc["id"], sc["target"])}
+        speech = lead_in + sum(l["dur"] for l in lines) + GAP * max(0, len(lines) - 1) + tail
         start = t0 / FPS
         want = start + max(sc["target"], speech)
         beat = round(want / period) * period
@@ -170,7 +174,7 @@ def plan() -> tuple[list[dict], float]:
         dur = (end - t0) / FPS
         # lines: spread over the scene, the spare time shared between the gaps
         spare = dur - speech
-        lead = LEAD + min(spare * 0.25, 0.5)
+        lead = lead_in + min(spare * 0.25, 0.5)
         gap = GAP + (min(spare * 0.5, 1.2) / (len(lines) - 1) if len(lines) > 1 else 0)
         t, placed = lead, []
         for l in lines:
@@ -503,6 +507,10 @@ def main() -> None:
          "-i", str(wav), "-map", "0:v", "-map", "1:a", "-c:v", "copy",
          "-af", f"volume={6 + MASTER_DB}dB,alimiter=limit=0.89:attack=4:release=60:level=false",
          "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(FINAL)])
+    small = FINAL.with_name(FINAL.stem + "-720p.mp4")       # the copy that fits in a mail
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(FINAL), "-vf", "scale=1280:-2:flags=lanczos",
+         "-c:v", "libx264", "-preset", "slow", "-crf", "27", "-pix_fmt", "yuv420p",
+         "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(small)])
     keep = {p.name for p in parts}
     for old in WORK.glob("s*-????????????.mp4"):
         if old.name not in keep:

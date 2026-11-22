@@ -3,7 +3,8 @@
 A ~60 s promo cut, rebuilt from scratch by one command:
 
 ```
-python3 teaser/build.py          # -> teaser/out/teaser-v2.mp4 (1920x1080, 30 fps, H.264 + AAC)
+python3 teaser/build.py          # -> teaser/out/teaser-v3.mp4 (1920x1080, 30 fps, H.264 + AAC)
+                                 #    and teaser-v3-720p.mp4, the copy small enough for a mail
 python3 teaser/build.py --plan   # the timeline only, nothing rendered
 ```
 
@@ -25,7 +26,9 @@ scene id), `in`/`out` seconds of that clip, optional `crop: [x, y, w, h]` (a pun
 1920x1080 source), `line` (the index of the scene's line this cut starts under: the cuts of
 one line share that line's time and are stretched together to fill it, which is what keeps
 a spoken line over its picture), `sub: "top"` (subtitle at the top during this cut) and
-`speed` (fixed instead of stretched). `build.py --plan` prints every cut with its place in
+`speed` (fixed instead of stretched). Two keys beside the scenes: `_target` overrides a
+scene's target seconds from `script.json` (never below its speech), `_tight` lists scenes
+cut to the length of their speech. `build.py --plan` prints every cut with its place in
 the film and its resulting speed. A scene with footage but no entry plays its clips whole
 (0.75x to 3x); a scene with no clip gets a dark placeholder card. The scene whose id ends
 in `-end` is always the generated end card.
