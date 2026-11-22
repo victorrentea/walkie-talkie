@@ -280,10 +280,20 @@ final class GestureHintBar {
     /// How much bigger the bar is drawn on a screen that is not the Retina.
     static let offRetinaScale: CGFloat = 3
 
+    /// **A hidden switch takes the bar off the screen** (2026-11-22, for the
+    /// teaser's footage — Victor: *"nu arăta hint-urile astea din colț"*, they
+    /// confuse a first-time viewer): `defaults write ro.victorrentea.wispr-relay
+    /// hintBarHidden -bool true`, or `WT_HINT_BAR=0`. Off unless set; no menu row.
+    /// Read at every update, so it needs no relaunch.
+    static func hidden(defaults: UserDefaults = .standard,
+                       environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        environment["WT_HINT_BAR"] == "0" || defaults.bool(forKey: "hintBarHidden")
+    }
+
     func update(_ stage: Stage) {
         // The trackpad's crosses need no Options+ profile, so no Logi gate.
         let trackpad = stage.fingers || (stage.noMouse && stage.listening && !stage.held && stage.crop == nil)
-        let visible = trackpad || (stage.listening && !stage.held && GestureGuide.logiGesturesOn)
+        let visible = !Self.hidden() && (trackpad || (stage.listening && !stage.held && GestureGuide.logiGesturesOn))
         guard stage != shown || (panel != nil) != visible else { return }
         shown = stage
         guard visible else { hide(); return }

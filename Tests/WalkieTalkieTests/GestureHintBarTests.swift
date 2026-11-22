@@ -7,7 +7,18 @@ final class GestureHintBarTests: XCTestCase {
 
     typealias Cross = GestureHintBar.Cross
 
-    func testNothingWhenNotDictating() {
+func testTheHiddenSwitchIsOffUnlessSet() {
+        let d = UserDefaults(suiteName: "hint-bar-hidden-test")!
+        d.removePersistentDomain(forName: "hint-bar-hidden-test")
+        XCTAssertFalse(GestureHintBar.hidden(defaults: d, environment: [:]))
+        XCTAssertTrue(GestureHintBar.hidden(defaults: d, environment: ["WT_HINT_BAR": "0"]))
+        XCTAssertFalse(GestureHintBar.hidden(defaults: d, environment: ["WT_HINT_BAR": "1"]))
+        d.set(true, forKey: "hintBarHidden")
+        XCTAssertTrue(GestureHintBar.hidden(defaults: d, environment: [:]))
+        d.removePersistentDomain(forName: "hint-bar-hidden-test")
+    }
+
+        func testNothingWhenNotDictating() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init()), [])
     }
 

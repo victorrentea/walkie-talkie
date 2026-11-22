@@ -323,6 +323,11 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 
 ## The corner hint bar draws every gesture that acts (2026-10-25)
 
+**A hidden switch takes the bar off the screen** (2026-11-22, for the teaser — Victor: *"nu arăta hint-urile astea
+din colț"*): `defaults write ro.victorrentea.wispr-relay hintBarHidden -bool true` or `WT_HINT_BAR=0`
+(`GestureHintBar.hidden`, read at every update). Off unless set, no menu row; the crop's own readout (the kit's
+`⌘ move ⌃ square` pill and size badges) is not the bar and stays.
+
 Victor: *"Am dat Forward sus și mi-a trecut ask în modul de terminal nou. Am dat back stânga și mi-a
 făcut cancel. Ăsta n-apar pe … diagrama de butoane live"*. Three read-only audits traced each F-key
 to its handler per stage and `GestureHintBar.crosses` now says what the code does:
