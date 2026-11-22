@@ -377,7 +377,8 @@ Off by default since 2026-09-09. Everything in this section is what the menu's *
 **A hidden switch takes the bar off the screen** (2026-11-22, for the teaser — Victor: *"nu arăta hint-urile astea
 din colț"*): `defaults write ro.victorrentea.wispr-relay hintBarHidden -bool true` or `WT_HINT_BAR=0`
 (`GestureHintBar.hidden`, read at every update). Off unless set, no menu row; the crop's own readout (the kit's
-`⌘ move ⌃ square` pill and size badges) is not the bar and stays.
+`⌘ move ⌃ square` pill and size badges) is not the bar and stays — it has its own switch, `cropReadoutsHidden` /
+`WT_CROP_READOUTS=0` (`area-crop.md`).
 
 **Glyphs alone with the mouse attached; the keys only without it; no words at all** (2026-11-22, Victor:
 *"înlocuiește clipboard-ul care scrie Copy … pune iconița de Copy care e standard, cele două dreptunghiuri cumva

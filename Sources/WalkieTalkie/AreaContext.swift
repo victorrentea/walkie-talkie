@@ -19,6 +19,20 @@ import AppKit
 /// Drawn, never written to disk: it is the panel's picture of a token, and the
 /// files the agent reads stay exactly what they were.
 enum AreaContext {
+    /// **A hidden switch takes every text and number off the crop** (2026-11-22, for the
+    /// teaser's footage, like the hint bar's — the legends read as noise to a first-time
+    /// viewer and a mask in the edit looked bad): the `⌘ move  ⌃↘ square  ⇧ / right-click
+    /// move to` pill, the width and height badges, `click to drop it here …` and the four
+    /// distances on the crosshair. The box, the dashed source, the ghost, the arrow and the
+    /// crosshair's lines stay. `defaults write ro.victorrentea.wispr-relay cropReadoutsHidden
+    /// -bool true`, or `WT_CROP_READOUTS=0`. Off unless set; no menu row. Read at every crop
+    /// (`AppDelegate.cropStyle` → the kit's `CropSelectionStyle.readoutsHidden`), so it needs
+    /// no relaunch.
+    static func readoutsHidden(defaults: UserDefaults = .standard,
+                               environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        environment["WT_CROP_READOUTS"] == "0" || defaults.bool(forKey: "cropReadoutsHidden")
+    }
+
     static let sourceColor = NSColor.systemRed
     static let destinationColor = NSColor.systemGreen
     static let arrowColor = NSColor.white

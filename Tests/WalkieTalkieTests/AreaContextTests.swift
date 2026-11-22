@@ -138,4 +138,17 @@ final class AreaContextTests: XCTestCase {
         let c = color(rep, x, y)
         return (c.redComponent + c.greenComponent + c.blueComponent) / 3
     }
+
+    /// The filming switch (2026-11-22): the crop's texts and numbers are shown unless asked.
+    func testTheCropsReadoutsAreShownUnlessTheHiddenSwitchIsSet() {
+        let name = "crop-readouts-hidden-test"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        XCTAssertFalse(AreaContext.readoutsHidden(defaults: d, environment: [:]))
+        XCTAssertTrue(AreaContext.readoutsHidden(defaults: d, environment: ["WT_CROP_READOUTS": "0"]))
+        XCTAssertFalse(AreaContext.readoutsHidden(defaults: d, environment: ["WT_CROP_READOUTS": "1"]))
+        d.set(true, forKey: "cropReadoutsHidden")
+        XCTAssertTrue(AreaContext.readoutsHidden(defaults: d, environment: [:]))
+        d.removePersistentDomain(forName: name)
+    }
 }

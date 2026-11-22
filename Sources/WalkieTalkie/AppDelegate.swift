@@ -12754,7 +12754,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ///
     /// The hint itself is never shown here: it belongs to the flavour that waits
     /// for a drag to start, and this one arrives with one already under way.
-    private static let cropStyle = CropSelectionStyle(
+    private static var cropStyle: CropSelectionStyle {
+        var style = cropStyleShown
+        // The filming switch, read at every crop (`AreaContext.readoutsHidden`).
+        style.readoutsHidden = AreaContext.readoutsHidden()
+        return style
+    }
+
+    private static let cropStyleShown = CropSelectionStyle(
         hint: "drag an area  ·  ⌘ move  ·  ⌥ from centre  ·  Esc cancels",
         // Named after the keys and always on the readout, lit only while held
         // — see `CropSelectionStyle.movingSuffix`.
