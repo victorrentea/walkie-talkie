@@ -1,12 +1,12 @@
 {
  "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; blur = [x, y, w, h] smears that region of the source; mask = \"readout\" finds the yellow wheel-drag box in this cut and paints out its size badges and key hint as they move (unused since the takes hide them); line = index of the scene's line this cut starts under, or [line, part] for a part of a split line (cuts that follow share the time up to the next placed cut and are stretched together to fill it); start = seconds into the scene where this cut starts, instead of line; sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech; _at gives a scene's line start times by hand, one per line, and a list for a line splits it at its punctuation into that many parts, each with its own start (null = where the voice puts it).",
- "_target": {"s01-hook": 7.2, "s02-site": 6.0, "s03-move": 8.2, "s04-point": 19.3, "s06-review": 4.8, "s07-modes": 18.7, "s08-ask": 9.6, "s10-end": 4.3},
- "_tight": ["s09-cost"],
+ "_target": {"s01-hook": 7.2, "s02-site": 6.0, "s03-move": 8.2, "s04-point": 19.3, "s06-review": 4.8, "s07-modes": 18.7, "s08-ask": 9.6, "s09-cost": 7.6, "s10-end": 4.3},
+ "_tight": [],
  "_at": {
   "s01-hook": [0.3, 3.5],
   "s03-move": [1.6, 4.9],
   "s04-point": [[2.5, 8.9], 15.2],
-  "s07-modes": [0.3, 3.3, 6.5, 8.2, 9.6, [12.0, null, null]],
+  "s07-modes": [0.3, 3.3, 6.5, 8.2, 9.6, [12.0, null]],
   "s08-ask": [0.35, 4.3]
  },
  "s01-hook": [

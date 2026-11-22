@@ -36,7 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
-CUT_VERSION = 6                    # the file is out/teaser-v<N>.mp4
+CUT_VERSION = 7                    # the file is out/teaser-v<N>.mp4
 sys.path.insert(0, str(HERE))
 import tts  # noqa: E402
 
@@ -51,7 +51,7 @@ ICON = HERE.parent / "assets" / "walkie-bound.png"
 
 W, H, FPS = 1920, 1080, 30
 SR = 48000
-RENDER_VERSION = 6                 # bump to throw away every cached scene
+RENDER_VERSION = 7                 # bump to throw away every cached scene
 
 MUSIC = MUSIC_DIR / "brain-dance.mp3"
 MUSIC_BPM = 124.0                  # stated by the composer; confirmed by beat_grid()
@@ -318,11 +318,72 @@ def endcard_png(path: Path) -> None:
     # The tagline under the name; the facts and the link lower down (Victor, 2026-11-22).
     d.text((W / 2, y + 118), "Talk to your coding agent", font=font(62, "Bold"),
            fill=WHITE, anchor="mm")
-    d.text((W / 2, H - 196), "Free  ·  open source  ·  macOS", font=font(48, "Medium"),
+    d.text((W / 2, H - 250), "Built for macOS", font=font(48, "Medium"),
            fill=(255, 176, 32), anchor="mm")
-    d.text((W / 2, H - 116), "github.com/victorrentea/walkie-talkie",
+    d.text((W / 2, H - 170), "github.com/victorrentea/walkie-talkie",
            font=font(44, "Regular"), fill=(190, 198, 214), anchor="mm")
+    d.text((W / 2, H - 108), "use it, fork it, tweak it", font=font(38, "Medium"),
+           fill=(140, 150, 170), anchor="mm")
     im.convert("RGB").save(path)
+
+
+def checklist_png(items: list[str], ticked: int, path: Path) -> None:
+    """The features card: `items` in one column, the first `ticked` of them ticked."""
+    im = backdrop().convert("RGBA")
+    d = ImageDraw.Draw(im)
+    f, row = font(48, "Bold"), 80
+    x = (W - max(f.getlength(t) for t in items) - 96) / 2
+    y = max(40, (H - 260 - row * len(items)) / 2)   # clear of the subtitle below
+    for i, text in enumerate(items):
+        cy, on = y + i * row + row / 2, i < ticked
+        d.rounded_rectangle((x, cy - 27, x + 54, cy + 27), 13,
+                            fill=(52, 199, 89, 255) if on else None,
+                            outline=None if on else (110, 118, 135, 255), width=4)
+        if on:
+            d.line([(x + 12, cy + 2), (x + 23, cy + 13), (x + 43, cy - 12)],
+                   fill=WHITE, width=8, joint="curve")
+        d.text((x + 88, cy), text, font=f, fill=WHITE if on else (120, 128, 145), anchor="lm")
+    im.convert("RGB").save(path)
+
+
+def note_png(note: dict, path: Path) -> None:
+    """A caption with an arrow to a point of the frame: {text, point: [x, y], from: "left"|...}."""
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    f = font(46, "Bold")
+    px, py = note["point"]
+    tw = f.getlength(note["text"])
+    dx, dy = {"left": (-1, 0), "right": (1, 0), "up": (0, -1), "down": (0, 1)}[note.get("from", "left")]
+    gap = 170
+    cx, cy = px + dx * (gap + (tw / 2 + 30 if dx else 0)), py + dy * (gap + (40 if dy else 0))
+    cx = min(W - tw / 2 - 50, max(tw / 2 + 50, cx)); cy = min(H - 80, max(80, cy))
+    box = (cx - tw / 2 - 30, cy - 42, cx + tw / 2 + 30, cy + 42)
+    d.rounded_rectangle(box, 22, fill=(255, 214, 10, 255))
+    d.text((cx, cy), note["text"], font=f, fill=(20, 20, 20, 255), anchor="mm")
+    sx = box[2] if dx < 0 else box[0] if dx > 0 else cx
+    sy = box[3] if dy < 0 else box[1] if dy > 0 else cy
+    ex, ey = px + dx * 26, py + dy * 26
+    d.line([(sx, sy), (ex, ey)], fill=(255, 214, 10, 255), width=8)
+    L = math.hypot(ex - sx, ey - sy) or 1
+    ux, uy = (ex - sx) / L, (ey - sy) / L
+    d.polygon([(px + dx * 4, py + dy * 4), (ex - ux * 14 - uy * 20, ey - uy * 14 + ux * 20),
+               (ex - ux * 14 + uy * 20, ey - uy * 14 - ux * 20)], fill=(255, 214, 10, 255))
+    im.save(path)
+
+
+def struck_png(st: dict, path: Path) -> None:
+    """What was first heard, struck through in red above the corrected word: {text, over: [x, y, w, h]}."""
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    x, y, w, h = st["over"]
+    f = font(st.get("size", max(30, round(h * 1.05))), "Bold")
+    tw = f.getlength(st["text"])
+    cx, cy = x + w / 2, y - h * 0.75
+    d.rounded_rectangle((cx - tw / 2 - 14, cy - h * 0.7, cx + tw / 2 + 14, cy + h * 0.7), 10,
+                        fill=(20, 20, 24, 235))
+    d.text((cx, cy), st["text"], font=f, fill=(255, 69, 58, 255), anchor="mm")
+    d.line([(cx - tw / 2 - 6, cy + 2), (cx + tw / 2 + 6, cy + 2)], fill=(255, 69, 58, 255), width=5)
+    im.save(path)
 
 
 # ---------------------------------------------------------------- picture
@@ -382,6 +443,8 @@ def segments_for(scene: dict) -> list[dict]:
     Cuts tagged with the same `line` share the time from that line to the next tagged one
     and are stretched together to fill it; untagged cuts continue the group before them."""
     sid, lines, total = scene["id"], scene["lines"], scene["dur"]
+    if scene.get("checklist"):                        # a generated card, whatever was filmed
+        return []
     cuts = json.loads(CUTS.read_text()).get(sid) if CUTS.is_file() else None
     if cuts:
         segs = [{"clip": sid, **c} for c in cuts if (FOOTAGE / f"{c.get('clip', sid)}.mp4").is_file()]
@@ -479,7 +542,13 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
         chains.append("".join(f"[t{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v0]")
     else:
         card = WORK / f"{sid}-card.png"
-        endcard_png(card) if is_end else placeholder_png(scene, card)
+        items = scene.get("checklist")
+        if is_end:
+            endcard_png(card)
+        elif items:
+            checklist_png(items, len(items) - len(scene["lines"]), card)
+        else:
+            placeholder_png(scene, card)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(card)]
         fade = ",fade=t=in:st=0:d=0.25" if is_end else ""
         chains.append(f"[0:v]{norm}{fade}[v0]")
@@ -504,6 +573,27 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
         chains.append(f"[{last}][{n + j}:v]overlay=0:0:enable='between(t,{a:.3f},{b:.3f})'"
                       f"[v{j + 1}]")
         last = f"v{j + 1}"
+    # pictures over a span of the scene: the checklist's ticks, a cut's note / struck word
+    extra: list[tuple[Path, float, float]] = []
+    items = scene.get("checklist")
+    if items and not segs:
+        for j, line in enumerate(scene["lines"]):   # one more tick as each line is spoken
+            png = WORK / f"{sid}-tick{j}.png"
+            checklist_png(items, len(items) - len(scene["lines"]) + j + 1, png)
+            extra.append((png, line["at"] + min(1.2, line["subs"][0]["dur"] * 0.4), dur))
+    for i, sg in enumerate(segs):
+        for kind, draw in (("note", note_png), ("struck", struck_png)):
+            if sg.get(kind):
+                png = WORK / f"{sid}-{kind}{i}.png"
+                draw(sg[kind], png)
+                a = sg["at"] + sg[kind].get("after", 0)
+                extra.append((png, a, sg["at"] + sg["dur"]))
+    base = n + len(subs)
+    for j, (png, a, b) in enumerate(extra):
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(png)]
+        chains.append(f"[{last}][{base + j}:v]overlay=0:0:enable='between(t,{a:.3f},{b:.3f})'"
+                      f"[x{j}]")
+        last = f"x{j}"
     if is_end:
         chains.append(f"[{last}]fade=t=out:st={dur - 0.5:.3f}:d=0.5[vf]")
         last = "vf"

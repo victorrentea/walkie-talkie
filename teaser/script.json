@@ -25,11 +25,11 @@
       "lines": [
         {
           "who": "u",
-          "text": "Make the header dark and the button orange."
+          "text": "Make the header dark and this button orange."
         },
         {
           "who": "n",
-          "text": "and just talk to it."
+          "text": "and just speak your prompt."
         }
       ]
     },
@@ -59,7 +59,7 @@
         },
         {
           "who": "n",
-          "text": "Everything you point at lands in the prompt, at the moment you said it."
+          "text": "Everything you point at is inserted in the prompt, at the moment you said it."
         }
       ]
     },
@@ -69,12 +69,12 @@
       "shows": "Screen recording mode (REC corners) over a flickering menu.",
       "lines": [
         {
-          "who": "u",
-          "text": "See how this flickers? Fix it."
-        },
-        {
           "who": "n",
           "text": "Or film it."
+        },
+        {
+          "who": "u",
+          "text": "See how this flickers? Fix it."
         }
       ]
     },
@@ -85,7 +85,7 @@
       "lines": [
         {
           "who": "u",
-          "text": "I don't like this loop. Simplify it."
+          "text": "I don't like this loop. Use Streams."
         }
       ]
     },
@@ -117,7 +117,7 @@
         },
         {
           "who": "n",
-          "text": "Or simply dictate: your text is cleaned up as you speak, by a dictionary that keeps learning from your agent sessions."
+          "text": "Or simply dictate: cleaned using a dictionary that keeps learning from your agent sessions."
         }
       ]
     },
@@ -132,14 +132,14 @@
         },
         {
           "who": "n",
-          "text": "Quick questions: searched on the web, adversarially reviewed."
+          "text": "Question mode: web research, adversarially reviewed."
         }
       ]
     },
     {
       "id": "s09-cost",
       "target": 6,
-      "shows": "The cost bubble beside a prompt; pictures as file paths in the prompt.",
+      "shows": "Generated card: the checklist of the features shown, all ticked; the last two (All local, Token-efficient) get ticked as their lines are spoken.",
       "lines": [
         {
           "who": "n",
@@ -147,8 +147,19 @@
         },
         {
           "who": "n",
-          "text": "All for a very low token overhead, tuned via heavy evals. And you see the cost of every task."
+          "text": "Token-efficiency tuned with heavy evals."
         }
+      ],
+      "checklist": [
+        "Talk to the session in the back",
+        "Point: screenshots, areas, selections",
+        "Move elements on screen",
+        "Film a bug",
+        "New session · wake word · at the cursor",
+        "Clean dictation, a learning dictionary",
+        "Question mode: web research + review",
+        "All local",
+        "Token-efficient"
       ]
     },
     {
