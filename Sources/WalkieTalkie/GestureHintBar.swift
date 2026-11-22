@@ -50,9 +50,6 @@ final class GestureHintBar {
         /// A prompt (🔼 / 🔼 → / 🔼 ↑); false for a plain dictation.
         var prompting = false
         var filming = false
-        /// A wheel crop was taken in this sentence: 🔽 ↑ films that area alone
-        /// (2026-11-21).
-        var areaFilm = false
         var kamikaze = false
         /// The sentence goes to the bound terminal: 🔽 ← marks it 🛑 interrupt
         /// (2026-11-22, `InterruptGate`); `interrupt` = already marked.
@@ -99,7 +96,11 @@ final class GestureHintBar {
         guard s.listening, !s.held, let crop = s.crop else { return nil }
         switch crop {
         case .selecting:
-            return MouseHint(wheel: "✂️ drag", right: "➡️ move to", body: "Esc cancel")
+            // **🔽 ↑ with the wheel still down films this box** (2026-11-22,
+            // `HotkeyTap.onAreaFilm`) — on the mouse's body, where the thumb is.
+            // Not over a ⚡ question (no film there), not without the mouse.
+            return MouseHint(wheel: "✂️ drag", right: "➡️ move to",
+                             body: s.noMouse || s.quick ? "Esc cancel" : Self.filmTheBox + " Esc cancel")
         case .locked:
             return MouseHint(wheel: "⬆️ let go", right: "↩️ unlock", body: "Esc cancel")
         case .parked:
@@ -112,6 +113,9 @@ final class GestureHintBar {
             return MouseHint(wheel: "🎯 drag there", right: "🗑️ discard", body: "Esc cancel")
         }
     }
+
+    /// The crop's body while the box is dragged: 🔽 ↑ films it.
+    static let filmTheBox = "🔽↑ 🔴 video"
 
     /// One button's gestures. `nil` = no box is drawn, `""` = an empty box.
     struct Cross: Equatable {
@@ -155,9 +159,9 @@ final class GestureHintBar {
             // While a film runs the shutter is its stop (2026-10-23, `onScreenshot`).
             back.click = s.filming ? "⏹️ video" : "📸 shot"
             // Stop is ⏹️, never the word (2026-09-30).
-            // After a wheel crop the film is that area alone (2026-11-21, Victor:
-            // *"să mai arăți așa și pe helper tooltips"*) — `✂️` says which.
-            back.up = s.filming ? "⏹️ video" : (s.areaFilm ? "🔴 ✂️ video" : "🔴 video")
+            // Always the whole display here (2026-11-22): a box is filmed from
+            // inside its own wheel drag (`mouse(for:)`), no longer *after a crop*.
+            back.up = s.filming ? "⏹️ video" : "🔴 video"
             // The typing box (2026-10-08, Victor: *"nu-l văd nici în sugestia
             // de taste din colț"*) — `HotkeyTap.onTypeIn`.
             back.down = "⌨️ type"
@@ -168,26 +172,33 @@ final class GestureHintBar {
             // **A question is a prompt** (2026-10-15): 🔼 asks, 🔽 is the
             // shutter and ↓ the typing box, as while prompting; no kamikaze, no
             // film (`toggleFilm` refuses it) — a question's answer is the reply
-            // pop-up. 🔼 → sends it to the terminal as a prompt (`dropQuestion`),
-            // 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`); 🔼 ↓ does both.
+            // pop-up. 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`); 🔼 ↓ does both.
+            // **Neither ✨ nor the terminal is offered from a question** (2026-11-22,
+            // Victor: *"din modul question nu are sens să am ✨ sau prompt bound"*):
+            // both arms are grey boxes. The bar only — 🔼 ↑ and 🔼 → still redirect
+            // the question (`convertDictationToSpawn`, `retarget` → `dropQuestion`).
             front.click = "⚡ ask"
             // 🔼 ↓ Googles it AND answers it (2026-11-11, `quickGoogleToo`).
             front.down = Self.google + " + ⚡"
-            front.right = Self.terminal + " terminal"
+            front.up = ""
+            front.right = ""
             back.click = "📸 shot"
             back.up = ""
             back.down = "⌨️ type"
             back.right = Self.google + " Google"
         } else {
-            // A plain sentence: 🔼 and 🔽 ↓ stop it without a Return, 🔼 → makes it
-            // a prompt to the terminal (`retarget`), 🔼 ↓ is the last prompt's
-            // kamikaze (`kamikazeAfterTheWords`).
-            front.click = "⏹️"
-            front.down = "☠️ last"
-            front.right = Self.terminal + " terminal"
+            // **A plain sentence has a cancel and a stop, nothing else** (2026-11-22,
+            // Victor: *"dictation mai are doar cancel 🗑️ și stop pe butonul de forward
+            // sau back. atât."*): 🔼 ← discards, 🔼 and 🔽 stop it — the words, then
+            // Return — and every other arm is a grey box (`HotkeyTap.plainIgnores`).
+            front.click = "⏹️ + ⏎"
+            front.up = ""
+            front.down = ""
+            front.right = ""
             back.click = "⏹️ + ⏎"
-            back.down = "⏹️"
-            back.right = "⏹️"
+            back.left = ""
+            back.down = ""
+            back.right = ""
         }
         // **The keyboard's way beside the gesture it stands for** (2026-10-20 on
         // the trackpad's crosses, on the mouse's too since 2026-10-22, Victor:
@@ -201,7 +212,8 @@ final class GestureHintBar {
         else if s.prompting || s.quick { front.click = (front.click ?? "") + " ⌘⌘" }
         if back.click == "📸 shot" { back.click = "📸 / ⌃P" }
         else if s.prompting, s.filming { back.click = "⏹️ / ⌃P" }
-        if !s.prompting && !s.quick { back.right = "⏹️ ⌘⌘" }
+        // Right ⌘ ×2 stops a plain sentence as the bare 🔽 does (Return and all).
+        if !s.prompting && !s.quick { back.click = "⏹️ + ⏎ ⌘⌘" }
         return [front, back]
     }
 
@@ -220,7 +232,11 @@ final class GestureHintBar {
         // (2026-11-22, Victor: *"copy să fie mereu în colț dreapta jos. text
         // selection să vină pe centru"*) — the row is right-aligned, so last = corner.
         if s.prompting || s.quick { return [selectKey, copyKey] }
-        return [promptKey, copyKey]
+        // **No copy on a plain dictation's bar** (2026-11-22, Victor: *"ce sens are
+        // copy în plain dictation?? … scoate, că nu are sens. dictez doar"*). The
+        // **Nor `💬 prompt ⌃P`** (same day, *"scoate și ctrl-p"*): ⌃P no longer
+        // turns a plain dictation into a prompt, and it gathers no copies either.
+        return []
     }
 
     static let promptKey = "💬 prompt ⌃P"
@@ -331,12 +347,13 @@ final class GestureHintBar {
             // The keys ride in the badges already (`crosses`, *"suggest [⌃P] in
             // the button … Put command command next to the flag"*).
             c = crosses(for: Stage(listening: true, prompting: s.prompting, filming: s.filming,
-                                   areaFilm: s.areaFilm, kamikaze: s.kamikaze,
+                                   kamikaze: s.kamikaze,
                                    interruptible: s.interruptible, interrupt: s.interrupt,
                                    spawn: s.spawn, quick: s.quick))
         } else {
             c = [Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: Self.terminal + " terminal"),
-                 Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate")]
+                 // ✌️ → starts nothing since 2026-11-22 (*"dictarea curată start: fără 🔽 →"*).
+                 Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "")]
         }
         c[0].corner = oneFinger
         c[1].corner = twoFingers
@@ -589,7 +606,6 @@ final class GestureHintBar {
             .init(title: "Prompt (light backdrop)", stage: .init(listening: true, prompting: true), light: true),
             .init(title: "Plain dictation", stage: .init(listening: true, prompting: false)),
             .init(title: "⚡ Question", stage: .init(listening: true, prompting: false, quick: true)),
-            .init(title: "Prompt after a crop", stage: .init(listening: true, prompting: true, areaFilm: true)),
             .init(title: "Filming, kamikaze on, to a new session",
                   stage: .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true)),
         ]),

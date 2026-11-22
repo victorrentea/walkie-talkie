@@ -22,7 +22,7 @@ The middle button held and dragged during a dictation selects a rectangle of the
 
 - **A crop moves the corner hint bar out of the way** (2026-10-09). The swallowed drags reach no window, so the bar's pointer dodge never heard them; `HotkeyTap.onAreaMoved` → `RelayWindow.pointerMovedUnseen` feeds it.
 
-- **🔽 ↑ after a crop films that box alone, ringed by `● REC`** (2026-11-21) — `screenshots-and-selection.md`, *🔽 ↑ after a wheel crop films that area alone*.
+- **🔽 ↑ with the wheel still down films the box under it, ringed by `● REC` — the film only, no picture** (2026-11-22, Victor: *"dau drag cu wheel la un chenar și la final, înainte de a ridica wheel-ul, fac gestul de back + swipe up"*) — `screenshots-and-selection.md`, *🔽 ↑ inside a wheel drag films that box*. In this file's terms: `HotkeyTap.areaFilmFlick` (the F4 branch, same tap thread as the drag) sets `areaFilmed`; from then every drag event of that press is swallowed and resizes nothing, the release is swallowed or passed **exactly as a crop's** (`areaCropping` stays up to the release, so no `replayMiddleClick`, the Wheel-mode bookkeeping cleared) but calls no `onAreaEnd` — `AppDelegate.filmTheBoxUnderTheWheel` has already ended the box (`endDrag` + `dragMoved(toCG:)` at the frozen corner). Not while the box is locked (`areaBoxLocked`, pushed from `onPhase`: flash `🎬 Not while the box is locked — film it before locking`), not drawing a move's destination, not over a ⚡ question (the flick goes to `toggleFilm`, which refuses there). ~~**🔽 ↑ after a crop films that box alone**~~ (2026-11-21) is gone: outside a live drag 🔽 ↑ films the whole display.
 
 ## The shared module (`Package.swift`)
 

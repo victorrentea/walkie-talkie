@@ -299,17 +299,17 @@ final class HotkeyTap {
         get { stateLock.lock(); defer { stateLock.unlock() }; return relayPromptOpenFlag }
         set {
             stateLock.lock()
-            let was = relayPromptOpenFlag || relayPlainOpenFlag
+            let was = relayPromptOpenFlag
             relayPromptOpenFlag = newValue
-            let now = relayPromptOpenFlag || relayPlainOpenFlag
             stateLock.unlock()
-            if was != now { Self.markPrompting(now) }
+            if was != newValue { Self.markPrompting(newValue) }
         }
     }
 
     /// **`~/.walkie-talkie/prompting` exists, holding this pid, while a prompt
-    /// records** (2026-10-20) — **and while a plain one does** (2026-10-22: ⌃P
-    /// is the switch to a prompt there, `onPlainToPrompt`) — Victor Mac reads it on ⌃P and lets the key
+    /// records** (2026-10-20) — **a prompt only since 2026-11-22**: a plain
+    /// dictation wrote it too from 2026-10-22, while ⌃P was its switch to a
+    /// prompt; that is gone, so ⌃P there is Victor Mac's again — Victor Mac reads it on ⌃P and lets the key
     /// through instead of taking its own screenshot (Victor: *"take over the
     /// shortcut and block the addon … If I am dictating, it's I'm telling you
     /// first"*). The pid lets a file left by a crash be told from a live prompt.
@@ -334,14 +334,7 @@ final class HotkeyTap {
     /// the photo or drag during the dictation process"*).
     var relayPlainOpen: Bool {
         get { stateLock.lock(); defer { stateLock.unlock() }; return relayPlainOpenFlag }
-        set {
-            stateLock.lock()
-            let was = relayPromptOpenFlag || relayPlainOpenFlag
-            relayPlainOpenFlag = newValue
-            let now = relayPromptOpenFlag || relayPlainOpenFlag
-            stateLock.unlock()
-            if was != now { Self.markPrompting(now) }
-        }
+        set { stateLock.lock(); relayPlainOpenFlag = newValue; stateLock.unlock() }
     }
     private var relayPlainOpenFlag = false
 
@@ -1883,6 +1876,53 @@ final class HotkeyTap {
     /// **It is judged on the tap thread and nowhere else**, which is what makes
     /// the swallow decision raceless: the drag that arms the crop and the
     /// release that ends it are the same serial stream of events.
+    /// **🔽 ↑ made with the wheel still down on a box: film that box**
+    /// (2026-11-22, Victor: *"dau drag cu wheel la un chenar și la final, înainte
+    /// de a ridica wheel-ul, fac gestul de back + swipe up"*). The corner the box
+    /// is frozen at, global CG points. Called on the tap thread.
+    var onAreaFilm: ((CGPoint) -> Void)?
+    /// …asked for while the box is locked for a move: refused, said.
+    var onAreaFilmRefused: (() -> Void)?
+    /// The box under the wheel is locked as a move's source (⇧ / a right click)
+    /// — pushed from `CropSelectionOverlay.onPhase` on main, read on the tap thread.
+    var areaBoxLocked: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return areaBoxLockedFlag }
+        set { stateLock.lock(); areaBoxLockedFlag = newValue; stateLock.unlock() }
+    }
+    private var areaBoxLockedFlag = false
+    /// 🔽 ↑ took this press's box for a film: the drag is no longer pushed, and
+    /// the release ends nothing (the film's handler ended the box already) —
+    /// still swallowed or passed exactly as a crop's release is, never replayed.
+    private var areaFilmed = false
+    /// Where the drag has been lately, for `FilmCorner`. Tap thread only.
+    private var areaTrail: [FilmCorner.Sample] = []
+
+    private func noteAreaTrail(_ event: CGEvent) {
+        let at = TimeInterval(event.timestamp) / 1_000_000_000
+        areaTrail.append(.init(at: at, point: event.location))
+        if let first = areaTrail.firstIndex(where: { at - $0.at <= FilmCorner.kept }), first > 0 {
+            areaTrail.removeFirst(first)
+        }
+    }
+
+    /// The F4 branch asks: is this flick the box's? True = taken (swallow it).
+    private func areaFilmFlick(_ event: CGEvent) -> Bool {
+        guard areaCropping, !areaDrawingDestination, !areaFilmed, !relayQuickOpen else { return false }
+        if areaBoxLocked {
+            Log.info("🎬 🔽 ↑ with the wheel down on a locked box — refused (film it before locking)")
+            onAreaFilmRefused?()
+            return true
+        }
+        areaFilmed = true
+        let chordAt = TimeInterval(event.timestamp) / 1_000_000_000
+        let corner = FilmCorner.corner(of: areaTrail, chordAt: chordAt) ?? event.location
+        let last = areaTrail.last?.point ?? event.location
+        Log.info(String(format: "🎬 🔽 ↑ with the wheel down — the box is frozen at %.0f,%.0f (the pointer is at %.0f,%.0f; %d drag samples)",
+                        corner.x, corner.y, last.x, last.y, areaTrail.count))
+        onAreaFilm?(corner)
+        return true
+    }
+
     private func areaDrag(_ type: CGEventType, _ event: CGEvent) -> Bool {
         guard event.getIntegerValueField(.mouseEventButtonNumber) == MOUSE_BUTTON_MIDDLE,
               event.getIntegerValueField(.eventSourceUserData) != Self.replayStamp else { return false }
@@ -1891,6 +1931,8 @@ final class HotkeyTap {
         case .otherMouseDown:
             areaAnchor = nil
             areaCropping = false
+            areaFilmed = false
+            areaTrail = []
             areaPressHeld = false
             haloDialed = false
             // **The source is locked and parked: this press is the destination's**
@@ -1934,7 +1976,10 @@ final class HotkeyTap {
             return areaPressHeld
 
         case .otherMouseDragged:
+            // 🔽 ↑ froze the box for a film: the hand's travel no longer resizes it.
+            if areaCropping, areaFilmed { return true }
             if areaCropping {
+                noteAreaTrail(event)
                 // **The box follows the events, not a timer.** Every one of
                 // these is about to be swallowed, so the overlay would otherwise
                 // be left polling `NSEvent.mouseLocation` from a main-thread
@@ -1972,6 +2017,7 @@ final class HotkeyTap {
             _ = claimWheelPress()
             wheelHold?.cancel()
             wheelHold = nil
+            noteAreaTrail(event)
             Log.info("✂️ wheel dragged while dictating — selecting an area")
             let at = areaPressedAt
             DispatchQueue.global().async { [weak self] in self?.onAreaShot?(anchor, at) }
@@ -1982,6 +2028,9 @@ final class HotkeyTap {
             let cropping = areaCropping
             let dialed = haloDialed
             let held = areaPressHeld
+            let filmed = areaFilmed
+            areaFilmed = false
+            areaTrail = []
             areaPressHeld = false
             areaAnchor = nil
             areaCropping = false
@@ -2008,7 +2057,9 @@ final class HotkeyTap {
             // stops polling session button state and waits to be told — see
             // `CropSelectionOverlay.driven`, and the two ways that poll is wrong
             // once a tap has an opinion about the button.
-            if cropping { onAreaEnd?() }
+            // …unless 🔽 ↑ ended this box already, for a film: nothing more to end.
+            if cropping, !filmed { onAreaEnd?() }
+            if filmed { Log.info("🎬 the wheel came up after 🔽 ↑ filmed its box — nothing to end, no click replayed") }
             // A held press that stayed a click is handed on now, whole.
             if held {
                 if !cropping && !dialed { replayMiddleClick(at: areaPressAtCG) }
@@ -2053,7 +2104,7 @@ final class HotkeyTap {
     private func areaRight(_ type: CGEventType) -> Bool {
         switch type {
         case .rightMouseDown:
-            guard areaCropping, !areaDrawingDestination else { return false }
+            guard areaCropping, !areaDrawingDestination, !areaFilmed else { return false }
             areaRightTaken = true
             Log.info("✂️ right click with the wheel down — locking/unlocking the box")
             DispatchQueue.main.async { CropSelectionOverlay.toggleMoveLock() }
@@ -2479,6 +2530,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// so the key trace, the re-fire guard and the frozen-app drop all say the
     /// same thing (2026-09-26). Literals because a static cannot read the
     /// instance constants above; the two lists are one list and must not drift.
+    /// The flicks a plain dictation ignores (2026-11-22): 🔼 → ↑ ↓ and 🔽 → ← ↑ ↓.
+    /// Not F7 / F6 (its stops) nor F11 (its cancel).
+    static let plainIgnores: Set<CGKeyCode> = [0x6D, 0x64, 0x65, 0x60, 0x63, 0x76, 0x6F]
+
     static let gestureNames: [CGKeyCode: String] = [
         0x63: "🔽 ← ⌃⌥⌘F3", 0x76: "🔽 ↑ ⌃⌥⌘F4", 0x60: "🔽 → ⌃⌥⌘F5", 0x61: "🔽 ⌃⌥⌘F6",
         0x62: "🔼 ⌃⌥⌘F7", 0x64: "🔼 ↑ ⌃⌥⌘F8", 0x65: "🔼 ↓ ⌃⌥⌘F9", 0x6D: "🔼 → ⌃⌥⌘F10",
@@ -2932,9 +2987,14 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             }
             lastBackToggleAt = f5Now
             if !ownClean { lastPlainStartAt = f5Now }
-            let stopping = ownClean && ownMicOpen
-            Log.info("🎙️ \(who) — a clean dictation on the Engine\(ownClean ? " (the stop; the words alone, no Return)" : " (the start)")")
-            DispatchQueue.global().async { [weak self] in self?.onCleanToggle?() }
+            // **Every stop ends in a Return** (2026-11-22, *"toate stopurile să dea
+            // și enter la final"*) — right ⌘ ×2's too; 2026-10-07's *the words
+            // alone* is gone.
+            Log.info("🎙️ \(who) — a clean dictation on the Engine\(ownClean ? " (the stop; Return once its words land)" : " (the start)")")
+            DispatchQueue.global().async { [weak self] in
+                if ownClean { self?.onBackSubmit?() }
+                self?.onCleanToggle?()
+            }
             return swallow(gesture, type, event)
         }
         // The arm says *a start was posted and has not ended* even
@@ -2954,10 +3014,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         }
         lastBackToggleAt = f5Now
         if !closing { lastPlainStartAt = f5Now }
-        Log.info("🎙️ \(who) — Wispr Flow's hands-free toggle\(closing ? " (the stop; the words alone, no Return)" : " (the start)")")
+        Log.info("🎙️ \(who) — Wispr Flow's hands-free toggle\(closing ? " (the stop; Return once its words land)" : " (the start)")")
         if closing {
             postWisprRawStop()
             setWisprArm(0)
+            DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }
         } else {
             // **The arm goes up before the chord is announced** (2026-10-06).
             // `onWisprRawChord` hops to the main queue, where `noteCleanStart`
@@ -2972,6 +3033,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             onWisprRawChord?(false)
         }
         return swallow(gesture, type, event)
+    }
+
+    /// **For the unit tests**: one event through the tap's own `handle`, with no
+    /// tap installed and nothing posted. True = the tap took it (swallowed).
+    func takesForTesting(_ type: CGEventType, _ event: CGEvent) -> Bool {
+        handle(type: type, event: event) == nil
     }
 
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -4079,18 +4146,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             DispatchQueue.global().async { [weak self] in self?.onScreenshot?(cursor) }
             return swallow("⌃P shutter", type, event)
         }
-        // ⌃P over a plain dictation — **the switch to a prompt** (2026-10-22),
-        // then the shutter, as above. Same bare-⌃ gate; `relayPlainOpen` is the
-        // app's own *still plain* (a Wispr arm alone does not count).
-        if keyCode == VK_P, ctrl, !cmd, !opt, !flags.contains(.maskShift),
-           relayPlainOpen, !relayPromptOpen, ownDictation {
-            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("⌃P to prompt (autorepeat)", type, event) }
-            ctrlPTaken = true
-            let cursor = NSEvent.mouseLocation
-            Log.info("💬 ⌃P over a plain dictation — it becomes a prompt, and the shutter")
-            DispatchQueue.global().async { [weak self] in self?.onPlainToPrompt?(cursor) }
-            return swallow("⌃P to prompt", type, event)
-        }
+        // ⌃P over a plain dictation is **not this app's** (2026-11-22, Victor:
+        // *"scoate și ctrl-p"*): it made the sentence a prompt from 2026-10-22
+        // (`onPlainToPrompt`, left wired and unreached); now the key passes as at
+        // rest, and `promptingMark` is not written, so Victor Mac's ⌃P takes it.
 
         // ⌘⌃X — **the local model, now** (2026-09-28): see `onLocalNow`. Swallowed
         // always, like the two above — at rest too, where the relay flashes
@@ -4144,6 +4203,18 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             if [VK_F11, VK_F8, VK_F9, VK_F3, VK_F4, VK_F12].contains(keyCode),
                refired(keyCode, at: CACurrentMediaTime()) {
                 return swallow("\(gesture) — re-fire dropped", type, event)
+            }
+            // **A plain dictation has a cancel and a stop, and nothing else**
+            // (2026-11-22, Victor: *"nici kamikaze nu are sens în dictarea curată.
+            // elimină și gesturile de back - swipe right sau down … dictation mai
+            // are doar cancel 🗑️ și stop pe butonul de forward sau back. atât."*).
+            // 🔼 ← cancels, the bare 🔼 and 🔽 stop it (words, then Return); every
+            // other flick is swallowed and does nothing — no flash, no turn into a
+            // prompt — from its first word until its words have landed. The
+            // trackpad's swipes are these same chords (`dispatchChord`).
+            if Self.plainIgnores.contains(keyCode), cleanSentenceOpen {
+                Log.info("🎙️ \(gesture) over a plain dictation — nothing (🔼 ← cancels, 🔼 / 🔽 stop it)")
+                return swallow("\(gesture) — nothing in a plain dictation", type, event)
             }
             switch keyCode {
             // ➡️ — the mouse moved right with the forward button held: start the
@@ -4278,7 +4349,11 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             // be made *whenever a dictation is open*, bound, unbound or headed
             // for a folder that does not exist yet. `AppDelegate` holds that
             // state whole and answers it.
+            // **…except with the wheel still down on a box** (2026-11-22,
+            // `areaFilmFlick`): that box is what is filmed. Same thread as the
+            // drag's own events, so the two cannot race.
             case VK_F4:
+                if areaFilmFlick(event) { return swallow(gesture + " — the box under the wheel", type, event) }
                 DispatchQueue.global().async { [weak self] in self?.onGestureFilm?() }
                 return swallow(gesture, type, event)
 
@@ -4434,7 +4509,12 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                     DispatchQueue.main.async { [weak self] in self?.onModelToggle?() }
                     return swallow(gesture, type, event)
                 }
-                return plainToggle(gesture, type, event)
+                // **At rest: nothing** (2026-11-22, Victor: *"dictarea curată start:
+                // fără 🔽 →"*) — the bare 🔽 and right ⌘ ×2 start the plain dictation;
+                // this flick started it from 2026-09-28. Swallowed, so the chord
+                // reaches no app.
+                Log.info("🔽 → back button flicked right — nothing (🔽 or right ⌘ ×2 starts the plain dictation)")
+                return swallow("\(gesture) — nothing at rest", type, event)
 
             // The back button **clicked** — **at rest, the plain dictation's
             // start** (2026-10-05; Return from 2026-09-28 until then — Victor:

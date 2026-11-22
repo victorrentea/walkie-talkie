@@ -224,11 +224,15 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-11-22: "dictarea curată start: fără 🔽 →" — the bare 🔽
+            # and right ⌘ ×2 start it. The remaining checks are the plain
+            # sentence's own, whichever of the two opened it.
             "row": ("🔽 back", "drag right, nothing open"),
-            "does": "caret, even when bound · CLEAN (words only) · Enter only at its stop",
+            "does": "NOTHING (2026-11-22) — swallowed; the plain dictation (caret, CLEAN words) starts on the bare 🔽 or right ⌘ ×2",
             "checks": [
-                ("F5 is the plain toggle", "HotkeyTap `case VK_F5`",
-                 lambda: has(gesture_case(src, "VK_F5"), r"return plainToggle\(gesture, type, event\)")),
+                ("F5 at rest starts nothing: no plain toggle, swallowed", "HotkeyTap `case VK_F5`",
+                 lambda: not has(gesture_case(src, "VK_F5"), r"plainToggle\(")
+                         and has(gesture_case(src, "VK_F5"), r'return swallow\("\\\(gesture\) — nothing at rest", type, event\)\s*$')),
                 ("the toggle posts Wispr's toggle and arms the plain sentence", "HotkeyTap `plainToggle`",
                  lambda: has(plain_toggle(src),
                              r"setWisprArm\(CACurrentMediaTime\(\)\)\s*Self\.postWisprHandsFree\(\)")),
@@ -249,7 +253,7 @@ def spec(src: dict):
                  lambda: has(function(src, ad, "deliver"), r"result\.text = clean \? spokenText :")),
                 ("no kamikaze word", "AppDelegate `deliver`",
                  lambda: has(function(src, ad, "deliver"), r"if clean(?: \|\| quick)? \{ kamikaze = false \}")),
-                ("no Return unless 🔽 asked for it", "AppDelegate `deliver`",
+                ("the Return rides a flag every stop sets (2026-11-22)", "AppDelegate `deliver`",
                  lambda: has(function(src, ad, "deliver"), r"let submitClean = clean && submitAfterClean")),
             ],
         },
@@ -346,6 +350,9 @@ def spec(src: dict):
                 ("…and asks for the Return after the words", "HotkeyTap `case VK_F6`",
                  lambda: has(gesture_case(src, "VK_F6"),
                              r"postWisprRawStop\(\)\s*setWisprArm\(0\)\s*DispatchQueue\.global\(\)\.async \{ \[weak self\] in self\?\.onBackSubmit\?\(\) \}\s*return swallow\(")),
+                ("every stop of a plain sentence asks for the Return — 🔼, the menu, right ⌘ ×2 (2026-11-22)",
+                 "AppDelegate `endDictation`",
+                 lambda: has(function(src, ad, "endDictation"), r"if cleanSentence, !cleanRedirected \{ submitAfterClean = true \}")),
                 ("the request is recorded for this sentence", "AppDelegate `hotkeys.onBackSubmit`",
                  lambda: has(closure(src, "hotkeys.onBackSubmit"), r"submitAfterClean = true")),
                 ("the Return follows the paste", "AppDelegate `deliver`",
@@ -356,26 +363,54 @@ def spec(src: dict):
             ],
         },
         {
-            # Victor, 2026-10-07: "swipe to right, that shortcut should just
-            # insert the text, not hit the enter" — a Return 2026-10-05 → 10-07.
-            "row": ("🔽 back", "drag right during a plain dictation"),
-            "does": "STOP it, insert the clean words — NO Enter",
+            # Victor, 2026-11-22: "nici kamikaze nu are sens în dictarea curată.
+            # elimină și gesturile de back - swipe right sau down. și toate
+            # stopurile să dea și enter la final. deci dictation mai are doar
+            # cancel 🗑️ și stop pe butonul de forward sau back. atât." Then:
+            # "scoate și ctrl-p".
+            "row": ("🔼 / 🔽", "any flick but 🔼 ← during a plain dictation"),
+            "does": "NOTHING — 🔼 → ↑ ↓ and 🔽 → ← ↑ ↓ are swallowed: no kamikaze, no new session, no terminal, no stop, no flash; ⌃P passes through",
             "checks": [
-                ("the stop is the same toggle, disarming the sentence", "HotkeyTap `plainToggle`",
+                ("the seven flicks are named once: not F7 / F6 (the stops), not F11 (the cancel)", "HotkeyTap `plainIgnores`",
+                 lambda: has(src["HotkeyTap.swift"],
+                             r"static let plainIgnores: Set<CGKeyCode> = \[0x6D, 0x64, 0x65, 0x60, 0x63, 0x76, 0x6F\]")),
+                ("a plain dictation swallows them before any gesture's branch", "HotkeyTap `handle`",
+                 lambda: has(src["HotkeyTap.swift"],
+                             r"if Self\.plainIgnores\.contains\(keyCode\), cleanSentenceOpen \{\s*Log\.info\([^\n]*\)\s*"
+                             r"return swallow\([^\n]*\)\s*\}\s*switch keyCode \{")),
+                ("⌃P over a plain dictation is not taken (2026-10-22's switch to a prompt is gone)", "HotkeyTap keyDown",
+                 lambda: not has(_strip_comments(src["HotkeyTap.swift"]), r"onPlainToPrompt\?\(")),
+                ("…and the prompting mark is a prompt's alone, so Victor Mac keeps ⌃P", "HotkeyTap `relayPlainOpen`",
+                 lambda: has(_strip_comments(src["HotkeyTap.swift"]),
+                             r"var relayPlainOpen: Bool \{\s*get \{[^\n]*\}\s*set \{ stateLock\.lock\(\); relayPlainOpenFlag = newValue; stateLock\.unlock\(\) \}\s*\}")),
+                ("it gathers no copies: the clipboard watch rides `attachable`", "AppDelegate `syncBorrowedGestures`",
+                 lambda: has(function(src, ad, "syncBorrowedGestures"), r"syncClipboardWatch\(attachable && ")),
+            ],
+        },
+        {
+            # Right ⌘ ×2 is `plainToggle`'s one caller over an open plain
+            # sentence since 2026-11-22 (🔽 → / 🔽 ↓ never reach it there).
+            "row": ("⌨️ right ⌘ ×2", "during a plain dictation"),
+            "does": "STOP it, insert the clean words, then Enter (2026-11-22 — no Enter from 2026-10-07)",
+            "checks": [
+                ("the stop is the toggle, disarming the sentence", "HotkeyTap `plainToggle`",
                  lambda: has(plain_toggle(src), r"let closing = wisprSentence.*?if closing \{\s*postWisprRawStop\(\)\s*setWisprArm\(0\)")),
-                ("…and a stop younger than 2 s is dropped (one slow flick)", "HotkeyTap `plainToggle`",
+                ("…and a stop younger than 2 s is dropped", "HotkeyTap `plainToggle`",
                  lambda: has(plain_toggle(src), r"lastPlainStartAt < Self\.gestureStopDwellSeconds")),
-                ("the Engine's stop is the toggle alone", "HotkeyTap `plainToggle`",
-                 lambda: has(plain_toggle(src), r"if !wisprSentence, backUsesOwnEngine \{.*?onCleanToggle\?\(\)")),
-                ("no stop in the toggle asks for the Return", "HotkeyTap `plainToggle`",
-                 lambda: not has(plain_toggle(src), r"onBackSubmit")),
+                ("the Engine's stop asks for the Return, then stops", "HotkeyTap `plainToggle`",
+                 lambda: has(plain_toggle(src), r"if ownClean \{ self\?\.onBackSubmit\?\(\) \}\s*self\?\.onCleanToggle\?\(\)")),
+                ("Wispr's stop asks for it too", "HotkeyTap `plainToggle`",
+                 lambda: has(plain_toggle(src), r"postWisprRawStop\(\)\s*setWisprArm\(0\)\s*DispatchQueue\.global\(\)\.async \{ \[weak self\] in self\?\.onBackSubmit\?\(\) \}")),
             ],
         },
         {
             # Victor, 2026-10-07: "The same with the back mouse and drag the mouse
             # down … should just insert the text without hitting the enter."
-            "row": ("🔽 back", "drag down during a plain dictation"),
-            "does": "STOP it, insert the clean words — NO Enter; otherwise unbind",
+            # 2026-11-22: over the app's own plain dictation the flick never gets
+            # here (`plainIgnores`); what is left of these branches is a sentence
+            # his own Wispr chord started, and the unbind at rest.
+            "row": ("🔽 back", "drag down, no plain dictation of the app's open"),
+            "does": "a Wispr sentence his own chord started: its stop; otherwise unbind",
             "checks": [
                 ("F12 stops an open plain sentence with 🔽 →'s own toggle, before the unbind",
                  "HotkeyTap `case VK_F12`",
@@ -442,7 +477,7 @@ def spec(src: dict):
             "checks": [
                 ("F5 over an open question raises the Google, before the plain toggle", "HotkeyTap `case VK_F5`",
                  lambda: before(gesture_case(src, "VK_F5"),
-                                r"if relayQuickOpen, ownMicOpen \{.*?onQuickGoogle\?\(\)", r"return plainToggle\(")),
+                                r"if relayQuickOpen, ownMicOpen \{.*?onQuickGoogle\?\(\)", r"nothing at rest")),
                 ("the app marks the sentence and ends it as 🔼 would", "AppDelegate `onQuickGoogle`",
                  lambda: before(closure(src, "hotkeys.onQuickGoogle"),
                                 r"self\.quickGoogle = true", r"self\.endDictation\(\)")),
@@ -526,16 +561,11 @@ def spec(src: dict):
                 ("…but its drag says how to get a prompt (2026-10-22)", "HotkeyTap `areaDrag` / AppDelegate `warnPlain`",
                  lambda: has(src["HotkeyTap.swift"], r"onPlainRefused\?\(\"✂️ the area crop\"\)")
                          and has(function(src, ad, "refusesAttachment"), r"if warn \{ warnPlain\(what\) \}")),
-                ("⌃P makes it a prompt at the caret, then the shutter (2026-10-22)", "HotkeyTap ⌃P / AppDelegate `promotePlainToPrompt`",
-                 lambda: has(_strip_comments(src["HotkeyTap.swift"]),
-                             r"relayPlainOpen, !relayPromptOpen, ownDictation \{.*?onPlainToPrompt\?\(cursor\)")
-                         and has(function(src, ad, "promotePlainToPrompt"),
-                                 r"cleanSentence = false.*?caretPrompt = true.*?syncBorrowedGestures\(\).*?plusOneShot\(")),
                 ("…nor does the area shot", "AppDelegate `areaShot`",
                  lambda: has(function(src, ad, "areaShot"), r"refusesAttachment\(")),
-                ("no highlight, no film, no typing box", "AppDelegate `fileSelection` / `toggleFilm` / `openTypeIn`",
+                ("no highlight, no film, no typing box", "AppDelegate `fileSelection` / `startFilm` / `openTypeIn`",
                  lambda: all(has(function(src, ad, f), r"refusesAttachment\(")
-                             for f in ("fileSelection", "toggleFilm", "openTypeIn"))),
+                             for f in ("fileSelection", "startFilm", "openTypeIn"))),
                 ("the highlight watcher rides `attachable`, not `live`", "AppDelegate `syncBorrowedGestures`",
                  lambda: all(has(function(src, ad, "syncBorrowedGestures"), p)
                              for p in (r"let attachable = live && !hotkeys\.cleanSentenceOpen",
@@ -631,7 +661,7 @@ def main(argv: list[str]) -> int:
         return self_test()
     code, failures = run(load())
     if failures:
-        print("\nThe gesture spec (2026-09-23, back button swapped back 2026-09-28, bare click plain 2026-10-05, 🔽 ← Return 2026-10-05, 🔽 → / 🔽 ↓ no Return 2026-10-07) no longer holds:")
+        print("\nThe gesture spec (2026-09-23, back button swapped back 2026-09-28, bare click plain 2026-10-05, 🔽 ← Return 2026-10-05, a plain dictation = cancel + stop with Return, 🔽 → nothing at rest 2026-11-22) no longer holds:")
         for f in failures:
             print(f"  ✗ {f}")
     return code
@@ -678,12 +708,19 @@ MUTATIONS = [
     ("the back click stops a plain sentence without its Return", "HotkeyTap.swift",
      "                    setWisprArm(0)\n                    DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }",
      "                    setWisprArm(0)"),
-    ("🔽 →'s Wispr stop presses Return again (2026-10-05 → 10-07)", "HotkeyTap.swift",
-     "            postWisprRawStop()\n            setWisprArm(0)\n        } else {",
-     "            postWisprRawStop()\n            setWisprArm(0)\n            DispatchQueue.global().async { [weak self] in self?.onBackSubmit?() }\n        } else {"),
-    ("🔽 →'s Engine stop presses Return again (2026-10-05 → 10-07)", "HotkeyTap.swift",
-     "DispatchQueue.global().async { [weak self] in self?.onCleanToggle?() }",
-     "DispatchQueue.global().async { [weak self] in if stopping { self?.onBackSubmit?() }; self?.onCleanToggle?() }"),
+    ("a plain dictation answers every flick again (before 2026-11-22)", "HotkeyTap.swift",
+     "if Self.plainIgnores.contains(keyCode), cleanSentenceOpen {", "if false {"),
+    ("kamikaze works over a plain dictation again (before 2026-11-22)", "HotkeyTap.swift",
+     "[0x6D, 0x64, 0x65, 0x60, 0x63, 0x76, 0x6F]", "[0x6D, 0x64, 0x60, 0x63, 0x76, 0x6F]"),
+    ("🔽 → starts the plain dictation at rest again (before 2026-11-22)", "HotkeyTap.swift",
+     "                return swallow(\"\\(gesture) — nothing at rest\", type, event)",
+     "                return plainToggle(gesture, type, event)"),
+    ("right ⌘ ×2 stops a plain sentence without its Return (2026-10-07 → 11-22)", "HotkeyTap.swift",
+     "                if ownClean { self?.onBackSubmit?() }\n", ""),
+    ("🔼 stops a plain sentence without its Return (before 2026-11-22)", "AppDelegate.swift",
+     "        if cleanSentence, !cleanRedirected { submitAfterClean = true }\n", ""),
+    ("a plain dictation gathers copies again (2026-10-22 → 11-22)", "AppDelegate.swift",
+     "syncClipboardWatch(attachable && ", "syncClipboardWatch(live && "),
     ("🔽 ↓ unbinds mid plain dictation (before 2026-10-07)", "HotkeyTap.swift",
      "                if wisprSentence || (ownClean && ownMicOpen) {\n                    return plainToggle(gesture, type, event)\n                }\n",
      ""),

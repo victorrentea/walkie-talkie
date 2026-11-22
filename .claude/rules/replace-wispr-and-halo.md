@@ -123,6 +123,34 @@ The mouse-5 legend went with the row. → `.claude/rules/menu-bar.md`, *The Engi
   whatever is on screen. → journal: *The ring round the pointer, when the destination is not a place (2026-09-09)*
 - **Both edges are logged** (`◯ caret halo on/off`): nothing behind them is visible on screen. → journal: *The ring round the pointer, when the destination is not a place (2026-09-09)*
 
+## No effect while the screen is filmed (2026-11-22, `FxHold`)
+
+Victor: *"cât durează recordul de ecran să nu se afișeze niciun alt efect (edge sau mouse dust)."*
+
+- **One hold, two reasons**: `FxHold.why(battery:filming:)` → `.filming` while `AppDelegate.film != nil`,
+  else `.battery` (`BatteryFx`). `syncBorrowedGestures`' `fxHeld` reads it, so a film takes down exactly
+  what battery does — the ring / pointer dust (`ringUp`), the rewind, the coast, the pin's heads
+  (`setDelivering`), the corner tunnel (`cornerTunnel.held`), the fly-to-corner, the halo dial
+  (`haloUp`) — **and the edge in whichever phase** (`edgeDust.drop`: `listen(nil)` only ends an edge
+  still being said, and one *waiting* for its message would have stayed through the film).
+- **Both edges of a film sync**: `startFilm`, `stopFilm` (with frames and without) call
+  `syncBorrowedGestures()`, `takeFilms` (the sentence ended while recording) hops one to main. So the
+  effects come back at the stop if the sentence is still open, in the dress it has then.
+- **Stay**: the `● REC` corners and border (`FilmBorder`), the chip, the red outline of the caret's
+  window (`FocusFrame` — information, as on battery), the subtitle band, flashes, the corner hint bar.
+  **Not held** (not asked, each a one-off of its own gesture): the shutter's echo and ripple, the
+  stop's wave, a bind's flight, the reply pop-up's burst.
+- **They were never in the film's pictures anyway**: `ScreenFilm.grab` runs inside
+  `ReplyPanel.outOfShot` (every window `.none` for the grab) and `FilmVideo` excludes the whole
+  application from its `SCContentFilter`. The hold is for his eyes and for a Teams/Zoom share.
+- `GET /test/state.fxHeld` (`"filming"` / `"battery"` / `""`) beside `filming`, `ringUp` and the new
+  `edgeDust` (the edge's phase: `down` · `listening` · `waiting` · `leaving`). Tests: `FxHoldTests` —
+  the rule, and the wiring held to the source (the sync reads the film, the edge is dropped, both edges
+  of a film sync). **Not seen live**: written against the installed build's absence (stage only), so
+  the desk check is still owed — `POST /test/dictation/start`, `POST /test/gesture {"name":"back-up"}`,
+  then `state`: `filming` true, `fxHeld` `filming`, `ringUp` false, `edgeDust` `down`/`leaving`; `back-up`
+  again and `ringUp` is back.
+
 ## The film asset (`assets/caret-halo-5x5.png`)
 
 - **25 frames of his GIF (`neon-electric-ring.gif`, 236 px, 20 fps), keyed off black with

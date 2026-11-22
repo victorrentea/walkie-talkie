@@ -13,6 +13,8 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 
 ## Superseded on the way
 
+- *🔽 ↑ after a wheel crop films that area alone* (2026-11-21, in `.claude/rules/screenshots-and-selection.md`) — superseded 2026-11-22: a box is filmed by 🔽 ↑ made **inside** its wheel drag, the film only; outside a live drag 🔽 ↑ films the whole display (*🎬 The box is filmed from inside its drag*)
+- *🔽 → starts the plain dictation* (2026-09-28), *🔽 → / 🔽 ↓ stop a plain dictation without a Return* (2026-10-07), *🔼 → / 🔼 ↑ make a plain dictation a prompt* (2026-10-08), *⌃P over a plain dictation makes it a prompt* and *a plain dictation gathers copies* (2026-10-22), *a plain sentence passes 🔼 ↓ to the last prompt* (2026-10-10) — all superseded 2026-11-22: a plain dictation has a cancel (🔼 ←) and a stop (🔼, 🔽, right ⌘ ×2 — every one ends in Return), every other flick does nothing over it, ⌃P is not taken, nothing is gathered, and 🔽 → starts nothing at rest (*🎙️ A plain dictation has a cancel and a stop*). *🔼 → mid-sentence flips bound ⇄ caret* (2026-10-05) stands — for prompts
 - *The edge is always on the Retina* (2026-11-21, in `.claude/rules/replace-wispr-and-halo.md`) — superseded 2026-11-22: the edge is on the pointer's screen and follows it after 0.3 s there (*🌫️ The edge follows the pointer's screen*)
 - *Picking elements in Chrome*, *The music pauses for the length of a dictation* and every later ⌘⇧-pick / music-bridge section — retired 2026-11-20: the *Walkie Talkie Inspector* extension, `MusicBridge` and the picks are deleted (*The Chrome extension is gone*)
 - *Active terminals* as the folder menu's last row (2026-11-03, first row since 2026-09-23) — removed 2026-11-20: every session no pinned row claims is a line under *✨ Workspace* (*▢ Active terminals goes*)
@@ -16985,6 +16987,73 @@ generată și pusă și în README.md pe GitHub mereu"*.
   README's *Gestures*. The guard is text, not pixels: the shoot writes `docs/readme/hint-bar.txt` (titles, badges,
   sizes) and a unit test compares it with what the code would draw now. A pixel compare would fail on an emoji
   font update; this fails on exactly the changes that make the picture a lie.
+
+## 2026-11-22 — ⚡ A question's bar offers neither ✨ nor the terminal
+
+Victor: *"din modul question nu are sens să am ✨ sau prompt bound."* The two arms are grey boxes on the ⚡ bar,
+mouse or none. Only the bar: 🔼 ↑ still turns the question into a new session's prompt (folder menu,
+`dropQuestion`) and 🔼 → into the bound terminal's (or, unbound, flashes `📍 Nothing bound` and leaves it a
+question). Reported to him rather than removed — the behaviour is his to decide.
+
+## 2026-11-22 — 🎬 No other effect while the screen is filmed
+
+Victor: *"cât durează recordul de ecran să nu se afișeze niciun alt efect (edge sau mouse dust)."*
+
+- `FxHold.why(battery:filming:)` is the one reason the effects are down; `syncBorrowedGestures` already had
+  the battery's hold (`fxHeld`), and a film now raises the same one. Plus `edgeDust.drop` — the sync's
+  `listen(nil)` only ends an edge still being said, so an edge waiting for its message outlived the hold.
+- `startFilm` / `stopFilm` / `takeFilms` sync, or nothing would notice the film's two edges.
+- The frames never held them: `ScreenFilm.grab` is inside `ReplyPanel.outOfShot`, the video's filter excludes
+  the app. Read in the code and left alone.
+- Kept up: `● REC`, the chip, the caret window's outline, the subtitle band, the hint bar. Not touched: the
+  one-off receipts (shutter echo, stop wave, bind flight).
+- `GET /test/state` gained `fxHeld` and `edgeDust`. Proven by `FxHoldTests` (rule + wiring read off the source),
+  **not on a running app** — this build was staged, not installed.
+
+## 2026-11-22 — 🎬 The box is filmed from inside its drag
+
+Victor: *"dau drag cu wheel la un chenar și la final, înainte de a ridica wheel-ul, fac gestul de back + swipe
+up … e complicat să știu că rămân cu record pe zona PRECEDENT cropuită."* Then: *"doar filmul"*.
+
+- 2026-11-21's *the last crop of this sentence is what 🔽 ↑ films* asked him to remember a box no longer on
+  screen. `filmArea`, `setAreaFilm`, `Stage.areaFilm`, the `🔴 ✂️` badge and the README's *Prompt after a crop*
+  column are deleted. 🔽 ↑ with no box under the wheel is the whole display.
+- **In the tap** (`areaFilmFlick`, the F4 case — the drag's own thread): the press is marked `areaFilmed`, its
+  later drag events are swallowed without being pushed, its release is matched as a crop's and ends nothing.
+- **Where the box ends** (`FilmCorner`): 🔽 going down is invisible to a tap, so if the pointer moves with the
+  swipe the box has already been dragged by it. The corner is taken back to where the hand was before the last
+  upward run (≤ 1 s, ≥ 24 pt, more up than sideways; across a pause, the sample it rested on). If Options+ holds
+  the pointer during a gesture the rule changes nothing.
+- **On main** (`filmTheBoxUnderTheWheel`): `endDrag()` then `dragMoved(toCG: corner)` — the kit finishes the
+  selection as at a release, and `areaShot`'s completion, seeing the 2 s deadline, starts the film instead of
+  filing a picture. Too small a box → a flash, no film. A locked box → refused with a flash.
+- `toggleFilm` split into `stopFilm` / `startFilm(area:on:)`.
+- **Unproven by construction**: whether Options+ posts ⌃⌥⌘F4 with the middle button held, and what the pointer
+  does meanwhile. `HotkeyTapGestureTests` proves everything after the chord.
+
+## 2026-11-22 — 🎙️ A plain dictation has a cancel and a stop
+
+Victor, in five messages the same evening: *"ce sens are copy în plain dictation?? … dictez doar."* · *"nici
+kamikaze nu are sens în dictarea curată. elimină și gesturile de back - swipe right sau down. și toate stopurile
+să dea și enter la final. deci dictation mai are doar cancel 🗑️ și stop pe butonul de forward sau back. atât."* ·
+*"dictarea curată start: fără 🔽 →"* · *"scoate și ctrl-p"*.
+
+- **One gate**: `HotkeyTap.plainIgnores` — F10, F8, F9, F5, F3, F4, F12 swallowed while `cleanSentenceOpen`,
+  ahead of every gesture's own branch. Seven accumulated meanings went with it (terminal, new session, the last
+  prompt's kamikaze, two no-Return stops, the film's refusal flash, the auto-bound sentence's 🛑). The trackpad's
+  swipes are those chords, so they went too.
+- **Every stop presses Return**: `endDictation` marks a plain sentence (`submitAfterClean`), `plainToggle`'s two
+  stops ask for it (right ⌘ ×2). 🔼 over a plain sentence used to insert the words alone. Q18's shell guard and
+  a sentence that ends by itself are unchanged.
+- **🔽 → at rest is nothing** — the plain dictation starts on 🔽 or right ⌘ ×2. Over a prompt 🧠, over ⚡ Google.
+- **⌃P is not taken** and the `prompting` mark is a prompt's alone, so Victor Mac's ⌃P works during a plain
+  dictation. With it the last way from plain to prompt is gone — hence **no copy gathering** (it existed for
+  that moment), and the refusal flash no longer names ⌃P.
+- **The bar** is the rule: `⏹️ + ⏎` twice, 🗑️, grey boxes; no keys row.
+- `evals/test_gesture_spec.py` carries the new rows and mutations. **It was already red at HEAD on eight
+  unrelated checks** (the caret envelope's `[Transcribed…]`, the right ⌘⌥ hold removed 2026-10-23, `deliver`'s
+  ⚡ and paste shapes) and four of its mutations no longer apply, so `--self-test` cannot run; not touched here.
+- Not made by hand on the mouse.
 
 ## 2026-11-22 — 🐱 The bound project's logo beside the walkie
 

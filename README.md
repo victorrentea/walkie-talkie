@@ -125,7 +125,7 @@ and cannot ask anything back, because you are not reading the terminal.
 ### The caret
 
 - **🔼, the forward click**: a prompt at the caret, carrying everything below (screenshots, highlights, picks).
-- **🔽 →, or right ⌘ ×2**: a plain dictation, the words alone. Wispr Flow's habit, with this app's engine.
+- **🔽, or right ⌘ ×2**: a plain dictation, the words alone, then Return. Wispr Flow's habit, with this app's engine. While it records only two things act: 🔼 ← discards it, 🔼 or 🔽 stops it.
 
 ## What rides along with the words
 
@@ -250,10 +250,13 @@ Logi Options+, and the app takes no mouse button at all.
 | 🔼 ← | cancel |
 | 🔼 ↓ | kamikaze; within 3 s after a prompt landed in a terminal (`☠️ Kamikaze?` by the pointer): send `kamikaze` alone to it |
 | ◀️ held, then 🔼 | bind the window in front |
-| 🔽 → | start / stop a plain dictation at the caret (the stop inserts the words, no Return) |
+| 🔽 → | while a prompt records: the session's model; over a question: Google it; at rest: nothing |
 | 🔽 | start / stop a plain dictation (ends in Return); the shutter while a prompt records |
+| 🔽 ↑ | start / stop a screen recording while a prompt records; with the wheel still down on a dragged box: film that box |
 | 🔽 ← | a microphone open: cancel; at rest: Codex voice in the app's window, full screen, a new chat each time; again ends it |
-| 🔽 ↓ | during a plain dictation: stop it, no Return; otherwise unbind |
+| 🔽 ↓ | while a prompt records: the typing box; at rest: unbind |
+
+A plain dictation answers only 🔼 ← (discard) and 🔼 / 🔽 (stop, then Return); every other flick does nothing while it records.
 
 **While you dictate, a bar on the second screen shows what each flick does right now.** Two crosses, as
 the buttons sit on the mouse: the forward button 🔼 above, the back button 🔽 below. The centre badge is
@@ -261,7 +264,7 @@ the click, each arm the flick in that direction; a grey box is a flick with noth
 Under the crosses, what the ordinary mouse adds meanwhile: select text, copy.
 
 <p align="center">
-  <img src="docs/readme/hint-bar.png" width="1000" alt="The corner hint bar with the mouse attached, one column per situation: prompt, plain dictation, question, after a crop, filming">
+  <img src="docs/readme/hint-bar.png" width="1000" alt="The corner hint bar with the mouse attached, one column per situation: prompt, plain dictation, question, filming">
 </p>
 
 With no Logitech mouse attached the crosses are the trackpad's (☝️ one finger, ✌️ two, under left ⌃⌥⌘)

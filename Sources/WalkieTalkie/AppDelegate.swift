@@ -132,10 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the first or teach the envelope a new shape. The envelope learned the
     /// shape; replacing what he deliberately captured was never acceptable.
     private var pendingFilms: [ScreenFilm.Result] = []
-    /// **The last area he dragged with the wheel in this sentence** — what 🔽 ↑
-    /// films instead of the whole display (2026-11-21). Keyed by the sentence's
-    /// start, so one from an earlier sentence is never picked up. Main only.
-    private var filmArea: (rect: NSRect, screen: NSScreen, sentence: Date)?
+    /// **🔽 ↑ was made with the wheel still down on a box** (2026-11-22,
+    /// `filmTheBoxUnderTheWheel`): the crop that comes back before this moment is
+    /// filmed, not filed as a picture. A deadline, not a flag — a crop that never
+    /// comes back must not turn the next one into a film. Main only.
+    private var cropEndsAsFilmUntil: CFAbsoluteTime = 0
 
 
     /// **Is Wispr Flow's microphone open right now?** — a `WisprWatch` that only
@@ -2986,6 +2987,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // — the hint bar's only news of the pointer — heard nothing, and the bar
         // sat under the box he was drawing. Already on main.
         hotkeys.onAreaMoved = { [weak self] in self?.overlay.pointerMovedUnseen() }
+        hotkeys.onAreaFilm = { [weak self] corner in
+            DispatchQueue.main.async { self?.filmTheBoxUnderTheWheel(cornerCG: corner) }
+        }
+        hotkeys.onAreaFilmRefused = { [weak self] in
+            DispatchQueue.main.async { self?.overlay.flash("🎬 Not while the box is locked — film it before locking", duration: 3) }
+        }
         hotkeys.onTrackpadHints = { [weak self] on in self?.overlay.setTrackpadHints(on) }
         // With no Logitech mouse the corner bar speaks trackpad (2026-10-20).
         MouseDevices.watch { [weak self] logi in self?.overlay.setNoMouse(!logi) }
@@ -3003,6 +3010,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .done: hint = nil
             }
             guard let self else { return }
+            // 🔽 ↑ films the box only while it is still being dragged.
+            self.hotkeys.areaBoxLocked = hint == .locked
             self.overlay.setCropPhase(hint)
         }
         // ⌘⌃X — the local model, now (2026-09-28). The tap hands it over on main.
@@ -6871,6 +6880,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// them.
     private func endDictation() {
         guard listening || source.isRecording else { return }
+        // **Every stop of a plain dictation ends in a Return** (2026-11-22, Victor:
+        // *"toate stopurile să dea și enter la final"*) — 🔼, right ⌘ ×2, the menu,
+        // whatever called this; the bare 🔽 asked for it already (`onBackSubmit`).
+        // Not a cancel, which never comes through here. The shell-prompt guard
+        // (Q18, `submitAfterCleanWords`) still holds the Return back at a shell.
+        if cleanSentence, !cleanRedirected { submitAfterClean = true }
         // **The wave leaves before the source is told to stop** (2026-11-22): the local
         // recorder's `stop()` drops `isRecording` in the call, so the check below never
         // passed on the local engine and the wave had not been seen since 2026-11-16.
@@ -8537,11 +8552,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the words landing the sentence is over, and a film started there would
     /// attach to whatever came next.
     private func toggleFilm() {
+        if film != nil { stopFilm(); return }
+        startFilm(area: nil, on: nil)
+    }
+
+    /// **🔽 ↑ with the wheel still down on a box: that box is what is filmed**
+    /// (2026-11-22). Victor: *"dau drag cu wheel la un chenar și la final, înainte
+    /// de a ridica wheel-ul, fac gestul de back + swipe up … e complicat să știu că
+    /// rămân cu record pe zona PRECEDENT cropuită"* — it supersedes 2026-11-21's
+    /// *🔽 ↑ after a crop films the previous box* (`filmArea`, gone): outside a
+    /// live drag 🔽 ↑ films the whole display, always.
+    ///
+    /// The tap owns the button and has stopped pushing the drag
+    /// (`HotkeyTap.onAreaFilm`); the box is frozen at `corner` — where the pointer
+    /// was before the swipe's own travel (`FilmCorner`) — and ended here, as the
+    /// wheel's release would end it. Its selection comes back through
+    /// `areaShot`'s completion, which reads the deadline: **the film only, no
+    /// picture** (Victor: *"doar filmul"*). Main.
+    private func filmTheBoxUnderTheWheel(cornerCG corner: CGPoint) {
+        Log.info(String(format: "🎬 🔽 ↑ with the wheel down — the box ends at %.0f,%.0f and is filmed, not filed", corner.x, corner.y))
+        cropEndsAsFilmUntil = CFAbsoluteTimeGetCurrent() + 2
+        CropSelectionOverlay.endDrag()
+        CropSelectionOverlay.dragMoved(toCG: corner)
+    }
+
+    private func stopFilm() {
         if let running = film {
             film = nil
             overlay.setFilming(false)
             guard let result = running.stop() else {
                 overlay.flash("⚠️ the recording caught no frames", duration: 5)
+                syncBorrowedGestures()
                 return
             }
             pendingFilms.append(result)
@@ -8551,10 +8592,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // not vanish when the shutter stops either.
             overlay.addFilmCarried(seconds: result.duration, frames: result.frames.count)
             publishShotCount()
+            // The effects held for the film come back (`FxHold`).
+            syncBorrowedGestures()
             overlay.flash(String(format: "🎥 %.1fs, %d frames", result.duration, result.frames.count),
                           duration: 2)
-            return
         }
+    }
+
+    /// `area` (AppKit global points) on `screen`: that box alone, ringed by
+    /// `● REC`; nil: the whole display under the pointer.
+    private func startFilm(area: NSRect?, on screen: NSScreen?) {
         guard listening || source.isRecording || speculative else {
             // Said rather than ignored: a free side button that does nothing is
             // indistinguishable from one Options+ has lost the mapping for, and
@@ -8576,21 +8623,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.film != nil else { return }
             self.toggleFilm()
         }
-        // **After a wheel crop, the film is that area alone** (2026-11-21, Victor:
-        // *"dacă am selectat cu wheel-ul o zonă … butonul de back și swipe în sus
-        // să înregistreze doar secțiunea aceeași … să atrag atenția pe o anumită
-        // zonă și să mai scutesc și din pixeli"*). The last box of this sentence;
-        // none → the whole display, as before.
-        stateLock.lock()
-        let sentence = dictationStartedAt
-        stateLock.unlock()
-        let area = filmArea.flatMap { $0.sentence == sentence ? $0 : nil }
-        guard let started = ScreenFilm.start(area: area?.rect, on: area?.screen) else {
+        guard let started = ScreenFilm.start(area: area, on: screen) else {
             overlay.flash("⚠️ could not start the recording", duration: 5)
             return
         }
         film = started
         overlay.setFilming(true)
+        // Nothing else is drawn while the REC corners are up (`FxHold`, 2026-11-22).
+        Log.info("🎬 filming — the halo, the dust and the edge stay down until it stops")
+        syncBorrowedGestures()
     }
 
     /// **Hand the finished recording to the message being built, and let go of
@@ -8611,6 +8652,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.setFilming(false)
             Log.info("🎬 the sentence ended while recording — stopping and attaching it")
             if let result = running.stop() { pendingFilms.append(result) }
+            // The hold ends with the film (`FxHold`) — after this delivery's own steps.
+            DispatchQueue.main.async { [weak self] in self?.syncBorrowedGestures() }
         }
         // The sentence is on its way out, so what it was carrying stops being
         // news — the row goes with the rest of the pending state.
@@ -8977,7 +9020,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.quick = quickAsk
         // **No 𝓯𝔁 on battery** (2026-10-20, `BatteryFx`): the ring, the rewind,
         // the coast and the pin all stay down; the chip and the outline do not.
-        let fxHeld = BatteryFx.holdsEffects
+        // **…and none while the screen is filmed** (2026-11-22, `FxHold`, Victor: *"cât
+        // durează recordul de ecran să nu se afișeze niciun alt efect (edge sau mouse
+        // dust)"*): the same hold, from 🔽 ↑ to the film's stop — `toggleFilm` and
+        // `takeFilms` sync at both edges, so they come back if the sentence is still open.
+        let fxHeld = FxHold.why(battery: BatteryFx.holdsEffects, filming: film != nil) != nil
+        // The edge too, in whichever phase: `listen(nil)` below only ends one still
+        // being said, and an edge waiting for its message would stay through the film.
+        if film != nil { edgeDust.drop("the screen is being filmed") }
         caretHalo.setRewind(settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet,
                             take: settleTake, estimate: settleEstimate)
         // **The pin stays through a quiet settle** (2026-11-10, Victor: *"când fac
@@ -9084,8 +9134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // **Both switches in `Auto-attach`** (2026-10-15) — ticked off, the
         // watcher stays down; the shutter still reads the highlight under it.
         syncSelectionWatch(attachable && AutoAttach.isOn(.selection))
-        // `live`, not `attachable`: a plain sentence gathers copies (2026-10-22, `fileCopied`).
-        syncClipboardWatch(live && AutoAttach.isOn(.clipboard))
+        // `attachable` again since 2026-11-22: a plain sentence gathered copies from
+        // 2026-10-22 for the moment it became a prompt — it can no longer become one
+        // (⌃P, 🔼 → and 🔼 ↑ do nothing over it), so nothing is watched for it.
+        syncClipboardWatch(attachable && AutoAttach.isOn(.clipboard))
     }
 
     // MARK: - The bound terminal
@@ -9472,6 +9524,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setBound(label: target.label, folder: line, title: target.title,
                          spawned: RebindHistory.shared.isSpawned(address: target.address),
                          icon: Self.appIcon(target.bundleID, height: 18))
+        // The project's logo beside the resting walkie (`ProjectLogo`, 2026-11-22).
+        ProjectLogo.resolve(label: target.folder) { [weak self] in self?.overlay.setProjectLogo($0) }
         status.setDestination(line, icon: Self.appIcon(target.bundleID, height: 20))
         // Published here for the reason everything else about a binding is
         // published here: this is the one method every route into and out of one
@@ -9524,8 +9578,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (`capturing` false while `listening` was true); the phantom second
     /// sentence started because a forward click landed while `settling` was true
     /// and `onPasteToggle` only ever asked about `listening`. Neither fact is on
-        // The project's logo beside the resting walkie (`ProjectLogo`, 2026-11-22).
-        ProjectLogo.resolve(label: target.folder) { [weak self] in self?.overlay.setProjectLogo($0) }
     /// screen, and reconstructing either from `relay.log` means reading prose
     /// after the event.
     private func stateSnapshot() -> [String: Any] {
@@ -9744,6 +9796,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         out["pasteboard"] = PasteboardTimeline.describe()
         out["autoAttach"] = AutoAttach.describe
         out["fxOnBattery"] = BatteryFx.describe
+        // Why the effects are down right now: "battery", "filming" or "" (`FxHold`).
+        out["fxHeld"] = FxHold.why(battery: BatteryFx.holdsEffects, filming: film != nil)?.rawValue ?? ""
+        out["edgeDust"] = edgeDust.phaseName
         out["chatVoice"] = ChatGPTVoice.describe
         out["voiceDialog"] = VoiceDialog.shared.describe
         out["djiButton"] = DjiButton.describe
@@ -12586,12 +12641,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// promptare"*) — `warnPlain`, unless `warn` is false.
     private func refusesAttachment(_ what: String, warn: Bool = true) -> Bool {
         guard hotkeys.cleanSentenceOpen else { return false }
-        Log.info("\(what) refused — a plain dictation attaches nothing (⌃P, 🔼 → or 🔼 ↑ makes it a prompt)")
+        Log.info("\(what) refused — a plain dictation attaches nothing")
         if warn { warnPlain(what) }
         return true
     }
 
-    static let plainAttachesNothing = "⚠️ Plain dictation — ⌃P makes it a prompt"
+    /// No way from a plain dictation to a prompt since 2026-11-22 — it named ⌃P until then.
+    static let plainAttachesNothing = "⚠️ Plain dictation — words only (🔼 starts a prompt)"
 
     /// The warning, once per `plainWarnGap`: a drag fires a stream of refusals,
     /// and one sentence said once is the whole of it. Any thread.
@@ -12842,21 +12898,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 DesktopEffects.resume()
                 self.caretHalo.veiled = false
                 self.overlay.veiled = false
+                // 🔽 ↑ ended this drag (`filmTheBoxUnderTheWheel`, 2026-11-22).
+                let asFilm = CFAbsoluteTimeGetCurrent() < self.cropEndsAsFilmUntil
+                self.cropEndsAsFilmUntil = 0
                 guard let selection = selection else {
                     // Esc, a right-click, or a drag that turned out to be a
                     // twitch. Nothing was filed and nothing is said: he called it
                     // off, and an app reporting his own cancellation back to him
                     // is the tidy-up-announcement `checkAlive` already refuses.
                     Log.info("✂️ area selection cancelled")
+                    // …but a film he asked for and did not get is said.
+                    if asFilm { self.overlay.flash("🎬 The box was too small to film", duration: 3) }
                     return
                 }
-                // 🔽 ↑ now films this box alone (2026-11-21) — the source box on a move.
-                self.stateLock.lock()
-                let sentence = self.dictationStartedAt
-                self.stateLock.unlock()
-                if let sentence {
-                    self.filmArea = (selection.rect, selection.screen, sentence)
-                    self.overlay.setAreaFilm(true)
+                if asFilm {
+                    // The film replaces the picture: nothing is filed. One already
+                    // running is stopped and kept — this box is the new one.
+                    if self.film != nil { self.stopFilm() }
+                    self.startFilm(area: selection.rect, on: selection.screen)
+                    return
                 }
                 DispatchQueue.global(qos: .userInitiated).async {
                     self.fileArea(selection.rect, on: selection.screen,

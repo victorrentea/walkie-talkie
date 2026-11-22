@@ -233,13 +233,16 @@ Covers the shutter: what a shot is named, what travels to the agent, the on-scre
   reordered 2026-10-20; `Selected Text` / `Everything I Copy` before) — all on by default.** Off means *nothing automatic*: Anything I Select off gates `probeRecentSelection`, the
   watcher, the drag-release probe and `finalSelectionRead`; Screenshot off skips 📸0 (and its ripple)
   but keeps `captureContext`'s booking. **The shutter is never gated** — a press is deliberate.
-- **A plain dictation gathers copies too** (2026-10-22, Victor: *"când fac o dictare curată, să preiei
+- **A plain dictation gathers no copies since 2026-11-22** — it can no longer become a prompt (⌃P, 🔼 →
+  and 🔼 ↑ do nothing over it: `mouse-gestures.md`, *A plain dictation has a cancel and a stop*), so the
+  watcher rides `attachable` again and the bullet below is history.
+- ~~**A plain dictation gathers copies too**~~ (2026-10-22 → 2026-11-22, Victor: *"când fac o dictare curată, să preiei
   totuși orice clipboard adun"*) — the one exception to *a plain dictation attaches nothing*: the
   watcher runs on `live`, `fileCopied` asks no `refusesAttachment`. Plain words still go out alone
   (`cleanLine`); the copies ride the sentence once it becomes a prompt (⌃P, 🔼 →, 🔼 ↑), and they
   count as attachments for `aimAtCaret`'s one-way rule. **A copied text lands on the quote row**
   (`setSelection("📋 …")`, flashing yellow) instead of the 1.5 s `📋 …` flash over the whole chip.
-- **Anything I Copy polls the change count every 250 ms while `live`** (`attachable` until 2026-10-22; `syncClipboardWatch`,
+- **Anything I Copy polls the change count every 250 ms while `attachable`** (`live` from 2026-10-22 to 2026-11-22; `syncClipboardWatch`,
   `clipboardQueue`), never the ⌘C key — *Copy Image* has none. Skip the relay's own writes
   (`PasteboardTimeline.lastOwnCount`) and its probe's ⌘C (`SelectionCapture.probedRecently`); a new
   synthetic ⌘C anywhere must set that flag too, or its copy files as his. Read only through
@@ -268,16 +271,36 @@ VCR camera"*). One 50 pt red dot (42 → 50 on 2026-10-16, *"20% larger"*), a ha
 on both, under the menu bar. The border blinks on its own layer at its old pace. Review:
 `FILM_BORDER_PNG=<dir> swift test --filter FilmBorderTests`.
 
-## 🔽 ↑ after a wheel crop films that area alone (2026-11-21)
+## 🔽 ↑ inside a wheel drag films that box (2026-11-22)
 
-Victor: *"dacă am selectat cu wheel-ul o zonă … butonul de back și swipe în sus să înregistreze doar
-secțiunea aceeași. Apoi apar recu în jurul acelei zone … să atrag atenția pe o anumită zonă și să mai
-scutesc și din pixeli … și pe helper tooltips"*.
+Victor: *"chiar nu se poate să pornesc înregistrarea video localizată așa: dau drag cu wheel la un chenar
+și la final, înainte de a ridica wheel-ul, fac gestul de back + swipe up — aceeași combinație ca atunci
+când, pe curat în prompting, dau record la tot ecranul. … e complicat să știu că rămân cu record pe zona
+PRECEDENT cropuită."* **Supersedes *🔽 ↑ after a wheel crop films that area alone* (2026-11-21)**:
+`AppDelegate.filmArea`, `RelayWindow.setAreaFilm`, `GestureHintBar.Stage.areaFilm` and the
+`🔴 ✂️` badge are deleted; **outside a live drag 🔽 ↑ films the whole display, always.**
 
-- **The last area of this sentence is what 🔽 ↑ films** — `AppDelegate.filmArea` (rect, screen, and the
-  sentence's `dictationStartedAt`, so an earlier sentence's box is never used), set when a crop's
-  selection comes back (the **source** box on a move). No crop in this sentence → the whole display,
-  as before. `ScreenFilm.start(area:on:)`: the frames are `CGDisplayCreateImage(_:rect:)` of the box
+- **The gesture**: wheel down, drag the box, and with the wheel still down 🔽 ↑ (⌃⌥⌘F4; ✌️ ↑ is the same
+  chord). The box ends there and `ScreenFilm.start(area:on:)` films it. **The film only — the box is not
+  filed as a picture** (Victor: *"doar filmul"*): no `fileArea`, no `📸`, no cut-out flight. Letting the
+  wheel go afterwards does nothing (`area-crop.md`, *The gesture*). A film already running is stopped and
+  kept, and the box's starts.
+- **Where the box is frozen — `FilmCorner`** (pure, `FilmCornerTests`). The side button reaches no tap,
+  only the F4 Options+ posts once it has recognised the swipe, so *when 🔽 went down* cannot be seen. If
+  the pointer follows the swipe, the drag's last events are the swipe itself and have been shrinking or
+  growing the box upwards. The tap keeps 1.5 s of the drag's points (`areaTrail`); at the chord the corner
+  is where the pointer was **before the last upward run**: walking back while the samples go up, within
+  1 s, as far as the sample the hand rested on (a gap over 0.12 s). Only a run of ≥ 24 pt, more up than
+  sideways, is taken back; a pointer that stood still (the last sample older than 0.12 s) or any other
+  shape leaves the box at the pointer. Log `🎬 🔽 ↑ with the wheel down — the box is frozen at x,y (the
+  pointer is at x,y; N drag samples)`.
+- **A box under 6 pt** (the kit's floor) films nothing: flash `🎬 The box was too small to film`.
+  `cropEndsAsFilmUntil` is a 2 s deadline, not a flag, so a crop that never comes back cannot turn the
+  next one into a film.
+- **The corner hints say it**: while the box is dragged the crop's mouse carries `🔽↑ 🔴` on its body
+  (`GestureHintBar.filmTheBox`; not once locked, not over a ⚡ question, not without the mouse); the
+  README's *Prompt after a crop* column is gone.
+- **`ScreenFilm.start(area:on:)`** is unchanged: the frames are `CGDisplayCreateImage(_:rect:)` of the box
   (the display's own points, top-left origin — `ScreenFilm.displayRect`), the video
   `SCStreamConfiguration.sourceRect` at the box's pixels (even sizes, HEVC), and **an area does not
   follow the pointer** to another display. Log `🎬 recording the area x1,y1→x2,y2 px of display N`.
@@ -286,8 +309,13 @@ scutesc și din pixeli … și pe helper tooltips"*.
   (`areaBadgeScale`) outside its corners, top two above, bottom two below, only top-left and
   bottom-right when the box is narrower than a pair; kept on the screen; clickable to stop, as ever.
   `FILM_BORDER_PNG=<dir> swift test --filter FilmBorderTests` writes `film-area.png`.
-- **The corner hints say it**: `GestureHintBar.Stage.areaFilm` (`RelayWindow.setAreaFilm`, cleared by
-  `setListening`) turns 🔽 ↑ `🔴 video` into `🔴 ✂️ video` (render `prompt-area`).
+- **Proven on the app's side only**: `HotkeyTapGestureTests` feeds the tap's own `handle` a wheel drag,
+  a pause, 90 pt of swipe, ⌃⌥⌘F4, more drag and the release — the corner is the paused one, no
+  `onAreaEnd`, no whole-display film, the release swallowed. **Not proven: the real mouse** — whether
+  Options+ emits ⌃⌥⌘F4 at all while the middle button is held, and whether the pointer moves during
+  that swipe. No desk route drives the kit's overlay through it either.
+- **While any film runs, nothing else is drawn** — `replace-wispr-and-halo.md`, *No effect while the
+  screen is filmed*.
 - **The envelope names the box**: `Result.area` (display pixels); the short row gains `only the area
   ✂️x1,y1→x2,y2`, the long form a `[The recording is only the area … not the whole display]` row.
 - Checked on the desk: `WT_SHOOT_FILM=2 WT_SHOOT_FILM_AREA=1828,437,400,300` (AppKit global points)

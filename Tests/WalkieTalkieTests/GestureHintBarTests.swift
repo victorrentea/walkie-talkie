@@ -50,14 +50,16 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         XCTAssertEqual(c[1].click, "⏹️ / ⌃P", "while a film runs the shutter is its stop (2026-10-23)")
     }
 
-    /// 2026-10-25 (the hint audit): every gesture a plain sentence answers is
-    /// drawn — 🔼 and 🔽 ↓ stop it, 🔼 → / 🔼 ↑ make it a prompt, 🔼 ↓ is the last
-    /// prompt's kamikaze, 🔽 ← cancels.
-    func testAPlainDictationShowsEveryGestureItAnswers() {
-        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false)), [
-            Cross(click: "⏹️", up: "✨ new", down: "☠️ last", left: "🗑️ discard", right: GestureHintBar.terminal + " terminal"),
-            Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "", right: "⏹️ ⌘⌘"),
-        ])
+    /// 2026-11-22: a plain dictation has a cancel (🔼 ←) and a stop (🔼, 🔽 — the
+    /// words, then Return), nothing else: every other arm is a grey box. Not
+    /// the interrupt either, when the app auto-bound it to a Claude Code tab.
+    func testAPlainDictationHasACancelAndAStop() {
+        let plain = [
+            Cross(click: "⏹️ + ⏎", up: "", down: "", left: "🗑️ discard", right: ""),
+            Cross(click: "⏹️ + ⏎ ⌘⌘", up: "", down: "", left: "", right: ""),
+        ]
+        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false)), plain)
+        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, interruptible: true)), plain)
     }
 
     /// 2026-10-09: a quick question's stop asks — no ⏎ promised. 2026-10-15:
@@ -66,9 +68,16 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// Googles it. 2026-11-11: 🔼 ↓ Googles it and answers it.
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
-            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: GestureHintBar.terminal + " terminal"),
+            // 2026-11-22: ✨ (🔼 ↑) and the terminal (🔼 →) are not offered from a question.
+            Cross(click: "⚡ ask ⌘⌘", up: "", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: ""),
             Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "", right: GestureHintBar.google + " Google"),
         ])
+        // …with the mouse and without it: grey boxes, not missing ones.
+        for noMouse in [false, true] {
+            let front = GestureHintBar.bar(for: .init(listening: true, prompting: false, quick: true, noMouse: noMouse)).crosses[0]
+            XCTAssertEqual(front.up, "", "noMouse \(noMouse)")
+            XCTAssertEqual(front.right, "", "noMouse \(noMouse)")
+        }
     }
 
     /// The keys with no gesture behind them, under the crosses (2026-10-22):
@@ -78,7 +87,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         // 2026-11-22: copy is its icon alone, and a prompt (a ⚡ question too)
         // gains select — the selection watcher is off in a plain dictation.
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false)),
-                       ["💬 prompt ⌃P", GestureHintBar.copyKey])
+                       [], "2026-11-22: no copy badge and no ⌃P on a plain dictation")
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true)),
                        [GestureHintBar.selectKey, GestureHintBar.copyKey])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false, quick: true)),
@@ -123,8 +132,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     func testWithTheMouseEveryBadgeIsGlyphsAlone() {
         let stages: [GestureHintBar.Stage] = [
             .init(listening: true, prompting: true),
-            .init(listening: true, prompting: true, filming: true, areaFilm: true, kamikaze: true, spawn: true),
-            .init(listening: true, prompting: true, areaFilm: true),
+            .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true),
             .init(listening: true, prompting: false),
             .init(listening: true, prompting: false, quick: true),
             .init(listening: true, prompting: true, crop: .selecting),
@@ -163,23 +171,23 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         XCTAssertEqual(none.keys, [GestureHintBar.selectKey, GestureHintBar.copyKey])
     }
 
-    /// `💬 prompt ⌃P` is a key with no gesture behind it: without the mouse it
-    /// is `💬 / ⌃P`, with it the row is the Copy icon alone.
+    /// No keys row at all since 2026-11-22 (no copy, no `💬 / ⌃P`); without the
+    /// mouse the stop names right ⌘ ×2.
     func testAPlainDictationsBarWithTheMouseAndWithout() {
         let mouse = GestureHintBar.bar(for: .init(listening: true, prompting: false))
         XCTAssertEqual(mouse.crosses, [
-            Cross(click: "⏹️", up: "✨", down: "☠️", left: "🗑️", right: GestureHintBar.terminal),
-            Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "", right: "⏹️"),
+            Cross(click: "⏹️ + ⏎", up: "", down: "", left: "🗑️", right: ""),
+            Cross(click: "⏹️ + ⏎", up: "", down: "", left: "", right: ""),
         ])
-        XCTAssertEqual(mouse.keys, [GestureHintBar.copyKey])
+        XCTAssertEqual(mouse.keys, [])
         let none = GestureHintBar.bar(for: .init(listening: true, prompting: false, noMouse: true))
-        XCTAssertEqual(none.crosses[1].right, "⏹️ / ⌘⌘")
-        XCTAssertEqual(none.keys, ["💬 / ⌃P", GestureHintBar.copyKey])
+        XCTAssertEqual(none.crosses[1].click, "⏹️ + ⏎ / ⌘⌘")
+        XCTAssertEqual(none.keys, [])
     }
 
     func testACropsMouseWithTheMouseAndWithout() {
         XCTAssertEqual(GestureHintBar.bar(for: .init(listening: true, prompting: true, crop: .selecting)).mouse,
-                       GestureHintBar.MouseHint(wheel: "✂️", right: "➡️", body: ""))
+                       GestureHintBar.MouseHint(wheel: "✂️", right: "➡️", body: "🔽↑ 🔴"))
         XCTAssertEqual(GestureHintBar.bar(for: .init(listening: true, prompting: true, crop: .parked, noMouse: true)).mouse,
                        GestureHintBar.MouseHint(left: "📍", wheel: "🎯", right: "🗑️", body: "Esc cancel"))
     }
@@ -189,7 +197,7 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     func testTheFingersAtRestWithTheMouseAndWithout() {
         XCTAssertEqual(GestureHintBar.bar(for: .init(fingers: true)).crosses, [
             Cross(click: "💬", up: "✨", down: "☠️", left: "⚡", right: GestureHintBar.terminal, corner: "☝️"),
-            Cross(click: "🎙️", up: "", down: "🔌", left: "⏎", right: "🎙️", corner: "✌️"),
+            Cross(click: "🎙️", up: "", down: "🔌", left: "⏎", right: "", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.bar(for: .init(fingers: true, noMouse: true)).crosses[1].click, "🎙️ / ⌘⌘")
     }
@@ -203,17 +211,20 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// *"copy să fie mereu în colț dreapta jos"*: in every stage that has a
     /// keys row, mouse or none, the Copy icon is the last badge — and the row
     /// is right-aligned, so that is the bar's bottom-right corner.
+    /// **Wherever it is shown** — a prompt and a ⚡ question. A plain dictation's
+    /// bar has no copy badge since 2026-11-22 (*"ce sens are copy în plain
+    /// dictation?? … dictez doar"*); it still gathers copies, the bar only stopped
+    /// saying so.
     func testCopyIsAlwaysTheBottomRightBadge() {
         for noMouse in [false, true] {
-            for (prompting, quick) in [(true, false), (false, false), (false, true)] {
+            for (prompting, quick) in [(true, false), (false, true)] {
                 let bar = GestureHintBar.bar(for: .init(listening: true, prompting: prompting, quick: quick, noMouse: noMouse))
-                XCTAssertEqual(bar.keys.last, GestureHintBar.copyKey)
+                XCTAssertEqual(bar.keys, [GestureHintBar.selectKey, GestureHintBar.copyKey])
                 XCTAssertEqual(GestureHintBar.Board.keyColumn(bar.keys.count - 1, of: bar.keys.count), 2)
-                if prompting || quick {
-                    XCTAssertEqual(bar.keys, [GestureHintBar.selectKey, GestureHintBar.copyKey])
-                    XCTAssertEqual(GestureHintBar.Board.keyColumn(0, of: 2), 1, "select in the centre column")
-                }
+                XCTAssertEqual(GestureHintBar.Board.keyColumn(0, of: 2), 1, "select in the centre column")
             }
+            let plain = GestureHintBar.bar(for: .init(listening: true, prompting: false, noMouse: noMouse))
+            XCTAssertFalse(plain.keys.contains(GestureHintBar.copyKey), "noMouse \(noMouse)")
         }
     }
 
@@ -247,13 +258,13 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     func testTheTrackpadsCrossesCarryTheFingers() {
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(fingers: true)), [
             Cross(click: "💬 prompt", up: "✨ new", down: "☠️", left: "⚡ ask", right: GestureHintBar.terminal + " terminal", corner: "☝️"),
-            Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "🎙️ dictate", corner: "✌️"),
+            Cross(click: "🎙️ dictate ⌘⌘", up: "", down: "🔌 unbind", left: "⏎", right: "", corner: "✌️"),
         ])
         XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: true, fingers: true)), [
             Cross(click: "🏁 / ⌘⌘", up: "✨ new", down: "☠️", left: "🗑️ discard", right: nil, corner: "☝️"),
             Cross(click: "📸 / ⌃P", up: "🔴 video", down: "⌨️ type", left: "", right: "🧠 model", corner: "✌️"),
         ])
-        XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: false, noMouse: true))[1].right, "⏹️ ⌘⌘")
+        XCTAssertEqual(GestureHintBar.fingerCrosses(for: .init(listening: true, prompting: false, noMouse: true))[1].click, "⏹️ + ⏎ ⌘⌘")
     }
 
     /// One finger is 🔼, two are 🔽, and each direction is the chord with the
@@ -296,12 +307,20 @@ func testTheHiddenSwitchIsOffUnlessSet() {
 
     /// `HINT_BAR_PNG=<dir> swift test --filter GestureHintBarTests` draws each
     /// stage over a dark and a light desktop, to look at.
-    /// After a wheel crop, 🔽 ↑ films the area — and says so (2026-11-21).
-    func testAreaFilmIsNamedOnBackUp() {
-        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true, areaFilm: true))[1].up,
-                       "🔴 ✂️ video")
-        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true, filming: true,
-                                                         areaFilm: true))[1].up, "⏹️ video")
+    /// 🔽 ↑ films the whole display — a box is filmed from inside its own
+    /// wheel drag, and the crop's mouse says so on its body (2026-11-22;
+    /// 2026-11-21's *after a crop* is gone).
+    func testTheBoxIsFilmedFromInsideItsDrag() {
+        XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: true))[1].up, "🔴 video")
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, prompting: true, crop: .selecting))?.body,
+                       "🔽↑ 🔴 video Esc cancel")
+        XCTAssertEqual(GestureHintBar.bar(for: .init(listening: true, prompting: true, crop: .selecting)).mouse?.body,
+                       "🔽↑ 🔴")
+        // Not once locked, not over a ⚡ question (no film there), not without the mouse.
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, prompting: true, crop: .locked))?.body, "Esc cancel")
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, crop: .selecting, quick: true))?.body, "Esc cancel")
+        XCTAssertEqual(GestureHintBar.mouse(for: .init(listening: true, prompting: true, crop: .selecting, noMouse: true))?.body,
+                       "Esc cancel")
     }
 
     func testRenderForReview() throws {
@@ -309,7 +328,6 @@ func testTheHiddenSwitchIsOffUnlessSet() {
         GestureHintBar.writeSheets(into: dir)
         let stages: [(String, GestureHintBar.Stage)] = [
             ("prompt", .init(listening: true, prompting: true)),
-            ("prompt-area", .init(listening: true, prompting: true, areaFilm: true)),
             ("prompt-filming", .init(listening: true, prompting: true, filming: true, kamikaze: true, spawn: true)),
             ("plain", .init(listening: true, prompting: false)),
             ("quick", .init(listening: true, prompting: false, quick: true)),

@@ -5158,16 +5158,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         updateHintBar()
     }
 
-    /// **A wheel crop was taken in this sentence, so 🔽 ↑ films that area**
-    /// (2026-11-21) — the corner hints say so. Down with the sentence.
-    private(set) var areaFilm = false
-
-    func setAreaFilm(_ on: Bool) {
-        guard areaFilm != on else { return }
-        areaFilm = on
-        updateHintBar()
-    }
-
     func setCropPhase(_ phase: GestureHintBar.CropPhase?) {
         guard cropPhase != phase else { return }
         cropPhase = phase
@@ -5177,7 +5167,6 @@ private let heardLabel = NSTextField(labelWithString: "")
     private func updateHintBar() {
         guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
         hintBar.update(.init(listening: listening, prompting: prompting, filming: filming,
-                             areaFilm: areaFilm,
                              kamikaze: kamikaze, interruptible: interruptible, interrupt: interrupt,
                              spawn: spawnMarked, held: heldPair, crop: cropPhase,
                              quick: asking, fingers: trackpadHints, noMouse: noMouse))
@@ -5550,8 +5539,6 @@ private let heardLabel = NSTextField(labelWithString: "")
         // total for the split second before the first shot lands.
         if value { shotCount = 0; listenOpenedAt = CACurrentMediaTime() }
         if !value { liveCaption.setOpen(false); opening = false }
-        // The area belongs to the sentence that took it.
-        areaFilm = false
         refreshTitle()
         layoutContent()          // the recording row lives and dies with this state
         reposition()             // …and the chip snaps back to the cursor

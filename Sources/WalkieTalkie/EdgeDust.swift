@@ -114,6 +114,8 @@ final class EdgeDust {
 
     private enum Phase: String { case down, listening, waiting, leaving }
     private var phase: Phase = .down
+    /// `GET /test/state.edgeDust`: down, listening, waiting or leaving.
+    var phaseName: String { phase.rawValue }
     private var edge: Edge?
     private var panel: NSPanel?
     private var picture: EdgeDustPicture?
