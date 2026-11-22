@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <title>Brewly — coffee, on a schedule</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 <!-- Demo landing page for the Walkie Talkie teaser. `state.json` is polled a few times a second and
@@ -32,39 +32,23 @@
     <div class="pitch">
       <h1><span id="line1">Fresh coffee,</span><br>before you run out.</h1>
       <p class="sub"><span class="typo">Roasted on Monday, at your door by <span class="wrong">Thurdsay</span><span class="right">Thursday</span>.</span><br>Skip or pause any time.</p>
-      <a class="cta" href="#">Start my first bag</a>
-      <span class="hint">No card needed for the first one.</span>
-      <div class="slot"><span class="badge" id="badge">★ 4.9 · loved by 12,000 slow mornings</span></div>
-    </div>
-    <div class="art">
-      <div class="art-empty">image<br>goes here</div>
-      <img class="art-photo" src="beans.svg" alt="">
+      <div class="buttons"><a class="cta" id="cta1" href="#">Start my first bag</a><a class="cta" id="cta2" href="#">See the plans</a></div>
+      <div class="slot"><span class="badge" id="badge">★ 4.9 · 12,000 slow mornings</span></div>
     </div>
   </section>
+  <!-- no picture slot on the page: the picture appears in whatever rectangle he drew (state.artBox, screen points) -->
+  <img class="art-photo" id="art" src="beans.svg" alt="">
 
   <section class="cards">
-    <article class="card">
-      <div class="ico">🌱</div>
-      <h3>Single origin</h3>
-      <p>One farm per bag. You get the farmer's name, the altitude and the harvest month.</p>
-    </article>
-    <article class="card">
-      <div class="ico">🚲</div>
-      <h3>Free shipping</h3>
-      <p>Every bag travels carbon-neutral, and the last mile is on two wheels where we can.</p>
-    </article>
-    <article class="card broken">
-      <div class="ico">⏸️</div>
-      <h3>Pause any time, no questions asked, really</h3>
-      <p>Going away? One tap moves your next delivery.</p>
-      <div class="price"><span class="was">9 €</span><span class="now">9 €</span> / bag</div>
-    </article>
+    <article class="card"><div class="ico">🌱</div><div><h3>Single origin</h3><p>One farm in every bag.</p></div></article>
+    <article class="card"><div class="ico">🚲</div><div><h3>Free shipping</h3><p>Carbon-neutral, by bike.</p></div></article>
+    <article class="card"><div class="ico">⏸️</div><div><h3>Pause any time</h3><p>One tap skips a delivery.</p></div></article>
   </section>
 </main>
 
 <script>
 // Every truthy key of state.json is a class on <body>; CSS transitions do the rest.
-const badge = document.getElementById('badge');
+const badge = document.getElementById('badge'), art = document.getElementById('art');
 let last = '';
 async function tick() {
   try {
@@ -73,11 +57,17 @@ async function tick() {
     if (text !== last) {
       last = text;
       const s = JSON.parse(text);
+      if (s['typo-fixed'] && !document.body.classList.contains('typo-fixed')) getSelection().removeAllRanges();   // the selected word is replaced: nothing stays selected
       document.body.className = Object.keys(s).filter(k => s[k]).join(' ');
-      if (s.pictureSrc) document.querySelector('.art-photo').src = s.pictureSrc;   // the picture he copied in the search (s04)
+      if (s.pictureSrc) art.src = s.pictureSrc;                     // the picture he copied in the search (s04)
+      if (s.artBox) {                                               // …placed in the rectangle he drew, given in screen points
+        const ox = window.screenX, oy = window.screenY + (window.outerHeight - window.innerHeight);
+        art.style.left = s.artBox.x - ox + 'px'; art.style.top = s.artBox.y - oy + 'px';
+        art.style.width = s.artBox.w + 'px'; art.style.height = s.artBox.h + 'px';
+      }
       // the "move this up here" scene: `moved` = the box Walkie's prompt carried, in screen points —
       // where it was drawn (from) and where it was dropped (to). The badge keeps its place inside the box,
-      // so it lands exactly where the dropped ghost showed it.
+      // so it lands exactly where the dropped ghost showed it (no snapping).
       if (s.moved) {
         const ox = window.screenX, oy = window.screenY + (window.outerHeight - window.innerHeight);
         if (!badge.classList.contains('floating')) {
@@ -86,12 +76,7 @@ async function tick() {
           badge.style.left = from.left + 'px'; badge.style.top = from.top + 'px';
           badge.classList.add('floating'); badge.getBoundingClientRect();
         }
-        let left = s.moved.toX - ox + +badge.dataset.dx, top = s.moved.toY - oy + +badge.dataset.dy;
-        // dropped beside the headline's first line? then it sits ON that line: centred on it, a neat gap after the comma
-        const line = document.getElementById('line1').getBoundingClientRect();
-        if (Math.abs(top + badge.offsetHeight / 2 - (line.top + line.height / 2)) < 40 && left > line.right - 40) {
-          top = line.top + line.height / 2 - badge.offsetHeight / 2 + 3; left = line.right + 18;
-        }
+        const left = s.moved.toX - ox + +badge.dataset.dx, top = s.moved.toY - oy + +badge.dataset.dy;
         badge.style.left = left + 'px'; badge.style.top = top + 'px';
         setTimeout(() => badge.classList.add('landed'), 650);
       } else {

@@ -6,7 +6,8 @@ only this script is committed. The header is a plain rebuild (wordmark, query bo
 nothing of anybody's account is on the page.   gimages.py   (run from teaser/)"""
 import json, html
 d = json.load(open("demo-site/gimages/items.json"))
-cols = sorted({it["x"] for it in d["items"]})[:3]                # the first three columns fit the small window
+cols = sorted({it["x"] for it in d["items"]})[:5]                # five columns across the window (round 6: 900 pt wide, the page scales to it)
+W = cols[-1] + 237 + 25
 cells = "".join(
     f'<figure style="left:{it["x"]}px;top:{it["y"] - 233 + 128}px;width:{it["w"]}px">'
     f'<img src="img/{i}.jpg" width="{it["w"]}" height="{it["h"]}" alt="{html.escape(it["alt"])}">'
@@ -16,7 +17,7 @@ open("demo-site/gimages/index.html", "w").write(f"""<!doctype html><html lang="e
 <title>coffee cup - Google Search</title>
 <style>
 *{{box-sizing:border-box;margin:0}} body{{font:14px arial,sans-serif;background:#fff;color:#202124;overflow-x:hidden}}
-#page{{width:782px;transform-origin:0 0;position:relative}}
+#page{{width:{W}px;transform-origin:0 0;position:relative}}
 header{{display:flex;align-items:center;gap:26px;padding:22px 25px 12px}}
 .logo{{font:500 30px 'Product Sans',arial,sans-serif;letter-spacing:-1.5px}}
 .box{{flex:1;height:46px;border-radius:24px;box-shadow:0 2px 5px 1px rgba(64,60,67,.16);border:1px solid #dfe1e5;padding:0 22px;font-size:16px;display:flex;align-items:center}}
@@ -30,6 +31,6 @@ figcaption{{font-size:12px;color:#5f6368;padding:5px 2px;white-space:nowrap;over
 <div class="box">coffee cup</div><div class="in">Sign in</div></header>
 <nav><span>AI Mode</span><span>All</span><b>Images</b><span>Videos</span><span>Shopping</span><span>News</span><span>More</span></nav>
 {cells}</div>
-<script>const fit=()=>document.getElementById('page').style.transform='scale('+innerWidth/782+')';fit();onresize=fit</script>
+<script>const fit=()=>document.getElementById('page').style.transform='scale('+innerWidth/{W}+')';fit();onresize=fit</script>
 </body></html>""")
 print("built", len(d["items"]), "items")

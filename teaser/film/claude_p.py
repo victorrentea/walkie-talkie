@@ -49,6 +49,7 @@ for line in sys.stdin:
     if role == "editor":
         m = re.search(r"<dictation>(.*?)</dictation>", said, re.S)
         t = (m.group(1) if m else said).strip()
+        open(__import__("os").path.expanduser("~/film/redactor.log"), "a").write("heard: " + t + "\n")   # what the recogniser wrote, before any correction (for the editor)
         t = re.sub(r",\s*(um+|uh+|erm?)\s*,", ",", t, flags=re.I)             # the fillers go
         t = re.sub(r"\b(um+|uh+|erm?)\b[,.]?\s*", "", t, flags=re.I)
         t = re.sub(r"\bso,\s", "so ", t); t = re.sub(r"\s{2,}", " ", t).strip()

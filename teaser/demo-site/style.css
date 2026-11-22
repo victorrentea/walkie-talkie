@@ -1,69 +1,55 @@
-/* Strong, flat colours on a dark page, on purpose: a change must read at a glance in a 1080p teaser, and
-   Walkie's edge dust is light — it needs something dark under it at every edge of the screen. */
+/* Strong, flat colours on a dark page, on purpose: a change must read at a glance in the teaser, and
+   Walkie's edge dust is light — it needs something dark under it at every edge of the screen.
+   Sized for a 960 pt wide window (round 6: the guest runs at 960x540 HiDPI, the whole screen is shown). */
 * { box-sizing: border-box; margin: 0; }
-html { font: 16px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: #eef2f8; background: #0f1826; }
+html { font: 15px/1.45 -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: #eef2f8; background: #0f1826; }
 body { min-height: 100vh; overflow: hidden; }
 a { color: inherit; text-decoration: none; }
 
-.top { display: flex; align-items: center; justify-content: space-between; height: 60px; padding: 0 44px;
+.top { display: flex; align-items: center; justify-content: space-between; height: 50px; padding: 0 40px;
        background: #f6f1e7; color: #1c2330; border-bottom: 3px solid #f6f1e7; transition: background .6s, color .6s, border-color .6s; }
-.logo { font-weight: 800; font-size: 22px; letter-spacing: -.3px; }
+.logo { font-weight: 800; font-size: 20px; letter-spacing: -.3px; }
 .bean { display: inline-block; margin-right: 4px; }
-nav { display: flex; gap: 30px; font-weight: 600; font-size: 15px; align-items: center; }
+nav { display: flex; gap: 26px; font-weight: 600; font-size: 14px; align-items: center; }
 .header-dark .top { background: #05080d; color: #fff; border-color: #ff7a00; }
 
 .has-menu { position: relative; }
-.menu { display: none; position: absolute; top: 36px; left: -60px; width: 300px; list-style: none; padding: 10px;
-        background: #fff; color: #1c2330; border-radius: 16px; box-shadow: 0 18px 44px rgba(0,0,0,.5); z-index: 5; }
-.menu li { padding: 13px 16px; border-radius: 10px; font-weight: 600; font-size: 19px; }
+.menu { display: none; position: absolute; top: 34px; left: -60px; width: 260px; list-style: none; padding: 8px;
+        background: #fff; color: #1c2330; border-radius: 14px; box-shadow: 0 18px 44px rgba(0,0,0,.5); z-index: 5; }
+.menu li { padding: 11px 14px; border-radius: 10px; font-weight: 600; font-size: 17px; }
 .menu li:nth-child(2) { background: #dfe7ff; }
 .menu-open .menu { display: block; }
-/* the bug of the "film it" scene: the open menu blinks, whole, about 2.5 times a second */
 .flicker .menu { animation: flick .4s steps(1) infinite; }
 @keyframes flick { 0% {opacity: 1} 50% {opacity: 0} }
 
-.hero { display: flex; align-items: center; gap: 40px; padding: 30px 64px 14px; }
-.pitch { flex: 1.25; }
-.slot { height: 32px; margin-top: 16px; }
-.badge { display: inline-block; padding: 6px 14px; border-radius: 999px; background: #22b57a; color: #04130c;
-         font-weight: 800; font-size: 14px; }
+.hero { padding: 50px 44px 0; }
+body { background: radial-gradient(560px 330px at 76% 44%, #17263d 0%, rgba(15,24,38,0) 70%); }
+.pitch { width: 500px; }
+h1 { font-size: 46px; line-height: 1.05; letter-spacing: -1.4px; font-weight: 800; margin: 0 0 10px; }
+.sub { font-size: 17px; line-height: 1.55; color: #a9b6ca; margin-bottom: 18px; }
+.buttons { display: flex; gap: 14px; }
+.cta { display: inline-block; padding: 12px 24px; border-radius: 11px; background: #3d6bff; color: #fff;
+       font-weight: 700; font-size: 16px; box-shadow: 0 8px 22px rgba(61,107,255,.4);
+       transition: background .6s, box-shadow .6s, transform .3s; }
+/* "this button": the one the pointer was on when the shutter was pressed (the second one) */
+.button-orange #cta2 { background: #ff7a00; box-shadow: 0 8px 24px rgba(255,122,0,.5); }
+.slot { height: 28px; margin-top: 18px; }
+.badge { display: inline-block; padding: 5px 13px; border-radius: 999px; background: #22b57a; color: #04130c;
+         font-weight: 800; font-size: 13px; }
 .badge.floating { position: fixed; z-index: 4; white-space: nowrap; transition: left .6s cubic-bezier(.3,1.2,.4,1), top .6s cubic-bezier(.3,1.2,.4,1); }
 .badge.landed { animation: land .8s ease-out; }
 @keyframes land { from { box-shadow: 0 0 0 0 rgba(34,181,122,.8); } to { box-shadow: 0 0 0 18px rgba(34,181,122,0); } }
-h1 { font-size: 54px; line-height: 1.04; letter-spacing: -1.6px; font-weight: 800; margin: 0 0 12px; }
-.sub { font-size: 19px; color: #a9b6ca; max-width: 30em; margin-bottom: 22px; }
-.cta { display: inline-block; padding: 15px 30px; border-radius: 12px; background: #3d6bff; color: #fff;
-       font-weight: 700; font-size: 18px; box-shadow: 0 8px 22px rgba(61,107,255,.4);
-       transition: background .6s, box-shadow .6s, transform .3s; }
-.button-orange .cta { background: #ff7a00; box-shadow: 0 8px 24px rgba(255,122,0,.5); transform: scale(1.04); }
-.hint { margin-left: 16px; color: #7f8ca3; font-size: 14px; }
 
-.art { flex: 1; height: 250px; position: relative; }
-.art-empty, .art-photo { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 22px; transition: opacity .6s, transform .6s; }
-.art-empty { display: flex; align-items: center; justify-content: center; text-align: center; border: 3px dashed #44546e;
-             color: #6c7d99; font-weight: 700; font-size: 20px; background: #162235; }
-.art-photo { object-fit: cover; opacity: 0; transform: scale(.94); }
+.art-photo { position: fixed; left: 560px; top: 90px; width: 340px; height: 220px; border-radius: 16px; object-fit: cover;
+             opacity: 0; transform: scale(.94); transition: opacity .6s, transform .6s; z-index: 3; box-shadow: 0 14px 40px rgba(0,0,0,.45); }
 .picture .art-photo { opacity: 1; transform: none; }
-.picture .art-empty { opacity: 0; }
 
-.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; padding: 10px 64px 0; }
-.card { background: #18243a; border-radius: 18px; padding: 20px 22px; border: 1px solid #2a3a56; min-height: 168px; position: relative; }
-.ico { font-size: 28px; margin-bottom: 6px; }
-.card h3 { font-size: 19px; letter-spacing: -.2px; margin-bottom: 4px; }
-.card p { color: #a9b6ca; font-size: 15px; }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 16px 44px 0; }
+.card { display: flex; gap: 12px; align-items: flex-start; background: #18243a; border-radius: 14px; padding: 13px 16px; border: 1px solid #2a3a56; }
+.ico { font-size: 24px; line-height: 1.1; }
+.card h3 { font-size: 15px; letter-spacing: -.2px; margin-bottom: 2px; }
+.card p { color: #a9b6ca; font-size: 13px; line-height: 1.35; }
 .typo .right { display: none; }
 .typo .wrong { text-decoration: underline wavy #ff5a5a; text-underline-offset: 4px; }
-.sub { line-height: 1.6; }
 .typo-fixed .typo .right { display: inline; }
 .typo-fixed .typo .wrong { display: none; }
-
-/* the visibly broken card: tilted, a title that runs out of it, a NaN price */
-.broken { border: 2px solid #ff5a5a; background: #3a1a22; transform: rotate(-2.2deg) translateY(10px); transition: all .6s; }
-.broken h3 { white-space: nowrap; width: 150%; color: #ff8d8d; }
-.broken .price { margin-top: 8px; font-weight: 800; font-size: 20px; color: #ff8d8d; }
-.broken .now { display: none; }
-.card-fixed .broken { border: 1px solid #2a3a56; background: #18243a; transform: none; }
-.card-fixed .broken h3 { white-space: normal; width: auto; color: inherit; }
-.card-fixed .broken .price { color: #22b57a; }
-.card-fixed .broken .was { display: none; }
-.card-fixed .broken .now { display: inline; }

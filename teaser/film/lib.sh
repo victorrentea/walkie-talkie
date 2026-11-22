@@ -29,7 +29,7 @@ vm_up_vnc() {                                         # headless, with Virtualiz
   grep -o 'vnc://[^ ]*' "$TART_HOME/$VM.log" | tail -1
 }
 deploy() {                                            # deploy <bundle>: replace the guest's app with it and launch
-  g pkill -x "Walkie Talkie"; sleep 1
+  g bash /Users/admin/film/gkill.sh "Walkie Talkie"; sleep 1
   g sudo rm -rf "/Applications/Walkie Talkie.app"
   COPYFILE_DISABLE=1 tar -C "$(dirname "$1")" -cf - "Walkie Talkie.app" | tart exec -i $VM sudo tar -C /Applications -xf -
   g sudo chown -R admin:staff "/Applications/Walkie Talkie.app"
@@ -60,6 +60,8 @@ wait_state() {                                        # wait_state '<python expr
 }
 tile() { ffmpeg -loglevel error -y -i "$1" -vf "fps=${3:-1/2},scale=960:-1,tile=${4:-2x5}" -frames:v 1 "$2"; }
 reload_site() { g osascript -e 'tell application "Safari" to set URL of front document to "http://localhost:8000/"' >/dev/null; }
+frame() { python3 "$FILM_DIR/vncrec.py" - --png "${1:-/tmp/teaser-raw/now.png}"; }   # one frame of the guest's screen, as the film sees it
+gkill() { g bash /Users/admin/film/gkill.sh "$@"; }                                   # guest: end processes by exact name (film/gkill.sh)
 tab() { g osascript -e "tell application \"Safari\" to tell front window to set current tab to tab $1" >/dev/null; }   # 1 = search, 2 = Brewly
 agent_restart() {                                     # (re)start the stand-in agent in the bound Terminal tab
   g pkill -f film/agent.py; sleep 0.5               # in the guest only
@@ -78,7 +80,7 @@ stage_terminal() {                                    # ONE opaque Terminal wind
   # no restored ones, no "terminate?" sheet from closing others).
   g pkill -f film/agent.py; g sudo pkill -x login; g pkill -9 -x Terminal; sleep 1.5
   gsh 'defaults write com.apple.Terminal ApplePersistenceIgnoreState -bool true; rm -rf ~/Library/Saved\ Application\ State/com.apple.Terminal.savedState
-       printf "#!/bin/sh\nsleep 3.4\nclear\ncd ~/film/demo-site && exec env '"${AGENT_ENV:-A=1}"' ~/film/bin/claude\n" > ~/film/brewly.command; chmod +x ~/film/brewly.command
+       printf "#!/bin/sh\nsleep 3.4\nclear\ncd '"${AGENT_CWD:-~/film/demo-site}"' && exec env '"${AGENT_ENV:-A=1}"' ~/film/bin/claude\n" > ~/film/brewly.command; chmod +x ~/film/brewly.command
        open -a Terminal ~/film/brewly.command'
   sleep 2.5
   g osascript -e "tell application \"Terminal\" to set bounds of front window to {${TERM_BOUNDS:-480, 320, 1056, 686}}" -e 'tell application "Terminal" to set custom title of selected tab of front window to "brewly"' >/dev/null

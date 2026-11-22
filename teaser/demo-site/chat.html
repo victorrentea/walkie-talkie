@@ -28,5 +28,6 @@
   </div>
   <textarea id="box" placeholder="Message #releases" autofocus></textarea>
 </main>
+<script>document.getElementById("box").addEventListener("keydown", e => { if (e.key === "Enter") e.preventDefault(); });   // the dictation's closing Return: nothing moves, the text stays to be read</script>
 </body>
 </html>

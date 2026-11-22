@@ -6,5 +6,5 @@ for k in ShowActiveProcessArgumentsInTitle ShowActiveProcessInTitle ShowWindowSe
   /usr/libexec/PlistBuddy -c "Delete :Window\ Settings:Pro:$k" $P 2>/dev/null; /usr/libexec/PlistBuddy -c "Add :Window\ Settings:Pro:$k bool false" $P
 done
 /usr/libexec/PlistBuddy -c "Delete :Window\ Settings:Pro:WindowTitle" $P 2>/dev/null; /usr/libexec/PlistBuddy -c "Add :Window\ Settings:Pro:WindowTitle string brewly" $P
-killall cfprefsd; sleep 1
+bash ~/film/gkill.sh cfprefsd; sleep 1
 defaults read com.apple.Terminal "Window Settings" | grep -c "InTitle = 0"
