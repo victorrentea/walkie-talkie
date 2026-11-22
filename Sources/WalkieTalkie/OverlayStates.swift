@@ -375,12 +375,11 @@ enum OverlayStates {
                 o.pinTranscribeWarmth(0.45)
             },
 
-            Shot(slug: "transcribing-redacting", group: "Dictating", title: "A plain dictation the ✍️ Redactor will rewrite",
-                 when: "The same wait, for a plain dictation at the caret with *✍️ Redactor* ticked in the Engine list and words Wispr Flow has not already edited.",
-                 note: "**`Transcribing and redacting via <logo>...`** (2026-11-22, Victor: *\"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită … «transcribing and redacting»\"*). The wait is both passes — the recogniser, then Sonnet against the screen — and the row said only the first. With the Redactor off, a prompt, or Wispr Flow's own words, the row is the one above.",
+            Shot(slug: "redacting", group: "Dictating", title: "The ✍️ Redactor is rewriting a plain dictation",
+                 when: "After the transcript of a plain dictation at the caret has arrived, while the Redactor (ticked in the Engine list) rewrites it — until the words are pasted, edited or raw. Never for Wispr Flow's own words, a prompt, or a sentence under three words.",
+                 note: "**The wait row's second phase** (2026-11-22, Victor: *\"e mult text acolo … pe durata redacting-ului, îmi scrii «redacting» și-l colorezi iarăși\"*; `Transcribing and redacting` for an hour before). `Transcribing via <logo>...` stays as it was while the audio is read; then the word is swapped in one relayout, the hourglass becomes ✍️ and the bar starts again from zero over two seconds — the redactor's p90 over 402 logged edits (median 1.4 s). No mark after the word: no tool's name on the chip. The row goes after the paste, so it costs the paste nothing.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setRedacting(true)
-                o.setTranscribing(true)
                 o.pinTranscribeWarmth(0.45)
             },
 

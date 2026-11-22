@@ -16707,10 +16707,15 @@ since 2026-10-22: Haiku inverted a self-correction by copying the words above th
 Sonnet low got it right 3/3 at 1.4–3.9 s. The 4 s budget is unchanged — a late Sonnet edit still
 pastes the raw words and is only logged; watch `✍️ editor: … in N ms` for how often that happens.
 
-## 2026-11-22 — ✍️ The chip says `Transcribing and redacting`
+## 2026-11-22 — ✍️ `Redacting...` is its own phase on the chip
 
-Victor: *"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită …
-«transcribing and redacting»"*. The wait row of a plain dictation reads `Transcribing and redacting
-via <logo>...` when the redactor will run on it (`DictationEditor.announced`: plain, the switch on,
-not Wispr Flow's own words); otherwise unchanged. Shot `transcribing-redacting`. Not seen live from
-the desk: no loopback route reaches the transcribing row without a real microphone take.
+Victor first asked for `Transcribing and redacting` on a plain dictation's wait row (*"la dictarea
+curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită"*), shipped in
+`69068a35`, then within the hour: *"e mult text acolo … pe durata redacting-ului, îmi scrii
+«redacting» și-l colorezi iarăși"*. So `Transcribing via <logo>...` is back to what it was, and when
+the transcript goes to `DictationEditor` the same row becomes `✍️ Redacting...`, its bar restarted
+over 2 s — `relay.log` held 402 edits: median 1.36 s, p90 2.1 s, max 3.4 s (mostly Haiku; Sonnet low
+measured 1.2–3.9 s on four). Up after the request leaves, down after the paste. His caveat was the
+cost: one relayout at each edge, ink only between. He also believes the redactor runs only after a
+local transcription; in the code it runs for ElevenLabs too (`applies`: everything but Wispr Flow) —
+left as is, reported to him.

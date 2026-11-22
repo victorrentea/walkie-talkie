@@ -366,16 +366,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// activ al lui Wispr"*. See `pushMicMark`.
     private static func mark(engine id: String) -> String { " via " + engineMark(id) }
 
-    /// **`Transcribing and redacting`** (2026-11-22): pushed before every
-    /// `setTranscribing(true)` and when the local model takes a Wispr sentence
-    /// over. The same facts the delivery reads (`clean`,
-    /// `DictationEditor.applies`), known before the words are.
-    private func pushRedacting() {
-        let wisprWords = engineId == "wispr" && !fallingBack && !markedLocalNow
-        overlay.setRedacting(DictationEditor.announced(plain: cleanSentence && !cleanRedirected,
-                                                       wisprWords: wisprWords))
-    }
-
     /// **Whose microphone the chip names: whoever is doing the hearing.**
     /// Wispr is, while it holds a sentence (`isRecording`, or `wisprHearing` for
     /// one the relay is not running) and whenever it is the Engine at rest; then
@@ -3207,6 +3197,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return answer
         }
 
+        picker.onTestRedacting = { [weak self] on in self?.overlay.setRedacting(on, span: DictationEditor.typical) }
         picker.onTestDictationStart = { [weak self] wallClock, clean in
             guard let self = self else { return }
             if wallClock {
@@ -4461,7 +4452,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `DecodeRate` has always been fitted against, and it is known here
         // whatever the source is.
         let spokenFor = spokenSoFar
-        pushRedacting()
         overlay.setTranscribing(true, audio: spokenFor)
         if let at = chipStoppedAt {
             chipStoppedAt = nil
@@ -5002,13 +4992,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // **✍️ Edited against the screen first** (2026-10-22,
                 // `DictationEditor`): the paste waits for it, never past its budget.
                 let submit = submitClean, pid = result.focusPid
+                // **`✍️ Redacting...` while it does** (2026-11-22): up after the
+                // request has left, down after the paste — never ahead of either.
+                let shown = !answeringInBackground && DictationEditor.asksModel(line)
                 DictationEditor.shared.edit(line, pid: pid, language: result.language) { [weak self] edited in
                     guard let self else { return }
                     self.pasteText(edited + mic, to: pid)
                     self.pinLanded(landing, "the edited words were pasted")
                     if submit { self.submitAfterCleanWords() }
                     self.pasteHint.pulse(reason: "an edited plain sentence has just landed")
+                    if shown { self.overlay.setRedacting(false) }
                 }
+                if shown { overlay.setRedacting(true, span: DictationEditor.typical) }
                 return
             } else {
                 pasteText(line + mic, to: result.focusPid)
@@ -5188,7 +5183,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !answeringInBackground {
             overlay.setEngineMark(Self.mark(engine: held != nil && scribeKey != nil ? "elevenlabs" : "whisper"))
             overlay.setTranscribing(false)
-            pushRedacting()
             overlay.setTranscribing(true, audio: duration)
         }
         // **Its answer goes to the sentence that failed** (Q12), in its turn.
@@ -5221,7 +5215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.fallbackAudio = nil
                 self.fallingBack = false
                 self.syncLocalNow()
-                if !self.answeringInBackground { self.overlay.setEngineMark(Self.mark(engine: self.engineId)); self.pushRedacting() }
+                if !self.answeringInBackground { self.overlay.setEngineMark(Self.mark(engine: self.engineId)) }
                 if let held {
                     self.finishGuard(held, retry: result)
                     self.dictationEndedForGood(.delivered)
@@ -5421,14 +5415,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if row.shown, let c = row.countdown, c <= 0 {
             overlay.setEngineMark(Self.mark(engine: "whisper"))
             markedLocalNow = true
-            pushRedacting()
         } else if markedLocalNow, !fallingBack {
             // No longer at `now` — the words landed, the decode ahead failed, or a
             // new sentence took the row (tester 2026-10-22: a failed decode left 💻 up).
             // The wait is over and the local words did not take it (the engine's
             // landed first): the next sentence must not wear 💻 (review 2026-10-22).
             markedLocalNow = false
-            if !answeringInBackground { overlay.setEngineMark(Self.mark(engine: engineId)); pushRedacting() }
+            if !answeringInBackground { overlay.setEngineMark(Self.mark(engine: engineId)) }
         }
         if a.available, localNowTick == nil {
             // 0.1 s: the decode's start is read here.
@@ -6829,7 +6822,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !caretHalo.flyToCorner() { caretHalo.wipeWithTheWave() }
             }
             overlay.setListening(false)
-            pushRedacting()
             overlay.setTranscribing(true, audio: spokenSoFar)
         }
     }
@@ -8027,7 +8019,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         Log.info(String(format: "↩️ recovering %.1fs of cancelled audio", kept.duration))
-        pushRedacting()
         overlay.setTranscribing(true, audio: kept.duration)
         let decodeStartedAt = Date()
         whisperSource.transcribe(wav: kept.url.path) { [weak self] result in
@@ -14388,7 +14379,6 @@ extension AppDelegate {
         liveSentence = parked
         Log.info("🧾 sentence #\(parked.id) is the one in flight again (\(parked.state))")
         if settling {
-            pushRedacting()
             overlay.setTranscribing(true, audio: max(0, CFAbsoluteTimeGetCurrent() - settlingFrom))
             armSettleGiveUp()
         }

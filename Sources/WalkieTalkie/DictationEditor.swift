@@ -50,11 +50,15 @@ final class DictationEditor {
     /// Engines whose words have not been edited by anybody yet.
     static func applies(toEngine engine: String) -> Bool { enabled && engine != "wispr-flow" }
 
-    /// Whether the chip's wait is both passes — `Transcribing and redacting`
-    /// (2026-11-22). `wisprWords`: the words on their way are Wispr Flow's own.
-    static func announced(plain: Bool, wisprWords: Bool, on: Bool = enabled) -> Bool {
-        plain && on && !wisprWords
-    }
+    /// Whether `edit` will ask the model at all — the chip's `Redacting...`
+    /// row goes up only then (2026-11-22). A shorter sentence answers at once.
+    static func asksModel(_ words: String) -> Bool { bare(words).count >= minimumWords }
+
+    /// **The span of the `Redacting...` bar: 2 s.** 402 edits in `relay.log`
+    /// up to 2026-11-22: median 1.36 s, p90 2.1 s, longest 3.4 s (the budget
+    /// cuts at 4) — so the usual edit lands with the bar two thirds lit and
+    /// one in ten sees it full, for at most two seconds.
+    static let typical: TimeInterval = 2.0
 
     /// The longest the sentence waits for its edit before the raw words go.
     static var budget: TimeInterval {
@@ -569,7 +573,7 @@ final class DictationEditor {
         // under three words — too little to misspell, and the wait is felt most there
         // (tester round 2: `uh` took 7.3 s for an edit that was refused).
         // A short sentence still gets its replacements, locally (`gvt token` → `JWT token`).
-        guard Self.bare(words).count >= Self.minimumWords else {
+        guard Self.asksModel(words) else {
             let local = Self.applyReplacements(words, Self.vocabulary())
             return finish(local, local == words ? "nothing to edit" : "«\(words)» → «\(local)» (replacements, no model)")
         }

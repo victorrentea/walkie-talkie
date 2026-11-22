@@ -468,15 +468,15 @@
         <p class="note">The one row left in which Victor is waiting on the app — <code>preparing</code>, the model coming up, was the other, and it stopped existing once the weights started loading at launch instead of at the first gesture. It used to be a flash, which put it at the foot of a panel while the thing it replaced sat at the top. The seconds it used to count down came off on 2026-09-08 — the filling word says the same estimate, and a number ticking toward zero is a deadline to watch.</p>
         <code class="slug">transcribing</code>
       </section>
-      <section class="card" id="transcribing-redacting">
+      <section class="card" id="redacting">
         <header>
-          <h3>A plain dictation the ✍️ Redactor will rewrite</h3>
-          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">316×46 pt</span></div>
+          <h3>The ✍️ Redactor is rewriting a plain dictation</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">218×46 pt</span></div>
         </header>
-        <div class="shot"><img src="states/transcribing-redacting.png" width="316" height="46" style="opacity:0.8" alt="A plain dictation the ✍️ Redactor will rewrite"></div>
-        <p class="when">The same wait, for a plain dictation at the caret with <em>✍️ Redactor</em> ticked in the Engine list and words Wispr Flow has not already edited.</p>
-        <p class="note"><strong><code>Transcribing and redacting via &lt;logo&gt;...</code></strong> (2026-11-22, Victor: <em>&quot;la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită … «transcribing and redacting»&quot;</em>). The wait is both passes — the recogniser, then Sonnet against the screen — and the row said only the first. With the Redactor off, a prompt, or Wispr Flow&#x27;s own words, the row is the one above.</p>
-        <code class="slug">transcribing-redacting</code>
+        <div class="shot"><img src="states/redacting.png" width="218" height="46" style="opacity:0.8" alt="The ✍️ Redactor is rewriting a plain dictation"></div>
+        <p class="when">After the transcript of a plain dictation at the caret has arrived, while the Redactor (ticked in the Engine list) rewrites it — until the words are pasted, edited or raw. Never for Wispr Flow&#x27;s own words, a prompt, or a sentence under three words.</p>
+        <p class="note"><strong>The wait row&#x27;s second phase</strong> (2026-11-22, Victor: <em>&quot;e mult text acolo … pe durata redacting-ului, îmi scrii «redacting» și-l colorezi iarăși&quot;</em>; <code>Transcribing and redacting</code> for an hour before). <code>Transcribing via &lt;logo&gt;...</code> stays as it was while the audio is read; then the word is swapped in one relayout, the hourglass becomes ✍️ and the bar starts again from zero over two seconds — the redactor&#x27;s p90 over 402 logged edits (median 1.4 s). No mark after the word: no tool&#x27;s name on the chip. The row goes after the paste, so it costs the paste nothing.</p>
+        <code class="slug">redacting</code>
       </section>
       <section class="card" id="transcribing-ready">
         <header>
@@ -896,7 +896,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at cf225a6e · 22 Nov 2026 · built 22 Nov 2026, 11:11
+  Generated from <code>OverlayStates.swift</code> · repo at 69068a35 · 22 Nov 2026 · built 22 Nov 2026, 11:18
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

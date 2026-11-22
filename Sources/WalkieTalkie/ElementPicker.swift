@@ -42,6 +42,8 @@ final class ElementPicker {
     /// have said — and the placement `ShotMarker.place` does becomes reachable
     /// from a desk. The only way to see a *whole* envelope without talking.
     var onTestDictationStart: ((_ clock: Bool, _ clean: Bool) -> Void)?
+    /// `POST /test/editor {"chip": true}`: the `✍️ Redacting...` row up / down, on main.
+    var onTestRedacting: ((Bool) -> Void)?
     /// `POST /test/halo {"style": "milkdrop87", "step": 1, "demo": 6, "opts": {...}}` —
     /// pick a halo (or step through them), preview it on the clip for `demo`
     /// seconds, with per-run preset options; answers what is now current.
@@ -1235,8 +1237,12 @@ final class ElementPicker {
             let language = body["language"] as? String
             // Answered from main, never waited for on the listener's queue (tester
             // 2026-10-22: requests ran one by one and `/test/state` stalled behind them).
+            // `"chip": true` (2026-11-22): the `✍️ Redacting...` row rides the edit, as at a delivery.
+            let chip = body["chip"] as? Bool == true && DictationEditor.asksModel(words)
             DispatchQueue.main.async { [weak self] in
+                defer { if chip { self?.onTestRedacting?(true) } }
                 DictationEditor.shared.edit(words, language: language) { edited in
+                    if chip { self?.onTestRedacting?(false) }
                     self?.respond(conn, 200, ["ok": true, "words": words, "edited": edited, "changed": edited != words,
                                               "ms": Int((CFAbsoluteTimeGetCurrent() - started) * 1000)])
                 }

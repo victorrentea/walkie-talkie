@@ -922,7 +922,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // word on this chip is one size and one weight, so what emphasis there is
         // belongs to the glyph column — the half that is recognised rather than
         // read.
-        if transcribing { return [(Self.waitGlyph, transcribeString, Self.iconInk)] }
+        if transcribing { return [(redacting ? Self.redactGlyph : Self.waitGlyph, transcribeString, Self.iconInk)] }
         guard !listening else { return [] }
         // **Nothing at all while unbound.** It carried `🛞 bind` for one build,
         // on the reading that the state should have a visible way out. It does
@@ -4856,25 +4856,31 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// **Three full stops, not `…`** — `listeningWord`'s reason, applied to the
     /// row that is the same slot at the next moment: the word fills a character
     /// at a time, and an ellipsis is one glyph that would light in one step.
-    private var transcribeWord: String { Self.transcribeWord(engineMark: engineMark, redacting: redacting) }
-
-    /// **`Transcribing and redacting via <logo>...` when the ✍️ Redactor will
-    /// rewrite this sentence** (2026-11-22, Victor: *"la dictarea curată, în
-    /// tooltip, să anunți că faci și redactarea dacă e redactarea pornită …
-    /// «transcribing and redacting»"*). The wait he is watching is both passes,
-    /// and the row said only the first. `AppDelegate.pushRedacting` decides —
-    /// a plain sentence, the switch on, words Wispr has not already edited.
-    static func transcribeWord(engineMark: String, redacting: Bool) -> String {
-        "Transcribing\(redacting ? " and redacting" : "")\(engineMark)\(Glyphs.dotsGap)..."
+    private var transcribeWord: String {
+        redacting ? Self.redactingWord : Self.transcribeWord(engineMark: engineMark)
     }
+
+    static func transcribeWord(engineMark: String) -> String { "Transcribing\(engineMark)\(Glyphs.dotsGap)..." }
+
+    /// **`✍️ Redacting...` — the same row, its second phase** (2026-11-22, Victor:
+    /// *"e mult text acolo … pe durata redacting-ului, îmi scrii «redacting» și-l
+    /// colorezi iarăși"*; `Transcribing and redacting` for an hour before). Up
+    /// while `DictationEditor` holds a plain sentence, the bar restarted from
+    /// zero over `DictationEditor.typical`. No mark after the word: the
+    /// redactor is not an engine he picks, and no tool's name goes on the chip.
+    static let redactingWord = "Redacting\(Glyphs.dotsGap)..."
+    private static let redactGlyph = Glyphs.emoji("✍️", ink: iconInk)
 
     private(set) var redacting = false
 
-    /// `setEngineMark`'s relayout rule: the row's width changes with it.
-    func setRedacting(_ on: Bool) {
+    /// One relayout at each edge; the fill between them is the transcribing
+    /// row's ink ticker. `span` 0 = no estimate (the catalogue pins its own).
+    func setRedacting(_ on: Bool, span: TimeInterval = 0) {
         guard redacting != on else { return }
         redacting = on
-        if transcribing { layoutContent() }
+        // The transcribing row may still be up: let `wait` see an edge.
+        if on { transcribing = false }
+        wait(on, span: on && span > 0 ? span : nil)
     }
 
     /// How far through the estimate this decode is, 0…1 — the same reading
@@ -4950,7 +4956,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         // after the word, in grey (2026-10-27): a hint beside the bar, not part of it,
         // and a grey apart from the bar's unlit `dim` so it never reads as letters to
         // fill — darker than it since the unlit letters went to 0.70 (2026-10-30).
-        if transcribing, let tail = localNowInline {
+        if transcribing, !redacting, let tail = localNowInline {
             let grey = anchored ? NSColor(calibratedWhite: 0.55, alpha: 1)
                                 : lit.withAlphaComponent(0.40)
             out.append(NSAttributedString(string: " " + tail, attributes: [.font: hintFont, .foregroundColor: grey]))
@@ -4981,6 +4987,20 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `audio` is how long the recording was; zero means no estimate, which is
     /// what every caller that has not measured one passes.
     func setTranscribing(_ value: Bool, audio: TimeInterval = 0) {
+        if redacting {
+            // The `Redacting` row is the redactor's to take down (the sentence's
+            // own late `setTranscribing(false)` must not); the next sentence's
+            // wait takes the row over.
+            guard value else { return }
+            redacting = false
+            transcribing = false
+        }
+        wait(value, span: value && audio > 0 ? max(1, DecodeRate.seconds(for: audio).rounded()) : nil)
+    }
+
+    /// The wait row up or down — `Transcribing` over a decode estimate,
+    /// `Redacting` over the redactor's typical time.
+    private func wait(_ value: Bool, span: TimeInterval?) {
         guard transcribing != value else { return }
         transcribing = value
         transcribeWatchdog?.invalidate()
@@ -4990,8 +5010,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         transcribeDeadline = nil
         transcribeSpan = 0
         transcribeLit = -1
-        if value, audio > 0 {
-            let span = max(1, DecodeRate.seconds(for: audio).rounded())
+        if value, let span {
             transcribeSpan = span
             transcribeDeadline = Date().addingTimeInterval(span)
             // **Fifteen ticks a second, and almost all of them do nothing** —
@@ -5026,7 +5045,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // of forever.
         if value {
             transcribeWatchdog = Timer.scheduledTimer(withTimeInterval: 180, repeats: false) { [weak self] _ in
-                self?.setTranscribing(false)
+                self?.redacting = false
+                self?.wait(false, span: nil)
             }
         }
         layoutContent()

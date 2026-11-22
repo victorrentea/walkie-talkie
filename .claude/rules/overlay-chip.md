@@ -349,15 +349,19 @@ yields to `--label`).
   it, and the logo **fills with it** since 2026-10-01 (it was always lit until then). The 💻, a colour
   emoji with no ink to take, is drawn at 35 % alpha until its step lights (`wordGlyph(lit:)`,
   2026-10-07, Victor: *"the laptop … should have a faded form and then it turns bright"*).
-- **`Transcribing and redacting via <logo>...` when the ✍️ Redactor will rewrite the sentence**
-  (2026-11-22, Victor: *"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e
-  redactarea pornită … «transcribing and redacting»"*). Only for a plain dictation at the caret with
-  the Redactor ticked and words that are not Wispr Flow's own (`DictationEditor.announced`, the facts
-  the delivery reads); a prompt, the switch off or Wispr's words keep `Transcribing via`.
-  `AppDelegate.pushRedacting` → `RelayWindow.setRedacting`, before every `setTranscribing(true)` and
-  when the local model takes a Wispr sentence over; the words are part of the bar
-  (`RelayWindow.transcribeWord`). Shot `transcribing-redacting`; pinned by
-  `DictationEditorTests.testTheTranscribingRowSaysRedactingOnlyWhenTheRedactorWillRun`.
+- **`✍️ Redacting...` is the wait row's second phase** (2026-11-22, Victor: *"e mult text acolo … pe
+  durata redacting-ului, îmi scrii «redacting» și-l colorezi iarăși"*; `Transcribing and redacting`
+  for an hour before — never put it back). `Transcribing via <logo>...` is unchanged, Redactor on or
+  off. When the transcript of a plain dictation goes to `DictationEditor` (`applies` + `asksModel`:
+  not Wispr Flow's words, three words or more), `RelayWindow.setRedacting(true, span:)` swaps the
+  word and the ⏳ for ✍️ in **one relayout** and the bar starts from zero over
+  `DictationEditor.typical` = 2 s (402 logged edits: median 1.36 s, p90 2.1 s, max 3.4 s, budget 4 s);
+  the fill is the transcribing ticker's ink, never `layoutContent`. **No mark after the word** — no
+  tool's name on the chip. It goes up after `edit` has sent the request and down **after** the paste
+  (edited, or raw on a refusal / the budget), so it costs the paste nothing. While it is up an
+  outside `setTranscribing(false)` is ignored (the sentence's own late one) and a
+  `setTranscribing(true)` takes the row for the next sentence. Shot `redacting`; strings pinned in
+  `DictationEditorTests`; at a desk `POST /test/editor {"words", "chip": true}` + `state.chip`.
 - **No overdue note on the `Transcribing` row since 2026-10-06** — the `  🤔⏱️` appended past 150 %
   of the estimate (2026-09-22/23) is gone (Victor: *"remove the thinking face from the tooltip …
   when the transcribing tool exceeds its time budget"*); the ⌘⌃X row's countdown says how long is
