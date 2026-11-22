@@ -38,7 +38,7 @@ enum Permissions {
         /// Cannot be told right now (Terminal is not running, an API is absent).
         case unknown
 
-        /// What the ❗ counts: everything that is known not to be granted.
+        /// What the ❌ counts: everything that is known not to be granted.
         var lacking: Bool { self == .missing || self == .notAsked }
     }
 
@@ -122,12 +122,52 @@ enum Permissions {
         readings.filter { entry($0.kind).required && $0.state.lacking }.count
     }
 
-    /// The row above Quit: today's `Built …` with everything granted.
+    /// **How a permission is shown: ❌ a required one that is missing, ⚠️ an optional one
+    /// that is not granted** (2026-11-22, Victor, asked whether Screen Recording and
+    /// Automation stay required: *"arată un ❌ pentru astea 2, un ⚠️ pentru celelalte"*).
+    /// The four required ones stay required. An optional one whose feature is switched
+    /// off in the app (`idle`) is neither: nobody is asking for it.
+    enum Mark: String {
+        case granted
+        /// ❌ — required and known not to be granted.
+        case missing
+        /// ⚠️ — optional, not granted, and its feature is on.
+        case warning
+        /// Optional, not granted, its feature switched off: no mark.
+        case idle
+        /// Cannot be told right now.
+        case unknown
+    }
+
+    static func mark(_ reading: Reading, idle: Set<Kind>) -> Mark {
+        switch reading.state {
+        case .granted: return .granted
+        case .unknown: return .unknown
+        case .missing, .notAsked:
+            if entry(reading.kind).required { return .missing }
+            return idle.contains(reading.kind) ? .idle : .warning
+        }
+    }
+
+    /// How many optional permissions wear the ⚠️. Never in the menu — the page only:
+    /// the camera is refused on purpose on many Macs, and Open at Login is a choice.
+    static func optionalOff(_ readings: [Reading], idle: Set<Kind>) -> Int {
+        readings.filter { mark($0, idle: idle) == .warning }.count
+    }
+
+    /// Why an idle permission is not needed, as the page says it.
+    static let idleNote: [Kind: String] = [.camera: "🙂 Read my face is off"]
+
+    /// The optional permissions whose feature is switched off in the app right now.
+    static func idleNow() -> Set<Kind> { FaceRead.enabled ? [] : [.camera] }
+
+    /// The row above Quit: today's `Built …` with everything granted. ❌ since
+    /// 2026-11-22 (❗ that morning); only the required ones ever change this row.
     static func rowTitle(missing: Int, build: String) -> String {
         switch missing {
         case ..<1: return "Built \(build)"
-        case 1: return "❗ 1 permission missing"
-        default: return "❗ \(missing) permissions missing"
+        case 1: return "❌ 1 permission missing"
+        default: return "❌ \(missing) permissions missing"
         }
     }
 
@@ -334,12 +374,12 @@ enum Permissions {
 
     /// What the chip says when a feature finds its permission missing.
     static func hintText(_ kind: Kind) -> String {
-        "❗ \(entry(kind).title) permission missing — the menu's ❗ row says why"
+        "❌ \(entry(kind).title) permission missing — the menu's ❌ row says why"
     }
 
     /// The one line at launch for everything refused.
     static func launchHint(_ titles: [String]) -> String {
-        "❗ Missing permission\(titles.count == 1 ? "" : "s"): \(titles.joined(separator: ", ")) — the menu's ❗ row says why"
+        "❌ Missing permission\(titles.count == 1 ? "" : "s"): \(titles.joined(separator: ", ")) — the menu's ❌ row says why"
     }
 
     /// Wired by `AppDelegate`: flash the hint. Called on main.
@@ -382,13 +422,16 @@ enum Permissions {
         let fakes = faked
         let real = Dictionary(uniqueKeysWithValues: catalogue.map { ($0.kind, read($0.kind)) })
         let missing = missingRequired(all)
+        let idle = idleNow()
         return ["permissions": all.map { r -> [String: Any] in
                     let e = entry(r.kind)
                     return ["id": r.kind.rawValue, "title": e.title, "required": e.required,
                             "state": r.state.rawValue, "real": real[r.kind]!.rawValue,
+                            "mark": mark(r, idle: idle).rawValue,
                             "faked": fakes[r.kind] != nil, "settings": e.settings]
                 },
                 "missingRequired": missing,
+                "optionalOff": optionalOff(all, idle: idle),
                 "row": rowTitle(missing: missing, build: StatusItem.buildStamp),
                 "page": PermissionsPage.describe()]
     }
@@ -406,6 +449,7 @@ enum PermissionsPage {
     private static var loaded = false
     private static var timer: Timer?
     private static var shown: [Permissions.Reading] = []
+    private static var shownIdle: Set<Permissions.Kind> = []
 
     /// Up, or brought forward, without activating the app.
     static func show() {
@@ -469,10 +513,12 @@ enum PermissionsPage {
     static func refresh(force: Bool = false) {
         guard let w = web, force || panel?.isVisible == true else { return }
         let now = Permissions.readings()
-        guard force || now != shown else { return }
+        let idle = Permissions.idleNow()
+        guard force || now != shown || idle != shownIdle else { return }
         shown = now
+        shownIdle = idle
         loaded = false
-        w.loadHTMLString(html(now, build: StatusItem.buildStamp), baseURL: nil)
+        w.loadHTMLString(html(now, build: StatusItem.buildStamp, idle: idle), baseURL: nil)
     }
 
     static func describe() -> [String: Any] {
@@ -504,23 +550,25 @@ enum PermissionsPage {
             .replacingOccurrences(of: ">", with: "&gt;").replacingOccurrences(of: "\"", with: "&quot;")
     }
 
-    /// An optional one that is not granted is a fact, not an alarm: grey, no red.
-    private static func badge(_ state: Permissions.State, required: Bool) -> String {
-        if !required, state.lacking {
-            return "<span class=\"badge dim\">– \(state == .notAsked ? "Not asked yet" : "Not granted")</span>"
-        }
-        switch state {
+    /// ❌ red for a required one that is missing, ⚠️ amber for an optional one not granted
+    /// (2026-11-22; optional ones were grey `– Not granted` that morning), nothing for an
+    /// optional one whose feature is off.
+    private static func badge(_ r: Permissions.Reading, _ mark: Permissions.Mark) -> String {
+        let notAsked = r.state == .notAsked
+        switch mark {
         case .granted: return "<span class=\"badge ok\">✓ Granted</span>"
-        case .missing: return "<span class=\"badge no\">✗ Missing</span>"
-        case .notAsked: return "<span class=\"badge ask\">✗ Not asked yet</span>"
+        case .missing: return "<span class=\"badge no\">❌ \(notAsked ? "Not asked yet" : "Missing")</span>"
+        case .warning: return "<span class=\"badge warn\">⚠️ \(notAsked ? "Not asked yet" : "Not granted")</span>"
+        case .idle: return "<span class=\"badge dim\">– Not needed: \(esc(Permissions.idleNote[r.kind] ?? "its feature is off"))</span>"
         case .unknown: return "<span class=\"badge dim\">– Cannot tell now</span>"
         }
     }
 
-    private static func row(_ r: Permissions.Reading) -> String {
+    private static func row(_ r: Permissions.Reading, idle: Set<Permissions.Kind>) -> String {
         let e = Permissions.entry(r.kind)
+        let mark = Permissions.mark(r, idle: idle)
         var more = ""
-        if r.state.lacking {
+        if mark == .missing || mark == .warning {
             let hint = r.state == .notAsked ? (e.notAskedHint ?? e.path) : e.path
             more = """
             <p class="without"><b>Without it:</b> \(esc(e.without))</p>
@@ -530,23 +578,27 @@ enum PermissionsPage {
             more = "<p class=\"without\">Terminal is not running, so macOS cannot say. Open Terminal and this row updates.</p>"
         }
         return """
-        <div class="row \(e.required ? r.state.rawValue : "optional")" id="\(r.kind.rawValue)">
-          <div class="head"><h3>\(esc(e.title))</h3>\(badge(r.state, required: e.required))</div>
+        <div class="row \(mark.rawValue)" id="\(r.kind.rawValue)">
+          <div class="head"><h3>\(esc(e.title))</h3>\(badge(r, mark))</div>
           <p class="why">\(esc(e.why))</p>\(more)
         </div>
         """
     }
 
-    static func html(_ readings: [Permissions.Reading], build: String) -> String {
+    /// `idle`: the optional permissions whose feature is off (`Permissions.idleNow`).
+    static func html(_ readings: [Permissions.Reading], build: String, idle: Set<Permissions.Kind> = []) -> String {
         let missing = Permissions.missingRequired(readings)
+        let off = Permissions.optionalOff(readings, idle: idle)
+        // The optional ones are said quietly, and only when nothing required is missing.
+        let quiet = off == 0 ? "" : " <span class=\"quiet\">⚠️ \(off) optional \(off == 1 ? "one is" : "ones are") off.</span>"
         let summary: String
         switch missing {
-        case 0: summary = "<p class=\"summary good\">✓ Every required permission is granted.</p>"
-        case 1: summary = "<p class=\"summary bad\">❗ 1 required permission is missing — what depends on it is off until you grant it.</p>"
-        default: summary = "<p class=\"summary bad\">❗ \(missing) required permissions are missing — what depends on them is off until you grant them.</p>"
+        case 0: summary = "<p class=\"summary good\">✓ Every required permission is granted.\(quiet)</p>"
+        case 1: summary = "<p class=\"summary bad\">❌ 1 required permission is missing — what depends on it is off until you grant it.</p>"
+        default: summary = "<p class=\"summary bad\">❌ \(missing) required permissions are missing — what depends on them is off until you grant them.</p>"
         }
         func group(_ title: String, _ required: Bool) -> String {
-            let rows = readings.filter { Permissions.entry($0.kind).required == required }.map(row).joined()
+            let rows = readings.filter { Permissions.entry($0.kind).required == required }.map { row($0, idle: idle) }.joined()
             return rows.isEmpty ? "" : "<h2>\(title)</h2>\(rows)"
         }
         let simulated = readings.contains { $0.faked } ? " · <b>simulated states</b> (test route)" : ""
@@ -582,10 +634,12 @@ enum PermissionsPage {
     .summary.bad { border-color:var(--red); color:var(--red); }
     .summary.good { color:var(--green); }
     .row { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 16px; margin-bottom:10px; }
-    .row.missing, .row.not-asked { border-color:var(--red); }
+    .row.missing { border-color:var(--red); }
+    .row.warning { border-color:var(--amber); }
+    .summary .quiet { color:var(--amber); font-weight:500; margin-left:6px; }
     .head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:3px; }
     .badge { font-weight:600; font-size:13px; white-space:nowrap; }
-    .ok { color:var(--green); } .no { color:var(--red); } .ask { color:var(--amber); } .dim { color:var(--mute); }
+    .ok { color:var(--green); } .no { color:var(--red); } .warn { color:var(--amber); } .dim { color:var(--mute); }
     .why { color:var(--mute); }
     .without { margin-top:6px; }
     .fix { display:flex; align-items:center; gap:12px; margin-top:10px; }
@@ -650,7 +704,7 @@ enum PermissionsPage {
     /// ordered in, so nothing reaches a screen. Main thread; `done` on main.
     static func png(_ readings: [Permissions.Reading], to path: String, width: CGFloat = 760,
                     dark: Bool = false, done: @escaping (Bool) -> Void) {
-        shoots.append(Shoot(html: html(readings, build: StatusItem.buildStamp), width: width, dark: dark,
+        shoots.append(Shoot(html: html(readings, build: StatusItem.buildStamp, idle: Permissions.idleNow()), width: width, dark: dark,
                             path: path, done: done))
     }
 

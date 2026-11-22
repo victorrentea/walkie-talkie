@@ -14604,7 +14604,7 @@ extension AppDelegate {
     /// **A missing permission switches its feature off, says so once, and the
     /// feature comes back when the grant does — without a restart.**
     ///
-    /// - The chip names what is missing and points at the menu's ❗ row
+    /// - The chip names what is missing and points at the menu's ❌ row
     ///   (`Permissions.onHint`) — at launch one line for all of them, later one
     ///   per feature that ran into it (rate-limited in `Permissions.hint`).
     /// - **Accessibility is watched**: while it is missing, every 2 s (one call,

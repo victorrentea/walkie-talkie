@@ -596,6 +596,22 @@ pagină, de ce permisiuni mai ai nevoie de dat și de ce ai nevoie de ele"*.
   (`Permissions.hint`, rate-limited per permission: 2 s for the dictation gesture, 60 s for pictures,
   5 min for Automation); at launch one line names everything refused, 2 s in. They replace
   `⚠️ grant Accessibility to Walkie Talkie` / `⚠️ grant Microphone …`.
+- **❌ a required one that is missing, ⚠️ an optional one not granted, nothing for one whose feature
+  is off** (2026-11-22, later the same day — Victor, asked whether Screen Recording and Automation
+  stay "required": *"arată un ❌ pentru astea 2, un ⚠️ pentru celelalte"*). Read as: the four required
+  ones stay required and wear ❌ (red; `not-asked` too); System Audio Recording Only, Camera and Open
+  at Login wear ⚠️ (amber badge and border, *Without it* + `Open Settings` as before) — they were grey
+  `– Not granted`. `Permissions.mark(_:idle:)` is the one decision (`granted｜missing｜warning｜idle｜unknown`).
+  **The ❗ is gone everywhere: the row above Quit is `❌ N permissions missing`**, the chip hints and
+  the page's banner say ❌ (the headings and older bullets here still say ❗ — same row).
+  **The menu row moves only for required ones** — the Camera is refused on purpose on many Macs and
+  Open at Login is a choice, so the ⚠️ lives on the page: per row, and quietly in the banner
+  (`✓ Every required permission is granted. ⚠️ 2 optional ones are off.`, only when nothing required
+  is missing). **Idle = its feature is switched off in the app** (`Permissions.idleNow`: Camera while
+  🙂 Read my face is unticked): `– Not needed: 🙂 Read my face is off`, no mark, no button, not counted.
+  A new optional permission with a switch goes into `idleNow` + `idleNote`. The page repaints when the
+  idle set changes too. `docs/readme/permissions-menu-row.png` still shows the ❗ (a menu cannot be
+  photographed without opening it on a screen — re-shoot in the guest).
 - **Guards read `Permissions.real`, never a fake** — a test route must not be able to switch his
   dictation off.
 - **The first click on `Open Settings` only brings the page forward** when another app is in front

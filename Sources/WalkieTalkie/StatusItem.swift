@@ -2060,9 +2060,11 @@ final class StatusItem: NSObject, NSMenuDelegate {
         Permissions.refreshAutomation { [weak self] in self?.applyPermissionsRow() }
     }
 
-    /// **❗ on the row above Quit while a required permission is missing**
+    /// **❌ on the row above Quit while a required permission is missing**
     /// (2026-11-22, Victor: *"un semn de exclamare dacă n-ai toate permisiunile
-    /// date"*) — `❗ 2 permissions missing`, and the click opens `PermissionsPage`.
+    /// date"*, then *"arată un ❌ pentru astea 2, un ⚠️ pentru celelalte"*) —
+    /// `❌ 2 permissions missing`, and the click opens `PermissionsPage`. The
+    /// optional ones' ⚠️ lives on the page only: this row never nags for them.
     /// With everything granted it is the plain `Built …` readout it was. Read at
     /// menu open only; no check here can raise a system dialog (`Permissions`).
     private var permissionsMissing = 0
