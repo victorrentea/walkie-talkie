@@ -1,0 +1,486 @@
+#!/usr/bin/env python3
+"""Assemble out/teaser-v1.mp4 from script.json, footage/, audio/ and music/.
+
+    python3 teaser/build.py            # everything: voices, timeline, video, mix, mux
+    python3 teaser/build.py --plan     # print the timeline only
+
+How a cut is made
+- Voices: tts.ensure() (cached per line).
+- Timeline: a scene lasts max(target, its speech + gaps), then its end moves to the
+  nearest beat of the music that still leaves room for the speech. Cuts are whole frames.
+- Picture, per scene: footage/<id>.mp4 (or takes <id>-a.mp4, <id>-b.mp4 ... cut one per
+  line), sped up / slowed down / trimmed to the scene; no clip -> a dark placeholder card.
+  A scene whose id ends in "-end" is the generated end card. Optional per-scene keys in
+  script.json: "trim": [in, out] seconds of the clip to use (per take: {"a": [in, out]}),
+  "speed": a fixed speed instead of the fitted one.
+- Subtitles: one full-frame PNG per line drawn with Pillow (Apple Color Emoji for the
+  microphone), overlaid for exactly the time its audio plays.
+- Sound: mixed in numpy -- voices at their timeline position, music ducked 12 dB under
+  speech with ramps, fades at both ends.
+Each scene renders to out/.work/<id>-<hash>.mp4 and is reused while nothing it depends on
+changed, so a rebuild after one new clip re-encodes one scene.
+"""
+from __future__ import annotations
+import hashlib
+import json
+import math
+import os
+import re
+import subprocess
+import sys
+import textwrap
+import wave
+from pathlib import Path
+
+import numpy as np
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import tts  # noqa: E402
+
+# TEASER_FOOTAGE / TEASER_OUT: another footage folder and output file (a dry run with
+# test clips, without touching the real cut).
+FOOTAGE = Path(os.environ.get("TEASER_FOOTAGE", HERE / "footage"))
+MUSIC_DIR, OUT = HERE / "music", HERE / "out"
+FINAL = Path(os.environ.get("TEASER_OUT", OUT / "teaser-v1.mp4"))
+WORK = OUT / ".work" if FINAL.parent == OUT else FINAL.parent / ".work"
+ICON = HERE.parent / "assets" / "walkie-bound.png"
+
+W, H, FPS = 1920, 1080, 30
+SR = 48000
+RENDER_VERSION = 3                 # bump to throw away every cached scene
+
+MUSIC = MUSIC_DIR / "brain-dance.mp3"
+MUSIC_BPM = 124.0                  # stated by the composer; confirmed by beat_grid()
+MUSIC_SKIP_BEATS = 4               # the track opens with a 2 s swell: start after it
+MUSIC_GAIN_DB = -4.5               # music level between lines
+DUCK_DB = -12.0                    # further drop under speech
+VOICE_RMS_DB = -19.0               # every voice clip is levelled to this
+MASTER_DB = 4.5                    # lift into the limiter: the cut lands near -15 LUFS
+
+LEAD, GAP, TAIL = 0.30, 0.28, 0.35  # silence before the first line / between / after
+BG = (11, 13, 18)
+WHITE, YELLOW = (255, 255, 255), (255, 214, 10)
+FONT = "/System/Library/Fonts/SFNS.ttf"
+EMOJI_FONT = "/System/Library/Fonts/Apple Color Emoji.ttc"
+MIC = "\U0001F399"
+
+
+def run(cmd: list[str]) -> None:
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode:
+        sys.exit(f"FAILED: {' '.join(cmd[:6])} ...\n{p.stderr[-3000:]}")
+
+
+def probe_duration(path: Path) -> float:
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                          "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                         capture_output=True, text=True, check=True).stdout
+    return float(out.strip().splitlines()[0])
+
+
+def decode(path: Path, sr: int = SR, ch: int = 2) -> np.ndarray:
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-ac", str(ch),
+                          "-ar", str(sr), "-f", "f32le", "-"], capture_output=True,
+                         check=True).stdout
+    return np.frombuffer(raw, np.float32).reshape(-1, ch).copy()
+
+
+# ---------------------------------------------------------------- music beat grid
+
+def beat_grid() -> tuple[float, float]:
+    """(seconds per beat, time of a beat near 0) measured on the track itself."""
+    cache = MUSIC_DIR / (MUSIC.stem + ".beat.json")
+    if cache.is_file() and cache.stat().st_mtime > MUSIC.stat().st_mtime:
+        d = json.loads(cache.read_text())
+        return d["period"], d["phase"]
+    sr, hop = 11025, 64
+    x = decode(MUSIC, sr, 1)[: sr * 120, 0]
+    n = len(x) // hop
+    env = np.sqrt((x[: n * hop].reshape(n, hop) ** 2).mean(1))
+    onset = np.maximum(0, np.diff(env))
+    fps = sr / hop
+    best = (0.0, MUSIC_BPM, 0.0)
+    for bpm in np.arange(MUSIC_BPM - 1.5, MUSIC_BPM + 1.5, 0.02):
+        period = 60 * fps / bpm
+        for ph in np.linspace(0, period, 40, endpoint=False):
+            idx = (ph + period * np.arange(int((len(onset) - ph) / period))).astype(int)
+            score = onset[idx].sum()
+            if score > best[0]:
+                best = (score, bpm, ph / fps)
+    period = 60 / best[1]
+    cache.write_text(json.dumps({"bpm": round(best[1], 2), "period": period,
+                                 "phase": best[2]}))
+    return period, best[2]
+
+
+# ---------------------------------------------------------------- timeline
+
+def chunks(line: dict) -> list[dict]:
+    """A long line's subtitle, one sentence at a time: [{text, at, dur}] inside the clip.
+
+    The boundary is the pause in the audio nearest to where the letters say it should be."""
+    text, dur = line["text"], line["dur"]
+    parts = re.split(r"(?<=[.?!])\s+", text) if len(text) > 55 else [text]
+    if len(parts) == 1:
+        return [{"text": text, "at": 0.0, "dur": dur}]
+    mono = decode(Path(line["file"]), 16000, 1)[:, 0]
+    rms = np.sqrt((mono[: len(mono) // 160 * 160].reshape(-1, 160) ** 2).mean(1))
+    quiet = rms < rms.max() * 0.06
+    pauses, i = [], 0                               # centres of pauses >= 0.1 s
+    while i < len(quiet):
+        j = i
+        while j < len(quiet) and quiet[j]:
+            j += 1
+        if j - i >= 10 and i > 0 and j < len(quiet):
+            pauses.append((i + j) / 2 / 100)
+        i = max(j, i + 1)
+    cost = [len(p) + 6 for p in parts]
+    cuts, acc = [0.0], 0
+    for c in cost[:-1]:
+        acc += c
+        guess = dur * acc / sum(cost)
+        near = min(pauses, key=lambda t: abs(t - guess), default=guess)
+        cuts.append(near if abs(near - guess) < 0.8 and near > cuts[-1] + 0.3 else guess)
+    cuts.append(dur)
+    return [{"text": p, "at": round(a, 3), "dur": round(b - a, 3)}
+            for p, a, b in zip(parts, cuts, cuts[1:])]
+
+
+def plan() -> tuple[list[dict], float]:
+    script = json.loads((HERE / "script.json").read_text())
+    by_scene: dict[str, list[dict]] = {}
+    for line in tts.ensure():
+        by_scene.setdefault(line["scene"], []).append(line)
+    period, phase = beat_grid()
+    music_start = phase % period + MUSIC_SKIP_BEATS * period   # the cut starts on a beat
+    scenes, t0 = [], 0                    # t0 in frames
+    for sc in script["scenes"]:
+        lines = by_scene.get(sc["id"], [])
+        speech = LEAD + sum(l["dur"] for l in lines) + GAP * max(0, len(lines) - 1) + TAIL
+        start = t0 / FPS
+        want = start + max(sc["target"], speech)
+        beat = round(want / period) * period
+        while beat < start + speech:
+            beat += period
+        end = round(beat * FPS)
+        dur = (end - t0) / FPS
+        # lines: spread over the scene, the spare time shared between the gaps
+        spare = dur - speech
+        lead = LEAD + min(spare * 0.25, 0.5)
+        gap = GAP + (min(spare * 0.5, 1.2) / (len(lines) - 1) if len(lines) > 1 else 0)
+        t, placed = lead, []
+        for l in lines:
+            placed.append({**l, "at": round(t, 3), "subs": chunks(l)})
+            t += l["dur"] + gap
+        scenes.append({**sc, "frames": end - t0, "start": start, "dur": dur,
+                       "lines": placed})
+        t0 = end
+    return scenes, music_start
+
+
+# ---------------------------------------------------------------- drawing
+
+def font(size: int, weight: str = "Bold") -> ImageFont.FreeTypeFont:
+    f = ImageFont.truetype(FONT, size)
+    try:
+        f.set_variation_by_name(weight)
+    except Exception:
+        pass
+    return f
+
+
+def emoji(size: int) -> Image.Image:
+    f = ImageFont.truetype(EMOJI_FONT, 160)       # the colour strike that exists
+    im = Image.new("RGBA", (220, 220), (0, 0, 0, 0))
+    ImageDraw.Draw(im).text((30, 30), MIC, font=f, embedded_color=True)
+    im = im.crop(im.getbbox())
+    if im.getbbox() is None or len(im.getcolors(100000) or []) < 20:
+        sys.exit("the microphone emoji did not render in colour")
+    k = size / im.height
+    return im.resize((max(1, round(im.width * k)), size), Image.LANCZOS)
+
+
+def wrap(text: str, f: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
+    words, lines, cur = text.split(), [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if f.getlength(trial) <= max_w or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = w
+    lines.append(cur)
+    if len(lines) == 2 and len(lines[1].split()) == 1 and len(lines[0].split()) > 3:
+        head = lines[0].split()                   # no orphan word on the second row
+        lines = [" ".join(head[:-1]), head[-1] + " " + lines[1]]
+    return lines
+
+
+def subtitle_png(text: str, who: str, path: Path) -> None:
+    size = 62
+    f = font(size, "Bold")
+    colour = YELLOW if who == "u" else WHITE
+    mic = emoji(round(size * 1.2)) if who == "u" else None
+    mic_w = (mic.width + 22) if mic else 0
+    rows = wrap(text, f, 1500 - mic_w)
+    line_h = round(size * 1.28)
+    widths = [f.getlength(r) for r in rows]
+    block_w = max(widths) + mic_w
+    block_h = line_h * len(rows)
+    pad_x, pad_y = 44, 24
+    box_w, box_h = block_w + 2 * pad_x, block_h + 2 * pad_y
+    x0, y0 = (W - box_w) / 2, H - 78 - box_h
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((x0, y0, x0 + box_w, y0 + box_h), 30,
+                                             fill=(0, 0, 0, 190))
+    im.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(6)))
+    d = ImageDraw.Draw(im)
+    for i, row in enumerate(rows):
+        row_w = widths[i] + (mic_w if i == 0 else 0)
+        x = (W - row_w) / 2
+        y = y0 + pad_y + i * line_h
+        if i == 0 and mic:
+            im.alpha_composite(mic, (round(x), round(y + (line_h - mic.height) / 2)))
+            x += mic_w
+        d.text((x, y + line_h / 2), row, font=f, fill=colour, anchor="lm",
+               stroke_width=3, stroke_fill=(0, 0, 0, 230))
+    im.save(path)
+
+
+def backdrop() -> Image.Image:
+    """Dark card background: a soft glow so it is visibly a card, not a dead frame."""
+    yy, xx = np.mgrid[0:H, 0:W]
+    r = np.hypot((xx - W / 2) / W, (yy - H * 0.42) / H)
+    glow = np.clip(1 - r * 1.9, 0, 1) ** 2
+    img = np.zeros((H, W, 3), np.float32)
+    for c in range(3):
+        img[..., c] = BG[c] + glow * (26, 30, 44)[c]
+    return Image.fromarray(img.astype(np.uint8), "RGB")
+
+
+def placeholder_png(scene: dict, path: Path) -> None:
+    im = backdrop()
+    d = ImageDraw.Draw(im)
+    d.text((W / 2, 300), scene["id"], font=font(84, "Heavy"), fill=(235, 238, 245),
+           anchor="mm")
+    d.text((W / 2, 372), "footage pending", font=font(30, "Medium"), fill=(255, 170, 40),
+           anchor="mm")
+    f = font(36, "Regular")
+    y = 450
+    for row in wrap(scene.get("shows", ""), f, 1300):
+        d.text((W / 2, y), row, font=f, fill=(150, 158, 175), anchor="mm")
+        y += 50
+    im.save(path)
+
+
+def endcard_png(path: Path) -> None:
+    im = backdrop().convert("RGBA")
+    d = ImageDraw.Draw(im)
+    y = 300
+    if ICON.is_file():
+        icon = Image.open(ICON).convert("RGBA").resize((300, 300), Image.LANCZOS)
+        im.alpha_composite(icon, ((W - 300) // 2, 110))
+        y = 500
+    d.text((W / 2, y), "Walkie Talkie", font=font(124, "Heavy"), fill=WHITE, anchor="mm")
+    d.text((W / 2, y + 110), "Free  ·  open source  ·  macOS", font=font(48, "Medium"),
+           fill=(255, 176, 32), anchor="mm")
+    d.text((W / 2, y + 196), "github.com/victorrentea/walkie-talkie",
+           font=font(44, "Regular"), fill=(190, 198, 214), anchor="mm")
+    im.convert("RGB").save(path)
+
+
+# ---------------------------------------------------------------- picture
+
+def takes_for(scene_id: str) -> list[Path]:
+    single = FOOTAGE / f"{scene_id}.mp4"
+    takes = sorted(FOOTAGE.glob(f"{scene_id}-[a-z].mp4"))
+    return takes or ([single] if single.is_file() else [])
+
+
+def slots(scene: dict, n: int) -> list[float]:
+    """Seconds each of n takes gets: one per line when they match, else equal shares."""
+    lines, dur = scene["lines"], scene["dur"]
+    if n == 1:
+        return [dur]
+    if n == len(lines):
+        cuts = [0.0] + [max(0.0, l["at"] - 0.2) for l in lines[1:]] + [dur]
+    else:
+        cuts = [dur * i / n for i in range(n + 1)]
+    frames = [round(c * FPS) for c in cuts]
+    return [(b - a) / FPS for a, b in zip(frames, frames[1:])]
+
+
+def fit(clip: float, slot: float, forced: float | None) -> float:
+    """Playback speed for a clip of `clip` seconds in a slot of `slot` seconds."""
+    if forced:
+        return forced
+    return min(3.0, max(0.75, clip / slot))       # beyond that: trim, or hold last frame
+
+
+def render_scene(scene: dict) -> tuple[Path, bool]:
+    WORK.mkdir(parents=True, exist_ok=True)
+    sid = scene["id"]
+    is_end = sid.endswith("-end")
+    takes = [] if is_end else takes_for(sid)
+    stat = [(p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in takes]
+    icon = ICON.stat().st_mtime_ns if is_end and ICON.is_file() else 0
+    key = hashlib.sha256(json.dumps([RENDER_VERSION, scene, stat, icon],
+                                    sort_keys=True).encode()).hexdigest()[:12]
+    out = WORK / f"{sid}-{key}.mp4"
+    if out.is_file():
+        return out, bool(takes)
+    for old in WORK.glob(f"{sid}-*"):
+        old.unlink()
+
+    dur = scene["dur"]
+    inputs: list[str] = []
+    chains: list[str] = []
+    norm = (f"fps={FPS},scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,"
+            f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=0x0b0d12,setsar=1,format=yuv420p")
+    if takes:
+        share = slots(scene, len(takes))
+        trims = scene.get("trim")
+        for i, (take, slot) in enumerate(zip(takes, share)):
+            tr = trims.get(take.stem[-1]) if isinstance(trims, dict) else trims
+            a, b = tr if tr else (0.0, probe_duration(take))
+            speed = fit(b - a, slot, scene.get("speed"))
+            inputs += ["-i", str(take)]
+            chains.append(
+                f"[{i}:v]trim={a}:{b},setpts=(PTS-STARTPTS)/{speed:.4f},{norm},"
+                f"tpad=stop_mode=clone:stop_duration={slot + 1:.3f},"
+                f"trim=duration={slot:.4f},setpts=PTS-STARTPTS[t{i}]")
+        n = len(takes)
+        if n > 1:
+            chains.append("".join(f"[t{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v0]")
+        else:
+            chains.append("[t0]null[v0]")
+    else:
+        card = WORK / f"{sid}-card.png"
+        endcard_png(card) if is_end else placeholder_png(scene, card)
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(card)]
+        fade = ",fade=t=in:st=0:d=0.25" if is_end else ""
+        chains.append(f"[0:v]{norm}{fade}[v0]")
+        n = 1
+
+    last = "v0"
+    subs = [(line["who"], line["at"] + c["at"], c["dur"], c["text"])
+            for line in scene["lines"] for c in line["subs"]]
+    for j, (who, at, sub_dur, text) in enumerate(subs):
+        png = WORK / f"{sid}-sub{j}.png"
+        subtitle_png(text, who, png)
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(png)]
+        a = max(0.0, at - 0.05)
+        nxt = subs[j + 1][1] - 0.05 if j + 1 < len(subs) else dur
+        b = min(dur, at + sub_dur + 0.25, nxt)
+        chains.append(f"[{last}][{n + j}:v]overlay=0:0:enable='between(t,{a:.3f},{b:.3f})'"
+                      f"[v{j + 1}]")
+        last = f"v{j + 1}"
+    if is_end:
+        chains.append(f"[{last}]fade=t=out:st={dur - 0.5:.3f}:d=0.5[vf]")
+        last = "vf"
+
+    run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", ";".join(chains),
+         "-map", f"[{last}]", "-frames:v", str(scene["frames"]), "-r", str(FPS),
+         "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+         "-video_track_timescale", "15360", "-an", str(out)])
+    return out, bool(takes)
+
+
+# ---------------------------------------------------------------- sound
+
+def mix(scenes: list[dict], music_start: float, total: float, out: Path) -> None:
+    n = int(round(total * SR))
+    voice = np.zeros((n, 2), np.float32)
+    duck = np.zeros(n, np.float32)                 # 1 where speech is
+    spans = []
+    for sc in scenes:
+        for l in sc["lines"]:
+            clip = decode(Path(l["file"]))
+            mono = clip.mean(1)
+            frame = mono[: len(mono) // 480 * 480].reshape(-1, 480)
+            rms = np.sqrt((frame ** 2).mean(1))
+            loud = rms[rms > rms.max() * 0.1]
+            gain = 10 ** (VOICE_RMS_DB / 20) / max(1e-4, float(np.sqrt((loud ** 2).mean())))
+            at = int(round((sc["start"] + l["at"]) * SR))
+            clip = clip[: n - at] * gain
+            voice[at: at + len(clip)] += clip
+            spans.append((sc["start"] + l["at"], sc["start"] + l["at"] + l["dur"]))
+    merged: list[list[float]] = []
+    for a, b in sorted(spans):                     # no pumping in the short gaps
+        if merged and a - merged[-1][1] < 0.7:
+            merged[-1][1] = b
+        else:
+            merged.append([a, b])
+    for a, b in merged:
+        duck[max(0, int((a - 0.12) * SR)): int((b + 0.10) * SR)] = 1
+    ramp = int(0.22 * SR)
+    kernel = np.hanning(ramp * 2 + 1).astype(np.float32)
+    duck = np.convolve(duck, kernel / kernel.sum(), "same")
+    env = 10 ** ((MUSIC_GAIN_DB + DUCK_DB * duck) / 20)
+
+    music = decode(MUSIC)[int(music_start * SR):]
+    if len(music) < n:
+        music = np.tile(music, (math.ceil(n / len(music)), 1))
+    music = music[:n] * env[:, None]
+    fade_in, fade_out = int(0.12 * SR), int(1.6 * SR)
+    music[:fade_in] *= np.linspace(0, 1, fade_in)[:, None] ** 2
+    music[-fade_out:] *= np.linspace(1, 0, fade_out)[:, None] ** 2
+
+    m = (voice + music) * 0.5                      # headroom; main() limits and lifts it
+    pcm = (np.clip(m, -1, 1) * 32767).astype("<i2")
+    with wave.open(str(out), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(SR)
+        w.writeframes(pcm.tobytes())
+
+
+# ---------------------------------------------------------------- main
+
+def main() -> None:
+    if not MUSIC.is_file():
+        sys.exit(f"missing {MUSIC} -- see teaser/README.md for where it comes from")
+    scenes, music_start = plan()
+    total = sum(s["frames"] for s in scenes) / FPS
+    period, _ = beat_grid()
+    print(f"music {60 / period:.2f} BPM, starts at {music_start:.3f}s of the track")
+    for s in scenes:
+        clips = "end card" if s["id"].endswith("-end") else (
+            ", ".join(p.name for p in takes_for(s["id"])) or "PLACEHOLDER")
+        print(f"{s['start']:6.2f}s  {s['id']:11} {s['dur']:5.2f}s "
+              f"(target {s['target']}, {s['dur'] / period:.1f} beats)  {clips}")
+        for l in s["lines"]:
+            print(f"           {l['who']} +{l['at']:.2f}s {l['dur']:.2f}s  "
+                  + " | ".join(c["text"] for c in l["subs"]))
+    print(f"total {total:.2f}s")
+    if "--plan" in sys.argv:
+        return
+
+    WORK.mkdir(parents=True, exist_ok=True)
+    parts, real = [], 0
+    for s in scenes:
+        path, has_footage = render_scene(s)
+        parts.append(path)
+        real += has_footage
+    listing = WORK / "concat.txt"
+    listing.write_text("".join(f"file '{p}'\n" for p in parts))
+    wav = WORK / "mix.wav"
+    mix(scenes, music_start, total, wav)
+    run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
+         "-i", str(wav), "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+         "-af", f"volume={6 + MASTER_DB}dB,alimiter=limit=0.89:attack=4:release=60:level=false",
+         "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(FINAL)])
+    keep = {p.name for p in parts}
+    for old in WORK.glob("s*-????????????.mp4"):
+        if old.name not in keep:
+            old.unlink()
+    cards = sum(1 for s in scenes if not s["id"].endswith("-end")) - real
+    print(f"{FINAL}  {total:.2f}s  footage: {real} scenes, placeholders: {cards}, "
+          f"end card: 1")
+
+
+if __name__ == "__main__":
+    main()
