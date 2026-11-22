@@ -372,17 +372,26 @@ def note_png(note: dict, path: Path) -> None:
 
 
 def struck_png(st: dict, path: Path) -> None:
-    """What was first heard, struck through in red above the corrected word: {text, over: [x, y, w, h]}."""
+    """What was first heard, struck through in red above the corrected word: {text, over: [x, y, w, h]}.
+
+    Optional: size (font px), lift (px between the word's top and the label's bottom, default
+    clear of a text box's border)."""
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     x, y, w, h = st["over"]
-    f = font(st.get("size", max(30, round(h * 1.05))), "Bold")
+    size = st.get("size", max(34, round(h * 1.2)))
+    f = font(size, "Bold")
     tw = f.getlength(st["text"])
-    cx, cy = x + w / 2, y - h * 0.75
-    d.rounded_rectangle((cx - tw / 2 - 14, cy - h * 0.7, cx + tw / 2 + 14, cy + h * 0.7), 10,
-                        fill=(20, 20, 24, 235))
-    d.text((cx, cy), st["text"], font=f, fill=(255, 69, 58, 255), anchor="mm")
-    d.line([(cx - tw / 2 - 6, cy + 2), (cx + tw / 2 + 6, cy + 2)], fill=(255, 69, 58, 255), width=5)
+    half = size * 0.72
+    cx, cy = x + w / 2, y - st.get("lift", 44) - half
+    d.rounded_rectangle((cx - tw / 2 - 18, cy - half, cx + tw / 2 + 18, cy + half), 12,
+                        fill=(20, 20, 24, 240), outline=(255, 69, 58, 255), width=2)
+    d.text((cx, cy), st["text"], font=f, fill=(255, 150, 142, 255), anchor="mm")
+    # a thin line, so the misheard word stays readable under it
+    d.line([(cx - tw / 2 - 8, cy + 2), (cx + tw / 2 + 8, cy + 2)], fill=(255, 59, 48, 255),
+           width=max(3, size // 14))
+    d.polygon([(cx - 10, cy + half), (cx + 10, cy + half), (cx, cy + half + 12)],
+              fill=(255, 69, 58, 255))                 # a small pointer down to the word
     im.save(path)
 
 

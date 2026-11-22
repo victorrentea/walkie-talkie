@@ -1,67 +1,63 @@
 {
- "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; blur = [x, y, w, h] smears that region of the source; mask = \"readout\" finds the yellow wheel-drag box in this cut and paints out its size badges and key hint as they move (unused since the takes hide them); line = index of the scene's line this cut starts under, or [line, part] for a part of a split line (cuts that follow share the time up to the next placed cut and are stretched together to fill it); start = seconds into the scene where this cut starts, instead of line; sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech; _at gives a scene's line start times by hand, one per line, and a list for a line splits it at its punctuation into that many parts, each with its own start (null = where the voice puts it).",
- "_target": {"s01-hook": 7.2, "s02-site": 6.0, "s03-move": 8.2, "s04-point": 19.3, "s06-review": 4.8, "s07-modes": 18.7, "s08-ask": 9.6, "s09-cost": 7.6, "s10-end": 4.3},
+ "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; blur = [x, y, w, h] smears that region of the source; mask = \"readout\" finds the yellow wheel-drag box in this cut and paints out its size badges and key hint as they move (unused since the takes hide them); line = index of the scene's line this cut starts under, or [line, part] for a part of a split line (cuts that follow share the time up to the next placed cut and are stretched together to fill it); start = seconds into the scene where this cut starts, instead of line; sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech; _at gives a scene's line start times by hand, one per line, and a list for a line splits it at its punctuation into that many parts, each with its own start (null = where the voice puts it). note = {text, point: [x, y], from: left|right|up|down, after: s} draws a yellow caption with an arrow to that point during the cut; struck = {text, over: [x, y, w, h], after: s} draws red struck-through text above that rect. v7: no crop anywhere (whole screen), every cut placed by start + speed.",
+ "_target": {"s01-hook": 7.26, "s02-site": 6.77, "s03-move": 7.26, "s04-point": 10.65, "s06-review": 4.84, "s07-modes": 19.35, "s08-ask": 9.6, "s09-cost": 7.6, "s10-end": 4.3},
  "_tight": [],
  "_at": {
-  "s01-hook": [0.3, 3.5],
-  "s03-move": [1.6, 4.9],
-  "s04-point": [[2.5, 8.9], 15.2],
-  "s07-modes": [0.3, 3.3, 6.5, 8.2, 9.6, [12.0, null]],
+  "s01-hook": [0.3, [3.65, 4.8]],
+  "s02-site": [0.3, 3.15],
+  "s03-move": [1.15, 3.65],
+  "s04-point": [[1.4, 3.2], 5.0],
+  "s06-review": [0.3],
+  "s07-modes": [0.3, 3.6, 6.85, 8.6, 10.75, [13.9, null]],
   "s08-ask": [0.35, 4.3]
  },
  "s01-hook": [
-  {"in": 0.6, "out": 3.8, "line": 0},
-  {"in": 4.0, "out": 5.9, "crop": [782, 440, 1138, 640], "line": 1, "speed": 1.0},
-  {"in": 9.7, "out": 11.6}
+  {"in": 1.5, "out": 4.9, "start": 0, "speed": 1.0},
+  {"in": 5.3, "out": 7.0, "start": 3.4, "speed": 1.0},
+  {"in": 9.9, "out": 12.39, "start": 5.1, "speed": 1.15}
  ],
  "s02-site": [
-  {"in": 5.4, "out": 8.6, "line": 0},
-  {"in": 15.9, "out": 17.3, "line": 1},
-  {"in": 21.0, "out": 21.85, "crop": [0, 150, 1280, 720], "speed": 1.0}
+  {"in": 2.5, "out": 6.28, "start": 0, "speed": 1.26},
+  {"in": 15.1, "out": 17.5, "start": 3.0, "speed": 1.85},
+  {"in": 17.5, "out": 19.97, "start": 4.3, "speed": 1.0, "note": {"text": "Cost of completed task", "point": [1281, 466], "from": "down", "after": 0.15}}
  ],
  "s03-move": [
-  {"in": 8.9, "out": 12.1, "speed": 2.6},
-  {"in": 13.8, "out": 20.4, "line": 0},
-  {"in": 20.4, "out": 21.0, "line": 1},
-  {"in": 26.9, "out": 29.3},
-  {"in": 33.6, "out": 34.45, "crop": [60, 150, 1280, 720], "speed": 1.0}
+  {"in": 3.2, "out": 7.75, "start": 0, "speed": 1.3},
+  {"in": 15.9, "out": 17.9, "start": 3.5, "speed": 1.0},
+  {"in": 27.2, "out": 28.97, "start": 5.5, "speed": 1.0}
  ],
  "s04-point": [
-  {"in": 10.2, "out": 14.4, "crop": [0, 322, 1280, 720], "speed": 1.15},
-  {"in": 24.0, "out": 29.9, "speed": 1.15},
-  {"in": 38.6, "out": 43.4, "crop": [0, 100, 1280, 720], "speed": 1.2},
-  {"in": 52.6, "out": 55.2, "crop": [0, 104, 1456, 819], "speed": 1.1},
-  {"in": 63.0, "out": 66.0},
-  {"in": 67.9, "out": 68.75, "crop": [0, 150, 1280, 720], "speed": 1.0}
+  {"in": 6.6, "out": 8.92, "start": 0, "speed": 1.6},
+  {"in": 8.92, "out": 9.47, "start": 1.45, "speed": 1.0},
+  {"in": 11.55, "out": 12.25, "start": 2.0, "speed": 1.75},
+  {"in": 13.28, "out": 14.18, "start": 2.4, "speed": 1.0},
+  {"in": 14.85, "out": 16.3, "start": 3.3, "speed": 1.0},
+  {"in": 19.3, "out": 23.9, "start": 4.75, "speed": 1.0},
+  {"in": 28.6, "out": 29.88, "start": 9.35, "speed": 1.0}
  ],
  "s05-film": [
   {"in": 6.0, "out": 10.4}
  ],
  "s06-review": [
-  {"in": 10.4, "out": 12.8, "crop": [300, 180, 1280, 720]},
-  {"in": 20.0, "out": 22.2, "crop": [300, 180, 1280, 720], "start": 2.9}
+  {"in": 3.0, "out": 6.2, "start": 0, "speed": 1.0},
+  {"in": 13.9, "out": 15.53, "start": 3.2, "speed": 1.0}
  ],
  "s07-modes": [
-  {"clip": "s07-modes-e", "in": 5.0, "out": 6.5, "line": 0},
-  {"clip": "s07-modes-e", "in": 11.9, "out": 13.4, "crop": [640, 360, 1280, 720], "sub": "top"},
-  {"clip": "s07-modes-a", "in": 3.4, "out": 5.2, "crop": [820, 480, 1120, 630], "line": 1, "speed": 1.0},
-  {"clip": "s07-modes-a", "in": 20.6, "out": 22.0, "crop": [700, 250, 1220, 686]},
-  {"clip": "s07-modes-b", "in": 2.6, "out": 5.4, "crop": [300, 0, 1620, 911], "line": 2, "sub": "top"},
-  {"clip": "s07-modes-c", "in": 3.0, "out": 4.2, "crop": [330, 110, 1280, 720], "line": 4},
-  {"clip": "s07-modes-c", "in": 6.0, "out": 7.2, "crop": [300, 640, 782, 440], "sub": "top"},
-  {"clip": "s07-modes-d", "in": 6.6, "out": 8.7, "line": [5, 0], "speed": 1.0, "sub": "top"},
-  {"clip": "s07-modes-d", "in": 13.1, "out": 13.9, "crop": [860, 640, 768, 432], "sub": "top"},
-  {"clip": "s07-modes-d", "in": 14.2, "out": 15.5, "crop": [860, 640, 768, 432], "sub": "top"},
-  {"clip": "s07-modes-d", "in": 15.8, "out": 19.2, "crop": [330, 518, 1000, 562], "start": 16.4, "sub": "top"}
+  {"clip": "s07-modes-e", "in": 3.9, "out": 5.3, "start": 0, "speed": 1.0},
+  {"clip": "s07-modes-e", "in": 10.0, "out": 12.6, "start": 1.4, "speed": 1.3},
+  {"clip": "s07-modes-a", "in": 4.7, "out": 6.5, "start": 3.4, "speed": 1.2},
+  {"clip": "s07-modes-a", "in": 19.3, "out": 21.64, "start": 4.9, "speed": 1.3},
+  {"clip": "s07-modes-b", "in": 0.2, "out": 1.61, "start": 6.7, "speed": 0.64},
+  {"clip": "s07-modes-b", "in": 1.6, "out": 3.3, "start": 8.9, "speed": 1.0},
+  {"clip": "s07-modes-c", "in": 2.3, "out": 3.8, "start": 10.6, "speed": 1.0, "sub": "top"},
+  {"clip": "s07-modes-c", "in": 10.7, "out": 12.3, "start": 12.1, "speed": 1.0, "sub": "top"},
+  {"clip": "s07-modes-d", "in": 4.3, "out": 5.8, "start": 13.7, "speed": 1.0, "sub": "top"},
+  {"clip": "s07-modes-d", "in": 10.2, "out": 13.0, "start": 15.2, "speed": 1.75, "sub": "top"},
+  {"clip": "s07-modes-d", "in": 13.0, "out": 15.57, "start": 16.8, "speed": 1.0, "sub": "top", "struck": {"text": "Resilience 4G", "over": [786, 836, 198, 44], "after": 0.4}}
  ],
  "s08-ask": [
   {"in": 6.6, "out": 10.2, "line": 0},
-  {"in": 22.0, "out": 23.3, "crop": [760, 420, 1120, 630], "line": 1, "speed": 1.0},
-  {"in": 29.0, "out": 32.9, "crop": [760, 420, 1120, 630]}
- ],
- "s09-cost": [
-  {"in": 5.0, "out": 8.4, "line": 0},
-  {"in": 9.2, "out": 12.7, "crop": [400, 200, 1520, 855], "line": [1, 0]},
-  {"in": 15.0, "out": 17.4, "crop": [400, 330, 1280, 720], "line": [1, 1]}
+  {"in": 22.0, "out": 23.3, "line": 1, "speed": 1.0},
+  {"in": 29.0, "out": 32.9}
  ]
 }

@@ -13,13 +13,19 @@ import build
 
 NAMES = {"s01": "1 · hook", "s02": "2 · site", "s03": "3 · move", "s04": "4 · point",
          "s05": "5 · film", "s06": "6 · code review", "s07": "7 · destinations",
-         "s08": "8 · question", "s09": "9 · cost", "s10": "10 · end"}
+         "s08": "8 · question", "s09": "9 · checklist", "s10": "10 · end"}
 SUB = {"e": "7e · session in the back", "a": "7a · new session", "b": "7b · wake word",
        "c": "7c · at the cursor", "d": "7d · clean dictation"}
 
 
 def spans() -> list[tuple[float, float, str]]:
     cuts = json.loads((build.WORK / "cutlist.json").read_text())
+    filmed = {c["scene"] for c in cuts}
+    for s in build.plan()[0]:                       # generated cards (checklist, end) have no cuts
+        if s["id"] not in filmed:
+            cuts.append({"scene": s["id"], "clip": s["id"], "from": round(s["start"], 2),
+                         "to": round(s["start"] + s["dur"], 2)})
+    cuts.sort(key=lambda c: c["from"])
     out: list[tuple[float, float, str]] = []
     for c in cuts:
         clip = c["clip"]
@@ -47,7 +53,7 @@ def main() -> None:
     sp = spans()
     dur = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries",
                 "format=duration", "-of", "csv=p=0", str(src)]).strip())
-    sp.append((sp[-1][1], dur, NAMES["s10"]))
+    sp[-1] = (sp[-1][0], dur, sp[-1][2])
     inputs, chains, last = ["-i", str(src)], [], "0:v"
     for i, (a, b, name) in enumerate(sp):
         p = build.WORK / f"label-{i}.png"
