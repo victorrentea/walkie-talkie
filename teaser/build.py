@@ -36,7 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
-CUT_VERSION = 3                    # the file is out/teaser-v<N>.mp4
+CUT_VERSION = 4                    # the file is out/teaser-v<N>.mp4
 sys.path.insert(0, str(HERE))
 import tts  # noqa: E402
 
@@ -51,7 +51,7 @@ ICON = HERE.parent / "assets" / "walkie-bound.png"
 
 W, H, FPS = 1920, 1080, 30
 SR = 48000
-RENDER_VERSION = 4                 # bump to throw away every cached scene
+RENDER_VERSION = 5                 # bump to throw away every cached scene
 
 MUSIC = MUSIC_DIR / "brain-dance.mp3"
 MUSIC_BPM = 124.0                  # stated by the composer; confirmed by beat_grid()
@@ -119,12 +119,16 @@ def beat_grid() -> tuple[float, float]:
 
 # ---------------------------------------------------------------- timeline
 
-def chunks(line: dict) -> list[dict]:
+def chunks(line: dict, force: int = 0) -> list[dict]:
     """A long line's subtitle, one sentence at a time: [{text, at, dur}] inside the clip.
 
     The boundary is the pause in the audio nearest to where the letters say it should be."""
     text, dur = line["text"], line["dur"]
     parts = re.split(r"(?<=[.?!])\s+", text) if len(text) > 55 else [text]
+    if force:                                       # cuts.json asked for this many parts
+        parts = re.split(r"(?<=[.?!,;:])\s+", text)
+        if len(parts) != force:
+            sys.exit(f"cannot split {text!r} into {force} parts at its punctuation")
     if len(parts) == 1:
         return [{"text": text, "at": 0.0, "dur": dur}]
     mono = decode(Path(line["file"]), 16000, 1)[:, 0]
@@ -166,20 +170,34 @@ def plan() -> tuple[list[dict], float]:
         sc = {**sc, "target": 0 if tight else edit.get("_target", {}).get(sc["id"], sc["target"])}
         speech = lead_in + sum(l["dur"] for l in lines) + GAP * max(0, len(lines) - 1) + tail
         start = t0 / FPS
+        fixed = edit.get("_at", {}).get(sc["id"])
+        placed = []
+        if fixed:                                   # line (and part) start times given by hand
+            for l, spec in zip(lines, fixed):
+                if isinstance(spec, list):
+                    subs = chunks(l, force=len(spec))
+                    for c, t in zip(subs, spec):
+                        c["shift"] = round(t - (spec[0] + c["at"]), 3)
+                    placed.append({**l, "at": spec[0], "subs": subs})
+                else:
+                    placed.append({**l, "at": spec, "subs": chunks(l)})
+            speech = max(l["at"] + c["at"] + c.get("shift", 0) + c["dur"]
+                         for l in placed for c in l["subs"]) + tail
         want = start + max(sc["target"], speech)
         beat = round(want / period) * period
         while beat < start + speech:
             beat += period
         end = round(beat * FPS)
         dur = (end - t0) / FPS
-        # lines: spread over the scene, the spare time shared between the gaps
-        spare = dur - speech
-        lead = lead_in + min(spare * 0.25, 0.5)
-        gap = GAP + (min(spare * 0.5, 1.2) / (len(lines) - 1) if len(lines) > 1 else 0)
-        t, placed = lead, []
-        for l in lines:
-            placed.append({**l, "at": round(t, 3), "subs": chunks(l)})
-            t += l["dur"] + gap
+        if not fixed:
+            # lines: spread over the scene, the spare time shared between the gaps
+            spare = dur - speech
+            lead = lead_in + min(spare * 0.25, 0.5)
+            gap = GAP + (min(spare * 0.5, 1.2) / (len(lines) - 1) if len(lines) > 1 else 0)
+            t = lead
+            for l in lines:
+                placed.append({**l, "at": round(t, 3), "subs": chunks(l)})
+                t += l["dur"] + gap
         scenes.append({**sc, "frames": end - t0, "start": start, "dur": dur,
                        "lines": placed})
         t0 = end
@@ -327,10 +345,19 @@ def segments_for(scene: dict) -> list[dict]:
                 for i, p in enumerate(takes)]
     if not segs:
         return []
+    def line_time(ref) -> float:
+        i, j = ref if isinstance(ref, list) else (ref, 0)
+        c = lines[i]["subs"][j]
+        return max(0.0, lines[i]["at"] + c["at"] + c.get("shift", 0) - (0.25 if j == 0 else 0.1))
+
     groups: list[tuple[float, list[dict]]] = []      # (start time, cuts)
     for seg in segs:
-        if "line" in seg and groups and seg["line"] < len(lines):
-            groups.append((max(0.0, lines[seg["line"]]["at"] - 0.25), [seg]))
+        ref = seg.get("line")
+        ok = ref is not None and (ref[0] if isinstance(ref, list) else ref) < len(lines)
+        if "start" in seg:
+            groups.append((seg["start"], [seg]))
+        elif ok and groups:
+            groups.append((line_time(ref), [seg]))
         elif not groups:
             groups.append((0.0, [seg]))
         else:
@@ -380,8 +407,14 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
             inputs += ["-ss", f"{sg['in']:.3f}", "-t", f"{sg['out'] - sg['in'] + 0.5:.3f}",
                        "-i", str(FOOTAGE / f"{sg['clip']}.mp4")]
             crop = "crop={2}:{3}:{0}:{1},".format(*sg["crop"]) if sg.get("crop") else ""
+            src = f"[{i}:v]"
+            if sg.get("blur"):                      # smear a region of the source (x, y, w, h)
+                bx, by, bw, bh = sg["blur"]
+                chains.append(f"[{i}:v]split[b{i}a][b{i}b];[b{i}b]crop={bw}:{bh}:{bx}:{by},"
+                              f"boxblur=8:3[b{i}c];[b{i}a][b{i}c]overlay={bx}:{by}[b{i}]")
+                src = f"[b{i}]"
             chains.append(
-                f"[{i}:v]setpts=(PTS-STARTPTS)/{sg['speed']:.4f},{crop}{norm},"
+                f"{src}setpts=(PTS-STARTPTS)/{sg['speed']:.4f},{crop}{norm},"
                 f"tpad=stop_mode=clone:stop_duration={sg['dur'] + 1:.3f},"
                 f"trim=duration={sg['dur']:.4f},setpts=PTS-STARTPTS[t{i}]")
         n = len(segs)
@@ -395,7 +428,8 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
         n = 1
 
     last = "v0"
-    subs = [(line["who"], line["at"] + c["at"], c["dur"], c["text"], line.get("tag"))
+    subs = [(line["who"], line["at"] + c["at"] + c.get("shift", 0), c["dur"], c["text"],
+             line.get("tag"))
             for line in scene["lines"] for c in line["subs"]]
     if is_end:
         subs = []   # the end card says it in its own type; no subtitle over it
@@ -437,11 +471,20 @@ def mix(scenes: list[dict], music_start: float, total: float, out: Path) -> None
             frame = mono[: len(mono) // 480 * 480].reshape(-1, 480)
             rms = np.sqrt((frame ** 2).mean(1))
             loud = rms[rms > rms.max() * 0.1]
-            gain = 10 ** (VOICE_RMS_DB / 20) / max(1e-4, float(np.sqrt((loud ** 2).mean())))
-            at = int(round((sc["start"] + l["at"]) * SR))
-            clip = clip[: n - at] * gain
-            voice[at: at + len(clip)] += clip
-            spans.append((sc["start"] + l["at"], sc["start"] + l["at"] + l["dur"]))
+            clip *= 10 ** (VOICE_RMS_DB / 20) / max(1e-4, float(np.sqrt((loud ** 2).mean())))
+            moved = any(c.get("shift") for c in l["subs"])
+            parts = l["subs"] if moved else [{"at": 0.0, "dur": l["dur"]}]
+            for c in parts:                        # a line split by hand plays part by part
+                piece = clip[int(c["at"] * SR): int((c["at"] + c["dur"]) * SR)].copy()
+                if moved:
+                    f = min(int(0.012 * SR), len(piece) // 2)
+                    piece[:f] *= np.linspace(0, 1, f)[:, None]
+                    piece[-f:] *= np.linspace(1, 0, f)[:, None]
+                t = sc["start"] + l["at"] + c["at"] + c.get("shift", 0)
+                at = int(round(t * SR))
+                piece = piece[: n - at]
+                voice[at: at + len(piece)] += piece
+                spans.append((t, t + c["dur"]))
     merged: list[list[float]] = []
     for a, b in sorted(spans):                     # no pumping in the short gaps
         if merged and a - merged[-1][1] < 0.7:
@@ -516,7 +559,7 @@ def main() -> None:
     mix(scenes, music_start, total, wav)
     run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(listing),
          "-i", str(wav), "-map", "0:v", "-map", "1:a", "-c:v", "copy",
-         "-af", f"volume={6 + MASTER_DB}dB,alimiter=limit=0.89:attack=4:release=60:level=false",
+         "-af", f"volume={6 + MASTER_DB}dB,alimiter=limit=0.84:attack=4:release=60:level=false",
          "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart", str(FINAL)])
     small = FINAL.with_name(FINAL.stem + "-720p.mp4")       # the copy that fits in a mail
     run(["ffmpeg", "-y", "-v", "error", "-i", str(FINAL), "-vf", "scale=1280:-2:flags=lanczos",

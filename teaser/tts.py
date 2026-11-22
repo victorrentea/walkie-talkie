@@ -181,7 +181,8 @@ def ensure() -> list[dict]:
             path, provider = speak(line["text"], voice)
             lines.append({"scene": scene["id"], "i": i, "who": line["who"],
                           "text": line["text"], "file": str(path), "provider": provider,
-                          "voice": voice, "dur": round(duration(path), 3)})
+                          "voice": voice, "dur": round(duration(path), 3),
+                          **({"tag": line["tag"]} if line.get("tag") else {})})
     (AUDIO / "manifest.json").write_text(json.dumps(lines, indent=1, ensure_ascii=False))
     return lines
 
