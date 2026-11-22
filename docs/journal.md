@@ -16706,3 +16706,11 @@ Haiku to **Sonnet at low effort** (`WT_EDITOR_EFFORT`, new; Haiku had none). The
 since 2026-10-22: Haiku inverted a self-correction by copying the words above the caret (2 runs in 3),
 Sonnet low got it right 3/3 at 1.4–3.9 s. The 4 s budget is unchanged — a late Sonnet edit still
 pastes the raw words and is only logged; watch `✍️ editor: … in N ms` for how often that happens.
+
+## 2026-11-22 — ✍️ The chip says `Transcribing and redacting`
+
+Victor: *"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită …
+«transcribing and redacting»"*. The wait row of a plain dictation reads `Transcribing and redacting
+via <logo>...` when the redactor will run on it (`DictationEditor.announced`: plain, the switch on,
+not Wispr Flow's own words); otherwise unchanged. Shot `transcribing-redacting`. Not seen live from
+the desk: no loopback route reaches the transcribing row without a real microphone take.

@@ -50,6 +50,12 @@ final class DictationEditor {
     /// Engines whose words have not been edited by anybody yet.
     static func applies(toEngine engine: String) -> Bool { enabled && engine != "wispr-flow" }
 
+    /// Whether the chip's wait is both passes — `Transcribing and redacting`
+    /// (2026-11-22). `wisprWords`: the words on their way are Wispr Flow's own.
+    static func announced(plain: Bool, wisprWords: Bool, on: Bool = enabled) -> Bool {
+        plain && on && !wisprWords
+    }
+
     /// The longest the sentence waits for its edit before the raw words go.
     static var budget: TimeInterval {
         (ProcessInfo.processInfo.environment["WT_EDITOR_BUDGET"]).flatMap(Double.init) ?? 4.0

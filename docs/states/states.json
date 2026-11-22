@@ -380,6 +380,18 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
+    "height" : 46,
+    "image" : "transcribing-redacting.png",
+    "note" : "**`Transcribing and redacting via <logo>...`** (2026-11-22, Victor: *\"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită … «transcribing and redacting»\"*). The wait is both passes — the recogniser, then Sonnet against the screen — and the row said only the first. With the Redactor off, a prompt, or Wispr Flow's own words, the row is the one above.",
+    "shape" : "chip",
+    "slug" : "transcribing-redacting",
+    "title" : "A plain dictation the ✍️ Redactor will rewrite",
+    "when" : "The same wait, for a plain dictation at the caret with *✍️ Redactor* ticked in the Engine list and words Wispr Flow has not already edited.",
+    "width" : 316
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
     "height" : 117,
     "image" : "transcribing-ready.png",
     "note" : "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and the row's ordinary ink, above the wait — **no green since 2026-10-22**, and the yellow flash of a changed row when it comes up (Victor: *\"să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare\"*) — **on the word `Ready` alone** since 2026-10-23 (*\"cuvântul ready, nu și ready for more\"*), shown here at its brightest. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
@@ -656,7 +668,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 102,
+    "height" : 126,
     "image" : "prompt-autosend-paused.png",
     "note" : "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
     "shape" : "panel",
@@ -692,14 +704,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 642,
+    "height" : 626,
     "image" : "prompt-inline.png",
     "note" : "2026-10-07, Victor: the panel must show *where* each thing landed, to check the annotation. A picture token ends its paragraph, captions the picture drawn under it — the ✂️ cut-out, or the frame — and the words carry on below. A highlight or a picked element is its own indented paragraph. Frames the words did not take stay in the strip; the automatic one (📸0) leads the words since 2026-10-23. **A frame's caption no longer prints the pointer's pixels** (`[📸2]`, not `[📸2🖱️@1204:388]` — 2026-10-17): a yellow dot on the picture says where it was; the agent's words keep the numbers.",
     "shape" : "panel",
     "slug" : "prompt-inline",
     "title" : "The prompt, with its pictures where they were taken",
     "when" : "Word timings placed the markers (ElevenLabs, local): every `[📸N…]` token in the words.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -728,14 +740,14 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 485,
+    "height" : 469,
     "image" : "prompt-copied.png",
     "note" : "2026-10-17, Victor: *\"also display the copied text or image from clipboard in the preview\"*. A copied image is a numbered picture like any other (`[📸N 📋 copied]`), drawn under its caption; copied text is its own paragraph, like a highlight — it used to run on as plain words, indistinguishable from what he said. Since 2026-10-23 it leads with 📋 where a highlight has its `“` (the chip's quote row does the same).",
     "shape" : "panel",
     "slug" : "prompt-copied",
     "title" : "The prompt, with what he copied where he copied it",
     "when" : "Auto-attach › Everything I Copy: text and an image copied while the prompt recorded.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
@@ -819,19 +831,19 @@
     "slug" : "prompt-long",
     "title" : "A long transcript",
     "when" : "A sentence that does not fit one line — the panel wraps and grows.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 1002,
+    "height" : 1036,
     "image" : "prompt-scrolling.png",
     "note" : "The words sit in a scroll view (2026-10-26, Victor: *\"dacă prompt preview panel devine prea înalt, să-i apară scrollbar\"*): the row takes the room the screen has, an overlay scroller flashes once on the edge, and the panel opens on the first word — the document is a flipped box, so a relayout (the countdown ticks once a second) keeps the top, and his own scrolling, where it was. The text field used to clip the tail silently.",
     "shape" : "panel",
     "slug" : "prompt-scrolling",
     "title" : "A transcript taller than the screen",
     "when" : "A dictation so long that its words would not fit what the screen leaves under the pictures and above the buttons.",
-    "width" : 832
+    "width" : 749
   },
   {
     "alpha" : 1,

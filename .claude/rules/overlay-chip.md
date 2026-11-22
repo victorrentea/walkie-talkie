@@ -349,6 +349,15 @@ yields to `--label`).
   it, and the logo **fills with it** since 2026-10-01 (it was always lit until then). The 💻, a colour
   emoji with no ink to take, is drawn at 35 % alpha until its step lights (`wordGlyph(lit:)`,
   2026-10-07, Victor: *"the laptop … should have a faded form and then it turns bright"*).
+- **`Transcribing and redacting via <logo>...` when the ✍️ Redactor will rewrite the sentence**
+  (2026-11-22, Victor: *"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e
+  redactarea pornită … «transcribing and redacting»"*). Only for a plain dictation at the caret with
+  the Redactor ticked and words that are not Wispr Flow's own (`DictationEditor.announced`, the facts
+  the delivery reads); a prompt, the switch off or Wispr's words keep `Transcribing via`.
+  `AppDelegate.pushRedacting` → `RelayWindow.setRedacting`, before every `setTranscribing(true)` and
+  when the local model takes a Wispr sentence over; the words are part of the bar
+  (`RelayWindow.transcribeWord`). Shot `transcribing-redacting`; pinned by
+  `DictationEditorTests.testTheTranscribingRowSaysRedactingOnlyWhenTheRedactorWillRun`.
 - **No overdue note on the `Transcribing` row since 2026-10-06** — the `  🤔⏱️` appended past 150 %
   of the estimate (2026-09-22/23) is gone (Victor: *"remove the thinking face from the tooltip …
   when the transcribing tool exceeds its time budget"*); the ⌘⌃X row's countdown says how long is

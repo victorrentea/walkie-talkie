@@ -4856,7 +4856,26 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// **Three full stops, not `…`** — `listeningWord`'s reason, applied to the
     /// row that is the same slot at the next moment: the word fills a character
     /// at a time, and an ellipsis is one glyph that would light in one step.
-    private var transcribeWord: String { "Transcribing\(engineMark)\(Glyphs.dotsGap)..." }
+    private var transcribeWord: String { Self.transcribeWord(engineMark: engineMark, redacting: redacting) }
+
+    /// **`Transcribing and redacting via <logo>...` when the ✍️ Redactor will
+    /// rewrite this sentence** (2026-11-22, Victor: *"la dictarea curată, în
+    /// tooltip, să anunți că faci și redactarea dacă e redactarea pornită …
+    /// «transcribing and redacting»"*). The wait he is watching is both passes,
+    /// and the row said only the first. `AppDelegate.pushRedacting` decides —
+    /// a plain sentence, the switch on, words Wispr has not already edited.
+    static func transcribeWord(engineMark: String, redacting: Bool) -> String {
+        "Transcribing\(redacting ? " and redacting" : "")\(engineMark)\(Glyphs.dotsGap)..."
+    }
+
+    private(set) var redacting = false
+
+    /// `setEngineMark`'s relayout rule: the row's width changes with it.
+    func setRedacting(_ on: Bool) {
+        guard redacting != on else { return }
+        redacting = on
+        if transcribing { layoutContent() }
+    }
 
     /// How far through the estimate this decode is, 0…1 — the same reading
     /// `listenWarmth` is, off a different clock. **Full when there is no

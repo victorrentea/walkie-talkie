@@ -138,6 +138,18 @@ final class DictationEditorTests: XCTestCase {
         XCTAssertEqual(DictationEditor.message("x", nil, vocabulary: v), "<vocabulary>Devoxx, Rentea</vocabulary>\n<replacements>GVT → JWT</replacements>\n<dictation>x</dictation>")
     }
 
+    /// The chip names both passes only when the redactor will run (2026-11-22).
+    func testTheTranscribingRowSaysRedactingOnlyWhenTheRedactorWillRun() {
+        let gap = String(Glyphs.dotsGap)
+        XCTAssertEqual(RelayWindow.transcribeWord(engineMark: " via E", redacting: true),
+                       "Transcribing and redacting via E\(gap)...")
+        XCTAssertEqual(RelayWindow.transcribeWord(engineMark: " via E", redacting: false), "Transcribing via E\(gap)...")
+        XCTAssertTrue(DictationEditor.announced(plain: true, wisprWords: false, on: true))
+        XCTAssertFalse(DictationEditor.announced(plain: true, wisprWords: false, on: false), "the switch is off")
+        XCTAssertFalse(DictationEditor.announced(plain: false, wisprWords: false, on: true), "a prompt is never redacted")
+        XCTAssertFalse(DictationEditor.announced(plain: true, wisprWords: true, on: true), "Wispr Flow edits its own words")
+    }
+
     func testTheShortcutReadsOnTheTranscribingLine() {
         XCTAssertEqual(AutoLocal.inlineText(keys: "⌘⌃X"), "— ⌘⌃X")
     }

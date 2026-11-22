@@ -375,6 +375,15 @@ enum OverlayStates {
                 o.pinTranscribeWarmth(0.45)
             },
 
+            Shot(slug: "transcribing-redacting", group: "Dictating", title: "A plain dictation the ✍️ Redactor will rewrite",
+                 when: "The same wait, for a plain dictation at the caret with *✍️ Redactor* ticked in the Engine list and words Wispr Flow has not already edited.",
+                 note: "**`Transcribing and redacting via <logo>...`** (2026-11-22, Victor: *\"la dictarea curată, în tooltip, să anunți că faci și redactarea dacă e redactarea pornită … «transcribing and redacting»\"*). The wait is both passes — the recogniser, then Sonnet against the screen — and the row said only the first. With the Redactor off, a prompt, or Wispr Flow's own words, the row is the one above.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setRedacting(true)
+                o.setTranscribing(true)
+                o.pinTranscribeWarmth(0.45)
+            },
+
             Shot(slug: "transcribing-ready", group: "Dictating", title: "Ready for more — talk again while it transcribes",
                  when: "The words are still in flight and a new sentence would be queued behind them, not refused (Q12; the local model too since 2026-10-21).",
                  note: "**`📻 Ready for more` is the top row** (2026-10-21, `Ready` until 2026-10-22, Victor: *\"even though it's transcribing, in the tooltip you should suggest ready whenever I could start talking again by displaying the walkie-talkie at the top of the list … literally saying ready\"*). The walkie and the row's ordinary ink, above the wait — **no green since 2026-10-22**, and the yellow flash of a changed row when it comes up (Victor: *\"să nu fie cu verde, ci același fond ca de obicei … flash-ul e galben ca de obicei și dispare\"*) — **on the word `Ready` alone** since 2026-10-23 (*\"cuvântul ready, nu și ready for more\"*), shown here at its brightest. Up from 0.8 s after the stop (a start sooner is the same click) until the words land; never with nothing transcribing, so the chip at rest is what it always was. Not shown while two sentences are already in flight.",
@@ -838,6 +847,7 @@ enum OverlayStates {
         o.setListening(false)
         o.setTranscribing(false)
                 o.pinTranscribeWarmth(nil)
+        o.setRedacting(false)
         o.setShotCount(0)
         o.clearSelection()
         o.setSpawnDestination(nil)
