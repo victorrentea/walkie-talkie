@@ -3,8 +3,8 @@
 A ~60 s promo cut, rebuilt from scratch by one command:
 
 ```
-python3 teaser/build.py          # -> teaser/out/teaser-v4.mp4 (1920x1080, 30 fps, H.264 + AAC)
-                                 #    and teaser-v4-720p.mp4, the copy small enough for a mail
+python3 teaser/build.py          # -> teaser/out/teaser-v5.mp4 (1920x1080, 30 fps, H.264 + AAC)
+                                 #    and teaser-v5-720p.mp4, the copy small enough for a mail
 python3 teaser/build.py --plan   # the timeline only, nothing rendered
 ```
 
@@ -27,7 +27,9 @@ scene id), `in`/`out` seconds of that clip, optional `crop: [x, y, w, h]` (a pun
 one line share that line's time and are stretched together to fill it, which is what keeps
 a spoken line over its picture), `sub: "top"` (subtitle at the top during this cut) and
 `speed` (fixed instead of stretched). A cut can also take `start` (seconds into the scene, instead of `line`), `line: [i, part]`
-(a part of a split line) and `blur: [x, y, w, h]` (smears a region of the source). `_at` gives a
+(a part of a split line) and `blur: [x, y, w, h]` (smears a region of the source). `mask: "readout"`
+finds the yellow wheel-drag box in that cut, frame by frame, and paints out its size badges and
+key hint as they move. `_at` gives a
 scene's line start times by hand; a list for one line splits it at its punctuation into that
 many parts, each with its own start, audio and subtitle both. Two more keys beside the scenes: `_target` overrides a
 scene's target seconds from `script.json` (never below its speech), `_tight` lists scenes

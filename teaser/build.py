@@ -36,7 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
-CUT_VERSION = 4                    # the file is out/teaser-v<N>.mp4
+CUT_VERSION = 5                    # the file is out/teaser-v<N>.mp4
 sys.path.insert(0, str(HERE))
 import tts  # noqa: E402
 
@@ -51,7 +51,7 @@ ICON = HERE.parent / "assets" / "walkie-bound.png"
 
 W, H, FPS = 1920, 1080, 30
 SR = 48000
-RENDER_VERSION = 5                 # bump to throw away every cached scene
+RENDER_VERSION = 6                 # bump to throw away every cached scene
 
 MUSIC = MUSIC_DIR / "brain-dance.mp3"
 MUSIC_BPM = 124.0                  # stated by the composer; confirmed by beat_grid()
@@ -327,6 +327,54 @@ def endcard_png(path: Path) -> None:
 
 # ---------------------------------------------------------------- picture
 
+def readout_masks(clip: str, a: float, b: float) -> list[dict]:
+    """Where the crop box's readouts sit, frame by frame, in footage/<clip> between a and b.
+
+    The wheel-drag box is drawn in yellow; its size badges ride above and left of it and
+    the grey key hint below. Returns three moving regions [{w, h, keys: [[t, x, y], ...]}]
+    (t in seconds from a, x/y the region's top-left on the 1920x1080 source)."""
+    fps, w, h = 8, 960, 540
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{a:.3f}", "-t", f"{b - a:.3f}",
+                          "-i", str(FOOTAGE / f"{clip}.mp4"), "-vf",
+                          f"fps={fps},scale={w}:{h}", "-f", "rawvideo", "-pix_fmt", "rgb24",
+                          "-"], capture_output=True, check=True).stdout
+    frames = np.frombuffer(raw, np.uint8).reshape(-1, h, w, 3).astype(int)
+    top, left, hint = [], [], []
+    for i, f in enumerate(frames):
+        r, g, bl = f[..., 0], f[..., 1], f[..., 2]
+        yellow = (r > 200) & (g > 165) & (g < 235) & (bl < 110)
+        rows = np.where(yellow.sum(1) >= 4)[0]
+        cols = np.where(yellow.sum(0) >= 3)[0]
+        if len(rows) < 2 or len(cols) < 2:
+            continue
+        # a drawn box has a solid top and bottom edge; a glow or a flash does not
+        span = yellow[:, cols[0]: cols[-1] + 1]
+        if span[rows[0]: rows[0] + 2].any(0).mean() < 0.7 or \
+                span[rows[-1] - 1: rows[-1] + 1].any(0).mean() < 0.7:
+            continue
+        x0, x1, y0, y1 = cols[0] * 2, cols[-1] * 2, rows[0] * 2, rows[-1] * 2
+        t, cx, cy = i / fps, (x0 + x1) / 2, (y0 + y1) / 2
+        clampx = lambda v, bw: int(min(W - bw - 4, max(4, v)))
+        clampy = lambda v, bh: int(min(H - bh - 4, max(4, v)))
+        top.append([t, clampx(cx - 60, 120), clampy(y0 - 58, 52)])
+        left.append([t, clampx(x0 - 112, 104), clampy(cy - 28, 56)])
+        hint.append([t, clampx(cx - 285, 570), clampy(y1 + 8, 54)])
+    if not top:
+        return []
+    return [{"w": 120, "h": 52, "keys": top}, {"w": 104, "h": 56, "keys": left},
+            {"w": 570, "h": 54, "keys": hint}]
+
+
+def piecewise(keys: list[list[float]], k: int) -> str:
+    """ffmpeg expression: column k of keys, linear in t between them, held outside."""
+    expr = str(keys[-1][k])
+    for (t0, *v0), (t1, *v1) in reversed(list(zip(keys, keys[1:]))):
+        a, b = v0[k - 1], v1[k - 1]
+        seg = f"{a}+({b - a})*(t-{t0:.3f})/{t1 - t0:.3f}" if a != b else str(a)
+        expr = f"if(lt(t,{t1:.3f}),{seg},{expr})"
+    return f"if(lt(t,{keys[0][0]:.3f}),{keys[0][k]},{expr})"
+
+
 def segments_for(scene: dict) -> list[dict]:
     """The scene's sub-cuts: cuts.json when it has them, else every clip found, whole.
 
@@ -408,9 +456,19 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
                        "-i", str(FOOTAGE / f"{sg['clip']}.mp4")]
             crop = "crop={2}:{3}:{0}:{1},".format(*sg["crop"]) if sg.get("crop") else ""
             src = f"[{i}:v]"
+            if sg.get("mask") == "readout":         # hide the crop box's badges and key hint
+                dl = []
+                for m in readout_masks(sg["clip"], sg["in"], sg["out"]):
+                    k = m["keys"]
+                    dl.append(f"delogo=x='{piecewise(k, 1)}':y='{piecewise(k, 2)}':"
+                              f"w={m['w']}:h={m['h']}:"
+                              f"enable='between(t,{k[0][0] - 0.15:.3f},{k[-1][0] + 0.3:.3f})'")
+                if dl:
+                    chains.append(f"{src}{','.join(dl)}[m{i}]")
+                    src = f"[m{i}]"
             if sg.get("blur"):                      # smear a region of the source (x, y, w, h)
                 bx, by, bw, bh = sg["blur"]
-                chains.append(f"[{i}:v]split[b{i}a][b{i}b];[b{i}b]crop={bw}:{bh}:{bx}:{by},"
+                chains.append(f"{src}split[b{i}a][b{i}b];[b{i}b]crop={bw}:{bh}:{bx}:{by},"
                               f"boxblur=8:3[b{i}c];[b{i}a][b{i}c]overlay={bx}:{by}[b{i}]")
                 src = f"[b{i}]"
             chains.append(
@@ -437,9 +495,9 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
         a = max(0.0, at - 0.05)
         nxt = subs[j + 1][1] - 0.05 if j + 1 < len(subs) else dur
         b = min(dur, at + sub_dur + 0.25, nxt)
-        # the subtitle goes to the top while any cut it overlaps asks for that
-        top = any(sg.get("sub") == "top" and sg["at"] < b and sg["at"] + sg["dur"] > a
-                  for sg in segs)
+        # the subtitle goes to the top when a cut it shares more than 0.4 s with asks for that
+        top = any(sg.get("sub") == "top" and
+                  min(b, sg["at"] + sg["dur"]) - max(a, sg["at"]) > 0.4 for sg in segs)
         png = WORK / f"{sid}-sub{j}.png"
         subtitle_png(text, who, png, top, tag)
         inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(png)]
