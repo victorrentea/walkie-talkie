@@ -37,6 +37,12 @@ import AppKit
 ///   rotated cw"*): the same grains, drawn by the same shader in its `marks` mode —
 ///   question marks lying on their side, the dot on the screen's edge and the hook
 ///   reaching in, forming and crumbling back to dust one after another.
+/// - **The caret's prompt has the bottom edge** (2026-11-22, Victor: *"atunci când fac
+///   promptare la caret, aș vrea să vină de jos … o animație similară cu cele care vin de
+///   sus sau din dreapta … punctele care vin să alcătuiască, din când în când, forme care
+///   seamănă cu pinul acela roșu"*): the same fire, and now and then a red map pin
+///   (`Glyphs.mapPinShape`) made of its grains rises out of it and crumbles (`v7_pins`).
+///   It ends with the swell when the words are in at the caret (`pinLanded`).
 /// - Click-through, **in a Teams/Zoom share since 2026-11-20** (Victor: *"make sure
 ///   the dust is also visible and the edge effect. We worked so hard … and they
 ///   don't see it"*): `.readOnly`, dropped to `.none` only while the shutter takes
@@ -47,7 +53,7 @@ import AppKit
 /// read when the strip is built, so a `defaults write` and the next sentence (or
 /// `POST /test/edge-dust`) show it with no restart.
 final class EdgeDust {
-    enum Edge: String { case top, right, left }
+    enum Edge: String { case top, right, left, bottom }
 
     static var capturable = false
     static weak var current: EdgeDust?
@@ -75,6 +81,8 @@ final class EdgeDust {
     /// The ⚡ question's strip is deeper: its marks walk in and are gone by ~230 pt
     /// (2026-11-20, Victor marked the band on the screen: ~240 pt from the left edge).
     static var leftThickness: CGFloat { CGFloat(knob("leftThickness", 240)) }
+    /// The caret's strip is as deep, for the pins that rise in it (the fire stays 110 pt tall).
+    static var bottomThickness: CGFloat { CGFloat(knob("bottomThickness", 240)) }
     /// A cancel takes the edge out this fast (2026-11-20: *"să dispară cu fade out pe zero
     /// trei secunde. Nu e brutal instant"* — it was cut at once since 2026-11-16).
     static let cutFade: TimeInterval = 0.3
@@ -126,6 +134,7 @@ final class EdgeDust {
         case .top:   return NSRect(x: screen.minX, y: screen.maxY - 2 * thickness, width: screen.width, height: 2 * thickness)
         case .right: return NSRect(x: screen.maxX - 2 * thickness, y: screen.minY, width: 2 * thickness, height: screen.height)
         case .left:  return NSRect(x: screen.minX, y: screen.minY, width: 2 * thickness, height: screen.height)
+        case .bottom: return NSRect(x: screen.minX, y: screen.minY, width: screen.width, height: 2 * thickness)
         }
     }
 
@@ -153,9 +162,11 @@ final class EdgeDust {
         Log.info("🌫️ the \(edge?.rawValue ?? "?") edge stays — until the message is in")
     }
 
-    /// The message is in the terminal (or the new window is open with it).
-    func sent() {
+    /// The message is in the terminal (or the new window is open with it). `only`: just
+    /// if that is the edge up — the caret's landing must not end a new sentence's edge.
+    func sent(only: Edge? = nil) {
         guard phase == .listening || phase == .waiting else { return }
+        if let only, edge != only { return }
         leave(sent: true, why: "the message is in")
     }
 
@@ -214,7 +225,8 @@ final class EdgeDust {
         let mouse = NSEvent.mouseLocation
         guard let screen = CaretHalo.retina
                 ?? NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
-        let thickness = wanted == .left ? Self.leftThickness : wanted == .top ? Self.topThickness : Self.thickness
+        let thickness = wanted == .left ? Self.leftThickness : wanted == .top ? Self.topThickness
+            : wanted == .bottom ? Self.bottomThickness : Self.thickness
         if let b = built, b.edge != wanted || b.screen != screen.frame || b.thickness != thickness
             || builtVariant != EdgeDustPictures.current { teardown() }
         builtVariant = EdgeDustPictures.current
@@ -235,7 +247,7 @@ final class EdgeDust {
         picture?.start()
         if feedTimer == nil { startFeeding() }
         p.orderFrontRegardless()
-        Log.info("🌫️ the \(wanted.rawValue) edge is up — \(wanted == .top ? "a prompt to a new session" : wanted == .right ? "a prompt to the bound terminal" : "a ⚡ question")")
+        Log.info("🌫️ the \(wanted.rawValue) edge is up — \(wanted == .top ? "a prompt to a new session" : wanted == .right ? "a prompt to the bound terminal" : wanted == .bottom ? "a prompt at the caret" : "a ⚡ question")")
     }
 
     private func leave(sent: Bool, why: String) {
@@ -347,6 +359,11 @@ final class EdgeDust {
             m = CATransform3DTranslate(m, t, 0, 0); m = CATransform3DScale(m, k, 1, 1); m = CATransform3DTranslate(m, -t, 0, 0)
         case .left:
             m = CATransform3DTranslate(m, -t, 0, 0); m = CATransform3DScale(m, k, 1, 1); m = CATransform3DTranslate(m, t, 0, 0)
+        case .bottom:
+            // Evenly, ×1.4 at the full swell, about the bottom's middle: stretched ×2 in depth
+            // alone, a pin came out a tall V (the recording of 2026-11-22).
+            let e = 1 + (k - 1) * 0.4
+            m = CATransform3DTranslate(m, 0, -t, 0); m = CATransform3DScale(m, e, e, 1); m = CATransform3DTranslate(m, 0, t, 0)
         }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -373,6 +390,7 @@ final class EdgeDust {
         case .top:   away = CATransform3DMakeTranslation(0, t, 0)
         case .right: away = CATransform3DMakeTranslation(t, 0, 0)
         case .left:  away = CATransform3DMakeTranslation(-t, 0, 0)
+        case .bottom: away = CATransform3DMakeTranslation(0, -t, 0)
         }
         let a = CABasicAnimation(keyPath: "sublayerTransform")
         a.fromValue = away
@@ -400,6 +418,7 @@ final class EdgeDust {
         case .top:   box = NSRect(x: 0, y: thickness, width: frame.width, height: thickness)
         case .right: box = NSRect(x: thickness, y: 0, width: thickness, height: frame.height)
         case .left:  box = NSRect(x: 0, y: 0, width: thickness, height: frame.height)
+        case .bottom: box = NSRect(x: 0, y: 0, width: frame.width, height: thickness)
         }
         let p = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         p.isOpaque = false
@@ -423,11 +442,13 @@ final class EdgeDust {
         away.frame = strip.bounds
         away.colors = [NSColor.black.cgColor, NSColor.black.cgColor, NSColor.clear.cgColor]
         // The question marks fade themselves (the shader, by ~230 pt): the mask only trims the last grains.
-        away.locations = edge == .left ? [0, 0.9, 1] : [0, 0.3, 1]
+        // The caret's pins too; its fire fades itself from 33 pt as the mask does elsewhere.
+        away.locations = edge == .left || edge == .bottom ? [0, 0.9, 1] : [0, 0.3, 1]
         switch edge {
         case .top:   away.startPoint = CGPoint(x: 0.5, y: 1); away.endPoint = CGPoint(x: 0.5, y: 0)
         case .right: away.startPoint = CGPoint(x: 1, y: 0.5); away.endPoint = CGPoint(x: 0, y: 0.5)
         case .left:  away.startPoint = CGPoint(x: 0, y: 0.5); away.endPoint = CGPoint(x: 1, y: 0.5)
+        case .bottom: away.startPoint = CGPoint(x: 0.5, y: 0); away.endPoint = CGPoint(x: 0.5, y: 1)
         }
         strip.layer?.mask = away
         content.addSubview(strip)

@@ -2,7 +2,7 @@
 //
 //   swift tools/render-edge-dust.swift <edge 0|1|2> <out.png> [level 0…1] [times…]
 //
-// Edge 0 = top, 1 = right, 2 = left (the ⚡ question's marks). The strip is drawn
+// Edge 0 = top, 1 = right, 2 = left (the ⚡ question's marks), 3 = bottom (the caret's pins). The strip is drawn
 // at 2× on a dark desk, one panel per time, side by side (a top strip: stacked).
 // Reads the shader from Sources/WalkieTalkie/EdgeDustV7.swift between the
 // `SHADER-BEGIN` / `SHADER-END` markers, so it always draws what the app draws.
@@ -38,7 +38,7 @@ let pipeline = try! device.makeRenderPipelineState(descriptor: d)
 let queue = device.makeCommandQueue()!
 
 let scale: Float = 2
-let size: SIMD2<Float> = edge < 0.5 ? [900, 110] : edge < 1.5 ? [110, 700] : [240, 700]
+let size: SIMD2<Float> = edge < 0.5 ? [900, 110] : edge < 1.5 ? [110, 700] : edge < 2.5 ? [240, 700] : [1100, 240]
 let w = Int(size.x * scale), h = Int(size.y * scale)
 
 func render(_ t: Float) -> [UInt8] {
@@ -66,7 +66,7 @@ func render(_ t: Float) -> [UInt8] {
 
 // Premultiplied BGRA over a dark desk (#1c1c1e), panels side by side with a gap.
 let gap = 24, bg: [Int] = [0x1e, 0x1c, 0x1c]
-let horizontal = edge >= 0.5
+let horizontal = edge >= 0.5 && edge < 2.5
 let W = horizontal ? times.count * w + (times.count - 1) * gap : w
 let H = horizontal ? h : times.count * h + (times.count - 1) * gap
 var canvas = [UInt8](repeating: 0, count: W * H * 4)

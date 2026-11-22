@@ -39,7 +39,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
     private struct Uniforms {
         var size = SIMD2<Float>(0, 0)   // the strip, in points
         var time: Float = 0
-        var edge: Float = 0             // 0 top, 1 right, 2 left (the ⚡ question's marks)
+        var edge: Float = 0             // 0 top, 1 right, 2 left (the ⚡ question's marks), 3 bottom (the caret's pins)
         var level: Float = 0            // his voice, 0…1
         var intensity: Float = 1        // 1 at rest … 2
         var scale: Float = 2            // pixels per point
@@ -76,7 +76,7 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
         }
         self.queue = queue
         view = MTKView(frame: strip.bounds, device: device)
-        uniforms.edge = edge == .top ? 0 : edge == .right ? 1 : 2
+        uniforms.edge = edge == .top ? 0 : edge == .right ? 1 : edge == .left ? 2 : 3
         uniforms.seed = Float.random(in: 0..<64)
         super.init()
         view.colorPixelFormat = format
@@ -124,10 +124,11 @@ final class EdgeDustV7: NSObject, EdgeDustPicture, MTKViewDelegate {
 
     /// Nothing new from now on; what is on its way finishes its path (2026-11-21).
     /// The fire's field leaves the edge at 52 pt/s and is gone past ~1.5 × its height:
-    /// ~2.6 s. A question mark runs its life out: up to 6.8 s, most far shorter.
+    /// ~2.6 s. A question mark runs its life out: up to 6.8 s, most far shorter. A caret
+    /// pin crumbles where it is over ~2.4 s (a paste is quick; it does not walk on).
     func drain() -> TimeInterval {
         uniforms.stop = Float(CACurrentMediaTime() - began)
-        return uniforms.edge > 1.5 ? 6.8 : 2.6
+        return uniforms.edge > 2.5 ? 2.8 : uniforms.edge > 1.5 ? 6.8 : 2.6
     }
 
     // MARK: - MTKViewDelegate
@@ -166,7 +167,7 @@ using namespace metal;
 struct V7U {
     float2 size;      // strip, points
     float time;
-    float edge;       // 0 top, 1 right, 2 left: question marks
+    float edge;       // 0 top, 1 right, 2 left: question marks, 3 bottom: map pins
     float level;      // voice 0..1
     float intensity;  // 1..2
     float scale;      // pixels per point
@@ -314,12 +315,87 @@ static float v7_marks(float a, float d, float t, float level, float k, float see
     return clamp(max(dens, bed), 0.0, 1.0);
 }
 
+// iq's exact signed distance to a triangle.
+static float v7_tri(float2 p, float2 p0, float2 p1, float2 p2) {
+    float2 e0 = p1 - p0, e1 = p2 - p1, e2 = p0 - p2;
+    float2 v0 = p - p0, v1 = p - p1, v2 = p - p2;
+    float2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+    float2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+    float2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+    float s = sign(e0.x * e2.y - e0.y * e2.x);
+    float2 d = min(min(float2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),
+                       float2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),
+                       float2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));
+    return -sqrt(d.x) * sign(d.y);
+}
+
+// **The caret's map pin**, `Glyphs.mapPinShape` in a 1-tall box (x across, y up, the tip
+// at the origin): a head of radius 0.348 on the tangents to the tip, a hole of 0.196 in
+// it. Negative inside the red, positive in the hole and outside.
+static float v7_pin(float2 g) {
+    const float R = 0.348;
+    float2 c = float2(0.0, 1.0 - R);
+    float phi = acos(R / c.y);
+    float2 tr = c + R * float2(cos(-1.5708 + phi), sin(-1.5708 + phi));
+    float body = min(length(g - c) - R, v7_tri(g, float2(0.0, 0.0), tr, float2(-tr.x, tr.y)));
+    return max(body, -(length(g - c) - 0.196));
+}
+
+// One pin: the one of cell `cell` (S points long), its density at (a, d).
+//
+// **From time to time the dust makes the caret's pin** (2026-11-22, Victor: *"când vine de
+// jos, mi-ar plăcea ca punctele care vin să alcătuiască, din când în când, forme care seamănă
+// cu pinul acela roșu … ca să înțeleg că e promptare pe caret"*). The question marks' journey
+// (`v7_mark`), upright with its tip down: born at the edge with a third of it below it, it
+// forms while it rises, then loses its grains on the way, gone by `gone`. Not every life of a
+// cell is a pin — about three in five — so they come now and then, never in a row. A life
+// already under way when the edge comes up is drawn only if it is still forming: the first
+// pins rise from the edge, none is found standing in the middle. Drained, a pin that is out
+// crumbles where it stands (`stop`): a paste lands in a second, it does not wait for them.
+static float v7_pin_life(float cell, float S, float a, float d, float t, float level, float k, float seed, float f, float stop) {
+    const float gone = 232.0;
+    float c1 = v7_h(float2(cell, 2.3)), c2 = v7_h(float2(cell, 6.1));
+    float life = 5.0 + 2.0 * c2;
+    float clock = t / life + c1 + seed * 0.11;
+    float n = floor(clock), pp = clock - n;
+    float born = (n - c1 - seed * 0.11) * life;
+    if (born > stop || born < -0.35 * life) return 0.0;
+    float2 id = float2(cell, n * 1.37 + 0.5);
+    if (v7_h(id + float2(0.0, 7.7)) > 0.6) return 0.0;
+    float h1 = v7_h(id + float2(0.0, 3.3)), h2 = v7_h(id + float2(0.0, 8.1)), h3 = v7_h(id + float2(0.0, 5.7));
+    float H = mix(95.0, 140.0, h2) * (1.0 + 0.10 * level + 0.12 * k);
+    float walk = 1.0 - (1.0 - pp) * (1.0 - pp) * 0.35 - 0.65 * (1.0 - pp);
+    float tip = mix(-0.35 * H, gone - 1.02 * H, walk);
+    float sway = sin(t * (0.35 + 0.20 * h3) + h1 * 6.2832) * 6.0;
+    float la = a - (cell + 0.5) * S - (h1 - 0.5) * 80.0 - sway;
+    float2 g = float2(la, d - tip);
+    g += (float2(v7_n(float2(a / 11.0, t * 0.7)), v7_n(float2(d / 11.0 + 5.0, t * 0.7))) - 0.5) * 3.0;
+    float sd = v7_pin(g / H) * H;
+    float shape = 1.0 - smoothstep(-1.5, 2.0, sd);
+    float near = 1.0 - smoothstep(0.0, 12.0, sd);
+    float form = smoothstep(0.0, 0.26, pp);
+    float fade = (1.0 - smoothstep(0.34, 0.92, pp)) * (1.0 - smoothstep(gone - 70.0, gone, d));
+    fade *= 1.0 - smoothstep(stop + 0.2, stop + 2.4, t);
+    float formed = shape * (0.85 + 0.30 * f);
+    float loose = near * smoothstep(0.55, 0.85, f) * 0.55;
+    return mix(loose, max(formed, loose * 0.5), form) * fade;
+}
+
+static float v7_pins(float a, float d, float t, float level, float k, float seed, float stop) {
+    const float S = 320.0;
+    float f = v7_fbm(float2(a / 15.0, (d - 30.0 * t) / 26.0));
+    return clamp(v7_pin_life(floor(a / S), S, a, d, t, level, k, seed, f, stop), 0.0, 1.0);
+}
+
 fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]) {
     // Points; origin at the top left of what is seen, y down.
     float2 p = in.pos.xy / u.scale;
     float a, d;                       // along the edge, away from it
-    bool marks = u.edge > 1.5;
-    if (u.edge < 0.5) { a = p.x; d = p.y; } else if (!marks) { a = p.y; d = u.size.x - p.x; } else { a = p.y; d = p.x; }
+    bool marks = u.edge > 1.5 && u.edge < 2.5;
+    bool pins = u.edge > 2.5;
+    if (u.edge < 0.5) { a = p.x; d = p.y; }
+    else if (pins) { a = p.x; d = u.size.y - p.y; }
+    else if (!marks) { a = p.y; d = u.size.x - p.x; } else { a = p.y; d = p.x; }
     a += u.seed * 97.0;
     float t = u.time;
     float k = clamp(u.intensity - 1.0, 0.0, 1.5);
@@ -351,6 +427,16 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     // field's own 52 pt/s and dies out at its tips as it always does.
     dens *= smoothstep(-6.0, 6.0, d - max(t - u.stop, 0.0) * 52.0);
     if (marks) { dens = v7_marks(a, d, t, u.level, k, u.seed, u.stop); h = 70.0; }
+    // The caret's bottom edge: the same fire, and now and then a red pin made of its grains.
+    // Its strip is deeper (the pins walk to ~230 pt), so the fire's own fade — the mask's on
+    // the 110 pt edges, from 30 % of the depth — is drawn here (`fireFade`).
+    float pinW = 0.0, fireFade = 1.0;
+    if (pins) {
+        float pd = v7_pins(a, d, t, u.level, k, u.seed, u.stop);
+        pinW = smoothstep(0.08, 0.40, pd);
+        fireFade = 1.0 - smoothstep(33.0, 110.0, d);
+        dens = max(dens * fireFade, pd);
+    }
 
     // Each tongue its own hue; paler at the base, deeper at the tip.
     float hue = v7_n(float2(as / 150.0, t * 0.05 + 11.0)) * 2.0 + u.seed;
@@ -382,12 +468,14 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
         float lit = smoothstep(r1 * 1.3, r1 * 1.3 + 0.12, dens);
         float twinkle = 0.55 + 0.45 * sin(t * (2.5 + 5.0 * r2) + r3 * 6.2832);
         float3 col = v7_palette(hue + (r4 - 0.5) * 0.16);
+        // A pin's grains are its red (`NSColor.systemRed`), a touch lighter or deeper each.
+        col = mix(col, mix(float3(1.0, 0.20, 0.17), float3(1.0, 0.42, 0.34), r4), pinW);
         col = mix(col * col * 0.95, mix(col, float3(1.0), 0.30), heat);
         sum += col * dotv * lit * twinkle * gain[i];
     }
 
     // A faint smooth glow under the dust, to bind it.
-    float3 base = v7_palette(hue);
+    float3 base = mix(v7_palette(hue), float3(1.0, 0.20, 0.17), pinW);
     base = mix(base * base, mix(base, float3(1.0), 0.2), heat);
     float3 rgb = sum * 0.95 + base * dens * dens * 0.12;
     rgb = 1.0 - exp(-rgb * 1.15);
@@ -395,7 +483,9 @@ fragment float4 v7_fragment(V7Out in [[stage_in]], constant V7U &u [[buffer(0)]]
     // is as good as additive, on a white page the grain keeps its colour instead of
     // washing out to white (at 0.5 it was invisible there).
     float alpha = clamp(max(rgb.r, max(rgb.g, rgb.b)) * 0.85, 0.0, 1.0);
-    return float4(rgb, alpha);
+    // The bottom's fire fades out with the depth as the mask does on the other edges.
+    float keep = pins ? max(1.0 - smoothstep(0.0, 1.0, (d - 33.0) / 77.0), pinW) : 1.0;
+    return float4(rgb, alpha) * keep;
 }
 """
 // SHADER-END

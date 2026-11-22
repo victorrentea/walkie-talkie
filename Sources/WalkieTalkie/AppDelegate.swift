@@ -685,16 +685,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let serial = caretLandingSerial
         caretLanding = serial
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.caretLandingCeiling) { [weak self] in
-            self?.pinLanded(serial, "no confirmation in \(Int(Self.caretLandingCeiling)) s")
+            self?.pinLanded(serial, "no confirmation in \(Int(Self.caretLandingCeiling)) s", landed: false)
         }
         return serial
     }
 
     /// The words are in at the caret (or will never be): the pin may go. On main.
-    private func pinLanded(_ serial: Int, _ why: String) {
+    private func pinLanded(_ serial: Int, _ why: String, landed: Bool = true) {
         guard caretLanding == serial, serial != 0 else { return }
         caretLanding = 0
         Log.info("📍 the pin goes — \(why)")
+        // The caret's bottom edge swells and goes, as a terminal's does on `.delivered`.
+        if landed { edgeDust.sent(only: .bottom) }
         syncBorrowedGestures()
     }
     private var settlingFrom: CFAbsoluteTime = 0
@@ -3675,7 +3677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         edgeDust.stillPending = { [weak self] in
             guard let self else { return false }
             return self.settling || self.panelsComing > 0 || self.deliveriesInFlight > 0 || self.spawnsInFlight > 0
-                || self.spawnPending || self.overlay.sentPromptFrame != nil
+                || self.spawnPending || self.overlay.sentPromptFrame != nil || self.caretLanding != 0
         }
         // **The ⚡ question's edge stays while its reply pop-up does** (2026-11-20): through
         // the transcription, the answer, 🌐, 😠 and every 🪏 more, until the pop-up is closed.
@@ -8930,12 +8932,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 : isBound ? .bound : .caret
             if ringUp { caretHalo.setDestination(destination) }
             // **The prompt's edge** (2026-11-16, `EdgeDust`): the top one for a new
-            // session, the right one for the bound terminal, none at the caret —
-            // from the first word; it outlives the microphone by itself. **The ⚡
-            // question has the left one** (2026-11-19), its dust drawing question marks.
+            // session, the right one for the bound terminal — from the first word; it
+            // outlives the microphone by itself. **The ⚡ question has the left one**
+            // (2026-11-19), its dust drawing question marks; **the caret the bottom one**
+            // (2026-11-22), its dust drawing the red pin now and then.
             edgeDust.listen(ringUp && listening && HaloStyle.promptsWearDust
                                 ? (destination == .spawn ? .top : destination == .bound ? .right
-                                   : destination == .quick ? .left : nil) : nil,
+                                   : destination == .quick ? .left : destination == .caret ? .bottom : nil) : nil,
                             micOpen: listening)
             // **A plain sentence 🔼 → / 🔼 ↑ made a prompt is a prompt on the
             // corner hints** (2026-10-25, the hint audit): the halo keeps the clean

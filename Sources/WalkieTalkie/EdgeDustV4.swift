@@ -327,6 +327,8 @@ final class EdgeDustV4: EdgeDustPicture {
         case .right: layer.frame = CGRect(x: box.maxX - size.width, y: box.maxY - size.height, width: size.width, height: size.height)
         // Out of `EdgeDustPictures.all`: the ⚡ question's left edge is only ever V7's marks.
         case .left:  layer.frame = CGRect(x: 0, y: box.maxY - size.height, width: size.width, height: size.height)
+        // The caret's bottom edge too (2026-11-22).
+        case .bottom: layer.frame = CGRect(x: 0, y: 0, width: size.width, height: size.height)
         }
         layer.contentsGravity = .resize
         layer.magnificationFilter = .linear
