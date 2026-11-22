@@ -1061,4 +1061,54 @@ extension Glyphs {
         }
     }
 
+    // MARK: - Select (2026-11-22)
+
+    /// **A selection being dragged: three lines of text, a stretch of the middle
+    /// one highlighted, the I-beam at the end of it** (2026-11-22, Victor, on the
+    /// corner hint bar: *"să aibă un caret și niște texte pe care tragi, ca
+    /// simbol, ca să înțeleg ce pot să fac în momentul acela al dictării"*).
+    /// No emoji or SF Symbol says *drag over text*; the pieces are the ones a
+    /// selection is made of on screen.
+    ///
+    /// On a grid of `height`, y up, `selectAspect` wide: the lines are bars
+    /// `0.12` thick at `0.82 / 0.50 / 0.18`, the last one short as a paragraph
+    /// ends; the highlight is a band `0.34` tall behind the middle line from
+    /// `0.34` to the caret at `1.00`; the I-beam stands `0.60` tall there, with
+    /// serifs `0.24` wide. The lines outside the highlight are dimmed to
+    /// `0.6 ×` the ink so the selected stretch and the caret are what is read.
+    static let selectAspect: CGFloat = 1.36
+    static func select(height h: CGFloat, ink: NSColor = .white,
+                       highlight: NSColor = NSColor(srgbRed: 0.16, green: 0.50, blue: 1, alpha: 1)) -> NSImage {
+        let w = h * selectAspect
+        return NSImage(size: NSSize(width: w, height: h), flipped: false) { _ in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+            let t = h * 0.12
+            func bar(_ x0: CGFloat, _ x1: CGFloat, _ y: CGFloat, _ colour: NSColor) {
+                ctx.setFillColor(colour.cgColor)
+                ctx.addPath(CGPath(roundedRect: CGRect(x: x0 * h, y: y * h - t / 2, width: (x1 - x0) * h, height: t),
+                                   cornerWidth: t / 2, cornerHeight: t / 2, transform: nil))
+                ctx.fillPath()
+            }
+            let dim = ink.withAlphaComponent(ink.alphaComponent * 0.6)
+            let caret: CGFloat = 1.00
+            bar(0, selectAspect, 0.82, dim)
+            bar(0, 0.26, 0.50, dim)
+            bar(0, 0.84, 0.18, dim)
+            // The highlight, then the selected stretch of the line over it.
+            ctx.setFillColor(highlight.cgColor)
+            ctx.addPath(CGPath(roundedRect: CGRect(x: 0.34 * h, y: 0.33 * h, width: (caret - 0.34) * h, height: 0.34 * h),
+                               cornerWidth: h * 0.05, cornerHeight: h * 0.05, transform: nil))
+            ctx.fillPath()
+            bar(0.42, caret - 0.10, 0.50, ink)
+            // The I-beam: a stem and two serifs.
+            let s = h * 0.085
+            ctx.setFillColor(ink.cgColor)
+            ctx.fill(CGRect(x: caret * h - s / 2, y: 0.20 * h, width: s, height: 0.60 * h))
+            for y in [0.20, 0.80 - 0.085] as [CGFloat] {
+                ctx.fill(CGRect(x: (caret - 0.12) * h, y: y * h, width: 0.24 * h, height: s))
+            }
+            return true
+        }
+    }
+
 }

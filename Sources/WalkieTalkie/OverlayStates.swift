@@ -49,6 +49,9 @@ enum OverlayStates {
         /// The window's alpha, which the drawing cannot carry: the view is drawn
         /// opaque and the window fades it afterwards.
         let alpha: Double
+        /// `shape: "bar"` — the corner hint bar's stage; the picture is the bar
+        /// drawing itself (`GestureHintBar.writeStill`), not the chip.
+        var bar: GestureHintBar.Stage? = nil
         let apply: (RelayWindow) -> Void
     }
 
@@ -802,6 +805,47 @@ enum OverlayStates {
                 o.showSentPrompt(transcript, hold: 6, words: transcript, heard: heard)
                 o.beginPromptEdit()
             },
+        ] + hintBar()
+    }
+
+    /// **The corner hint bar** (2026-11-22) — not the chip: a fixed spot on the
+    /// secondary screen. Photographed per stage, with the Logitech mouse attached
+    /// and without it, because that is what decides how much a badge says.
+    private static func hintBar() -> [Shot] {
+        let group = "The corner hint bar"
+        func bar(_ slug: String, _ title: String, when: String, note: String, _ stage: GestureHintBar.Stage) -> Shot {
+            Shot(slug: slug, group: group, title: title, when: when, note: note, shape: "bar",
+                 alpha: Double(GestureHintBar.acrossOpacity), bar: stage) { _ in }
+        }
+        return [
+            bar("bar-prompt-mouse", "A prompt — the mouse attached",
+                when: "While a prompt records, on the secondary screen beside the Retina (three times this size there; the picture is at two).",
+                note: "Two crosses, 🔼 over 🔽: the centre is the click, the arms are the swipes. **Glyphs alone since 2026-11-22** — Victor: *\"afișează tastele … doar dacă nu e mouse-ul conectat … lasă doar emoji-urile … mai puțin late acele badge-uri\"*. 🏁 end, ✨ new session, ☠️ kamikaze, 🗑️ discard; 📸 shot, 🔴 film, ⌨️ typing box, 🧠 model. Under them what the ordinary mouse does meanwhile: the Copy icon (a copy rides along — no word, no ⌘C) and the new **select** badge, a caret dragged over lines of text (`Glyphs.select`). 122 pt wide; 260 with the words.",
+                .init(listening: true, prompting: true)),
+            bar("bar-prompt-no-mouse", "A prompt — no Logitech mouse",
+                when: "The same moment with no Logitech mouse in the registry (`MouseDevices`): the crosses are the trackpad's, ☝️ one finger and ✌️ two under left ⌃⌥⌘.",
+                note: "Now the keys help, so they are back in the badges they stand for: `🏁 / ⌘⌘`, `📸 / ⌃P`. Still no words. The boxes are as wide as the widest badge, so this bar is wider than the mouse's.",
+                .init(listening: true, prompting: true, noMouse: true)),
+            bar("bar-plain-mouse", "A plain dictation — the mouse attached",
+                when: "While a plain dictation records (🔽 / 🔽 →).",
+                note: "⏹️ stops it, `⏹️ + ⏎` stops it and presses Return, 💻 makes it a prompt to the terminal, ✨ a new session's, ☠️ is the last prompt's kamikaze. One badge under the crosses: a copy is gathered for the moment the sentence becomes a prompt. **No select badge** — a plain dictation files no highlight — and `💬 / ⌃P` is a key, so it waits for the bar below.",
+                .init(listening: true, prompting: false)),
+            bar("bar-plain-no-mouse", "A plain dictation — no Logitech mouse",
+                when: "The same moment without the mouse.",
+                note: "`⏹️ / ⌘⌘` on ✌️ →, and `💬 / ⌃P` under the crosses: ⌃P makes the sentence a prompt and takes the shot.",
+                .init(listening: true, prompting: false, noMouse: true)),
+            bar("bar-question-mouse", "A ⚡ question — the mouse attached",
+                when: "While a quick question records (🔼 ← at rest).",
+                note: "⚡ asks, 💻 sends it to the terminal instead, Google's G searches it, `G + ⚡` does both. It is a prompt, so copy and select both ride.",
+                .init(listening: true, prompting: false, quick: true)),
+            bar("bar-crop-mouse", "A wheel crop — the mouse attached",
+                when: "From the wheel press until the crop lands: the bar draws the mouse, because that is the hand the crop is in.",
+                note: "The wheel drags the ✂️ box, the right button ➡️ moves it elsewhere. The palm said `Esc cancel` until 2026-11-22 — a key, so it is empty with the mouse attached and back without it.",
+                .init(listening: true, prompting: true, crop: .selecting)),
+            bar("bar-fingers-rest-no-mouse", "At rest, left ⌃⌥⌘ held — no Logitech mouse",
+                when: "0.3 s into holding left ⌃⌥⌘ with no sentence open: what each trackpad gesture starts.",
+                note: "☝️: 💬 a prompt at the caret, ✨ a new session, ⚡ a question, 💻 a prompt at the bound terminal, ☠️ kamikaze. ✌️: `🎙️ / ⌘⌘` a plain dictation (right ⌘ twice is its key), ⏎ Return, 🔌 unbind. With the mouse attached the same bar loses the `/ ⌘⌘`.",
+                .init(fingers: true, noMouse: true)),
         ]
     }
 
@@ -831,10 +875,13 @@ enum OverlayStates {
                 ]
                 if shot.shape != "none" {
                     let path = (dir as NSString).appendingPathComponent("\(shot.slug).png")
-                    if shot.shape == "atom" { PromptAtom.writeStill(to: path) } else { overlay.snapshot(to: path) }
+                    var barSize: NSSize?
+                    if shot.shape == "atom" { PromptAtom.writeStill(to: path) }
+                    else if let stage = shot.bar { barSize = GestureHintBar.writeStill(of: stage, to: path) }
+                    else { overlay.snapshot(to: path) }
                     row["image"] = "\(shot.slug).png"
-                    let size = shot.shape == "atom" ? NSSize(width: PromptAtom.side, height: PromptAtom.side)
-                                                    : overlay.chipFrame.size
+                    let size = barSize ?? (shot.shape == "atom" ? NSSize(width: PromptAtom.side, height: PromptAtom.side)
+                                                                : overlay.chipFrame.size)
                     row["width"] = Int(size.width.rounded())
                     row["height"] = Int(size.height.rounded())
                 }

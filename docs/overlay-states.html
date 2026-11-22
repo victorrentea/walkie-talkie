@@ -51,6 +51,7 @@
   .tag-flash { color: #e8c06a; border-color: #4d4128; }
   .tag-panel { color: #8fb8e8; border-color: #2c3f56; }
   .tag-atom { color: #f08fc4; border-color: #56304a; }
+  .tag-bar { color: #c9a6f0; border-color: #45305a; }
   .tag-none { color: #8a8a94; border-style: dashed; }
   /* The backdrop is the point: the chip is white text with a halo, drawn over
      whatever Victor happens to be working on. Two of them, switchable, because
@@ -101,7 +102,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 75 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 83 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -124,7 +125,7 @@
     by hand.
   </div>
 </header>
-<nav><a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#Flashes">Flashes</a> <a href="#The held prompt">The held prompt</a></nav>
+<nav><a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#At rest">At rest</a> <a href="#Dictating">Dictating</a> <a href="#Flashes">Flashes</a> <a href="#The held prompt">The held prompt</a> <a href="#The corner hint bar">The corner hint bar</a></nav>
     <h2 id="At rest">At rest</h2>
     <div class="grid">
       <section class="card" id="unbound-idle">
@@ -909,8 +910,81 @@
         <code class="slug">prompt-editing</code>
       </section>
     </div>
+    <h2 id="The corner hint bar">The corner hint bar</h2>
+    <div class="grid">
+      <section class="card" id="bar-prompt-mouse">
+        <header>
+          <h3>A prompt — the mouse attached</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">244×468 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-prompt-mouse.png" width="244" height="468" style="opacity:1" alt="A prompt — the mouse attached"></div>
+        <p class="when">While a prompt records, on the secondary screen beside the Retina (three times this size there; the picture is at two).</p>
+        <p class="note">Two crosses, 🔼 over 🔽: the centre is the click, the arms are the swipes. <strong>Glyphs alone since 2026-11-22</strong> — Victor: <em>&quot;afișează tastele … doar dacă nu e mouse-ul conectat … lasă doar emoji-urile … mai puțin late acele badge-uri&quot;</em>. 🏁 end, ✨ new session, ☠️ kamikaze, 🗑️ discard; 📸 shot, 🔴 film, ⌨️ typing box, 🧠 model. Under them what the ordinary mouse does meanwhile: the Copy icon (a copy rides along — no word, no ⌘C) and the new <strong>select</strong> badge, a caret dragged over lines of text (<code>Glyphs.select</code>). 122 pt wide; 260 with the words.</p>
+        <code class="slug">bar-prompt-mouse</code>
+      </section>
+      <section class="card" id="bar-prompt-no-mouse">
+        <header>
+          <h3>A prompt — no Logitech mouse</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">314×468 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-prompt-no-mouse.png" width="314" height="468" style="opacity:1" alt="A prompt — no Logitech mouse"></div>
+        <p class="when">The same moment with no Logitech mouse in the registry (<code>MouseDevices</code>): the crosses are the trackpad&#x27;s, ☝️ one finger and ✌️ two under left ⌃⌥⌘.</p>
+        <p class="note">Now the keys help, so they are back in the badges they stand for: <code>🏁 / ⌘⌘</code>, <code>📸 / ⌃P</code>. Still no words. The boxes are as wide as the widest badge, so this bar is wider than the mouse&#x27;s.</p>
+        <code class="slug">bar-prompt-no-mouse</code>
+      </section>
+      <section class="card" id="bar-plain-mouse">
+        <header>
+          <h3>A plain dictation — the mouse attached</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">300×468 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-plain-mouse.png" width="300" height="468" style="opacity:1" alt="A plain dictation — the mouse attached"></div>
+        <p class="when">While a plain dictation records (🔽 / 🔽 →).</p>
+        <p class="note">⏹️ stops it, <code>⏹️ + ⏎</code> stops it and presses Return, 💻 makes it a prompt to the terminal, ✨ a new session&#x27;s, ☠️ is the last prompt&#x27;s kamikaze. One badge under the crosses: a copy is gathered for the moment the sentence becomes a prompt. <strong>No select badge</strong> — a plain dictation files no highlight — and <code>💬 / ⌃P</code> is a key, so it waits for the bar below.</p>
+        <code class="slug">bar-plain-mouse</code>
+      </section>
+      <section class="card" id="bar-plain-no-mouse">
+        <header>
+          <h3>A plain dictation — no Logitech mouse</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">374×468 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-plain-no-mouse.png" width="374" height="468" style="opacity:1" alt="A plain dictation — no Logitech mouse"></div>
+        <p class="when">The same moment without the mouse.</p>
+        <p class="note"><code>⏹️ / ⌘⌘</code> on ✌️ →, and <code>💬 / ⌃P</code> under the crosses: ⌃P makes the sentence a prompt and takes the shot.</p>
+        <code class="slug">bar-plain-no-mouse</code>
+      </section>
+      <section class="card" id="bar-question-mouse">
+        <header>
+          <h3>A ⚡ question — the mouse attached</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">298×468 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-question-mouse.png" width="298" height="468" style="opacity:1" alt="A ⚡ question — the mouse attached"></div>
+        <p class="when">While a quick question records (🔼 ← at rest).</p>
+        <p class="note">⚡ asks, 💻 sends it to the terminal instead, Google&#x27;s G searches it, <code>G + ⚡</code> does both. It is a prompt, so copy and select both ride.</p>
+        <code class="slug">bar-question-mouse</code>
+      </section>
+      <section class="card" id="bar-crop-mouse">
+        <header>
+          <h3>A wheel crop — the mouse attached</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">244×216 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-crop-mouse.png" width="244" height="216" style="opacity:1" alt="A wheel crop — the mouse attached"></div>
+        <p class="when">From the wheel press until the crop lands: the bar draws the mouse, because that is the hand the crop is in.</p>
+        <p class="note">The wheel drags the ✂️ box, the right button ➡️ moves it elsewhere. The palm said <code>Esc cancel</code> until 2026-11-22 — a key, so it is empty with the mouse attached and back without it.</p>
+        <code class="slug">bar-crop-mouse</code>
+      </section>
+      <section class="card" id="bar-fingers-rest-no-mouse">
+        <header>
+          <h3>At rest, left ⌃⌥⌘ held — no Logitech mouse</h3>
+          <div class="tags"><span class="tag tag-bar" title="the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer">hint bar</span><span class="tag">alpha 1.00</span><span class="tag">314×392 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/bar-fingers-rest-no-mouse.png" width="314" height="392" style="opacity:1" alt="At rest, left ⌃⌥⌘ held — no Logitech mouse"></div>
+        <p class="when">0.3 s into holding left ⌃⌥⌘ with no sentence open: what each trackpad gesture starts.</p>
+        <p class="note">☝️: 💬 a prompt at the caret, ✨ a new session, ⚡ a question, 💻 a prompt at the bound terminal, ☠️ kamikaze. ✌️: <code>🎙️ / ⌘⌘</code> a plain dictation (right ⌘ twice is its key), ⏎ Return, 🔌 unbind. With the mouse attached the same bar loses the <code>/ ⌘⌘</code>.</p>
+        <code class="slug">bar-fingers-rest-no-mouse</code>
+      </section>
+    </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at c8687e54 · 22 Nov 2026 · built 22 Nov 2026, 14:11
+  Generated from <code>OverlayStates.swift</code> · repo at 4d038956 · 22 Nov 2026 · built 22 Nov 2026, 15:17
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

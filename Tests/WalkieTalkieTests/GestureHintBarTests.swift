@@ -75,11 +75,129 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// ⌃P turns a plain dictation into a prompt, ⌘C files a copy.
     func testTheKeysRow() {
         XCTAssertEqual(GestureHintBar.keys(for: .init()), [])
+        // 2026-11-22: copy is its icon alone, and a prompt (a ⚡ question too)
+        // gains select — the selection watcher is off in a plain dictation.
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false)),
-                       ["💬 prompt ⌃P", "📋 copy ⌘C"])
-        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true)), ["📋 copy ⌘C"])
+                       ["💬 prompt ⌃P", GestureHintBar.copyKey])
+        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true)),
+                       [GestureHintBar.copyKey, GestureHintBar.selectKey])
+        XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false, quick: true)),
+                       [GestureHintBar.copyKey, GestureHintBar.selectKey])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: true, crop: .selecting)), [])
         XCTAssertEqual(GestureHintBar.keys(for: .init(listening: true, prompting: false, held: true)), [])
+    }
+
+    // MARK: glyphs with the mouse, keys without it (2026-11-22)
+
+    /// Victor: *"afișează tastele … doar dacă nu e mouse-ul conectat … lasă doar
+    /// emoji-urile … poți chiar să scoți textele cu totul"*.
+    func testALabelLosesItsWordsAndKeepsItsKeyOnlyWithoutTheMouse() {
+        let cases: [(String, String, String)] = [
+            // full wording, with the mouse, without it
+            ("🗑️ discard", "🗑️", "🗑️"),
+            ("🏁 / ⌘⌘", "🏁", "🏁 / ⌘⌘"),
+            ("📸 / ⌃P", "📸", "📸 / ⌃P"),
+            ("⚡ ask ⌘⌘", "⚡", "⚡ / ⌘⌘"),
+            ("⏹️ ⌘⌘", "⏹️", "⏹️ / ⌘⌘"),
+            ("🎙️ dictate ⌘⌘", "🎙️", "🎙️ / ⌘⌘"),
+            ("🔴 ✂️ video", "🔴 ✂️", "🔴 ✂️"),
+            ("⏹️ + ⏎", "⏹️ + ⏎", "⏹️ + ⏎"),
+            (GestureHintBar.google + " + ⚡", GestureHintBar.google + " + ⚡", GestureHintBar.google + " + ⚡"),
+            (GestureHintBar.google + " Google", GestureHintBar.google, GestureHintBar.google),
+            ("➡️ move to", "➡️", "➡️"),
+            ("~☠️", "~☠️", "~☠️"),
+            ("⏎", "⏎", "⏎"),
+            ("", "", ""),
+            // No glyph to fall back on: the words stay, unless they name a key.
+            ("Esc cancel", "", "Esc cancel"),
+            ("interrupt", "interrupt", "interrupt"),
+        ]
+        for (full, mouse, noMouse) in cases {
+            XCTAssertEqual(GestureHintBar.shown(full, keys: false), mouse, "\(full) with the mouse")
+            XCTAssertEqual(GestureHintBar.shown(full, keys: true), noMouse, "\(full) without it")
+        }
+    }
+
+    /// With the Logitech mouse attached no badge of any stage carries a word
+    /// or a key; whatever `crosses` learns to say later is cut the same way.
+    func testWithTheMouseEveryBadgeIsGlyphsAlone() {
+        let stages: [GestureHintBar.Stage] = [
+            .init(listening: true, prompting: true),
+            .init(listening: true, prompting: true, filming: true, areaFilm: true, kamikaze: true, spawn: true),
+            .init(listening: true, prompting: true, areaFilm: true),
+            .init(listening: true, prompting: false),
+            .init(listening: true, prompting: false, quick: true),
+            .init(listening: true, prompting: true, crop: .selecting),
+            .init(listening: true, prompting: true, crop: .locked),
+            .init(listening: true, prompting: true, crop: .parked),
+            .init(listening: true, prompting: true, crop: .drawing),
+            .init(fingers: true),
+            .init(listening: true, prompting: true, fingers: true),
+        ]
+        for stage in stages {
+            let bar = GestureHintBar.bar(for: stage)
+            XCTAssertFalse(bar.isEmpty, "\(stage)")
+            var labels = bar.crosses.flatMap { [$0.click, $0.up, $0.down, $0.left, $0.right] }.compactMap { $0 } + bar.keys
+            if let m = bar.mouse { labels += [m.left, m.wheel, m.right, m.body] }
+            for label in labels {
+                XCTAssertFalse(label.contains { $0.isASCII && $0.isLetter }, "a word in “\(label)” — \(stage)")
+                XCTAssertFalse(label.contains { "⌘⌃⌥⇧/".contains($0) }, "a key in “\(label)” — \(stage)")
+            }
+        }
+    }
+
+    func testAPromptsBarWithTheMouseAndWithout() {
+        let mouse = GestureHintBar.bar(for: .init(listening: true, prompting: true))
+        XCTAssertEqual(mouse.crosses, [
+            Cross(click: "🏁", up: "✨", down: "☠️", left: "🗑️", right: nil),
+            Cross(click: "📸", up: "🔴", down: "⌨️", left: "", right: "🧠"),
+        ])
+        XCTAssertEqual(mouse.keys, [GestureHintBar.copyKey, GestureHintBar.selectKey])
+
+        // No Logitech mouse: the trackpad's crosses, the keys back in their badges.
+        let none = GestureHintBar.bar(for: .init(listening: true, prompting: true, noMouse: true))
+        XCTAssertEqual(none.crosses, [
+            Cross(click: "🏁 / ⌘⌘", up: "✨", down: "☠️", left: "🗑️", right: nil, corner: "☝️"),
+            Cross(click: "📸 / ⌃P", up: "🔴", down: "⌨️", left: "", right: "🧠", corner: "✌️"),
+        ])
+        XCTAssertEqual(none.keys, [GestureHintBar.copyKey, GestureHintBar.selectKey])
+    }
+
+    /// `💬 prompt ⌃P` is a key with no gesture behind it: without the mouse it
+    /// is `💬 / ⌃P`, with it the row is the Copy icon alone.
+    func testAPlainDictationsBarWithTheMouseAndWithout() {
+        let mouse = GestureHintBar.bar(for: .init(listening: true, prompting: false))
+        XCTAssertEqual(mouse.crosses, [
+            Cross(click: "⏹️", up: "✨", down: "☠️", left: "🗑️", right: "💻"),
+            Cross(click: "⏹️ + ⏎", up: "", down: "⏹️", left: "", right: "⏹️"),
+        ])
+        XCTAssertEqual(mouse.keys, [GestureHintBar.copyKey])
+        let none = GestureHintBar.bar(for: .init(listening: true, prompting: false, noMouse: true))
+        XCTAssertEqual(none.crosses[1].right, "⏹️ / ⌘⌘")
+        XCTAssertEqual(none.keys, ["💬 / ⌃P", GestureHintBar.copyKey])
+    }
+
+    func testACropsMouseWithTheMouseAndWithout() {
+        XCTAssertEqual(GestureHintBar.bar(for: .init(listening: true, prompting: true, crop: .selecting)).mouse,
+                       GestureHintBar.MouseHint(wheel: "✂️", right: "➡️", body: ""))
+        XCTAssertEqual(GestureHintBar.bar(for: .init(listening: true, prompting: true, crop: .parked, noMouse: true)).mouse,
+                       GestureHintBar.MouseHint(left: "📍", wheel: "🎯", right: "🗑️", body: "Esc cancel"))
+    }
+
+    /// The trackpad's crosses at rest, the chord held with the mouse attached
+    /// and with none.
+    func testTheFingersAtRestWithTheMouseAndWithout() {
+        XCTAssertEqual(GestureHintBar.bar(for: .init(fingers: true)).crosses, [
+            Cross(click: "💬", up: "✨", down: "☠️", left: "⚡", right: "💻", corner: "☝️"),
+            Cross(click: "🎙️", up: "", down: "🔌", left: "⏎", right: "🎙️", corner: "✌️"),
+        ])
+        XCTAssertEqual(GestureHintBar.bar(for: .init(fingers: true, noMouse: true)).crosses[1].click, "🎙️ / ⌘⌘")
+    }
+
+    /// The point of it: *"mai puțin late acele badge-uri"*. 260 pt before.
+    func testThePromptsBarIsUnderHalfItsOldWidth() {
+        let bar = GestureHintBar.bar(for: .init(listening: true, prompting: true))
+        XCTAssertLessThanOrEqual(GestureHintBar.Board.size(for: bar.crosses, mouse: bar.mouse, keys: bar.keys).width, 130)
     }
 
     func testNothingWhileRightCmdOptIsHeld() {
@@ -162,19 +280,26 @@ func testTheHiddenSwitchIsOffUnlessSet() {
             ("fingers", .init(fingers: true)),
             ("fingers-prompt", .init(listening: true, prompting: true, fingers: true)),
             ("no-mouse-plain", .init(listening: true, prompting: false, noMouse: true)),
+            ("no-mouse-prompt", .init(listening: true, prompting: true, noMouse: true)),
+            ("no-mouse-quick", .init(listening: true, prompting: false, quick: true, noMouse: true)),
+            ("no-mouse-crop", .init(listening: true, prompting: true, crop: .selecting, noMouse: true)),
+            ("no-mouse-fingers", .init(fingers: true, noMouse: true)),
         ]
+        // Drawn as across the seam: three times the size, solid (`spot`).
+        let k = GestureHintBar.offRetinaScale
         for (name, stage) in stages {
             for (bgName, bg) in [("dark", NSColor(white: 0.12, alpha: 1)), ("light", NSColor(white: 0.93, alpha: 1))] {
-                let mouse = stage.fingers ? nil : GestureHintBar.mouse(for: stage)
-                let trackpad = stage.fingers || stage.noMouse
-                let crosses = trackpad ? GestureHintBar.fingerCrosses(for: stage)
-                    : mouse == nil ? GestureHintBar.crosses(for: stage) : []
-                let keys = mouse == nil ? GestureHintBar.keys(for: stage) : []
-                let size = GestureHintBar.Board.size(for: crosses, mouse: mouse, keys: keys)
+                let bar = GestureHintBar.bar(for: stage)
+                let (crosses, mouse, keys) = (bar.crosses, bar.mouse, bar.keys)
+                var size = GestureHintBar.Board.size(for: crosses, mouse: mouse, keys: keys)
+                if bgName == "dark" { print("hint bar \(name): \(Int(size.width)) × \(Int(size.height)) pt") }
+                size = NSSize(width: size.width * k, height: size.height * k)
                 let board = GestureHintBar.Board(frame: NSRect(x: 20, y: 20, width: size.width, height: size.height))
                 board.crosses = crosses
                 board.mouse = mouse
                 board.keys = keys
+                board.scale = k
+                board.opacity = GestureHintBar.acrossOpacity
                 let host = NSView(frame: NSRect(x: 0, y: 0, width: size.width + 40, height: size.height + 40))
                 host.wantsLayer = true
                 host.layer?.backgroundColor = bg.cgColor

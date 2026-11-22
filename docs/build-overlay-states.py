@@ -35,6 +35,7 @@ SHAPES = {
     "flash": ("flash", "a message in the chip for a few seconds — bare like the chip, no blur, no border"),
     "panel": ("panel", "top-left of the screen, blurred, full opacity, ✕ on hover"),
     "atom": ("atom", "the prompt at rest: an animation in the corner, the dialog comes when the hand does"),
+    "bar": ("hint bar", "the gesture bar in a corner of the secondary screen — a fixed spot, never beside the pointer"),
     "none": ("no window", "nothing on screen"),
 }
 
@@ -157,6 +158,7 @@ PAGE = """<!doctype html>
   .tag-flash {{ color: #e8c06a; border-color: #4d4128; }}
   .tag-panel {{ color: #8fb8e8; border-color: #2c3f56; }}
   .tag-atom {{ color: #f08fc4; border-color: #56304a; }}
+  .tag-bar {{ color: #c9a6f0; border-color: #45305a; }}
   .tag-none {{ color: #8a8a94; border-style: dashed; }}
   /* The backdrop is the point: the chip is white text with a halo, drawn over
      whatever Victor happens to be working on. Two of them, switchable, because

@@ -213,12 +213,103 @@ final class GestureHintBar {
     /// prompt, and gathered by a plain one for the moment it becomes one. Pure.
     static func keys(for s: Stage) -> [String] {
         guard s.listening, !s.held, s.crop == nil else { return [] }
-        if s.prompting || s.quick { return [copyKey] }
+        // A prompt (a ⚡ question is one) files what he highlights too — the
+        // selection watcher runs on `attachable`, which a plain sentence is not
+        // (`AppDelegate.syncBorrowedGestures`); the clipboard's runs for both.
+        if s.prompting || s.quick { return [copyKey, selectKey] }
         return [promptKey, copyKey]
     }
 
     static let promptKey = "💬 prompt ⌃P"
-    static let copyKey = "📋 copy ⌘C"
+    /// **Copy is its icon alone — no word, no ⌘C** (2026-11-22, Victor: *"pune
+    /// iconița de Copy care e standard, cele două dreptunghiuri cumva rotunjite …
+    /// la copy jos nici nu mai spui Command [C]"*): the Edit menu's two sheets
+    /// (`doc.on.doc`, as on the chip since 2026-10-29), painted where this
+    /// private-use character stands. `📋 copy ⌘C` until then.
+    static let copyKey = "\u{E0A1}"
+    /// **Select: a caret dragging over lines of text** (2026-11-22, Victor: *"mai
+    /// pune-mi încă un badge … select. Să aibă un caret și niște texte pe care
+    /// tragi"*) — `Glyphs.select`, painted where this character stands.
+    static let selectKey = "\u{E0A2}"
+
+    // MARK: glyphs with the mouse, keys without it (2026-11-22)
+
+    /// **What a label shows.** Victor: *"afișează tastele, adică Command Command
+    /// pentru finish, Control P pentru poză, doar dacă nu e mouse-ul conectat.
+    /// Dacă e mouse-ul conectat, nu mă ajută. Alea, lasă doar emoji-urile …
+    /// cred că poți chiar să scoți textele cu totul … mai puțin late acele
+    /// badge-uri."* `crosses` / `mouse` / `keys` keep the full wording (it is the
+    /// spec, and the log's); this cuts it for the screen:
+    /// - **the words go, always** — `🗑️ discard` → `🗑️`, `🔴 ✂️ video` → `🔴 ✂️`;
+    ///   a `+` stays only between two glyphs (`⏹️ + ⏎`);
+    /// - **a key legend** (a token with ⌘ ⌃ ⌥ ⇧, or `Esc`) **stays only with
+    ///   `keys`** — no Logitech mouse — after a slash: `🏁 / ⌘⌘`, `⚡ / ⌘⌘`;
+    /// - **a label with no glyph keeps its words** (a glyph cannot be invented
+    ///   here) — unless it names a key and keys are off: then it is empty.
+    /// Pure.
+    static func shown(_ label: String, keys showKeys: Bool) -> String {
+        var glyphs: [String] = [], legend: [String] = []
+        var joiner = false
+        for token in label.split(separator: " ") {
+            if isKey(token) { legend.append(String(token)); continue }
+            if token.allSatisfy({ $0.isASCII && $0.isLetter }) || token == "/" { continue }
+            if token == "+" { joiner = !glyphs.isEmpty; continue }
+            if joiner { glyphs.append("+") }
+            joiner = false
+            glyphs.append(String(token))
+        }
+        guard !glyphs.isEmpty else { return legend.isEmpty || showKeys ? label : "" }
+        guard showKeys, !legend.isEmpty else { return glyphs.joined(separator: " ") }
+        return glyphs.joined(separator: " ") + " / " + legend.joined(separator: " ")
+    }
+
+    /// A token that names a key: a modifier's mark in it, or `Esc`. `⏎` is not
+    /// one — in a label it is the Return the gesture presses.
+    static func isKey(_ token: Substring) -> Bool {
+        token == "Esc" || token.contains { "⌘⌃⌥⇧".contains($0) }
+    }
+
+    /// Everything the bar draws for a stage, cut by `shown`.
+    struct Bar: Equatable {
+        var crosses: [Cross] = []
+        var mouse: MouseHint?
+        var keys: [String] = []
+        var isEmpty: Bool { crosses.isEmpty && mouse == nil }
+    }
+
+    /// **The bar for a stage** — which variant (`trackpad`: the fingers' crosses;
+    /// a crop: the mouse; else the side buttons' crosses) and, through `shown`,
+    /// how much each badge says: **glyphs alone with the Logitech mouse attached,
+    /// glyph + key without it** (`Stage.noMouse`). A keys-row entry that is only
+    /// a key (`💬 prompt ⌃P`) is not drawn with the mouse; nor is the crop's
+    /// `Esc cancel`. Pure — the Logi-mode gate and the hidden switch are `update`'s.
+    static func bar(for stage: Stage) -> Bar {
+        let withKeys = stage.noMouse
+        let trackpad = stage.fingers || (stage.noMouse && stage.listening && !stage.held && stage.crop == nil)
+        var bar = Bar()
+        if trackpad {
+            bar.crosses = fingerCrosses(for: stage)
+            bar.keys = keys(for: stage)
+        } else if let mouse = mouse(for: stage) {
+            bar.mouse = MouseHint(left: shown(mouse.left, keys: withKeys), wheel: shown(mouse.wheel, keys: withKeys),
+                                  right: shown(mouse.right, keys: withKeys), body: shown(mouse.body, keys: withKeys))
+        } else {
+            bar.crosses = crosses(for: stage)
+            bar.keys = keys(for: stage)
+        }
+        bar.crosses = bar.crosses.map { c in
+            var c = c
+            c.click = c.click.map { shown($0, keys: withKeys) }
+            c.up = c.up.map { shown($0, keys: withKeys) }
+            c.down = c.down.map { shown($0, keys: withKeys) }
+            c.left = c.left.map { shown($0, keys: withKeys) }
+            c.right = c.right.map { shown($0, keys: withKeys) }
+            return c
+        }
+        bar.keys = bar.keys.filter { withKeys || !$0.split(separator: " ").contains(where: isKey) }
+            .map { shown($0, keys: withKeys) }
+        return bar
+    }
 
     /// **The trackpad's crosses, under left ⌃⌥⌘** (2026-10-20, Victor: *"I should
     /// see the same tooltips in the bottom right corner to suggest what actions I
@@ -264,9 +355,54 @@ final class GestureHintBar {
     private var displays: [Display] = []
     private var placed: Spot?
 
-    fileprivate static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
-    fileprivate static let boxHeight: CGFloat = 24
-    fileprivate static let minBoxWidth: CGFloat = 68
+    /// **Bigger glyphs in narrower boxes** (2026-11-22): with the words gone a
+    /// badge is one glyph, so the box's floor fell from 68 to 38 and the room
+    /// went to the glyph — 12 pt → 15 pt, the box 24 → 26 tall.
+    fileprivate static let font = NSFont.systemFont(ofSize: 15, weight: .medium)
+    fileprivate static let boxHeight: CGFloat = 26
+    fileprivate static let minBoxWidth: CGFloat = 38
+    fileprivate static let ink = NSColor.white.withAlphaComponent(0.92)
+    /// The Copy icon in the bar's ink (`copyKey`), made once.
+    fileprivate static let copyImage: NSImage? = NSImage(systemSymbolName: "doc.on.doc",
+                                                         accessibilityDescription: "Copy")?
+        .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: font.pointSize, weight: .medium)
+            .applying(.init(paletteColors: [ink])))
+    /// The drawn selection (`selectKey`), made once.
+    fileprivate static let selectImage = Glyphs.select(height: (font.pointSize * 1.25).rounded(), ink: ink)
+
+    /// **The pictures a label can carry**: the size of what is painted where a
+    /// private-use character stands (`google`, `copyKey`, `selectKey`), nil for
+    /// a character the font draws.
+    fileprivate static func pictureSize(_ c: Character) -> NSSize? {
+        switch String(c) {
+        case google: let g = font.capHeight + 4; return NSSize(width: g, height: g)
+        case copyKey: return copyImage?.size
+        case selectKey: return selectImage.size
+        default: return nil
+        }
+    }
+
+    /// A label as runs of text and pictures, each with its width.
+    fileprivate static func runs(_ text: String) -> [(text: String, picture: Character?, width: CGFloat)] {
+        var out: [(text: String, picture: Character?, width: CGFloat)] = []
+        var plain = ""
+        func flush() {
+            guard !plain.isEmpty else { return }
+            out.append((plain, nil, (plain as NSString).size(withAttributes: [.font: font]).width))
+            plain = ""
+        }
+        for c in text {
+            if let size = pictureSize(c) { flush(); out.append(("", c, size.width)) } else { plain.append(c) }
+        }
+        flush()
+        return out
+    }
+
+    /// A label's drawn width — off its runs, since the font cannot answer for a picture.
+    static func labelWidth(_ label: String) -> CGFloat {
+        let text = label.hasPrefix(struck) ? String(label.dropFirst(struck.count)) : label
+        return runs(text).reduce(0) { $0 + $1.width }
+    }
     fileprivate static let padding: CGFloat = 6
     fileprivate static let gap: CGFloat = 4
     /// Between the 🔼 cross and the 🔽 one: a row's worth, as in the sketch —
@@ -306,13 +442,9 @@ final class GestureHintBar {
         guard stage != shown || (panel != nil) != visible else { return }
         shown = stage
         guard visible else { hide(); return }
-        if trackpad {
-            show(Self.fingerCrosses(for: stage), keys: Self.keys(for: stage))
-            return
-        }
-        let mouse = Self.mouse(for: stage)
-        show(mouse == nil ? Self.crosses(for: stage) : [], mouse: mouse,
-             keys: mouse == nil ? Self.keys(for: stage) : [])
+        // Glyphs alone with the mouse, glyph + key without it (2026-11-22, `bar`).
+        let bar = Self.bar(for: stage)
+        show(bar.crosses, mouse: bar.mouse, keys: bar.keys)
     }
 
     /// Every mouse move, from the chip's own monitors: the bar leaves the screen
@@ -398,6 +530,32 @@ final class GestureHintBar {
         board = nil
         NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; p.animator().alphaValue = 0 },
                                             completionHandler: { p.orderOut(nil) })
+    }
+
+    /// **The bar for a stage as a PNG, for the states page** (`OverlayStates`,
+    /// `shape: "bar"`): solid, as across the seam, at twice its Retina size and
+    /// 2× the pixels (`RelayWindow.snapshot`'s rule). Answers the size in points,
+    /// nil when the stage has no bar.
+    @discardableResult
+    static func writeStill(of stage: Stage, to path: String, scale: CGFloat = 2) -> NSSize? {
+        let bar = bar(for: stage)
+        guard !bar.isEmpty else { return nil }
+        let base = Board.size(for: bar.crosses, mouse: bar.mouse, keys: bar.keys)
+        let size = NSSize(width: base.width * scale, height: base.height * scale)
+        let board = Board(frame: NSRect(origin: .zero, size: size))
+        board.crosses = bar.crosses
+        board.mouse = bar.mouse
+        board.keys = bar.keys
+        board.scale = scale
+        board.opacity = acrossOpacity
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(size.width * 2), pixelsHigh: Int(size.height * 2),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+        rep.size = size
+        board.cacheDisplay(in: board.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
+        try? png.write(to: URL(fileURLWithPath: path))
+        return size
     }
 
     private static func describe(_ c: Cross) -> String {
@@ -515,8 +673,9 @@ final class GestureHintBar {
     }
 
     /// The crosses, drawn. A three-column grid shared by both, so their centre
-    /// boxes line up; every box is as wide as the widest label, so the board
-    /// does not change width when a label does.
+    /// boxes line up. **Each column is as wide as its own widest badge**
+    /// (2026-11-22 — every box was as wide as the bar's widest label until then,
+    /// so one `⏹️ + ⏎` in the middle cost the two side columns its width too).
     final class Board: NSView {
         var crosses: [Cross] = [] { didSet { needsDisplay = true } }
         /// Set during a crop, in place of the crosses.
@@ -530,16 +689,26 @@ final class GestureHintBar {
 
         override var isFlipped: Bool { true }
 
-        static func boxWidth(for crosses: [Cross], keys: [String] = []) -> CGFloat {
-            let labels = crosses.flatMap { [$0.click, $0.up, $0.down, $0.left, $0.right] }.compactMap { $0 } + keys
-            let widest = labels.map { ($0 as NSString).size(withAttributes: [.font: GestureHintBar.font]).width }
-                .max() ?? 0
-            return max(GestureHintBar.minBoxWidth, ceil(widest) + GestureHintBar.padding * 2)
+        /// The three columns' widths: ← | click ↑ ↓ | →, each key in the column
+        /// `keyColumn` puts it in.
+        static func columnWidths(for crosses: [Cross], keys: [String] = []) -> [CGFloat] {
+            var labels: [[String?]] = [crosses.map(\.left), crosses.flatMap { [$0.click, $0.up, $0.down] },
+                                       crosses.map(\.right)]
+            for (i, key) in keys.enumerated() { labels[keyColumn(i, of: keys.count)].append(key) }
+            return labels.map { column in
+                let widest = column.compactMap { $0 }.map(GestureHintBar.labelWidth).max() ?? 0
+                return max(GestureHintBar.minBoxWidth, ceil(widest) + GestureHintBar.padding * 2)
+            }
+        }
+
+        /// Three keys to a line, each line right-aligned.
+        static func keyColumn(_ i: Int, of count: Int) -> Int {
+            let line = i / 3, inLine = min(3, count - line * 3)
+            return 3 - inLine + i % 3
         }
 
         static func mouseBoxWidth(for m: MouseHint) -> CGFloat {
-            let widest = [m.left, m.wheel, m.right]
-                .map { ($0 as NSString).size(withAttributes: [.font: GestureHintBar.font]).width }.max() ?? 0
+            let widest = [m.left, m.wheel, m.right].map(GestureHintBar.labelWidth).max() ?? 0
             return max(GestureHintBar.minBoxWidth, ceil(widest) + GestureHintBar.padding * 2)
         }
 
@@ -552,10 +721,9 @@ final class GestureHintBar {
         }
 
         static func size(for crosses: [Cross], keys: [String] = []) -> NSSize {
-            let w = boxWidth(for: crosses, keys: keys)
             let crossHeight = GestureHintBar.boxHeight * 3 + GestureHintBar.gap * 2
             let n = CGFloat(crosses.count)
-            return NSSize(width: w * 3 + GestureHintBar.gap * 2,
+            return NSSize(width: columnWidths(for: crosses, keys: keys).reduce(0, +) + GestureHintBar.gap * 2,
                           height: crossHeight * n + GestureHintBar.crossGap * max(0, n - 1)
                                 + keysHeight(keys.count))
         }
@@ -569,8 +737,9 @@ final class GestureHintBar {
         }
 
         override func draw(_ dirtyRect: NSRect) {
-            let w = Self.boxWidth(for: crosses, keys: keys)
+            let widths = Self.columnWidths(for: crosses, keys: keys)
             let h = GestureHintBar.boxHeight, gap = GestureHintBar.gap
+            func x(_ col: Int) -> CGFloat { widths[..<col].reduce(0, +) + CGFloat(col) * gap }
             let crossHeight = h * 3 + gap * 2
             let cg = NSGraphicsContext.current?.cgContext
             cg?.scaleBy(x: scale, y: scale)
@@ -585,8 +754,7 @@ final class GestureHintBar {
                 let top = CGFloat(i) * (crossHeight + GestureHintBar.crossGap)
                 func box(_ text: String?, col: Int, row: Int) {
                     guard let text else { return }
-                    let r = NSRect(x: CGFloat(col) * (w + gap), y: top + CGFloat(row) * (h + gap),
-                                   width: w, height: h)
+                    let r = NSRect(x: x(col), y: top + CGFloat(row) * (h + gap), width: widths[col], height: h)
                     drawBox(text, in: r)
                 }
                 box(c.up, col: 1, row: 0)
@@ -598,7 +766,7 @@ final class GestureHintBar {
                     // The top-left cell alone, clear of the ← box under it.
                     let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: h * 0.8)]
                     let size = (corner as NSString).size(withAttributes: attrs)
-                    (corner as NSString).draw(at: NSPoint(x: (w - size.width) / 2, y: top + (h - size.height) / 2),
+                    (corner as NSString).draw(at: NSPoint(x: (widths[0] - size.width) / 2, y: top + (h - size.height) / 2),
                                               withAttributes: attrs)
                 }
             }
@@ -607,9 +775,9 @@ final class GestureHintBar {
             let n = CGFloat(crosses.count)
             let keysTop = crossHeight * n + GestureHintBar.crossGap * max(0, n - 1) + GestureHintBar.crossGap / 2
             for (i, key) in keys.enumerated() {
-                let line = i / 3, inLine = min(3, keys.count - line * 3), col = 3 - inLine + i % 3
-                drawBox(key, in: NSRect(x: CGFloat(col) * (w + gap), y: keysTop + CGFloat(line) * (h + gap),
-                                        width: w, height: h))
+                let line = i / 3, col = Self.keyColumn(i, of: keys.count)
+                drawBox(key, in: NSRect(x: x(col), y: keysTop + CGFloat(line) * (h + gap),
+                                        width: widths[col], height: h))
             }
         }
 
@@ -711,26 +879,36 @@ final class GestureHintBar {
             style.lineBreakMode = .byClipping
             let attrs: [NSAttributedString.Key: Any] = [
                 .font: GestureHintBar.font,
-                .foregroundColor: NSColor.white.withAlphaComponent(0.92),
+                .foregroundColor: GestureHintBar.ink,
                 .paragraphStyle: style,
             ]
             let s = text as NSString
             var ts = s.size(withAttributes: attrs)
-            if let at = text.range(of: GestureHintBar.google) {
-                // The G in its own square, the words around it drawn left-aligned
-                // from where the centred whole would start.
-                let before = String(text[..<at.lowerBound]) as NSString
-                let after = String(text[at.upperBound...]) as NSString
+            let runs = GestureHintBar.runs(text)
+            if runs.contains(where: { $0.picture != nil }) {
+                // Each picture in its own box (Google's G, the Copy icon, the
+                // selection), the words around it drawn left-aligned from where
+                // the centred whole would start.
                 let left: [NSAttributedString.Key: Any] = attrs.filter { $0.key != .paragraphStyle }
-                let g = GestureHintBar.font.capHeight + 4
-                let wb = before.size(withAttributes: left).width, wa = after.size(withAttributes: left).width
-                ts.width = wb + g + wa
+                ts.width = runs.reduce(0) { $0 + $1.width }
                 var x = max(r.minX + 4, r.midX - ts.width / 2)
-                let y = r.midY - ts.height / 2
-                before.draw(at: NSPoint(x: x, y: y), withAttributes: left)
-                x += wb
-                Self.drawGoogleG(in: NSRect(x: x, y: r.midY - g / 2, width: g, height: g))
-                after.draw(at: NSPoint(x: x + g, y: y), withAttributes: left)
+                for run in runs {
+                    if let c = run.picture, let size = GestureHintBar.pictureSize(c) {
+                        let box = NSRect(x: x, y: r.midY - size.height / 2, width: size.width, height: size.height)
+                        switch String(c) {
+                        case GestureHintBar.google: Self.drawGoogleG(in: box)
+                        case GestureHintBar.copyKey:
+                            GestureHintBar.copyImage?.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1,
+                                                           respectFlipped: true, hints: nil)
+                        default:
+                            GestureHintBar.selectImage.draw(in: box, from: .zero, operation: .sourceOver, fraction: 1,
+                                                            respectFlipped: true, hints: nil)
+                        }
+                    } else {
+                        (run.text as NSString).draw(at: NSPoint(x: x, y: r.midY - ts.height / 2), withAttributes: left)
+                    }
+                    x += run.width
+                }
             } else {
                 s.draw(in: NSRect(x: r.minX + 4, y: r.midY - ts.height / 2, width: r.width - 8, height: ts.height),
                        withAttributes: attrs)

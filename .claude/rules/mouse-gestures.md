@@ -379,6 +379,39 @@ din colț"*): `defaults write ro.victorrentea.wispr-relay hintBarHidden -bool tr
 (`GestureHintBar.hidden`, read at every update). Off unless set, no menu row; the crop's own readout (the kit's
 `⌘ move ⌃ square` pill and size badges) is not the bar and stays.
 
+**Glyphs alone with the mouse attached; the keys only without it; no words at all** (2026-11-22, Victor:
+*"înlocuiește clipboard-ul care scrie Copy … pune iconița de Copy care e standard, cele două dreptunghiuri cumva
+rotunjite. Și afișează tastele, adică Command Command pentru finish, Control P pentru poză, doar dacă nu e
+mouse-ul conectat. Dacă e mouse-ul conectat, nu mă ajută. Alea, lasă doar emoji-urile, da? Gunoi, finish, new,
+kamikaze. Și cred că poți chiar să scoți textele cu totul … mai puțin late acele badge-uri … la copy jos nici nu
+mai spui Command [C] … Și mai pune-mi încă un badge, să fie ceva de genul select. Să aibă un caret și niște texte
+pe care tragi, ca simbol, ca să înțeleg ce pot să fac în momentul acela al dictării."*) — supersedes, for what is
+**drawn**, every `🗑️ discard` / `🏁 / ⌘⌘` / `📋 copy ⌘C` wording in this file and in the bullets below:
+- **`crosses` / `mouse` / `keys` keep the full wording** (the spec, the tests, what a new gesture is written in);
+  **`GestureHintBar.bar(for:)` is what `update` draws**, each label cut by `shown(_:keys:)`: ASCII words go
+  (`🗑️ discard` → `🗑️`, `🔴 ✂️ video` → `🔴 ✂️`, `Ⓖ Google` → `Ⓖ`; a `+` stays between two glyphs), a key legend
+  (a token with ⌘ ⌃ ⌥ ⇧, or `Esc`) stays only when `Stage.noMouse`, after a slash (`🏁 / ⌘⌘`, `📸 / ⌃P`,
+  `⚡ / ⌘⌘`, `⏹️ / ⌘⌘`, `🎙️ / ⌘⌘`). **A label with no glyph keeps its words** — so a new gesture needs an emoji,
+  or it is the one wide badge on the bar. Nothing else decides: add a string to `crosses` and it is cut the same.
+- **With the mouse a key that has no gesture behind it is not drawn**: `💬 prompt ⌃P` leaves the keys row, the
+  crop's palm (`Esc cancel`) is an empty box. Without it: `💬 / ⌃P`, and `Esc cancel` whole (no glyph to fall on).
+- **The same rule under left ⌃⌥⌘**: the fingers' crosses with a Logitech mouse attached carry no `⌘⌘` either.
+- **Copy is the Copy icon alone** (`copyKey`, SF Symbol `doc.on.doc` in the bar's ink — the chip's since
+  2026-10-29) and **select is drawn** (`selectKey` → `Glyphs.select`: three lines, a stretch of the middle one
+  highlighted, the I-beam at its end). Both are private-use characters in the label, painted by `drawBox` like
+  Google's G (`pictureSize` / `runs`; `labelWidth` measures them — the font cannot). Row under the crosses:
+  **prompt and ⚡ `copy · select`, plain `copy`** (the selection watcher runs on `attachable`, which a plain
+  sentence is not; the clipboard's runs for both — `syncBorrowedGestures`). `AutoAttach`'s two switches are not
+  read: the badges stay when one is off.
+- **Narrower, and the glyphs bigger**: font 12 → 15 pt, box 24 → 26 tall, the box's floor 68 → 38, and **each
+  column is as wide as its own widest badge** (`Board.columnWidths`; all three took the widest label's until
+  then). Prompt 260 → 122 pt wide (× 3 across the seam), plain 299 → 150, ⚡ 260 → 149, a crop 245 → 122; without
+  the mouse 157 (plain 187). Height 220 → 234.
+- **Photographed**: states page group *The corner hint bar* (`Shot.bar`, `shape: "bar"`,
+  `GestureHintBar.writeStill`) — `bar-prompt-mouse` / `-no-mouse`, `bar-plain-mouse` / `-no-mouse`,
+  `bar-question-mouse`, `bar-crop-mouse`, `bar-fingers-rest-no-mouse`. `HINT_BAR_PNG=<dir> swift test --filter
+  GestureHintBarTests` renders every stage at the secondary's × 3 on a dark and a light desktop (`no-mouse-*`).
+
 Victor: *"Am dat Forward sus și mi-a trecut ask în modul de terminal nou. Am dat back stânga și mi-a
 făcut cancel. Ăsta n-apar pe … diagrama de butoane live"*. Three read-only audits traced each F-key
 to its handler per stage and `GestureHintBar.crosses` now says what the code does:
