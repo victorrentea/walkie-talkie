@@ -265,16 +265,25 @@ struct LiveAgreement {
 }
 
 /// The switch: Engine submenu `Live captions (local)`, `UserDefaults`
-/// `localLiveCaptions` (default on), `WT_LOCAL_LIVE=0|1` for one run.
+/// `localLiveCaptions`, `WT_LOCAL_LIVE=0|1` for one run.
+///
+/// **Off unless he ticks it** (2026-11-22, Victor: *"subtitrarea live: da, off by default"* —
+/// it was on by default since 2026-10-05; his own Mac had it unticked, and a fresh install
+/// paid a second ~2 GB helper for it). A saved value, on or off, still wins.
 enum LocalLive {
     static let defaultsKey = "localLiveCaptions"
     static let menuTitle = "Live captions (local)"
+    /// With no preference saved.
+    static let unset = false
+
+    static func on(defaults: UserDefaults = .standard,
+                   environment: [String: String] = ProcessInfo.processInfo.environment) -> Bool {
+        if let env = environment["WT_LOCAL_LIVE"] { return env != "0" }
+        return defaults.object(forKey: defaultsKey) as? Bool ?? unset
+    }
 
     static var isOn: Bool {
-        get {
-            if let env = ProcessInfo.processInfo.environment["WT_LOCAL_LIVE"] { return env != "0" }
-            return UserDefaults.standard.object(forKey: defaultsKey) as? Bool ?? true
-        }
+        get { on() }
         set { UserDefaults.standard.set(newValue, forKey: defaultsKey) }
     }
 }

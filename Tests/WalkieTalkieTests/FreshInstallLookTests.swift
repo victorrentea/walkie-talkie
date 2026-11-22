@@ -54,6 +54,23 @@ final class FreshInstallLookTests: XCTestCase {
         }
     }
 
+    /// No live captions from the local model until he ticks the row (2026-11-22, Victor:
+    /// *"subtitrarea live: da, off by default"*); a saved value, either way, still wins.
+    func testLocalLiveCaptionsAreOffUntilTicked() {
+        let name = "local-live-default-test"
+        let d = UserDefaults(suiteName: name)!
+        d.removePersistentDomain(forName: name)
+        XCTAssertFalse(LocalLive.unset)
+        XCTAssertFalse(LocalLive.on(defaults: d, environment: [:]))
+        XCTAssertTrue(LocalLive.on(defaults: d, environment: ["WT_LOCAL_LIVE": "1"]))
+        d.set(true, forKey: LocalLive.defaultsKey)
+        XCTAssertTrue(LocalLive.on(defaults: d, environment: [:]))
+        XCTAssertFalse(LocalLive.on(defaults: d, environment: ["WT_LOCAL_LIVE": "0"]))
+        d.set(false, forKey: LocalLive.defaultsKey)
+        XCTAssertFalse(LocalLive.on(defaults: d, environment: [:]))
+        d.removePersistentDomain(forName: name)
+    }
+
     /// The voice the effects hear, and the corner's wheel.
     func testTheVoiceFilterAndTheCorner() {
         XCTAssertEqual(HaloVoice.unset, .spectrum)

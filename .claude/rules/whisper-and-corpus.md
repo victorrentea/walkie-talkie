@@ -196,7 +196,9 @@ the local model … don't feed too small chunks either"*.
 Victor: *"Pe stilul Eleven Labs Live Captions … cu ajutorul modelului local … un fel de sliding
 window … să le trimiți atunci când fac o pauză în vorbire"*, then *"în niciun caz nu trebuie să
 întârzii transcrierea finală … instantaneu anulezi orice se întâmpla în curs … vei tăia unde pare
-că nu mai vorbesc"*. Engine submenu `Live captions (local)` (default on, `UserDefaults`
+că nu mai vorbesc"*. Engine submenu `Live captions (local)` (**off by default since 2026-11-22** —
+Victor: *"subtitrarea live: da, off by default"*; on by default until then; `LocalLive.unset`,
+pinned in `FreshInstallLookTests`; a saved value still wins — `UserDefaults`
 `localLiveCaptions`, `WT_LOCAL_LIVE=0|1`); the band is `LiveCaptionBand`, fed through the
 protocol's `didHearLive` / `didOpenLive` like ElevenLabs + Live.
 
