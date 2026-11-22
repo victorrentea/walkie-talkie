@@ -297,9 +297,12 @@ def endcard_png(path: Path) -> None:
         im.alpha_composite(icon, ((W - 300) // 2, 110))
         y = 500
     d.text((W / 2, y), "Walkie Talkie", font=font(124, "Heavy"), fill=WHITE, anchor="mm")
-    d.text((W / 2, y + 110), "Free  ·  open source  ·  macOS", font=font(48, "Medium"),
+    # The tagline under the name; the facts and the link lower down (Victor, 2026-11-22).
+    d.text((W / 2, y + 118), "Talk to your coding agent", font=font(62, "Bold"),
+           fill=WHITE, anchor="mm")
+    d.text((W / 2, H - 196), "Free  ·  open source  ·  macOS", font=font(48, "Medium"),
            fill=(255, 176, 32), anchor="mm")
-    d.text((W / 2, y + 196), "github.com/victorrentea/walkie-talkie",
+    d.text((W / 2, H - 116), "github.com/victorrentea/walkie-talkie",
            font=font(44, "Regular"), fill=(190, 198, 214), anchor="mm")
     im.convert("RGB").save(path)
 
@@ -394,6 +397,8 @@ def render_scene(scene: dict) -> tuple[Path, list[dict]]:
     last = "v0"
     subs = [(line["who"], line["at"] + c["at"], c["dur"], c["text"], line.get("tag"))
             for line in scene["lines"] for c in line["subs"]]
+    if is_end:
+        subs = []   # the end card says it in its own type; no subtitle over it
     for j, (who, at, sub_dur, text, tag) in enumerate(subs):
         a = max(0.0, at - 0.05)
         nxt = subs[j + 1][1] - 0.05 if j + 1 < len(subs) else dur
