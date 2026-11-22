@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>cart.js — brewly (working tree)</title>
+<title>CartService.java — brewly (working tree)</title>
 <style>
-  /* A diff view drawn in the browser for the "I don't like this loop" scene — not a real IDE.
+  /* A diff view drawn in the browser for the "I don't like this loop" scene — not a real IDE. Java: the indexed loop becomes stream().filter().mapToDouble().sum().
      `loop-fixed` in state.json swaps the loop for the rewritten lines. */
   * { box-sizing: border-box; margin: 0; }
   body { background: #1e1f22; color: #bcbec4; font: 14px -apple-system, sans-serif; height: 100vh; display: flex; overflow: hidden; }
@@ -15,21 +15,21 @@
   .tabs { height: 38px; background: #2b2d30; display: flex; align-items: flex-end; padding-left: 8px; border-bottom: 1px solid #393b40; }
   .tab { padding: 9px 18px; color: #dfe1e5; border-bottom: 3px solid #3574f0; background: #1e1f22; }
   .tab + .tab { border-color: transparent; background: none; color: #8c8f97; }
-  pre { flex: 1; padding: 14px 0; font: 17px/28px Menlo, monospace; counter-reset: n 11; }
-  pre div { padding-left: 76px; position: relative; white-space: pre; height: 28px; }
+  pre { flex: 1; padding: 14px 0; font: 16px/27px Menlo, monospace; counter-reset: n 8; }
+  pre div { padding-left: 76px; position: relative; white-space: pre; height: 27px; }
   pre div::before { counter-increment: n; content: counter(n); position: absolute; left: 0; width: 46px; text-align: right; color: #5a5d63; user-select: none; -webkit-user-select: none; }
   .add { background: #2a3b2c; } .add::after { content: ""; position: absolute; left: 56px; top: 0; bottom: 0; width: 4px; background: #549159; }
-  .k { color: #cf8e6d; } .f { color: #56a8f5; } .n { color: #2aacb8; } .c { color: #7a7e85; }
+  .k { color: #cf8e6d; } .t { color: #c5c8d0; } .s { color: #6aab73; } .f { color: #56a8f5; } .n { color: #2aacb8; } .c { color: #7a7e85; }
   ::selection { background: #214283; }
   .new { display: none; } .loop-fixed .new { display: block; animation: in .7s; } .loop-fixed .old { display: none; }
   @keyframes in { from { background: #4a7a50; } }
 </style>
 </head>
 <body>
-<aside><b>Changes · 2 files</b><div class="on">cart.js <i>+9</i></div><div>cart.test.js <i>+14</i></div></aside>
+<aside><b>Changes · 2 files</b><div class="on">CartService.java <i>+9</i></div><div>CartServiceTest.java <i>+14</i></div></aside>
 <main>
-  <div class="tabs"><div class="tab">cart.js</div><div class="tab">cart.test.js</div></div>
-<pre id="code"><div><span class="c">// Sum of what is in the cart, skipping the paused lines.</span></div><div class="add"><span class="k">export function</span> <span class="f">totalPrice</span>(items) {</div><div class="add old">  <span class="k">let</span> total = <span class="n">0</span>;</div><div class="add old">  <span class="k">for</span> (<span class="k">let</span> i = <span class="n">0</span>; i &lt; items.length; i++) {</div><div class="add old">    <span class="k">if</span> (items[i].active) {</div><div class="add old">      total = total + items[i].price * items[i].qty;</div><div class="add old">    }</div><div class="add old">  }</div><div class="add old">  <span class="k">return</span> total;</div><div class="add new">  <span class="k">return</span> items</div><div class="add new">    .<span class="f">filter</span>(item =&gt; item.active)</div><div class="add new">    .<span class="f">reduce</span>((sum, item) =&gt; sum + item.price * item.qty, <span class="n">0</span>);</div><div class="add">}</div><div></div><div><span class="k">export function</span> <span class="f">formatPrice</span>(cents) {</div><div>  <span class="k">return</span> (cents / <span class="n">100</span>).<span class="f">toFixed</span>(<span class="n">2</span>) + <span class="c">' €'</span>;</div><div>}</div></pre>
+  <div class="tabs"><div class="tab">CartService.java</div><div class="tab">CartServiceTest.java</div></div>
+<pre id="code"><div><span class="k">public class</span> <span class="t">CartService</span> {</div><div></div><div>    <span class="c">// Sum of what is in the cart, skipping the paused lines.</span></div><div class="add">    <span class="k">public double</span> <span class="f">totalPrice</span>(<span class="t">List</span>&lt;<span class="t">Item</span>&gt; items) {</div><div class="add old">        <span class="k">double</span> total = <span class="n">0</span>;</div><div class="add old">        <span class="k">for</span> (<span class="k">int</span> i = <span class="n">0</span>; i &lt; items.<span class="f">size</span>(); i++) {</div><div class="add old">            <span class="k">if</span> (items.<span class="f">get</span>(i).<span class="f">active</span>()) {</div><div class="add old">                total += items.<span class="f">get</span>(i).<span class="f">price</span>() * items.<span class="f">get</span>(i).<span class="f">qty</span>();</div><div class="add old">            }</div><div class="add old">        }</div><div class="add old">        <span class="k">return</span> total;</div><div class="add new">        <span class="k">return</span> items.<span class="f">stream</span>()</div><div class="add new">                .<span class="f">filter</span>(<span class="t">Item</span>::active)</div><div class="add new">                .<span class="f">mapToDouble</span>(i -&gt; i.<span class="f">price</span>() * i.<span class="f">qty</span>())</div><div class="add new">                .<span class="f">sum</span>();</div><div class="add">    }</div><div></div><div>    <span class="k">public</span> <span class="t">String</span> <span class="f">formatPrice</span>(<span class="k">double</span> amount) {</div><div>        <span class="k">return</span> <span class="t">String</span>.<span class="f">format</span>(<span class="s">"%.2f €"</span>, amount);</div><div>    }</div><div>}</div></pre>
 </main>
 <script>
 let last = '';

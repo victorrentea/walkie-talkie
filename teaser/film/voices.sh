@@ -7,7 +7,7 @@ mk s02 "Make the header dark, [[slnc 350]] and the button orange. [[slnc 500]] K
 mk s03 "Move this badge [[slnc 1500]] up here, [[slnc 600]] right next to the headline."
 mk s04 "Use this picture [[slnc 1300]] here. [[slnc 3200]] And fix this text. [[slnc 2600]] Thanks."
 mk s05 "See how this flickers? [[slnc 600]] It should stay still. [[slnc 400]] Fix it."
-mk s06 "I do not like this loop. [[slnc 500]] Simplify it, and keep the behaviour the same."
+mk s06 "I do not like this loop. [[slnc 500]] Simplify it."
 mk s07a "Start a new session, [[slnc 400]] review my last commit, [[slnc 300]] and tell me what could break."
 mk s07c "Rename this function to parse order, [[slnc 400]] and update every place that calls it."
 mk s07d "Hi Anna. Um, the resilience for jay upgrade is, uh, ready, so we can ship it on Friday."
