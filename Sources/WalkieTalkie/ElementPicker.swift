@@ -637,7 +637,7 @@ final class ElementPicker {
 
         // Wispr as an engine: the process, the chord, a held modifier pair.
         case ("POST", "/test/wispr-proc"), ("POST", "/test/wispr-chord"), ("POST", "/test/modifiers"),
-             ("POST", "/test/wispr-paste"), ("POST", "/test/wispr-wedge"):
+             ("POST", "/test/wispr-paste"), ("POST", "/test/wispr-wedge"), ("POST", "/test/mic-hang"):
             let body = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any] ?? [:]
             guard let hook = onTestWisprHook else { return respond(conn, 503, ["ok": false, "error": "no handler"]) }
             let (code, answer) = hook(request.path, body)

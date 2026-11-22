@@ -129,6 +129,15 @@ protocol DictationSource: AnyObject {
     /// `didBegin`, and after `didTranscribe` when there was one.
     var didEnd: ((DictationEnd) -> Void)? { get set }
 
+    /// **Whether the take being recorded has its microphone open yet**
+    /// (2026-11-22). The dictation opens on the gesture; a source that owns its
+    /// recorder confirms the device a moment later (`didConfirmOpen`, main
+    /// queue) — or never, and then fails the sentence at `MicFailure.openTimeout`.
+    var micConfirmedOpen: Bool { get }
+    var didConfirmOpen: (() -> Void)? { get set }
+    /// The recorder lanes' state for `GET /test/state` — empty for a source without one.
+    var micLanes: [String: Any] { get }
+
     /// **Where in the audio this recogniser will transcribe did that moment
     /// fall** — nil when the source does not own the recording (2026-09-19).
     ///
@@ -488,6 +497,13 @@ extension DictationSource {
         set {}
     }
     var liveOpen: Bool { false }
+    /// A source with no recorder of its own has nothing to wait for.
+    var micConfirmedOpen: Bool { true }
+    var didConfirmOpen: (() -> Void)? {
+        get { nil }
+        set {}
+    }
+    var micLanes: [String: Any] { [:] }
     var queuesSentences: Bool { false }
     var take: Int { 0 }
     var answeringTake: Int? { nil }

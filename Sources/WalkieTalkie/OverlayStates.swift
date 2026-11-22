@@ -250,6 +250,17 @@ enum OverlayStates {
                 o.setShotCount(1)
             },
 
+            Shot(slug: "listening-opening-mic", group: "Dictating", title: "Opening microphone — the relay's own recorder has not opened yet",
+                 when: "A sentence on ElevenLabs or the local model whose microphone has not confirmed open 1.5 s after the gesture (an ordinary open takes under a second) — until it opens, or for 8 s, when the sentence fails with `⚠️ Microphone did not open — nothing was recorded`.",
+                 note: "**2026-11-22.** At 13:47:48 `-[AVAudioEngine inputNode]` never came back: the chip said `Prompting` for 32 s over a microphone that was not open, then `Transcribing...` for ever over a sentence that was never recorded. The dictation still opens on the gesture; what the row may not do is claim a microphone it has not got. `AppDelegate.watchMicOpening` raises it, `DictationSource.didConfirmOpen` takes it down.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setListening(true)
+                o.setOpening(true, saying: MicFailure.openingRow)
+                o.pinListenWarmth(0.0)
+                o.setShotCount(1)
+            },
+
             Shot(slug: "listening-long", group: "Dictating", title: "Two minutes in",
                  when: "Any dictation that has been running for a whole minute — and every one that runs for several.",
                  note: "**`(2m)` is the one fact the rest of the row cannot carry.** `Listening...` fills in the first three voiced seconds and then never changes again, so from that moment on nothing distinguishes a sentence from a monologue — and a monologue costs real seconds at the other end, since the decode is charged per second of audio and the panel he has to read while Cancel is running is as long as he made it. Victor's ask, 2026-09-09: *\"să pui după toată povestea o paranteză rotundă în care treci numărul de minute\"*. **Nothing under a minute**: `(0m)` would be a readout saying only that a clock exists, an inch from what he is reading, for the length of every ordinary dictation — which is the rent the model id was taken off this row for paying.",
@@ -509,6 +520,14 @@ enum OverlayStates {
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
                 o.flash("🗑️ Cancelled", duration: 60)
+            },
+
+            Shot(slug: "flash-mic-not-open", group: "Flashes", title: "Flash — the microphone did not open",
+                 when: "Twelve seconds, 8 s into a sentence whose microphone never opened (`MicFailure.openTimeout`) — while he is still talking, not after he stops. Nothing was recorded, so there is no *recover it from the menu*.",
+                 note: "**2026-11-22**, after two sentences were lost in silence to a CoreAudio call that never returned. The recorder is abandoned with the call inside it and a fresh one takes its place (`MicLanes`), so the next gesture records.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.flash("⚠️ \(MicFailure.didNotOpen)", duration: 60)
             },
 
             Shot(slug: "flash-local-fallback", group: "Flashes", title: "Flash — the local model stood in",

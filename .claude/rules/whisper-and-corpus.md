@@ -625,6 +625,43 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   recording, on every engine. `engine` is a `var` now: written under `lifecycle` (on `restartQueue`
   for a rebuild, by `close()` for every session), and the config observer is re-registered on each new engine.
 
+## A microphone call that never returns is walked away from (2026-11-22, `MicLanes`)
+
+- **What happened** (13:47:48, the installed app): `MicRecorder.start` → `-[AVAudioEngine inputNode]`
+  on a fresh engine never returned — `sample`d spinning inside AVFAudio's own
+  `AVAudioIOUnit_OSX::_GetHWFormat` (property queries to `coreaudiod`, which sat at 80 %; back to 7 %
+  when the process died), 45 s after `could not switch to Elgato Wave XLR — OSStatus 1852797029`
+  (`'nope'`) and a 4 s open. No loop of this app's: one call, one frame, for the whole sample. Take 9's
+  stop and take 10's start/stop sat behind it on the source's serial queue; both sentences were lost
+  with no WAV, `busy` never cleared, a Quit waited on them and the app was SIGKILLed.
+- **Open, stop and cancel go through `MicLanes`** (ElevenLabs and the local model; a lane = one
+  `MicRecorder` + its serial queue). A call not back by its deadline — **`MicFailure.openTimeout` /
+  `closeTimeout`, 8 s** (ordinary opens log `mic: recording through` in the gesture's second; the
+  slowest that still recorded took 4 s) — abandons the lane: every unfinished call on it is told on
+  main, in order, and a **fresh recorder** is in place before they are. So `source.meter` is a
+  reading, never kept across a hop (`LocalLiveCaption` asks each time).
+- **The sentence fails where he can see it**: `.failed(why: MicFailure.didNotOpen, audio: nil)` →
+  flash `⚠️ Microphone did not open — nothing was recorded` (12 s; no *recover it from the menu* —
+  every `.failed` with no audio drops that tail now), 8 s in, while he is still talking. A take
+  already stopped behind the open is failed the same way (`failUnclosed`), cancelled if he had
+  cancelled it. `Microphone did not close — the recording is lost` for a close that never returns.
+- **The chip does not claim a microphone it has not got**: 1.5 s (`MicFailure.openingAfter`) into an
+  open that has not confirmed, the row reads `Opening microphone...` (`AppDelegate.watchMicOpening`,
+  `DictationSource.micConfirmedOpen` / `didConfirmOpen`; Shot `listening-opening-mic`, flash Shot
+  `flash-mic-not-open`).
+- **A cancel never waits for a microphone that has not opened**: answered in the cancel itself
+  (`.cancelled(audio: nil)`), the lane only puts down what the open still brings (file deleted). The
+  local model's cancel of a stopped-but-unopened take too (`disown`).
+- **If the stuck call comes back**, its `late` handler closes that recorder and deletes the file on
+  the old lane; `mic lane: … came back N s after it was asked`. Until then it counts as `stuck`;
+  **three stuck ⇒ `start()` refuses at once** (`MicFailure.notAnswering`) rather than add a fourth
+  thread asking `coreaudiod` in a loop.
+- **Desk:** `POST /test/mic-hang {"opens": n}` makes the next n `MicRecorder.start(to:)` calls never
+  return (no CoreAudio touched); `GET /test/state.micLanes {stuck, abandoned, waiting, last}`. Tests:
+  `MicLanesTests` (a stub that never returns; and `ElevenLabsSource` over the hang hook).
+- **Not covered:** `WisprFlowSource.meterQueue` (the meter beside a Wispr sentence) is the same shape
+  and has no deadline yet. Proven by unit tests only — not yet run against the app at a desk.
+
 ## The menu row
 
 - **`Local Whisper — 1.6 GB RAM` is a disabled readout, read when the menu opens.** The number is

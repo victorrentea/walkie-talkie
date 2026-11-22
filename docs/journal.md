@@ -16727,3 +16727,49 @@ dacă folosim serviciile cloud, gen [Wispr] Flow sau ElevenLabs. Altfel să stea
 `AppDelegate.mark(engine:)` sends an empty mark for the local model, on the `Transcribing` row only;
 `via 💻` (2026-10-22's *"înlocuiești motorul cu local"*) is superseded — at the fallback's `now` the
 cloud's logo now simply goes. The `Prompting → 💻` row and the 💻 flashes are unchanged.
+
+## 2026-11-22 — 🎙️ A microphone that does not open fails the sentence in 8 s; a second Quit goes
+
+**13:47–13:57, the installed app.** 13:47:03 `could not switch to Elgato Wave XLR — OSStatus
+1852797029` (`'nope'`), the open took 4 s and the take recorded through the system input. 13:47:48,
+take 9: `🎙️ local recording started` and never `mic: recording through …`. He spoke 32 s, stopped,
+spoke take 10 for 5 s, stopped; the settle then logged `Whisper (local) is still working` every 8 s
+for 144 s. No WAV for either. A cancel left `busy`; the menu's Quit was deferred (`transcribing, an
+earlier sentence in flight`), a SIGTERM 58 s later too; the coordinator SIGKILLed it at his word
+(*"nu reușesc să-l opresc?!"*, *"e blocat rău"*, *"să nu se mai întâmple"*).
+
+**Proven from the `sample`:** one thread, all 1525 samples, in `closure in LocalWhisperSource.start()
+→ MicRecorder.start(to:)` (line 697, `engine.inputNode`) → `-[AVAudioEngine inputNode]` →
+`AVAudioEngineImpl::UpdateInputNode` → `AVAudioIOUnit_OSX::_GetHWFormat`, its children spread over
+five call sites of that one function (`AudioUnitGetProperty` 1012, `AudioUnitGetPropertyInfo` 392, …)
+ending in `mach_msg` to `coreaudiod`. So it was not blocked, it was **looping inside AVFAudio**, and
+that loop is what held `coreaudiod` at ~80 % (7 % once the process was killed). AVFAudio's own
+`engine` queue sat in `IOUnitConfigurationChanged` waiting for a mutex — a device configuration
+change was in flight. The whisper helper was idle: it was never asked anything. **Not ours:**
+`MicRecorder.start` appears once in the stack and never re-enters; `InputDevice.select`'s failure
+path does not retry; `GainGuard` and the wake word's device poll were 2 samples each; today's
+permissions commit (846e00df) adds only a TCC status read before the gesture. **Inferred:** the Wave
+XLR (or `usbaudiod`, at 24 %) was reconfiguring — the `'nope'` 45 s earlier is the same device
+refusing to be selected — and `_GetHWFormat` retries while the device's answers disagree. Nothing in
+this app can stop that loop; it can only refuse to stand behind it.
+
+**What changed.**
+
+- `MicLanes` (new): the sources' open / stop / cancel run on a lane (a recorder + its queue) with a
+  deadline — 8 s, against opens that log in the gesture's second and one 4 s open that still
+  recorded. Past it the lane is abandoned with the call inside, everything queued behind is told in
+  order, a fresh `MicRecorder` takes over. A late return closes that recorder and deletes its file.
+  Three calls still stuck ⇒ the next start is refused at once.
+- The sentence ends `.failed("Microphone did not open — nothing was recorded", audio: nil)`: a 12 s
+  flash, 8 s into the sentence. From 1.5 s the chip's row says `Opening microphone...` instead of
+  `Prompting`. A cancel over an unopened microphone is answered in the cancel.
+- `QuitGate.verdict`: a second ask ≥ 1 s after a deferred quit goes at once; a quit let through arms
+  a 2 s `_exit`. What blocked the quit was not a deadlock: `applicationShouldTerminate` was waiting,
+  as designed, for sentences that could not end, under a 10-minute ceiling.
+
+**Verified by:** `MicLanesTests` (stub recorder that never returns: failed at the deadline with the
+calls behind it, the next take on a fresh recorder, the late return cleaned up; `ElevenLabsSource`
+over `MicRecorder.hangOpensForTest`: failed while recording, stopped-behind-the-open answered once,
+cancel answered at once), `QuitGateTests`. **Not verified:** the app end to end (`POST
+/test/mic-hang` exists for it) — he was dictating with the installed build; `WisprFlowSource`'s
+meter queue has no deadline yet; whether a fresh engine opens while an old one is still looping.

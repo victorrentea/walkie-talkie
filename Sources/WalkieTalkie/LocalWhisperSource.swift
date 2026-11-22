@@ -36,13 +36,18 @@ final class LocalWhisperSource: DictationSource {
     var didTranscribe: ((DictationResult) -> Void)?
     var didEnd: ((DictationEnd) -> Void)?
 
-    let meter = MicRecorder()
+    /// **The live lane's recorder** (2026-11-22, `MicLanes`): a recorder whose
+    /// open or close never came back is abandoned and replaced, so this is a
+    /// reading, not a constant — never keep it across a hop.
+    var meter: MicRecorder { lanes.recorder }
+    private let lanes = MicLanes<MicRecorder>(label: "ro.victorrentea.wispr-relay.local-mic") { MicRecorder() }
+    var micLanes: [String: Any] { lanes.describe() }
     private let whisper = LocalWhisper()
 
     // MARK: - Live captions (2026-10-05) — see `LocalLiveCaption`
 
     private lazy var live: LocalLiveCaption = {
-        let l = LocalLiveCaption(meter: meter)
+        let l = LocalLiveCaption(meter: { [unowned self] in self.meter })
         l.onCaption = { [weak self] committed, partial in self?.didHearLive?(committed, partial, false) }
         return l
     }()
@@ -202,6 +207,8 @@ final class LocalWhisperSource: DictationSource {
     @discardableResult
     func start() -> String? {
         guard !isRecording else { return nil }
+        // Three opens still stuck in CoreAudio: a fourth would only spin beside them.
+        if lanes.saturated { return MicFailure.notAnswering }
         // **A cold model never delays the microphone** (2026-09-26). It used to
         // refuse here, and `AppDelegate` banked the gesture and opened the
         // microphone ten seconds later (`recordWhenSourceReady`) — ten seconds
@@ -233,45 +240,97 @@ final class LocalWhisperSource: DictationSource {
         }
         Log.info("🎙️ local recording started — \(wav.lastPathComponent) (take \(take)"
                  + (unanswered.isEmpty ? ")" : ", \(unanswered.count) earlier still decoding)"))
-        // **Opened on `audioQueue`, never on main** (2026-09-24) — the shape
+        // **Opened on the lane's queue, never on main** (2026-09-24) — the shape
         // `ElevenLabsSource` has had since 2026-09-19. `MicRecorder.start` and
         // `.stop` are synchronous CoreAudio calls that wait on the engine's own
         // mutex; a device change in flight (the DJI receiver dropping out) holds
         // it, and a cancel on the main thread then froze the whole app.
+        // **With a deadline since 2026-11-22** (`MicLanes`): an open that never
+        // returns fails this sentence at `openTimeout` and leaves the next one a
+        // fresh recorder.
         let withCaption = liveOpen
         let t = take
-        audioQueue.async { [weak self] in
-            guard let self = self else { return }
-            guard let why = self.meter.start(to: wav) else {
-                DispatchQueue.main.async {
-                    guard self.isRecording, self.take == t else { return }
-                    // `takeEnd` is this take's from here on.
-                    job.open = true
-                    if withCaption {
-                        self.live.begin()
-                        self.didOpenLive?()
-                    }
+        lanes.run("the open of take \(t)", timeout: MicFailure.openTimeout, work: { meter in
+            meter.start(to: wav)
+        }, done: { [weak self] why in
+            guard let self else { return }
+            guard let why else {
+                guard self.isRecording, self.take == t else { return }
+                // `takeEnd` is this take's from here on.
+                job.open = true
+                self.didConfirmOpen?()
+                if withCaption {
+                    self.live.begin()
+                    self.didOpenLive?()
                 }
                 return
             }
             Log.error("🎙️ local: the microphone would not open — \(why)")
-            DispatchQueue.main.async {
-                guard self.isRecording, self.take == t else { return }
-                self.isRecording = false
-                self.recordingJob = nil
-                self.stopChunkWatch()
-                self.settlePhase(.done("error"))
-                self.answer(t) { self.didEnd?(.failed(why: why, audio: nil, duration: 0)) }
-            }
-        }
+            guard self.isRecording, self.take == t else { return }
+            self.isRecording = false
+            self.recordingJob = nil
+            self.stopChunkWatch()
+            self.settlePhase(.done("error"))
+            self.answer(t) { self.didEnd?(.failed(why: why, audio: nil, duration: 0)) }
+        }, abandoned: { [weak self] in
+            self?.micDidNotOpen(job)
+        }, late: { meter, why in
+            // The open came back after the sentence was failed: a microphone
+            // nobody is waiting for is closed, and its file goes.
+            if why == nil { _ = meter.stop() }
+            try? FileManager.default.removeItem(at: wav)
+        })
         startChunkWatch()
         didBegin?()
         return nil
     }
 
-    /// Open, stop and cancel all go through it, in order — a close queued
-    /// behind an open cannot overtake it.
-    private let audioQueue = DispatchQueue(label: "ro.victorrentea.wispr-relay.local-mic")
+    /// **The open did not come back by `MicFailure.openTimeout`** (2026-11-22):
+    /// the sentence fails where he can see it, whatever it has been through
+    /// since — still recording, stopped and waiting for its close, or cancelled
+    /// there. Main queue.
+    private func micDidNotOpen(_ job: Job) {
+        let t = job.take
+        Log.error("🎙️ local: the microphone did not open for take \(t) — \(MicFailure.didNotOpen)")
+        if recordingJob === job {
+            live.end()
+            liveOpen = false
+            isRecording = false
+            recordingJob = nil
+            stopChunkWatch()
+            job.cancelled = true
+            job.dropPieces()
+            settlePhase(.done("error"))
+            answer(t) { didEnd?(.failed(why: MicFailure.didNotOpen, audio: nil, duration: 0)) }
+            return
+        }
+        // Stopped (or cancelled at the close) behind the open: its close is on
+        // the abandoned lane and will never answer.
+        failUnclosed(job, why: MicFailure.didNotOpen)
+    }
+
+    /// A take whose close will not answer — its lane was abandoned. Answered
+    /// once: cancelled if he had cancelled it, failed otherwise. Main queue.
+    private func failUnclosed(_ job: Job, why: String) {
+        let t = job.take
+        guard job.wav == nil, unanswered.contains(t) else { return }
+        let wasCancelled = job.cancelled
+        if jobs[t] === job { jobs[t] = nil }
+        if jobs.isEmpty { DecodeRate.noteLeft(nil) }
+        job.cancelled = true
+        job.cancelAtClose = false
+        job.dropPieces()
+        answer(t) {
+            settlePhase(.done(wasCancelled ? "dismissed" : "error"))
+            didEnd?(wasCancelled ? .cancelled(audio: nil, duration: 0) : .failed(why: why, audio: nil, duration: 0))
+        }
+    }
+
+    /// **The microphone confirmed open** — until then the chip may say so
+    /// (`MicFailure.openingRow`). Main queue.
+    var didConfirmOpen: (() -> Void)?
+    /// Whether the take being recorded has its microphone open yet.
+    var micConfirmedOpen: Bool { recordingJob?.open ?? false }
 
     func stop() {
         guard isRecording, let job = recordingJob else { return }
@@ -303,20 +362,27 @@ final class LocalWhisperSource: DictationSource {
         }
         didStopListening?()
         let from = job.lastCut
-        audioQueue.async { [weak self] in
-            guard let self = self else { return }
-            let closed = self.meter.stop()
+        let chunked = !job.pieces.isEmpty
+        lanes.run("the close of take \(t)", timeout: MicFailure.closeTimeout, work: { meter in
+            let closed = meter.stop()
             // **The tail, read here** — on the queue that closed the take and
             // before a next take's `start` (queued behind this) resets `take`.
-            let end = self.meter.takeEnd
-            let tail = job.pieces.isEmpty ? [] : self.meter.takeSlice(from: from, to: end)
-            let hops = job.pieces.isEmpty ? [] : self.meter.meterHops
+            let end = meter.takeEnd
+            let tail = chunked ? meter.takeSlice(from: from, to: end) : []
+            let hops = chunked ? meter.meterHops : []
             // This take's own speech, before a next `start` zeroes it.
-            let voiced = self.meter.voicedSeconds
-            DispatchQueue.main.async {
-                self.finishRecording(closed, job: job, tail: tail, tailEnd: end, hops: hops, voiced: voiced)
-            }
-        }
+            let voiced = meter.voicedSeconds
+            return (closed, end, tail, hops, voiced)
+        }, done: { [weak self] r in
+            self?.finishRecording(r.0, job: job, tail: r.2, tailEnd: r.1, hops: r.3, voiced: r.4)
+        }, abandoned: { [weak self] in
+            guard let self else { return }
+            // Either its own close never came back, or an earlier call on the
+            // lane (its open, most likely) did not — `micDidNotOpen` has then
+            // answered it already and this finds nothing to do.
+            Log.error("🎙️ local: the close of take \(t) was abandoned with its recorder")
+            self.failUnclosed(job, why: job.open ? MicFailure.didNotClose : MicFailure.didNotOpen)
+        })
     }
 
     /// The tail of `stop()`, on the main queue, exactly as it always ran.
@@ -331,6 +397,10 @@ final class LocalWhisperSource: DictationSource {
                     settlePhase(.done("dismissed"))
                     didEnd?(.cancelled(audio: closed?.url, duration: closed?.duration ?? 0))
                 }
+            } else if let orphan = closed?.url {
+                // Answered already (a cancel over a microphone not yet open, a
+                // lane given up): nobody holds this file.
+                try? FileManager.default.removeItem(at: orphan)
             }
             return
         }
@@ -669,10 +739,13 @@ final class LocalWhisperSource: DictationSource {
         if jobs.isEmpty { DecodeRate.noteLeft(nil) }   // wave 4: no stale estimate
         job.cancelled = true
         job.dropPieces()
-        // **Still closing** (the stop's `meter.stop()` not back from `audioQueue`,
+        // **Still closing** (the stop's `meter.stop()` not back from its lane,
         // review 2026-10-22): answered there, with the WAV — answered here it went
         // out with no audio for Recover and the file was orphaned.
-        if job.wav == nil, job.stoppedAt != nil {
+        // **Unless its microphone never confirmed open** (2026-11-22): that close
+        // may never come back, and a cancel may not wait on it — answered now;
+        // whatever the close still brings is deleted there.
+        if job.wav == nil, job.stoppedAt != nil, job.open {
             job.cancelAtClose = true
             return
         }
@@ -700,13 +773,28 @@ final class LocalWhisperSource: DictationSource {
         let t = job.take
         settlePhase(.done("dismissed"))
         didStopListening?()
-        audioQueue.async { [weak self] in
-            guard let self = self else { return }
-            let taken = self.meter.stop()
-            DispatchQueue.main.async {
-                self.answer(t) { self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0)) }
-            }
+        // **A cancel never waits for a microphone that has not opened**
+        // (2026-11-22): nothing was recorded, so it is answered here, and the
+        // close on the lane only puts down whatever the open still brings.
+        var answeredHere = false
+        if !job.open {
+            answeredHere = true
+            answer(t) { didEnd?(.cancelled(audio: nil, duration: 0)) }
         }
+        lanes.run("the cancel of take \(t)", timeout: MicFailure.closeTimeout, work: { meter in
+            meter.stop()
+        }, done: { [weak self] taken in
+            guard let self else { return }
+            if answeredHere {
+                if let url = taken?.url { try? FileManager.default.removeItem(at: url) }
+                return
+            }
+            self.answer(t) { self.didEnd?(.cancelled(audio: taken?.url, duration: taken?.duration ?? 0)) }
+        }, abandoned: { [weak self] in
+            guard let self, !answeredHere else { return }
+            Log.error("🎙️ local: the cancel of take \(t) was abandoned with its recorder — answered without its audio")
+            self.answer(t) { self.didEnd?(.cancelled(audio: nil, duration: 0)) }
+        })
     }
 
     // MARK: - Chunks: decoding while he still speaks (2026-10-21)

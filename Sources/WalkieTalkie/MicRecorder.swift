@@ -282,6 +282,24 @@ final class MicRecorder {
     static var lastOpened: (device: String, rate: Int, channels: Int, at: Date)?
 
 
+    /// **Test-only** (`POST /test/mic-hang`, 2026-11-22): how many of the next
+    /// `start(to:)` calls never return — the open that wedged inside
+    /// `-[AVAudioEngine inputNode]` at 13:47:48 that day, without CoreAudio.
+    /// Before `lifecycle` is taken, so the hung recorder holds no lock.
+    private static let hangLock = NSLock()
+    private static var hangOpens = 0
+    static var hangOpensForTest: Int {
+        get { hangLock.withLock { hangOpens } }
+        set { hangLock.withLock { hangOpens = newValue } }
+    }
+    private static func takeTestHang() -> Bool {
+        hangLock.withLock {
+            guard hangOpens > 0 else { return false }
+            hangOpens -= 1
+            return true
+        }
+    }
+
     /// Shorter than this and it was a misfire — a click he did not mean, or a
     /// button pressed and released while deciding. Sending an empty transcript
     /// costs an agent turn; dropping half a second of silence costs nothing.
@@ -646,6 +664,10 @@ final class MicRecorder {
     /// passes it.
     @discardableResult
     func start(to destination: URL?) -> String? {
+        if Self.takeTestHang() {
+            Log.error("mic: this open hangs on purpose (POST /test/mic-hang) — it will never return")
+            while true { Thread.sleep(forTimeInterval: 3600) }
+        }
         lifecycle.lock(); defer { lifecycle.unlock() }
         lock.lock()
         let wasOpen = isRecording, openURL = url

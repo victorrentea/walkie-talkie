@@ -1252,40 +1252,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (`QuickAsk.ask(search:)`, its own process, started at the flick).
     private var quickGoogleToo = false
 
-    /// Somewhere for this dictation to go: a terminal already bound, one it is
-    /// about to open for itself, the caret — or, since 2026-09-11, one he has
-    /// not pointed at yet (`holdsForBind`).
-    private var hasDestination: Bool { isBound || spawnPending || pasteMode || Self.holdsForBind }
+    /// **A bound prompt with nothing bound does not start** (2026-11-22). Victor:
+    /// *"Dacă n-am niciun terminal legat … nu pot să pornesc o dictare bound. Ideea
+    /// asta de «bind to send/paste» e stupidă. Să nici nu pornească în modul de
+    /// bound dacă n-am terminal legat."* It supersedes 2026-09-11's `holdsForBind`
+    /// (*"urmând a mă lega ulterior"*) and 2026-09-26's Q1 (*held 5 min for the
+    /// next bind*): no microphone, no ring, no edge — one flash that says why
+    /// and which key answers it. The question is asked **once, at the start**
+    /// (`startDictation`); a sentence already open keeps its shutter, its film
+    /// and its microphone whatever happens to the binding under it, and its
+    /// ending is `keepUndelivered`. The caret prompt, the new session, the plain
+    /// dictation, the ⚡ question and the wake word never ask.
+    static let nothingBoundFlash = "📍 Nothing bound — ⌘⌃B binds the terminal in front"
 
-    /// **Whether a dictation spoken with nothing bound is kept for the binding
-    /// that follows it, instead of being refused.**
-    ///
-    /// Victor's ask, 2026-09-11: *"tot ce pot să fac când sunt legat de un
-    /// terminal să pot să fac și atunci când sunt nelegat, urmând a mă lega
-    /// ulterior"*. It is the fourth answer to *where do these words go*, and the
-    /// answer is **later** — see `awaitingBind`.
-    ///
-    /// It retires most of *Unbound is inert*, and it is worth being exact about
-    /// what that rule was and was not. It was written on 2026-08-27 because the
-    /// relay had just become a login item: it sat there all day, so every
-    /// sentence Victor spoke into a browser, a chat or a commit message was
-    /// costing him a screenshot and mouse 4, **with nowhere for the
-    /// words to go**. The premise is the last clause, not the binding: a
-    /// destination that arrives two minutes late is still a destination, which
-    /// is the same reading that already exempted the spawn (`spawnPending`, a
-    /// session that does not exist yet) and the caret (`pasteMode`).
-    ///
-    /// **What the 2026-08-27 decision genuinely settled stands untouched**: the
-    /// outbox does not fill up with dictations nobody asked for. A held sentence
-    /// is in memory and nothing else — `commit` writes the JSONL line at the
-    /// moment of delivery and not before — so a relay left unbound all day still
-    /// leaves no log of his private dictation behind it.
-    ///
-    /// A constant rather than a setting: this is how the app behaves now, and a
-    /// menu tick for it would be *Pause* coming back under another name. It is
-    /// here as one word to flip if the hold turns out to be worse than the
-    /// refusal was.
-    static let holdsForBind = true
+    /// The refusal, said on the chip and in the log.
+    private func refuseUnbound(_ what: String) {
+        Log.info("🚫 \(what) — nothing is bound (no microphone, no ring; ⌘⌃B binds the terminal in front)")
+        overlay.flash(Self.nothingBoundFlash, duration: 3)
+    }
 
     /// **When the last bind Victor actually pressed for landed**, and the grace
     /// it buys the sentence that follows it.
@@ -2402,6 +2386,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.onTestWisprHook = { [weak self] path, body in
             guard let self else { return (503, ["ok": false, "error": "gone"]) }
             switch path {
+            case "/test/mic-hang":
+                // `{"opens": n}`: the next n `MicRecorder.start(to:)` calls never
+                // return (they wait without touching CoreAudio) — the microphone
+                // that does not open, at a desk. `{"opens": 0}` puts it back; a
+                // call already hanging stays hung until the app quits.
+                if let n = body["opens"] as? Int { MicRecorder.hangOpensForTest = max(0, n) }
+                var out: [String: Any] = ["ok": true, "micHang": MicRecorder.hangOpensForTest]
+                DispatchQueue.main.sync { out["micLanes"] = self.source.micLanes }
+                return (200, out)
             case "/test/wispr-wedge":
                 // `{"miss": true}` counts one *row made, mic never opened* (the
                 // threshold'th one restarts his REAL Wispr once the relay is quiet);
@@ -4017,10 +4010,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// **The chip does not say `Prompting` over a microphone that has not
+    /// opened** (2026-11-22): `MicFailure.openingAfter` into a sentence whose
+    /// recorder has not confirmed, the row reads `Opening microphone...` — until
+    /// it confirms (`didConfirmOpen`) or the sentence fails at
+    /// `MicFailure.openTimeout` with `MicFailure.didNotOpen`.
+    private func watchMicOpening() {
+        let take = source.take
+        DispatchQueue.main.asyncAfter(deadline: .now() + MicFailure.openingAfter) { [weak self] in
+            guard let self, self.listening, !self.wisprMicSentence, self.source.isRecording,
+                  self.source.take == take, !self.source.micConfirmedOpen else { return }
+            Log.error(String(format: "🎙️ the microphone has not opened %.1f s after the gesture — the chip says %@",
+                             MicFailure.openingAfter, MicFailure.openingRow))
+            self.overlay.setOpening(true, saying: MicFailure.openingRow)
+        }
+    }
+
     private func wireDictationSource() {
         source.didMaybeBegin = { [weak self] why in self?.wisprMicSentence = false; self?.dictationMaybeBeginning(why) }
-        source.didBegin = { [weak self] in self?.wisprMicSentence = false; self?.dictationBegan() }
+        source.didBegin = { [weak self] in self?.wisprMicSentence = false; self?.dictationBegan(); self?.watchMicOpening() }
         source.didStopListening = { [weak self] in self?.dictationStoppedListening() }
+        source.didConfirmOpen = { [weak self] in
+            guard let self, self.overlay.opening, !self.wisprMicSentence else { return }
+            Log.info("🎙️ the microphone is open — the chip says so now")
+            self.overlay.setOpening(false)
+        }
         // **Each answer goes to the sentence it belongs to, in the order spoken**
         // (Q12) — the take the source labels it with, else the live sentence.
         source.didTranscribe = { [weak self] result in
@@ -4284,15 +4298,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // **The chip says where these words are going.** A spawn names its
         // folder (armed at the gesture), a caret sentence says so and outranks
-        // the bound terminal for its own length, and a sentence with nothing
-        // bound names the gesture that would give it somewhere to go.
+        // the bound terminal for its own length. (A bound prompt with nothing
+        // bound never opens — 2026-11-22 — so the `bind to send` row is gone.)
         // **Just `Asking`** (2026-10-15, Victor: *"the tooltip … should just say
         // asking"*) — it said `quick answer — opus`.
         if quickAsk { overlay.setSpawnDestination(Self.askingRow, mark: RelayWindow.questionMark) }
         else if pasteMode { overlay.setSpawnDestination("caret", icon: RelayWindow.pinGlyph) }
-        else if !spawnPending, !isBound {
-            overlay.setSpawnDestination("bind to send", icon: RelayWindow.pinGlyph)
-        }
         else if !spawnPending { overlay.setSpawnDestination(nil) }
 
         localRecordingApp = NSWorkspace.shared.frontmostApplication?.localizedName
@@ -4420,15 +4431,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Still `⚡ ring down:` in the log, for `RingDown` and every grep since
         // 09-13; what the ring does on screen now is coast (`CaretHalo`).
         Log.info("⚡ ring down: the microphone closed — the words are in flight (the ring coasts, fading)")
-        // **Only an explicit caret sentence goes to the caret** (2026-09-26,
-        // Victor's Q1: *"bind to send memory"*). Nothing bound used to latch the
-        // caret here — `!isBound && !spawnPending && spawnPickInFlight == nil` —
-        // while the chip said `bind to send`, so real unbound speech was pasted
-        // wherever the focus was (TD3, TG18) and only the test route, which never
-        // reaches this line, was held (TD31). The chip was right: nothing bound
-        // is *held for the next bind* (`latch` nil, `commit` → `holdForBind`).
-        // The caret is the forward click, F7 (`pasteMode`) and the back click's
-        // clean sentence (`deliver`).
+        // **Only an explicit caret sentence goes to the caret** (2026-09-26, Q1).
+        // A bound sentence that finds nothing bound at its close — unbound while
+        // he spoke — is not pasted wherever the focus is and, since 2026-11-22,
+        // not held for a bind either: `latch` nil, `commit` → `keepUndelivered`
+        // (Prompt History + the clipboard, said on the chip). The caret is the
+        // forward click, F7 (`pasteMode`) and the back click's clean sentence.
         latchedAtCaret = pasteMode
         // **And which terminal — the whole recipient, not only *not the caret***
         // (2026-09-26, Victor's Q2). Until then the close latched the caret
@@ -4443,7 +4451,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             live.state = "transcribing"
             live.target = latchedAtCaret ? "caret"
                 : (spawnPending || spawnPickInFlight != nil) ? "new session"
-                : latch?.target.map { "terminal:\($0.label)" } ?? "held for a bind"
+                : latch?.target.map { "terminal:\($0.label)" } ?? "nothing bound"
         }
         // **Every destination's take, not only the caret's** (2026-09-30). The
         // rewind has run for all of them since 2026-09-23 (`syncBorrowedGestures`),
@@ -6092,6 +6100,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let silenced = InputDevice.silencedReason() {
                 Log.error("🔇 \(why) — \(silenced)")
                 overlay.flash("⚠️ \(why) — \(silenced). Turn it up, then recover it from the menu", duration: 12)
+            } else if audio == nil {
+                // Nothing was recorded (a microphone that never opened or
+                // closed, 2026-11-22): there is nothing in the menu to recover.
+                overlay.flash("⚠️ \(why)", duration: 12)
             } else {
                 overlay.flash("⚠️ \(why) — recover it from the menu", duration: 12)
             }
@@ -6412,14 +6424,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             aimAtBoundTerminal()
             return
         }
-        // **…and with nothing bound, at the terminal bound last** (2026-10-01).
-        // Victor: *"să pot să tranziționez din modul de dictare la caret … în
-        // modul de dictare legată de terminalul precedent … să dau forward și
-        // să mut la dreapta, ca să trimit promptul curent la terminalul legat
-        // precedent"*. Until now an unbound 🔼 → here had nowhere to aim and
-        // stopped the sentence. `aimAtPreviousTerminal`.
-        if pasteMode, !isBound, let previous = RebindHistory.shared.previous {
-            aimAtPreviousTerminal(previous)
+        // **…and with nothing bound it stays at the caret** (2026-11-22, Victor:
+        // *"Să nici nu pornească în modul de bound dacă n-am terminal legat"*).
+        // From 2026-10-01 this re-bound the terminal bound last and aimed the
+        // sentence at it, the words held for that bind if it was slow or failed
+        // (`aimAtPreviousTerminal`, gone with the hold). Now nothing flips into
+        // *bound* without a binding: the sentence goes on as it was — caret
+        // prompt, plain words or ⚡ question — and the chip says which key
+        // would give it a terminal. ⌘⌃B mid-sentence still redirects it
+        // (`showBound`, deliberate). Only the gesture: the wheel's toggle
+        // (`onLocalToggle`) keeps its stop.
+        if flipsDestination, pasteMode, !isBound {
+            Log.info("↪️ 🔼 → mid-sentence with nothing bound — the sentence stays where it was going (no flip to a terminal that is not there)")
+            overlay.flash(Self.nothingBoundFlash, duration: 3)
             return
         }
         // **…and 🔼 → on a bound sentence takes it to the caret, so the gesture
@@ -6430,7 +6447,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // branch above is the way back. 🔼 is the stop now; ⌘⌃D keeps its own
         // (`flipsDestination` is the gesture's alone), and a spawn is not a
         // bound sentence — 🔼 ↑ owns its destination.
-        if flipsDestination, !pasteMode, !spawnPending, isBound {
+        // **Whether or not its terminal is still bound** (2026-11-22): a bound
+        // sentence unbound under him is the one that most needs the caret, and
+        // the way back answers with the hint above.
+        if flipsDestination, !pasteMode, !spawnPending {
             aimAtCaret()
             return
         }
@@ -6537,34 +6557,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || pendingSelection != nil || !pendingExtraSelections.isEmpty
     }
 
-    /// Point a caret sentence at the terminal the relay was bound to last, and
-    /// bind it again — see `toggleDictation`.
-    ///
-    /// The aim is taken at once and the bind follows off the main thread (it is
-    /// `osascript`, as in `rebindFromMenu`). Nothing waits on it: a sentence
-    /// whose microphone closes before the bind lands is unbound at the close, so
-    /// it is held (`awaitingBind`) and goes out when `showBound` sees the
-    /// target — the same terminal, a beat later. If the window is gone the bind
-    /// fails, the flash says so, and the sentence waits for a bind like any
-    /// other. No raise: he is looking at the window he was dictating into.
-    private func aimAtPreviousTerminal(_ previous: RebindHistory.Entry) {
-        guard let tty = previous.tty else { return endDictation() }
-        retarget(to: previous.label)
-        Log.info("↪️ redirected mid-sentence — nothing bound, so to the terminal bound last: "
-                 + "\(previous.label) (\(previous.address)), re-binding it")
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard let bound = self.terminal.bind(tty: tty) else {
-                Log.info("↪️ the terminal bound last (\(previous.address)) is gone — the sentence waits for a bind")
-                DispatchQueue.main.async { [weak self] in
-                    self?.overlay.flash("⚠️ \(previous.label) is closed — bind a terminal", duration: 3)
-                }
-                return
-            }
-            Log.info("📍 re-bound to \(bound.address) by 🔼 → mid-sentence")
-            DispatchQueue.main.async { [weak self] in self?.showBound(bound) }
-        }
-    }
-
     /// Take a sentence already in flight off the caret and point it at the bound
     /// terminal — see `toggleDictation`.
     ///
@@ -6579,8 +6571,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("↪️ redirected mid-sentence — these words go to the bound terminal, not the caret")
     }
 
-    /// The caret sentence's aim moved to a terminal — `aimAtBoundTerminal`,
-    /// `aimAtPreviousTerminal`.
+    /// The caret sentence's aim moved to a terminal — `aimAtBoundTerminal`.
     private func retarget(to label: String) {
         pasteMode = false
         dropQuestion(for: label)
@@ -6631,6 +6622,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startDictation(spawn: Bool = false, paste: Bool = false,
                                 deferContext: Bool = false, clean: Bool = false, quick: Bool = false,
                                 followUp: Bool = false, wake: Bool = false, chat: Bool = false) {
+        // **A bound prompt needs a bound terminal** (2026-11-22, Victor: *"Să nici
+        // nu pornească în modul de bound dacă n-am terminal legat"*) — asked
+        // before anything else, so nothing is parked, flagged or opened for a
+        // gesture that has nowhere to send. A bind still resolving (⌘⌃B pressed
+        // a second ago, `osascript` not back yet) banks the press instead: the
+        // bind's landing opens the microphone, its failure drops it with its
+        // own flash.
+        if !spawn, !paste, !isBound, !(listening || source.isRecording) {
+            if bindInFlight {
+                recordWhenBound = true
+                Log.info("🎙️ a bound prompt asked while the bind is still resolving — banked; the microphone opens when it lands")
+                return
+            }
+            return refuseUnbound("bound prompt not started")
+        }
         // **Never twice.** Every caller is a gesture that means "start", and two
         // of them arriving in one turn — a hold timer and a release racing for
         // the same press, the menu row clicked on a session already opening —
@@ -6745,9 +6751,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.ownCleanSentence = clean
         submitAfterClean = false
         contextAtWheelRelease = deferContext
-        // **Always true since `holdsForBind`**, and kept rather than deleted: it
-        // is the gate this path is written under.
-        guard hasDestination else { return }
         // **W19 (2026-09-28): the folder menu only for a start the source took**
         // — with Wispr quit, 🔼 ↑ opened the menu and left `spawnPending` up for
         // a sentence that never started (TW15, 4/4 in the lab).
@@ -8231,10 +8234,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// harmless — but the screen is only captured once per dictation, since a
     /// second capture would cost a megabyte for an identical frame.
     private func captureContext() {
-        // A picture of the screen at the moment he starts talking is only worth
-        // taking when there is somebody it is being taken *for*. A spawn counts
-        // as somebody — the session it is about to open reads the same line.
-        guard hasDestination else { return }
         // **A clean dictation takes no picture** (Victor, 2026-09-23: *"butonul
         // de Back trebuie să pornească dictarea simplă, fără poze, fără
         // nimic"*). The back click's sentence is armed (`backStopsWispr`) from
@@ -8741,7 +8740,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A parked sentence's answer (Q12) runs on its fields; `run` syncs after the swap-back.
         guard !answeringInBackground else { return }
         syncLocalNow()
-        let live = hasDestination && listening
+        let live = listening
         // **Replace Wispr borrows them too, since 2026-09-08.** It did not until
         // then, and the argument was that both buttons are taken in order to
         // *add to a message* while that mode has no message — one string, going
@@ -9523,6 +9522,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // idling on its own wave, which is correct outside a dictation.
             "meter": (source.meter.isRecording ? "engine"
                       : wisprSource.meter.isRecording ? "wispr" : "none"),
+            // The engine's recorder lanes (2026-11-22, `MicLanes`): calls still
+            // stuck in CoreAudio, recorders abandoned since launch, the last why.
+            "micLanes": source.micLanes,
+            "micHang": MicRecorder.hangOpensForTest,
             "chip": overlay.renderedRows,
             // The destination, in the three flags that decide it plus the one
             // latched at the microphone's close.
@@ -12581,7 +12584,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func plusOneShot(cursor: NSPoint) {
-        guard hasDestination else { return }
         // **A plain dictation takes no picture, at the start or at the end**
         // (2026-09-23, Victor: *"there is no screenshot in a clean dictation"*).
         // The back click is its stop, not a shutter, already; this closes the
@@ -12736,7 +12738,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// in the sentence he reached for it, and framing a box carefully is a
     /// second or two he should not be charged for.
     private func areaShot(from anchor: NSPoint, at takenAt: Date) {
-        guard hasDestination else { return }
         if refusesAttachment("✂️ the area crop") { return }
         // Sampled with the gesture, like the shutter's: by the time the box is
         // drawn the front window may be one he switched to in order to frame it.
@@ -13098,13 +13099,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **A quit mid-sentence waits for the sentence** — see `QuitGate` for why this
     /// refuses and retries rather than answering `.terminateLater`.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if quitApproved || QuitGate.disabled { return .terminateNow }
+        if quitApproved || QuitGate.disabled { QuitGate.armHardExit(); return .terminateNow }
         let why = quitBlockers
-        guard !why.isEmpty else { return .terminateNow }
+        let waited = quitDeferredSince.map { Date().timeIntervalSince($0) }
+        if case .go(let reason) = QuitGate.verdict(blockers: why, waited: waited, askedAgain: true) {
+            if !reason.isEmpty { Log.error("quit: \(reason) — quitting now") }
+            quitApproved = true
+            QuitGate.clearMarker()
+            QuitGate.armHardExit()
+            return .terminateNow
+        }
         if quitDeferredSince == nil {
             quitDeferredSince = Date()
-            Log.info("⏳ quit deferred — \(why.joined(separator: ", ")); it goes once the words have landed")
-            overlay.flash("↻ quitting after this sentence", duration: 3)
+            Log.info("⏳ quit deferred — \(why.joined(separator: ", ")); it goes once the words have landed (a second Quit goes at once)")
+            overlay.flash("↻ quitting after this sentence — Quit again to leave now", duration: 3)
             closeMicrophoneToLeave("the quit")
             quitWhenIdle()
         }
@@ -13126,9 +13134,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func quitWhenIdle() {
         QuitGate.touchMarker()
+        guard !quitApproved else { return }   // a second ask already let it through
         let why = quitBlockers
         let waited = Date().timeIntervalSince(quitDeferredSince ?? Date())
-        guard why.isEmpty || waited >= QuitGate.ceiling else {
+        guard QuitGate.verdict(blockers: why, waited: waited, askedAgain: false) != .wait else {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.quitWhenIdle() }
             return
         }

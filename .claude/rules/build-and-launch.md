@@ -298,6 +298,14 @@ Full history and reasoning: docs/journal.md — see the sections named after eac
   either way.
   → journal: *Restarting keeps the binding, and never interrupts a sentence (2026-09-09)*
 
+- **A second Quit goes at once, and a quit let through is gone in 2 s** (2026-11-22, `QuitGate.verdict`,
+  `QuitGateTests`). 13:56 that day: a Quit deferred behind two sentences that could never land (their
+  microphone had not opened), a SIGTERM 58 s later refused the same way, the 10 min ceiling far off —
+  SIGKILL. Now any new ask (menu, ⌘Q, SIGTERM) ≥ `insistAfter` 1 s after the first deferral is let
+  through (`quit: asked again N s into the wait — … is given up`; flash `↻ quitting after this
+  sentence — Quit again to leave now`), and every `.terminateNow` arms `QuitGate.armHardExit`: a
+  background thread `_exit(0)`s 2 s later whatever `applicationWillTerminate` is waiting on. The
+  first ask still waits for a sentence, as before. `relay-restart.sh` is unchanged.
 - **A Quit or a Dock restart with the microphone open ends the sentence first** (2026-10-09, `closeMicrophoneToLeave`): the words are delivered the ordinary way, then the app goes. Waiting was right for words in flight and wrong for an open microphone, which nothing closes — the deferred quit's ceiling is 10 min. `relay-restart.sh` is unaffected: its gate never lets it ask while anything is busy.
 
 ## A click on the Dock tile is a restart (2026-09-14)

@@ -101,7 +101,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 75 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 77 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -347,6 +347,16 @@
         <p class="when">A Wispr Flow sentence, from the gesture until Wispr&#x27;s own microphone opens (0.3–0.7 s warm, 5–6 s cold).</p>
         <p class="note"><strong>Q20 (2026-09-28, Victor&#x27;s Q8 = A).</strong> A cold Wispr is deaf for up to six seconds after the chord, and the chip used to say <code>Listening</code> over it — the first words went nowhere and nothing said so. It says <code>Opening Wispr Flow...</code> until the 100 ms poll or the CoreAudio edge sees Wispr&#x27;s microphone open (<code>WisprFlowSource.micOpened</code>), then the ordinary row. The relay&#x27;s own recording runs from the gesture regardless, which is what the local fallback (Q14) transcribes if Wispr never hears the sentence.</p>
         <code class="slug">listening-opening</code>
+      </section>
+      <section class="card" id="listening-opening-mic">
+        <header>
+          <h3>Opening microphone — the relay&#x27;s own recorder has not opened yet</h3>
+          <div class="tags"><span class="tag tag-chip" title="bare text beside the cursor — no blur, no shadow, no ✕">chip</span><span class="tag">alpha 0.80</span><span class="tag">308×93 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/listening-opening-mic.png" width="308" height="93" style="opacity:0.8" alt="Opening microphone — the relay&#x27;s own recorder has not opened yet"></div>
+        <p class="when">A sentence on ElevenLabs or the local model whose microphone has not confirmed open 1.5 s after the gesture (an ordinary open takes under a second) — until it opens, or for 8 s, when the sentence fails with <code>⚠️ Microphone did not open — nothing was recorded</code>.</p>
+        <p class="note"><strong>2026-11-22.</strong> At 13:47:48 <code>-[AVAudioEngine inputNode]</code> never came back: the chip said <code>Prompting</code> for 32 s over a microphone that was not open, then <code>Transcribing...</code> for ever over a sentence that was never recorded. The dictation still opens on the gesture; what the row may not do is claim a microphone it has not got. <code>AppDelegate.watchMicOpening</code> raises it, <code>DictationSource.didConfirmOpen</code> takes it down.</p>
+        <code class="slug">listening-opening-mic</code>
       </section>
       <section class="card" id="listening-long">
         <header>
@@ -611,6 +621,16 @@
         <p class="note"><strong>Words and nothing else</strong>, and <strong>bare</strong>: no glyph of its own, no lone 🎙️ above it, no blur, no rounded rect, no shadow, no ✕. It is a word replacing a word — it lands in the row <code>Listening…</code> was just occupying, beside the pointer — and a window opening and closing round it for a second and a half read as an <em>event</em> rather than as the state changing back to nothing. The audio is gone; there is nothing to offer him and nothing to undo.</p>
         <code class="slug">flash-cancelled</code>
       </section>
+      <section class="card" id="flash-mic-not-open">
+        <header>
+          <h3>Flash — the microphone did not open</h3>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">431×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/flash-mic-not-open.png" width="431" height="46" style="opacity:0.8" alt="Flash — the microphone did not open"></div>
+        <p class="when">Twelve seconds, 8 s into a sentence whose microphone never opened (<code>MicFailure.openTimeout</code>) — while he is still talking, not after he stops. Nothing was recorded, so there is no <em>recover it from the menu</em>.</p>
+        <p class="note"><strong>2026-11-22</strong>, after two sentences were lost in silence to a CoreAudio call that never returned. The recorder is abandoned with the call inside it and a fresh one takes its place (<code>MicLanes</code>), so the next gesture records.</p>
+        <code class="slug">flash-mic-not-open</code>
+      </section>
       <section class="card" id="flash-local-fallback">
         <header>
           <h3>Flash — the local model stood in</h3>
@@ -727,9 +747,9 @@
       <section class="card" id="prompt-autosend-paused">
         <header>
           <h3>Under Autosend, with the pointer on it</h3>
-          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">385×126 pt</span></div>
+          <div class="tags"><span class="tag tag-panel" title="top-left of the screen, blurred, full opacity, ✕ on hover">panel</span><span class="tag">alpha 1.00</span><span class="tag">385×102 pt</span></div>
         </header>
-        <div class="shot"><img src="states/prompt-autosend-paused.png" width="385" height="126" style="opacity:1" alt="Under Autosend, with the pointer on it"></div>
+        <div class="shot"><img src="states/prompt-autosend-paused.png" width="385" height="102" style="opacity:1" alt="Under Autosend, with the pointer on it"></div>
         <p class="when">Autosend is ticked and he moved the pointer onto the panel before its second ran out (2026-09-23).</p>
         <p class="note">The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.</p>
         <code class="slug">prompt-autosend-paused</code>
@@ -906,7 +926,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 56568441 · 22 Nov 2026 · built 22 Nov 2026, 11:41
+  Generated from <code>OverlayStates.swift</code> · repo at 2dba6aaf · 22 Nov 2026 · built 22 Nov 2026, 14:03
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

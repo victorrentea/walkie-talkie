@@ -1041,7 +1041,7 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// three dots are the last three steps, which is the part Victor reads to
     /// know it is done.
     private var listeningWord: String {
-        opening ? "Opening Wispr Flow..." : Self.listeningWord(asking: asking, prompting: prompting, micMark: micMark)
+        opening ? openingWord : Self.listeningWord(asking: asking, prompting: prompting, micMark: micMark)
     }
 
     /// One row for the three sentences: the word differs, the `→ <mark>` is the
@@ -1055,10 +1055,18 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// chord while the chip used to say `Listening` (W11): the first words went
     /// nowhere and nothing said so. `AppDelegate` raises it at a Wispr
     /// sentence's begin and drops it on `WisprFlowSource.micOpened`.
+    ///
+    /// **`Opening microphone...` for the relay's own recorder** (2026-11-22,
+    /// `MicFailure.openingRow`): an open that has not confirmed 1.5 s after the
+    /// gesture says so instead of `Prompting`, until it confirms or the sentence
+    /// fails at `MicFailure.openTimeout`.
     private(set) var opening = false
-    func setOpening(_ on: Bool) {
-        guard opening != on else { return }
+    static let openingWispr = "Opening Wispr Flow..."
+    private var openingWord = RelayWindow.openingWispr
+    func setOpening(_ on: Bool, saying word: String = RelayWindow.openingWispr) {
+        guard opening != on || (on && openingWord != word) else { return }
         opening = on
+        if on { openingWord = word }
         if listening { layoutContent() }
     }
 

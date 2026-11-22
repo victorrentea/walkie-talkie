@@ -29,7 +29,10 @@ import Foundation
 final class LocalLiveCaption {
 
     let whisper = LocalWhisper(live: true)
-    private let meter: MicRecorder
+    /// Asked each time: the source's recorder is replaced when a microphone
+    /// call never comes back (2026-11-22, `MicLanes`).
+    private let meterNow: () -> MicRecorder
+    private var meter: MicRecorder { meterNow() }
 
     /// Everything settled, then the tail still moving — `DictationSource.didHearLive`'s shape.
     var onCaption: ((_ committed: String, _ partial: String) -> Void)?
@@ -65,7 +68,7 @@ final class LocalLiveCaption {
     private static let window = FileManager.default.temporaryDirectory
         .appendingPathComponent("walkie-live-window.pcm")
 
-    init(meter: MicRecorder) { self.meter = meter }
+    init(meter: @escaping () -> MicRecorder) { self.meterNow = meter }
 
     var ready: Bool { whisper.ready }
 
