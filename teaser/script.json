@@ -124,7 +124,7 @@
       "lines": [
         {
           "who": "u",
-          "text": "Is Hystrix still maintained?"
+          "text": "Is the Hystrix library from Netflix still maintained?"
         },
         {
           "who": "n",
