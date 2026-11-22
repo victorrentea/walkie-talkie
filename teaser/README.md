@@ -3,7 +3,7 @@
 A ~60 s promo cut, rebuilt from scratch by one command:
 
 ```
-python3 teaser/build.py          # -> teaser/out/teaser-v1.mp4 (1920x1080, 30 fps, H.264 + AAC)
+python3 teaser/build.py          # -> teaser/out/teaser-v2.mp4 (1920x1080, 30 fps, H.264 + AAC)
 python3 teaser/build.py --plan   # the timeline only, nothing rendered
 ```
 
@@ -16,15 +16,19 @@ python3 teaser/build.py --plan   # the timeline only, nothing rendered
 | file | what it does |
 |---|---|
 | `tts.py` | one clip per line into `audio/`, cached by a hash of provider + voice + text, so a script edit re-synthesises only the changed lines |
+| `cuts.json` | the edit: which seconds of which clip each scene shows, punch-ins, subtitle position |
 | `build.py` | timeline, per-scene picture, subtitles, sound mix, mux |
 
-**Footage**: `footage/<scene-id>.mp4`, or takes `footage/<scene-id>-a.mp4`, `-b.mp4`, ...
-(one take per line when the counts match, equal shares otherwise). A clip is sped up or
-slowed down to fill its scene (0.75x to 3x; past that it is trimmed, or its last frame
-held). A scene with no clip gets a dark placeholder card, so a cut can be made at any
-moment. The scene whose id ends in `-end` is always the generated end card. Optional keys
-on a scene in `script.json`: `"trim": [in, out]` (seconds of the clip to use; per take:
-`{"a": [in, out]}`) and `"speed": 1.5`.
+**Footage and the edit**: the takes in `footage/` are long and uncut; `cuts.json` is the
+edit. Per scene it lists sub-cuts played in order: `clip` (file in `footage/`, default the
+scene id), `in`/`out` seconds of that clip, optional `crop: [x, y, w, h]` (a punch-in on the
+1920x1080 source), `line` (the index of the scene's line this cut starts under: the cuts of
+one line share that line's time and are stretched together to fill it, which is what keeps
+a spoken line over its picture), `sub: "top"` (subtitle at the top during this cut) and
+`speed` (fixed instead of stretched). `build.py --plan` prints every cut with its place in
+the film and its resulting speed. A scene with footage but no entry plays its clips whole
+(0.75x to 3x); a scene with no clip gets a dark placeholder card. The scene whose id ends
+in `-end` is always the generated end card.
 
 **Timeline**: a scene lasts `max(target, its speech + gaps)`, and its end then moves to the
 nearest beat of the music that still leaves room for the speech. Hard cuts on whole frames.

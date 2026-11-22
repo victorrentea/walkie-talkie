@@ -36,6 +36,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 HERE = Path(__file__).resolve().parent
+CUT_VERSION = 2                    # the file is out/teaser-v<N>.mp4
 sys.path.insert(0, str(HERE))
 import tts  # noqa: E402
 
@@ -43,13 +44,14 @@ import tts  # noqa: E402
 # test clips, without touching the real cut).
 FOOTAGE = Path(os.environ.get("TEASER_FOOTAGE", HERE / "footage"))
 MUSIC_DIR, OUT = HERE / "music", HERE / "out"
-FINAL = Path(os.environ.get("TEASER_OUT", OUT / "teaser-v1.mp4"))
+FINAL = Path(os.environ.get("TEASER_OUT", OUT / f"teaser-v{CUT_VERSION}.mp4"))
+CUTS = HERE / "cuts.json"
 WORK = OUT / ".work" if FINAL.parent == OUT else FINAL.parent / ".work"
 ICON = HERE.parent / "assets" / "walkie-bound.png"
 
 W, H, FPS = 1920, 1080, 30
 SR = 48000
-RENDER_VERSION = 3                 # bump to throw away every cached scene
+RENDER_VERSION = 4                 # bump to throw away every cached scene
 
 MUSIC = MUSIC_DIR / "brain-dance.mp3"
 MUSIC_BPM = 124.0                  # stated by the composer; confirmed by beat_grid()
@@ -218,7 +220,7 @@ def wrap(text: str, f: ImageFont.FreeTypeFont, max_w: int) -> list[str]:
     return lines
 
 
-def subtitle_png(text: str, who: str, path: Path) -> None:
+def subtitle_png(text: str, who: str, path: Path, top: bool = False) -> None:
     size = 62
     f = font(size, "Bold")
     colour = YELLOW if who == "u" else WHITE
@@ -231,7 +233,7 @@ def subtitle_png(text: str, who: str, path: Path) -> None:
     block_h = line_h * len(rows)
     pad_x, pad_y = 44, 24
     box_w, box_h = block_w + 2 * pad_x, block_h + 2 * pad_y
-    x0, y0 = (W - box_w) / 2, H - 78 - box_h
+    x0, y0 = (W - box_w) / 2, (64 if top else H - 78 - box_h)
     im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).rounded_rectangle((x0, y0, x0 + box_w, y0 + box_h), 30,
@@ -294,44 +296,64 @@ def endcard_png(path: Path) -> None:
 
 # ---------------------------------------------------------------- picture
 
-def takes_for(scene_id: str) -> list[Path]:
-    single = FOOTAGE / f"{scene_id}.mp4"
-    takes = sorted(FOOTAGE.glob(f"{scene_id}-[a-z].mp4"))
-    return takes or ([single] if single.is_file() else [])
+def segments_for(scene: dict) -> list[dict]:
+    """The scene's sub-cuts: cuts.json when it has them, else every clip found, whole.
 
-
-def slots(scene: dict, n: int) -> list[float]:
-    """Seconds each of n takes gets: one per line when they match, else equal shares."""
-    lines, dur = scene["lines"], scene["dur"]
-    if n == 1:
-        return [dur]
-    if n == len(lines):
-        cuts = [0.0] + [max(0.0, l["at"] - 0.2) for l in lines[1:]] + [dur]
+    Each comes back with `dur` (seconds on screen, whole frames) and the speed that implies.
+    Cuts tagged with the same `line` share the time from that line to the next tagged one
+    and are stretched together to fill it; untagged cuts continue the group before them."""
+    sid, lines, total = scene["id"], scene["lines"], scene["dur"]
+    cuts = json.loads(CUTS.read_text()).get(sid) if CUTS.is_file() else None
+    if cuts:
+        segs = [{"clip": sid, **c} for c in cuts if (FOOTAGE / f"{c.get('clip', sid)}.mp4").is_file()]
     else:
-        cuts = [dur * i / n for i in range(n + 1)]
-    frames = [round(c * FPS) for c in cuts]
-    return [(b - a) / FPS for a, b in zip(frames, frames[1:])]
+        takes = sorted(FOOTAGE.glob(f"{sid}-[a-z].mp4")) or \
+            [p for p in [FOOTAGE / f"{sid}.mp4"] if p.is_file()]
+        segs = [{"clip": p.stem, "in": 0.0, "out": probe_duration(p),
+                 **({"line": i} if len(takes) == len(lines) > 1 else {})}
+                for i, p in enumerate(takes)]
+    if not segs:
+        return []
+    groups: list[tuple[float, list[dict]]] = []      # (start time, cuts)
+    for seg in segs:
+        if "line" in seg and groups and seg["line"] < len(lines):
+            groups.append((max(0.0, lines[seg["line"]]["at"] - 0.25), [seg]))
+        elif not groups:
+            groups.append((0.0, [seg]))
+        else:
+            groups[-1][1].append(seg)
+    edges = [round(g[0] * FPS) for g in groups] + [scene["frames"]]
+    for (_, members), f0, f1 in zip(groups, edges, edges[1:]):
+        span = (f1 - f0) / FPS
+        fixed = sum((m["out"] - m["in"]) / m["speed"] for m in members if "speed" in m)
+        loose = sum(m["out"] - m["in"] for m in members if "speed" not in m)
+        k = loose / max(0.1, span - fixed)            # speed of the stretched cuts
+        if not cuts:
+            k = min(3.0, max(0.75, k))                # an uncurated clip: trim or hold instead
+        t, f = 0.0, f0
+        for i, m in enumerate(members):
+            m["speed"] = m.get("speed", k)
+            t += (m["out"] - m["in"]) / m["speed"]
+            end = f1 if i == len(members) - 1 else min(f1, f0 + round(t * FPS))
+            m["at"], m["dur"] = f / FPS, (end - f) / FPS
+            f = end
+    return [m for m in segs if m["dur"] > 0]
 
 
-def fit(clip: float, slot: float, forced: float | None) -> float:
-    """Playback speed for a clip of `clip` seconds in a slot of `slot` seconds."""
-    if forced:
-        return forced
-    return min(3.0, max(0.75, clip / slot))       # beyond that: trim, or hold last frame
-
-
-def render_scene(scene: dict) -> tuple[Path, bool]:
+def render_scene(scene: dict) -> tuple[Path, list[dict]]:
     WORK.mkdir(parents=True, exist_ok=True)
     sid = scene["id"]
     is_end = sid.endswith("-end")
-    takes = [] if is_end else takes_for(sid)
-    stat = [(p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in takes]
+    segs = [] if is_end else segments_for(scene)
+    clips = sorted({s["clip"] for s in segs})
+    stat = [(c, (FOOTAGE / f"{c}.mp4").stat().st_size, (FOOTAGE / f"{c}.mp4").stat().st_mtime_ns)
+            for c in clips]
     icon = ICON.stat().st_mtime_ns if is_end and ICON.is_file() else 0
-    key = hashlib.sha256(json.dumps([RENDER_VERSION, scene, stat, icon],
+    key = hashlib.sha256(json.dumps([RENDER_VERSION, scene, segs, stat, icon],
                                     sort_keys=True).encode()).hexdigest()[:12]
     out = WORK / f"{sid}-{key}.mp4"
     if out.is_file():
-        return out, bool(takes)
+        return out, segs
     for old in WORK.glob(f"{sid}-*"):
         old.unlink()
 
@@ -340,23 +362,17 @@ def render_scene(scene: dict) -> tuple[Path, bool]:
     chains: list[str] = []
     norm = (f"fps={FPS},scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,"
             f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=0x0b0d12,setsar=1,format=yuv420p")
-    if takes:
-        share = slots(scene, len(takes))
-        trims = scene.get("trim")
-        for i, (take, slot) in enumerate(zip(takes, share)):
-            tr = trims.get(take.stem[-1]) if isinstance(trims, dict) else trims
-            a, b = tr if tr else (0.0, probe_duration(take))
-            speed = fit(b - a, slot, scene.get("speed"))
-            inputs += ["-i", str(take)]
+    if segs:
+        for i, sg in enumerate(segs):
+            inputs += ["-ss", f"{sg['in']:.3f}", "-t", f"{sg['out'] - sg['in'] + 0.5:.3f}",
+                       "-i", str(FOOTAGE / f"{sg['clip']}.mp4")]
+            crop = "crop={2}:{3}:{0}:{1},".format(*sg["crop"]) if sg.get("crop") else ""
             chains.append(
-                f"[{i}:v]trim={a}:{b},setpts=(PTS-STARTPTS)/{speed:.4f},{norm},"
-                f"tpad=stop_mode=clone:stop_duration={slot + 1:.3f},"
-                f"trim=duration={slot:.4f},setpts=PTS-STARTPTS[t{i}]")
-        n = len(takes)
-        if n > 1:
-            chains.append("".join(f"[t{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v0]")
-        else:
-            chains.append("[t0]null[v0]")
+                f"[{i}:v]setpts=(PTS-STARTPTS)/{sg['speed']:.4f},{crop}{norm},"
+                f"tpad=stop_mode=clone:stop_duration={sg['dur'] + 1:.3f},"
+                f"trim=duration={sg['dur']:.4f},setpts=PTS-STARTPTS[t{i}]")
+        n = len(segs)
+        chains.append("".join(f"[t{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v0]")
     else:
         card = WORK / f"{sid}-card.png"
         endcard_png(card) if is_end else placeholder_png(scene, card)
@@ -369,12 +385,15 @@ def render_scene(scene: dict) -> tuple[Path, bool]:
     subs = [(line["who"], line["at"] + c["at"], c["dur"], c["text"])
             for line in scene["lines"] for c in line["subs"]]
     for j, (who, at, sub_dur, text) in enumerate(subs):
-        png = WORK / f"{sid}-sub{j}.png"
-        subtitle_png(text, who, png)
-        inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(png)]
         a = max(0.0, at - 0.05)
         nxt = subs[j + 1][1] - 0.05 if j + 1 < len(subs) else dur
         b = min(dur, at + sub_dur + 0.25, nxt)
+        # the subtitle goes to the top while any cut it overlaps asks for that
+        top = any(sg.get("sub") == "top" and sg["at"] < b and sg["at"] + sg["dur"] > a
+                  for sg in segs)
+        png = WORK / f"{sid}-sub{j}.png"
+        subtitle_png(text, who, png, top)
+        inputs += ["-loop", "1", "-framerate", str(FPS), "-t", f"{dur + 1:.3f}", "-i", str(png)]
         chains.append(f"[{last}][{n + j}:v]overlay=0:0:enable='between(t,{a:.3f},{b:.3f})'"
                       f"[v{j + 1}]")
         last = f"v{j + 1}"
@@ -386,7 +405,7 @@ def render_scene(scene: dict) -> tuple[Path, bool]:
          "-map", f"[{last}]", "-frames:v", str(scene["frames"]), "-r", str(FPS),
          "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
          "-video_track_timescale", "15360", "-an", str(out)])
-    return out, bool(takes)
+    return out, segs
 
 
 # ---------------------------------------------------------------- sound
@@ -448,13 +467,19 @@ def main() -> None:
     period, _ = beat_grid()
     print(f"music {60 / period:.2f} BPM, starts at {music_start:.3f}s of the track")
     for s in scenes:
-        clips = "end card" if s["id"].endswith("-end") else (
-            ", ".join(p.name for p in takes_for(s["id"])) or "PLACEHOLDER")
         print(f"{s['start']:6.2f}s  {s['id']:11} {s['dur']:5.2f}s "
-              f"(target {s['target']}, {s['dur'] / period:.1f} beats)  {clips}")
+              f"(target {s['target']}, {s['dur'] / period:.1f} beats)")
         for l in s["lines"]:
             print(f"           {l['who']} +{l['at']:.2f}s {l['dur']:.2f}s  "
                   + " | ".join(c["text"] for c in l["subs"]))
+        segs = [] if s["id"].endswith("-end") else segments_for(s)
+        for g in segs:
+            print(f"           cut {s['start'] + g['at']:6.2f}-{s['start'] + g['at'] + g['dur']:6.2f}"
+                  f"  {g['clip']} {g['in']:.1f}-{g['out']:.1f}s x{g['speed']:.2f}"
+                  + (f"  crop {g['crop']}" if g.get("crop") else "")
+                  + ("  sub top" if g.get("sub") == "top" else ""))
+        if not segs:
+            print("           " + ("end card" if s["id"].endswith("-end") else "PLACEHOLDER"))
     print(f"total {total:.2f}s")
     if "--plan" in sys.argv:
         return
@@ -462,9 +487,14 @@ def main() -> None:
     WORK.mkdir(parents=True, exist_ok=True)
     parts, real = [], 0
     for s in scenes:
-        path, has_footage = render_scene(s)
+        path, segs = render_scene(s)
         parts.append(path)
-        real += has_footage
+        real += bool(segs)
+    (WORK / "cutlist.json").write_text(json.dumps(
+        [{"scene": s["id"], "clip": g["clip"], "in": g["in"], "out": g["out"],
+          "speed": round(g["speed"], 2), "from": round(s["start"] + g["at"], 2),
+          "to": round(s["start"] + g["at"] + g["dur"], 2)}
+         for s in scenes if not s["id"].endswith("-end") for g in segments_for(s)], indent=1))
     listing = WORK / "concat.txt"
     listing.write_text("".join(f"file '{p}'\n" for p in parts))
     wav = WORK / "mix.wav"
