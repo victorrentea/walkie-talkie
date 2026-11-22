@@ -91,8 +91,8 @@
     },
     {
       "id": "s07-modes",
-      "target": 11,
-      "shows": "Four quick cuts: flick up = new session (top edge dust, new terminal); wake word; prompt at the caret (bottom edge, red pins); clean dictation in a mail with 'Transcribing and redacting'.",
+      "target": 14,
+      "shows": "Four quick cuts: flick up = new session (top edge dust, new terminal); wake word; prompt at the caret (bottom edge, red pins); clean dictation in a mail with 'Transcribing and redacting'. The dictated sentence holds a technical name that lands spelled right (the learned dictionary).",
       "lines": [
         {
           "who": "n",
@@ -110,6 +110,10 @@
         {
           "who": "n",
           "text": "Or just dictate, cleaned up as you speak."
+        },
+        {
+          "who": "n",
+          "text": "The redactor learns your vocabulary from your agent sessions."
         }
       ]
     },
