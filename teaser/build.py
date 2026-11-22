@@ -318,7 +318,7 @@ def endcard_png(path: Path) -> None:
     # The tagline under the name; the facts and the link lower down (Victor, 2026-11-22).
     d.text((W / 2, y + 118), "Talk to your coding agent", font=font(62, "Bold"),
            fill=WHITE, anchor="mm")
-    d.text((W / 2, H - 250), "Built for macOS", font=font(48, "Medium"),
+    d.text((W / 2, H - 250), "Free  ·  open source  ·  built for macOS", font=font(48, "Medium"),
            fill=(255, 176, 32), anchor="mm")
     d.text((W / 2, H - 170), "github.com/victorrentea/walkie-talkie",
            font=font(44, "Regular"), fill=(190, 198, 214), anchor="mm")
