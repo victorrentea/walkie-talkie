@@ -133,6 +133,20 @@ Victor: *"cât durează recordul de ecran să nu se afișeze niciun alt efect (e
   (`setDelivering`), the corner tunnel (`cornerTunnel.held`), the fly-to-corner, the halo dial
   (`haloUp`) — **and the edge in whichever phase** (`edgeDust.drop`: `listen(nil)` only ends an edge
   still being said, and one *waiting* for its message would have stayed through the film).
+- **At the film's start they are off in the call, not wound down** (2026-11-23; teaser take 6b: no new
+  dust was added, but the pointer's and the right edge's dust already in the air drifted on for ~4 s).
+  `startFilm` calls `vanishEffectsForFilm()` **before** its sync: `CaretHalo.vanishForFilm` (panel ordered
+  out — live, collapsing, docked or flying to the corner — pin hidden, `cancelled` set so the sync's
+  `setActive(false)` takes `hide`'s short branch: no collapse, no fade), `EdgeDust.vanish` (any phase,
+  **`leaving` too**; `teardown`, so no grain is kept for the edge that returns), `CornerTunnel.vanish`
+  (`teardown`: no grace, spiral or `dieOut`). The sync's own line is `edgeDust.vanish` now — `drop` drains
+  and skips an edge already leaving; it stays battery's. No `dock` while a film runs. Halo first: the
+  corner's wheel may be the pointer's own dust. The wheel drag's film (`filmTheBoxUnderTheWheel`) starts
+  through the same `startFilm`, at the box's completion — until then the crop's veil hides the ring, not
+  the edge. Coming back at the stop is unchanged. Proven in `FxHoldTests` on panels never ordered front
+  (edge `down` from every phase, ring `visible` false / `closing` false in the call); **not seen on a
+  running app** — desk check owed: `state` straight after `back-up` → `edgeDust` `down` (never
+  `leaving`), `halo.ring.visible` false, `halo.ring.closing` false, with `fxHeld` `filming`, not `battery`.
 - **Both edges of a film sync**: `startFilm`, `stopFilm` (with frames and without) call
   `syncBorrowedGestures()`, `takeFilms` (the sentence ended while recording) hops one to main. So the
   effects come back at the stop if the sentence is still open, in the dress it has then.

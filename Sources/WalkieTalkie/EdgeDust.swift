@@ -242,6 +242,25 @@ final class EdgeDust {
         leave(sent: false, why: why)
     }
 
+    /// **The screen is being filmed: off in this call** (2026-11-23) — no drain, no
+    /// fade, from any phase, an edge already `leaving` included (`drop` let the grains
+    /// in the air finish, ~4 s of dust over a film that had started). The panel and its
+    /// picture are let go, so no grain is kept for the edge that comes up again at the
+    /// film's stop; `turn` moves on, so a drain or a fade still pending ends nothing.
+    func vanish(_ why: String) {
+        guard phase != .down || panel?.isVisible == true else { return }
+        Log.info("🌫️ the \(edge?.rawValue ?? "?") edge is off at once (was \(phase.rawValue)) — \(why)")
+        teardown()
+    }
+
+    /// Tests only (`FxHoldTests`): an edge standing in `phase` on a panel never ordered front.
+    func standForTest(_ edge: Edge, phase name: String, on panel: NSPanel) {
+        guard let phase = Phase(rawValue: name) else { return }
+        self.edge = edge
+        self.phase = phase
+        self.panel = panel
+    }
+
     /// A cancel: out in `cutFade`, no swell. It was off the screen in the call
     /// (2026-11-16, *"la cancel dispare brusc toată grafica de pe ecran"*) until
     /// 2026-11-20: *"să dispară cu fade out pe zero trei secunde. Nu e brutal instant"*.

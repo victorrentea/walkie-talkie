@@ -322,6 +322,19 @@ final class CornerTunnel {
     /// Battery, a ⚡ question: down now, whatever the reasons.
     var held = false { didSet { if held != oldValue { sync() } } }
 
+    /// **The screen is being filmed: off in this call** (2026-11-23) — `held` alone
+    /// goes through `hide` (the dust's grace, its spiral and `dieOut`; a fade for the
+    /// tunnel). The panel and its engine are let go, so the wheel that comes back at
+    /// the film's stop starts empty. Not a cancel: `held` going false raises it again.
+    func vanish() {
+        lingering = false
+        guard up || panel?.isVisible == true else { return }
+        Log.info("🌀 the corner's wheel is off at once — the screen is being filmed")
+        teardown()
+        circling = false
+        quiet = false
+    }
+
     // MARK: - The desk
 
     /// The live instance, for `POST /test/corner-tunnel`.

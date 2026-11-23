@@ -17126,3 +17126,16 @@ Victor, asked whether the two flicks the question's bar stopped offering should 
 - `evals/test_gesture_spec.py`: new row and two mutations; the eight checks red at HEAD are still the only red.
 - Not made by hand on the mouse; the guide read as HTML (`GUIDE_HTML`), not looked at in a window.
 
+## 2026-11-23 — 🎬 At the film's start the effects are off at once
+
+Teaser take 6b (VM): 🔽 ↑ mid-prompt added no new dust, but the pointer's dust and the right edge's, already
+in the air, drifted on and took ~4 s to thin out. The hold of 2026-11-22 only *asked* each effect to go:
+the ring collapsed or faded, `edgeDust.drop` drained, the corner's wheel wound into its centre.
+
+- `startFilm` → `vanishEffectsForFilm()` before its sync: `CaretHalo.vanishForFilm`, `EdgeDust.vanish`,
+  `CornerTunnel.vanish` — panels ordered out in the call; the edge and the wheel are torn down, so nothing
+  in the air is kept for the return. The sync's `drop` became `vanish` (an edge already `leaving` was skipped).
+- The wheel drag's film goes through the same `startFilm`. The prompt panel's `dock` is refused while filming.
+- Battery keeps its drain. The return at the stop is untouched.
+- Proven by `FxHoldTests` on panels never ordered front (state read in the same call) and by the wiring held
+  to the source. **Not on a running app** — staged, not installed; the engines' real pixels were not watched.

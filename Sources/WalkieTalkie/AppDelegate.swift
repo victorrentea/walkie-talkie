@@ -8631,7 +8631,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.setFilming(true)
         // Nothing else is drawn while the REC corners are up (`FxHold`, 2026-11-22).
         Log.info("🎬 filming — the halo, the dust and the edge stay down until it stops")
+        // **At once** (2026-11-23): what is already in the air is taken off in this
+        // turn — the sync below would only start the collapse, the drain, the spiral.
+        vanishEffectsForFilm()
         syncBorrowedGestures()
+    }
+
+    /// The ring and the pin, the edge, the corner's wheel: ordered out in this call,
+    /// no drain and no fade (2026-11-23). The halo first — the corner's wheel may be
+    /// the pointer's own dust (`standIn`), and its end must find the flight gone.
+    private func vanishEffectsForFilm() {
+        caretHalo.vanishForFilm()
+        edgeDust.vanish("the screen is being filmed")
+        cornerTunnel.vanish()
     }
 
     /// **Hand the finished recording to the message being built, and let go of
@@ -9027,7 +9039,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fxHeld = FxHold.why(battery: BatteryFx.holdsEffects, filming: film != nil) != nil
         // The edge too, in whichever phase: `listen(nil)` below only ends one still
         // being said, and an edge waiting for its message would stay through the film.
-        if film != nil { edgeDust.drop("the screen is being filmed") }
+        // **Off at once, not drained** (2026-11-23, `vanish`): `drop` left the grains
+        // in the air to finish, and did nothing for an edge already leaving.
+        if film != nil { edgeDust.vanish("the screen is being filmed") }
         caretHalo.setRewind(settling && !listening && !speculative && !quickAsk && !fxHeld && !quiet,
                             take: settleTake, estimate: settleEstimate)
         // **The pin stays through a quiet settle** (2026-11-10, Victor: *"când fac
@@ -13631,7 +13645,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.hotkeys.promptHeld = true
                 // **The effect flies into the panel and stays over it,
                 // see-through, until it goes** (2026-10-07) — `CaretHalo.dock`.
-                if !BatteryFx.holdsEffects { self.caretHalo.dock { [weak self] in self?.overlay.sentPromptFrame } }
+                if FxHold.why(battery: BatteryFx.holdsEffects, filming: self.film != nil) == nil { self.caretHalo.dock { [weak self] in self?.overlay.sentPromptFrame } }
             } else {
                 self.commit(message)
             }

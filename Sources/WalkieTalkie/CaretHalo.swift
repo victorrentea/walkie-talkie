@@ -1751,6 +1751,63 @@ final class CaretHalo {
         Log.info("◯ caret halo cut — the sentence was cancelled")
     }
 
+    /// **A film starts: everything of the ring is off the screen in this call**
+    /// (2026-11-23, Victor's *"cât durează recordul de ecran să nu se afișeze niciun
+    /// alt efect"*, held to the letter after a take where the dust already in the air
+    /// went on drifting for ~4 s). No collapse, no fade, no flight to the corner: the
+    /// panel is ordered out here — a live ring, one still collapsing, one docked on
+    /// the prompt panel, the dust on its way to the corner's wheel — and the pin with
+    /// it. `AppDelegate.startFilm` calls it **before** its sync, so the
+    /// `setActive(false)` that follows finds `cancelled` and only stops the engine
+    /// (`hide`'s short branch). Not a cancel: `show` clears the flag, and the ring
+    /// blooms again at the film's stop if the sentence is still open.
+    func vanishForFilm() {
+        // A dock gives the window its own frame and level back first (`show` assumes them).
+        settleDock()
+        arrow.hide()
+        guard let panel, live || closing || panel.isVisible else { return }
+        cancelled = true
+        if cornerFlight != nil { restoreCornerKnobs() }
+        cornerFlight = nil
+        cornerOrbitAdopted = false
+        orbitFading = false
+        // Whatever was taking it down slowly is called off: its delayed `orderOut`
+        // (the generation), the wave's wipe, the collapse's scale and ink.
+        stillGeneration &+= 1
+        closingGeneration &+= 1
+        closing = false
+        growGraceTimer?.invalidate(); growGraceTimer = nil
+        growOnShow = false
+        stage?.removeAnimation(forKey: "collapse")
+        stage?.removeAnimation(forKey: "collapse-ink")
+        stage?.removeAnimation(forKey: "bloom")
+        stage?.removeAnimation(forKey: "question-fly")
+        panel.contentView?.layer?.mask = nil
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0
+            panel.animator().alphaValue = 0
+        }
+        panel.alphaValue = 0
+        panel.orderOut(nil)
+        // A ring that was not live (collapsing, docked) gets no `hide`: its engine stops here.
+        if !live {
+            timer?.invalidate(); timer = nil
+            renderTimer?.invalidate(); renderTimer = nil
+            web?.stop(); under?.stop()
+            pageRunning = false
+            releaseMonitorsIfIdle()
+        }
+        Log.info("◯ caret halo cut — the screen is being filmed")
+    }
+
+    /// Tests only (`FxHoldTests`): a ring that believes it is up on `panel`, which is
+    /// never ordered front. `collapsing`: the microphone closed and the collapse is in the air.
+    func standForTest(on panel: RelayPanel, collapsing: Bool = false) {
+        self.panel = panel
+        live = !collapsing
+        closing = collapsing
+    }
+
     /// The stop's press (`AppDelegate.endDictation`), or the settle of a sentence no
     /// press ended (`syncBorrowedGestures`) — never a cancel. Answers whether the
     /// dust flies; then nothing is wiped.
