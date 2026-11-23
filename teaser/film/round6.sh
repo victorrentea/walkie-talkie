@@ -161,16 +161,17 @@ s04prep)  # the page back to how s03 left it (s04's result undone), to retake s0
   dark false; url "index.html?v=r6"; sleep 1.5 ;;
 s05)  # film mode over the blinking Plans menu, on the page as s04 left it. 🔼 → opens the prompt, 🔽 ↑ starts the film of the whole
       # display (REC corners; the app draws no dust and no edge while it runs), "See how this flickers? Fix it.", 🔼 ends both;
-      # the stand-in stops the blinking when the prompt lands
+      # the stand-in stops the blinking when the prompt lands. The dust already in the air when the film starts lives out its
+      # ~4 s (the app adds none): the words are spoken after it is gone, so the whole spoken part is clean
   dark false; [ -f $RAW/final-state.json ] && FINAL=$(cat $RAW/final-state.json)
   "$FILM_DIR/site.sh" state "$(python3 -c "import json,sys;d=json.loads(sys.argv[1]);d.update({'menu-open':1,'flicker':1});print(json.dumps(d))" "$FINAL")"; url "index.html?v=r6"
   stage_terminal >/dev/null; sleep 5; front Terminal; sleep 0.6; front Safari; mouse '[["move",430,330,0.3]]'; sleep 1.5
-  rec_start s05; t0; voice s05b@2.3
+  rec_start s05; t0; voice s05b@4.7
   play '[["at",0],["mark","flicker_visible_from"],["mark","dictation_starts"],["api","test/gesture",{"name":"forward-right"}],
-         ["at",1.2],["mark","film_starts"],["api","test/gesture",{"name":"back-up"}],
-         ["at",1.9],["move",690,215,0.9],["at",3.4],["move",760,245,0.6],["at",4.3],["move",700,205,0.6],
-         ["at",5.6],["mark","film_stops"],["mark","dictation_ends"],["api","test/gesture",{"name":"forward-click"}]]'
-  SEND 1.4; sleep 2.0; mark flicker_fixed; sleep 5
+         ["at",0.3],["mark","film_starts"],["api","test/gesture",{"name":"back-up"}],
+         ["at",0.6],["move",740,347,0.8],["at",5.2],["move",800,352,0.6],["at",6.4],["move",762,342,0.6],
+         ["at",8.4],["mark","film_stops"],["mark","dictation_ends"],["api","test/gesture",{"name":"forward-click"}]]'
+  SEND 1.4; sleep 9
   END; "$FILM_DIR/site.sh" merge '{"menu-open":0,"flicker":0}' ;;
 s08)  # the ⚡ quick question (🔼 ← at rest) over the real github.com/Netflix/Hystrix, dark appearance: question marks down the left
       # edge, the reply pop-up and its 🔎 web check and 🧐 review. The three answers are SCRIPTED (claude_p.py stands in for

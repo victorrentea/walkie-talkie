@@ -33,6 +33,15 @@ TAKES = {
          "this take only (with it the panel is taller than the 540 pt screen and the sentence scrolls out of view). Result: the copied picture "
          "appears in the drawn box (box read from the prompt's ✂️ token), Thurdsay → Thursday. Pill as in s02. The panel shows 'Mic: BlackHole 2ch' "
          "and 'Engine: Local Whisper Turbo'."),
+ "s05": ("s05-film", 3.2, "The page as s04 left it, the Plans menu open and blinking (flicker_visible_from → flicker_last_blink). Forward-right opens the prompt, "
+         "back-up starts the film of the whole display at film_starts: REC corners and a red border; while it runs the app draws no pointer dust and no "
+         "edge dust (checked in the frames: only REC, the border and the chip). 'See how this flickers? Fix it.'; the prompt and the film end "
+         "together at film_stops; the prompt carries the film as [🎦1 = …sheet.png, 5s, 26 frames, video video.mov]; the stand-in stops the blinking "
+         "(the menu stays open, still) at flicker_last_blink."),
+ "s08": ("s08-ask", 3.6, "DARK appearance, the real github.com/Netflix/Hystrix at its 'Hystrix Status' heading. Forward-left at rest = the quick question: coloured "
+         "question marks down the left edge while asking and through the phases; the reply pop-up: first answer, then the web-checked one (row: Opus + "
+         "Internet), then the reviewed one (row: … + reviewed). The three answers are SCRIPTED (film/claude_p.py stands in for `claude -p`) from "
+         "what that page says; the final answer stays to the end of the clip."),
  "s06": ("s06-review", 3.2, "Java diff page (drawn in the browser). The loop is selected by a 0.3 s drag WHILE 'I do not like this loop' is spoken "
          "(selection_start/end), then 'Use streams.'; the stand-in rewrites it to items.stream().filter(Item::active).mapToDouble(i -> i.price() * "
          "i.qty()).sum()."),
