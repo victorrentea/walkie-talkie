@@ -12921,10 +12921,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// It is the same call Victor made in Victor Mac, where the crop's yellow
     /// border went the same day.
     ///
-    /// `takenAt` is the **press**, not the release: the shot is named by where
-    /// in the sentence he reached for it, and framing a box carefully is a
-    /// second or two he should not be charged for.
-    private func areaShot(from anchor: NSPoint, at takenAt: Date) {
+    /// **The release is the moment, not the press** (2026-11-23, Victor: *"poza
+    /// să fie inserată în dictare … la momentul când dau drumul la crop. Când
+    /// eliberezi … rotița"*). The token lands in the words where the box was
+    /// finished — that is when the picture exists and what he says around it.
+    /// `pressedAt` is kept for the log only. Until this day it was the press
+    /// (*framing a box is a second or two he should not be charged for*).
+    private func areaShot(from anchor: NSPoint, at pressedAt: Date) {
         if refusesAttachment("✂️ the area crop") { return }
         // Sampled with the gesture, like the shutter's: by the time the box is
         // drawn the front window may be one he switched to in order to frame it.
@@ -12962,6 +12965,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // 🔽 ↑ ended this drag (`filmTheBoxUnderTheWheel`, 2026-11-22).
                 let asFilm = CFAbsoluteTimeGetCurrent() < self.cropEndsAsFilmUntil
                 self.cropEndsAsFilmUntil = 0
+                // The wheel came up (or the box was dropped): this is the
+                // moment the picture belongs to in the words (2026-11-23).
+                let takenAt = Date()
                 guard let selection = selection else {
                     // Esc, a right-click, or a drag that turned out to be a
                     // twitch. Nothing was filed and nothing is said: he called it
@@ -12979,6 +12985,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.startFilm(area: selection.rect, on: selection.screen)
                     return
                 }
+                Log.info(String(format: "✂️ area released %.1f s after the press — placed at the release",
+                                takenAt.timeIntervalSince(pressedAt)))
                 DispatchQueue.global(qos: .userInitiated).async {
                     self.fileArea(selection.rect, on: selection.screen,
                                   takenAt: takenAt, source: source, movedTo: selection.movedTo)

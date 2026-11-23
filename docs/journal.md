@@ -17153,3 +17153,16 @@ nimic în acel caz (doar proiectele cu logo stabilit hard-codat să aibă logo)"
   `ProjectIcons.markBeatsFiles` (there are no files left for a mark to beat).
 - Checked with `WT_SHOOT_PROJECT_LOGO`: workspace → none, brian-WheelieGoodRentals → none, petclinic →
   colour mark, training-assistant → template mark, walkie-talkie → its override.
+
+## 2026-11-23 — ✂️ A crop's picture goes into the words at the wheel's release
+
+Victor: *"poza să fie inserată în dictare dacă dau crop la momentul când dau drumul la crop. Când
+eliberezi … rotița, practic."* Since 2026-09-10 the area's `takenAt` was the press (`HotkeyTap`'s
+`onAreaShot` time), on the argument that framing a box is a second or two he should not be charged
+for. In practice he keeps talking while he frames, and what he says about the box comes as he
+finishes it, so a token placed at the press sat words before the thing it illustrates.
+`AppDelegate.areaShot` now takes `Date()` in the selection callback — the release, or the end of a
+move (second box released, left-click drop) — and passes it to `fileArea`: marker reservation, the
+offset in the frame's name, `pendingShotOffsets` and the inline token all read it. The press is only
+logged (`✂️ area released N s after the press — placed at the release`). A release after the sentence
+has closed still sends the picture on its own, as before.

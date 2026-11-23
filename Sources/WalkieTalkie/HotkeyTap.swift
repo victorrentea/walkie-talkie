@@ -62,9 +62,9 @@ final class HotkeyTap {
     var onPlainRefused: ((String) -> Void)?
 
     /// **The wheel, dragged while dictating: a region instead of the display.**
-    /// The corner the drag started from, and the moment the wheel went down —
-    /// which is the moment the picture belongs to, exactly as the shutter's
-    /// `takenAt` is the press and not the subprocess.
+    /// The corner the drag started from, and the moment the wheel went down.
+    /// The picture's place in the words is the **release**, taken by
+    /// `AppDelegate.areaShot` when the box is finished (2026-11-23).
     var onAreaShot: ((NSPoint, Date) -> Void)?
 
     /// **The wheel came up and this tap ate the event.** The selection is
