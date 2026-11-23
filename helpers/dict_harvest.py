@@ -15,17 +15,19 @@ the agent receiving the prompt, mid-task and with one sentence of context, decid
 **What it reads.** Every dictation of the window from `~/.walkie-talkie/outbox.jsonl` (the text as
 recognised, before any agent saw it), each matched to the conversation it went into — Claude Code
 transcripts (`~/.claude/projects/*/*.jsonl`) and Copilot CLI events (`~/.copilot/session-state/*/
-events.jsonl`) — to take the agent's reply after it and Victor's next message. The strongest
+events.jsonl`) — to take the agent's reply after it, **its thinking summary** (Claude Code only:
+what the agent understood the sentence to say, 2026-11-23) and Victor's next message. The strongest
 evidence is his own correction in the next message ("nu, am zis X"); next, the agent writing the
-term right in its reply. A dictation with no transcript match still goes in, with no context.
+term right in its reply or its thinking. A dictation with no transcript match still goes in, with no context.
 
 **Who decides.** Parallel `claude -p` workers (Sonnet, on the subscription, lean flags — no tools,
 no settings, no MCP: `reference_lean_claude_p`), one per chunk of dictations — the "subagents".
 Each returns pairs with a quote as evidence. **Pairs accumulate across weeks** in
 `dict-harvest/ledger.json`, one sighting per dictation (keyed by its timestamp, so re-running the
 same days counts nothing twice); only high-confidence sightings count. A pair is promoted
-(`walkie-dict add <right> --heard <heard>`) at **2** sightings when one of them is his own
-correction (`word*`), at **3** when all are inferred — and never while another spelling for the
+(`walkie-dict add <right> --heard <heard>`) at **1** sighting when it is his own
+correction (`word*`), at **2** when all are inferred (2026-11-23, Victor: *"facem doar o singură
+dată corectura cu steluță … îl învață, gata"* — it was 2 and 3) — and never while another spelling for the
 same `heard` has as many. An unpromoted pair not seen again for 60 days fades out (120 for one hour; Victor: "poate chiar de 60 zile"). A pair whose
 `heard` is not literally in the dictation is thrown away (the model invented it). Pairs already in
 `vocabulary.txt` are given to the workers as KNOWN and skipped.
@@ -49,7 +51,7 @@ WT = os.path.join(HOME, ".walkie-talkie")
 OUT = os.path.join(WT, "dict-harvest")
 VOCAB = os.path.join(WT, "vocabulary.txt")
 LEDGER = os.path.join(OUT, "ledger.json")
-PROMOTE_CORRECTED, PROMOTE_DEDUCED = 2, 3   # sightings to enter the dictionary: with one of his * fixes / inferred only
+PROMOTE_CORRECTED, PROMOTE_DEDUCED = 1, 2   # sightings to enter the dictionary: with one of his * fixes / inferred only
 FORGET_DAYS = 60                             # an unpromoted pair not seen again for this long is dropped
 WALKIE_DICT = os.path.join(HOME, ".local", "bin", "walkie-dict")
 TOKEN = re.compile(r"\[[^\]]{0,300}\]")   # [📸0 auto], [selected: …], footer rows
@@ -60,7 +62,8 @@ STARRED = re.compile(r"(?<![\w*])([\w][\w.\-/'’ăâîșțşţ]*)\*(?![\w*])") 
 SYSTEM = """You find speech-recognition mistakes in dictated prompts. The speaker, Victor, is a Romanian \
 software trainer who dictates prompts to coding agents in Romanian and English, full of tool names, \
 product names, people's names and technical terms. For each numbered item you get DICTATION (the \
-recogniser's raw output), REPLY (what the agent answered next) and NEXT (Victor's next message), \
+recogniser's raw output), THOUGHT (the agent's own reasoning summary right after reading it — how \
+it understood the sentence), REPLY (what the agent answered next) and NEXT (Victor's next message), \
 when known.
 
 Find terms the recogniser wrote wrong: a name, product, tool, command, file, or technical/English \
@@ -69,13 +72,14 @@ merely unusual. Each pair needs evidence from the context:
 - "user-corrected": NEXT corrects it. His usual way: NEXT (often his very next message) holds the \
 right word followed by an asterisk — "claude-gpt*" means "the word you got wrong is claude-gpt"; a \
 STARRED line lists those. Find the span of DICTATION it replaces. Also "nu, am zis X", "I meant X";
-- "agent-used": REPLY clearly refers to the same thing spelled right;
+- "agent-used": THOUGHT or REPLY clearly refers to the same thing spelled right (THOUGHT often \
+restates the misheard words as the agent decoded them — "he means Whisper local");
 - "well-known": an unmistakable known name (e.g. "Cloud Code" for "Claude Code") — high only if certain.
 
 Skip pairs already listed in KNOWN. "heard" must be copied exactly from DICTATION (the shortest span \
 that is wrong, 1–4 words); "right" is the correct spelling. Reply with ONLY a JSON array, no prose:
 [{"item": 3, "heard": "...", "right": "...", "evidence": "user-corrected|agent-used|well-known", \
-"quote": "<≤15 words from REPLY/NEXT proving it>", "confidence": "high|medium"}]
+"quote": "<≤15 words from THOUGHT/REPLY/NEXT proving it>", "confidence": "high|medium"}]
 Return [] when there is nothing."""
 
 
@@ -108,10 +112,10 @@ def dictations(since, limit):
     return out[-limit:] if limit else out
 
 
-def block_text(content):
+def block_text(content, kind="text"):
     if isinstance(content, str):
-        return content
-    return "\n".join(b.get("text", "") for b in content or [] if isinstance(b, dict) and b.get("type") == "text")
+        return content if kind == "text" else ""
+    return "\n".join(b.get(kind, "") for b in content or [] if isinstance(b, dict) and b.get("type") == kind)
 
 
 def conversations(since_epoch):
@@ -130,9 +134,13 @@ def conversations(since_epoch):
                 continue
             if j.get("isMeta") or j.get("isSidechain") or j.get("type") not in ("user", "assistant"):
                 continue
-            t = block_text((j.get("message") or {}).get("content")).strip()
+            content = (j.get("message") or {}).get("content")
+            t = block_text(content).strip()
             if t:
                 turns.append((j["type"], t))
+            th = block_text(content, "thinking").strip() if j["type"] == "assistant" else ""
+            if th:   # the summary of its thinking: how it read the sentence
+                turns.append(("thought", th))
         if turns:
             convs.append((path, turns))
     for path in glob.glob(os.path.join(HOME, ".copilot", "session-state", "*", "events.jsonl")):
@@ -162,18 +170,19 @@ def attach_context(items, convs):
     for it in items:
         key = norm(it["text"])[:60]
         hit = next(((p, i) for p, i, t in index if key and key in t), None)
-        it["reply"] = it["next"] = ""
+        it["reply"] = it["next"] = it["thought"] = ""
         if not hit:
             continue
         p, i = hit
         turns = by_path[p]
-        reply = []
+        reply, thought = [], []
         for r, t in turns[i + 1:]:
             if r == "user":
                 it["next"] = TOKEN.sub(" ", t)[:600]
                 break
-            reply.append(t)
+            (thought if r == "thought" else reply).append(t)
         it["reply"] = "\n".join(reply)[:1200]
+        it["thought"] = "\n".join(thought)[:800]   # the first one restates the sentence; later ones drift into the task
         it["where"] = p
 
 
@@ -191,6 +200,8 @@ def ask(chunk, known, model):
     body = ["KNOWN: " + "; ".join(known), ""]
     for n, it in enumerate(chunk, 1):
         body.append(f"## item {n}\nDICTATION: {it['text']}")
+        if it["thought"]:
+            body.append(f"THOUGHT: {it['thought']}")
         if it["reply"]:
             body.append(f"REPLY: {it['reply']}")
         if it["next"]:
