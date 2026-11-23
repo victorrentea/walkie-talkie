@@ -280,7 +280,7 @@ yields to `--label`).
   of the chip, not the menu bar's). Only on the `collapsed` chip, the one state that draws the walkie (the
   yellow Wispr ring included); a sentence in flight keeps the terminal's icon and `folder@branch`.
   `RelayWindow.setProjectLogo` / `projectGlyph`, at `glyphColumn + recordDotGap`, so the walkie never moves;
-  in its colours, 18 pt, no rim, no shadow; dropped by `setBound(label: nil)`. `ProjectLogo` finds it: the
+  in its colours, **as tall as the walkie glyph and centred on its midline** (2026-11-23, Victor: *"v-centered și dimensionat cu aceeași înălțime ca iconul walkie"* — 18 pt centred on the 21 pt row sat half a point low and read smaller; `ProjectLogo.side` 19), no rim, no shadow; dropped by `setBound(label: nil)`. `ProjectLogo` finds it: the
   project is the repo root of the directory the binding's label was read from
   (`TerminalBinding.label(forDirectory:)` notes it — no second lookup; an IDE panel with no folder has no
   logo). **First hit wins:** `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` → `ProjectIcons`' colour

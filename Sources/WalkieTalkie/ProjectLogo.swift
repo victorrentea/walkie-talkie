@@ -26,9 +26,11 @@ import AppKit
 /// thread, and its answer is cached per root for `freshFor`.
 enum ProjectLogo {
 
-    /// Points. The walkie beside it is `RelayWindow.walkieInk` (19); a logo is a
-    /// subject, like every other bitmap in the column, so it is a little under.
-    static let side: CGFloat = 18
+    /// Points: the walkie's own height (`RelayWindow.walkieInk`, 19). It was a
+    /// point under, as a subject beside the state; on 2026-11-23 Victor asked for
+    /// it *"cu aceeași înălțime ca iconul walkie"*, and the chip also scales it to
+    /// the walkie glyph actually drawn and centres it on that glyph's midline.
+    static let side: CGFloat = 19
 
     // MARK: - label → directory
 
@@ -326,7 +328,7 @@ enum ProjectLogo {
             for (ground, colour) in [("dark", NSColor(white: 0.12, alpha: 1)), ("light", NSColor(white: 0.96, alpha: 1))] {
                 let walkie = Glyphs.walkieOutlined(height: 19)
                 let pad: CGFloat = 12, gap: CGFloat = 5, box: CGFloat = 20
-                let width = pad * 2 + box + (logo.map { gap + $0.size.width } ?? 0)
+                let width = pad * 2 + box + (logo.map { gap + ($0.size.width * 19 / max($0.size.height, 1)).rounded() } ?? 0)
                 let height = pad * 2 + 21
                 let scale: CGFloat = 8
                 guard let rep = bitmap(Int(width * scale), Int(height * scale)) else { continue }
@@ -335,12 +337,15 @@ enum ProjectLogo {
                     colour.setFill()
                     NSRect(x: 0, y: 0, width: width, height: height).fill()
                     NSGraphicsContext.current?.imageInterpolation = .high
-                    walkie.draw(in: NSRect(x: pad + ((box - walkie.size.width) / 2).rounded(),
-                                           y: pad + ((21 - walkie.size.height) / 2).rounded(),
-                                           width: walkie.size.width, height: walkie.size.height))
-                    if let logo {
-                        logo.draw(in: NSRect(x: pad + box + gap, y: pad + ((21 - logo.size.height) / 2).rounded(),
-                                             width: logo.size.width, height: logo.size.height))
+                    let walkieRect = NSRect(x: pad + ((box - walkie.size.width) / 2).rounded(),
+                                            y: pad + ((21 - walkie.size.height) / 2).rounded(),
+                                            width: walkie.size.width, height: walkie.size.height)
+                    walkie.draw(in: walkieRect)
+                    // As the chip places it: the walkie's height, on its midline.
+                    if let logo, logo.size.height > 0 {
+                        let h = walkieRect.height
+                        let w = (logo.size.width * h / logo.size.height).rounded()
+                        logo.draw(in: NSRect(x: pad + box + gap, y: walkieRect.midY - h / 2, width: w, height: h))
                     }
                 }
                 if let png = rep.representation(using: .png, properties: [:]) {

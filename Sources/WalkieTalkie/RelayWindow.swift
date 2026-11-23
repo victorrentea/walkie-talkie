@@ -3084,9 +3084,16 @@ private let heardLabel = NSTextField(labelWithString: "")
         // the far side of the column, where a name would start.
         projectGlyph.image = restingLogo
         projectGlyph.isHidden = restingLogo == nil
-        if let logo = restingLogo {
-            projectGlyph.frame = NSRect(x: column + gap, y: ((titleRowHeight - logo.size.height) / 2).rounded(),
-                                        width: logo.size.width, height: logo.size.height)
+        // **As tall as the walkie, on the walkie's own midline** (2026-11-23,
+        // Victor: *"v-centered și dimensionat cu aceeași înălțime ca iconul
+        // walkie"*): measured off the glyph actually standing there, not off the
+        // row — an 18 pt logo centred on its own in the 21 pt row rounded half a
+        // point below a 19 pt walkie and read as smaller and dropped.
+        if let logo = restingLogo, logo.size.height > 0 {
+            let walkie = titleGlyph.frame
+            let h = walkie.height > 0 ? walkie.height : logo.size.height
+            let w = (logo.size.width * h / logo.size.height).rounded()
+            projectGlyph.frame = NSRect(x: column + gap, y: walkie.midY - h / 2, width: w, height: h)
         }
         centre(titleLabel, x: column + gap,
                width: max(0, width - column - gap), inRowOfHeight: titleRowHeight)
