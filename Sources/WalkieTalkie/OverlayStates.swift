@@ -90,9 +90,9 @@ enum OverlayStates {
                 o.setProjectLogo(ProjectLogo.logo(forDirectory: NSHomeDirectory() + "/workspace/petclinic"))
             },
 
-            Shot(slug: "bound-idle-logo-file", group: "At rest", title: "…a logo found in the project's files",
+            Shot(slug: "bound-idle-logo-file", group: "At rest", title: "…the logo the project names",
                  when: "The same, bound to a session in this repo.",
-                 note: "`.walkie/logo.png` in the repo root is the project saying which picture it is — here a link to the Dock tile's artwork. Without one the search goes on to `logo` / `icon` / `apple-touch-icon` / `favicon` files in the usual folders, then an `.icns`. A full square is drawn with rounded corners; this one is a disc already.",
+                 note: "`.walkie/logo.png` in the repo root is the project saying which picture it is — here a link to the Dock tile's artwork. Without one (or a mark in `ProjectIcons`) nothing is drawn — the project's own files are never searched (2026-11-23). A full square is drawn with rounded corners; this one is a disc already.",
                  shape: "chip", alpha: 0.80) { o in
                 o.setBound(label: "walkie-talkie", folder: "walkie-talkie", title: "✳ walkie-talkie", icon: terminal)
                 o.setProjectLogo(ProjectLogo.logo(forDirectory: FileManager.default.currentDirectoryPath))

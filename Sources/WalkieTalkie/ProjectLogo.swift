@@ -13,18 +13,16 @@ import AppKit
 ///
 /// 1. `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` — the project says so.
 /// 2. `ProjectIcons`' coloured mark for that folder name — the marks Victor
-///    chose for the spawn menu (🐱 petclinic…), in their colours here; or its
-///    monochrome one where `ProjectIcons.markBeatsFiles` (training-assistant's
-///    mortarboard, black and white since 2026-11-23).
-/// 3. A file the project ships: `logo`, `icon`, `appicon`, `apple-touch-icon`,
-///    `favicon` (in that order; svg, png, icns, ico) in the root and the usual
-///    folders, one level of sub-modules included, then any `.icns` / the largest
-///    PNG of an `AppIcon.appiconset`.
-/// 4. `ProjectIcons`' monochrome mark, white with the walkie's black rim.
+///    chose for the spawn menu (🐱 petclinic…), in their colours here.
+/// 3. `ProjectIcons`' monochrome mark, white with the walkie's black rim
+///    (training-assistant's mortarboard).
 ///
-/// Nothing found is nothing drawn. The file search is bounded (a fixed list of
-/// folders, `maxModules` sub-modules, `budget` seconds), runs off the main
-/// thread, and its answer is cached per root for `freshFor`.
+/// **Nothing else: no search through the project's files** (2026-11-23, Victor:
+/// *"să nu caute … doar proiectele cu logo stabilit hard-codat să aibă logo"*).
+/// Bound to `~/workspace` — no repo, every sub-folder another project — the
+/// search had put a course repo's favicon beside the walkie. Nothing found is
+/// nothing drawn. The one file check runs off the main thread, and its answer is
+/// cached per root for `freshFor`.
 enum ProjectLogo {
 
     /// Points: the walkie's own height (`RelayWindow.walkieInk`, 19). It was a
@@ -73,9 +71,9 @@ enum ProjectLogo {
             if Date().timeIntervalSince(cached.at) < freshFor { return }
         }
         queue.async {
-            let found = files(inRoot: root)
+            let found = override(inRoot: root)
             DispatchQueue.main.async {
-                let image = compose(root: root, found: found)
+                let image = compose(root: root, override: found)
                 cache[root] = (image, Date())
                 guard ask == asked else { return }
                 // The same picture again is not news: the chip keeps the view it has.
@@ -90,33 +88,28 @@ enum ProjectLogo {
     /// The whole answer in one call, for tests and the `WT_SHOOT_PROJECT_LOGO` render.
     static func logo(forDirectory dir: String) -> NSImage? {
         let root = repoRoot(of: dir)
-        return compose(root: root, found: files(inRoot: root))
+        return compose(root: root, override: override(inRoot: root))
     }
 
     /// Which tier answered, for the log and the tests.
     static func source(forDirectory dir: String) -> String {
         let root = repoRoot(of: dir)
-        let found = files(inRoot: root)
         let name = (root as NSString).lastPathComponent
-        if let o = found.override { return "override \(o)" }
-        if case .colour? = ProjectIcons.original(for: name) { return "ProjectIcons colour mark" }
-        if ProjectIcons.markBeatsFiles(name), case .template? = ProjectIcons.original(for: name) {
-            return "ProjectIcons template mark"
+        if let o = override(inRoot: root) { return "override \(o)" }
+        switch ProjectIcons.original(for: name) {
+        case .colour?: return "ProjectIcons colour mark"
+        case .template?: return "ProjectIcons template mark"
+        case nil: return "none"
         }
-        if let f = found.discovered { return "file \(f)" }
-        if case .template? = ProjectIcons.original(for: name) { return "ProjectIcons template mark" }
-        return "none"
     }
 
-    private static func compose(root: String, found: Found) -> NSImage? {
-        let name = (root as NSString).lastPathComponent
-        if let path = found.override, let image = load(path) { return image }
-        let mark = ProjectIcons.original(for: name)
-        if case .colour(let image)? = mark, let out = render(image) { return out }
-        if ProjectIcons.markBeatsFiles(name), case .template(let image)? = mark { return outlined(image) }
-        if let path = found.discovered, let image = load(path) { return image }
-        if case .template(let image)? = mark { return outlined(image) }
-        return nil
+    private static func compose(root: String, override path: String?) -> NSImage? {
+        if let path, let image = load(path) { return image }
+        switch ProjectIcons.original(for: (root as NSString).lastPathComponent) {
+        case .colour(let image)?: return render(image)
+        case .template(let image)?: return outlined(image)
+        case nil: return nil
+        }
     }
 
     // MARK: - the repo root
@@ -137,76 +130,15 @@ enum ProjectLogo {
         return (dir as NSString).standardizingPath
     }
 
-    // MARK: - files
+    // MARK: - the project's own say
 
-    struct Found { var override: String?; var discovered: String? }
-
-    static let budget: TimeInterval = 0.5
-    static let maxModules = 40
-    private static let names = ["logo", "icon", "appicon", "app-icon", "apple-touch-icon", "favicon"]
-    private static let extensions = ["svg", "png", "icns", "ico"]
-    private static let folders = ["", "docs", "public", "static", "assets", "images", "img", "resources",
-                                  "src", "src/assets", "src/assets/images", "src/main/resources/static",
-                                  "src/main/resources/static/images", "src/main/resources/static/resources/images"]
-    private static let moduleFolders = ["", "src", "public", "static", "assets", "src/assets", "src/assets/images",
-                                        "src/main/resources/static", "src/main/resources/static/images"]
-    private static let skipped: Set<String> = ["node_modules", "build", "dist", "target", "vendor", "coverage",
-                                               "out", "tmp", "venv", "__pycache__", "Pods"]
-
-    static func files(inRoot root: String) -> Found {
-        let fm = FileManager.default
-        let deadline = Date().addingTimeInterval(budget)
-        var found = Found()
+    /// `<root>/.walkie/logo.*`, the only file looked at — never a search.
+    static func override(inRoot root: String) -> String? {
         for ext in ["png", "svg", "pdf", "jpg", "jpeg", "icns", "ico"] {
             let path = "\(root)/.walkie/logo.\(ext)"
-            if fm.fileExists(atPath: path) { found.override = path; return found }
+            if FileManager.default.fileExists(atPath: path) { return path }
         }
-        // The root's own folders first, then each sub-module's (petclinic-frontend/src/…).
-        var bases = folders.map { $0.isEmpty ? root : "\(root)/\($0)" }
-        let modules = ((try? fm.contentsOfDirectory(atPath: root)) ?? []).sorted()
-            .filter { !$0.hasPrefix(".") && !skipped.contains($0) }
-            .filter { var isDir: ObjCBool = false
-                      return fm.fileExists(atPath: "\(root)/\($0)", isDirectory: &isDir) && isDir.boolValue }
-            .prefix(maxModules)
-        for module in modules {
-            bases += moduleFolders.map { $0.isEmpty ? "\(root)/\(module)" : "\(root)/\(module)/\($0)" }
-        }
-        // Listed once each, matched without regard to case (`Logo.png`, `AppIcon.icns`).
-        var listings: [(base: String, files: [String: String])] = []
-        for base in bases {
-            if Date() > deadline { break }
-            guard let entries = try? fm.contentsOfDirectory(atPath: base) else { continue }
-            listings.append((base, Dictionary(entries.map { ($0.lowercased(), $0) }, uniquingKeysWith: { a, _ in a })))
-        }
-        for name in names {
-            for listing in listings {
-                for ext in extensions {
-                    if let file = listing.files["\(name).\(ext)"] {
-                        found.discovered = "\(listing.base)/\(file)"
-                        return found
-                    }
-                }
-            }
-        }
-        // A Mac or iOS app: its `.icns`, or the largest tile of its icon set.
-        for listing in listings {
-            if let icns = listing.files.keys.sorted().first(where: { $0.hasSuffix(".icns") }),
-               let file = listing.files[icns] {
-                found.discovered = "\(listing.base)/\(file)"
-                return found
-            }
-            for (lower, entry) in listing.files where lower.hasSuffix(".xcassets") {
-                let set = "\(listing.base)/\(entry)/AppIcon.appiconset"
-                let tiles = ((try? fm.contentsOfDirectory(atPath: set)) ?? []).filter { $0.lowercased().hasSuffix(".png") }
-                let largest = tiles.max { size(of: "\(set)/\($0)") < size(of: "\(set)/\($1)") }
-                if let largest { found.discovered = "\(set)/\(largest)"; return found }
-            }
-        }
-        return found
-    }
-
-    private static func size(of path: String) -> Int {
-        ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int) ?? 0
+        return nil
     }
 
     // MARK: - drawing

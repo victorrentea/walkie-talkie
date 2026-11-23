@@ -17139,3 +17139,17 @@ the ring collapsed or faded, `edgeDust.drop` drained, the corner's wheel wound i
 - Battery keeps its drain. The return at the stop is untouched.
 - Proven by `FxHoldTests` on panels never ordered front (state read in the same call) and by the wiring held
   to the source. **Not on a running app** — staged, not installed; the engines' real pixels were not watched.
+
+## 2026-11-23 — 🐱 No logo search: only the marks set by hand
+
+Bound to a session in `~/workspace` the chip showed a wheel with flames beside the walkie: Victor, *"ce e
+iconul … de după iconul walkie?"*. `~/workspace` is no repo, so it was its own root, and the favicon search
+went through its first 40 sub-folders — each another project — and took
+`brian-WheelieGoodRentals/src/main/resources/static/images/logo.png`. Victor: *"să nu caute … să nu pună
+nimic în acel caz (doar proiectele cu logo stabilit hard-codat să aibă logo)"*.
+
+- **`ProjectLogo` looks at one file only, `<root>/.walkie/logo.*`, then `ProjectIcons`' colour mark, then
+  its monochrome one.** The `logo`/`icon`/`favicon`/`.icns`/`AppIcon` search is gone, and with it
+  `ProjectIcons.markBeatsFiles` (there are no files left for a mark to beat).
+- Checked with `WT_SHOOT_PROJECT_LOGO`: workspace → none, brian-WheelieGoodRentals → none, petclinic →
+  colour mark, training-assistant → template mark, walkie-talkie → its override.

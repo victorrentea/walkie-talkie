@@ -284,12 +284,12 @@ yields to `--label`).
   project is the repo root of the directory the binding's label was read from
   (`TerminalBinding.label(forDirectory:)` notes it — no second lookup; an IDE panel with no folder has no
   logo). **First hit wins:** `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` → `ProjectIcons`' colour
-  mark for the folder name, un-greyed (🐱 petclinic, whatever favicon its frontend ships) → a `logo` /
-  `icon` / `appicon` / `apple-touch-icon` / `favicon` file (svg, png, icns, ico) in the root, `docs`,
-  `public`, `static`, `assets`, `images`, `src/assets`, `src/main/resources/static`… and one level of
-  sub-modules, then an `.icns` or the largest `AppIcon.appiconset` PNG → `ProjectIcons`' monochrome mark,
-  white with the walkie's black rim. Nothing found, nothing drawn. Transparent margins are cut, a full
-  square gets 22 % corners. Off main, 0.5 s budget, ≤ 40 sub-modules, cached per root for 60 s; a cached
+  mark for the folder name, un-greyed (🐱 petclinic) → `ProjectIcons`' monochrome mark,
+  white with the walkie's black rim. **Nothing else — the project's files are never searched**
+  (2026-11-23, Victor: *"să nu caute … doar proiectele cu logo stabilit hard-codat să aibă logo"*): bound to
+  `~/workspace` (no repo, every sub-folder another project) the favicon search had drawn a course repo's
+  logo. Nothing found, nothing drawn. Transparent margins are cut, a full
+  square gets 22 % corners. Off main, cached per root for 60 s; a cached
   answer is given in the same turn as the bind, so re-binding does not blink. This repo's is
   `.walkie/logo.png`, a link to `assets/walkie-bound.png`. Shots `bound-idle-logo`,
   `bound-idle-logo-file`; `WT_SHOOT_PROJECT_LOGO=<dir> WT_SHOOT_PROJECT_LOGO_FOLDERS=a:b` renders walkie +

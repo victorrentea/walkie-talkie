@@ -106,12 +106,6 @@ enum ProjectIcons {
         folder == "victor-mac" || folder == "victor-effects"
     }
 
-    /// Projects whose monochrome mark beats the picture the repo ships, on the chip
-    /// too (`ProjectLogo`): training-assistant's favicons are the coloured 🎓.
-    static func markBeatsFiles(_ folder: String) -> Bool {
-        folder == "training-assistant"
-    }
-
     /// The image in its greys, its alpha kept.
     private static func grey(_ image: NSImage) -> NSImage {
         let side: CGFloat = 64

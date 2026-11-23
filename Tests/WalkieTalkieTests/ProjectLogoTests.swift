@@ -40,18 +40,22 @@ final class ProjectLogoTests: XCTestCase {
         XCTAssertEqual(ProjectLogo.repoRoot(of: deep), (root as NSString).standardizingPath)
     }
 
-    func testTheOrderIsOverrideThenLogoThenFaviconInASubModule() {
-        write(root + "/web/src/favicon.png")
-        XCTAssertEqual(ProjectLogo.files(inRoot: root).discovered, root + "/web/src/favicon.png")
+    /// No search through the project's files (2026-11-23): bound to `~/workspace`
+    /// a course repo's favicon stood beside the walkie. Only `.walkie/logo.*` counts.
+    func testTheProjectsFilesAreNotSearchedOnlyItsWalkieLogo() {
+        write(root + "/logo.png")
         write(root + "/docs/Logo.png")
-        XCTAssertEqual(ProjectLogo.files(inRoot: root).discovered, root + "/docs/Logo.png")
+        write(root + "/web/src/favicon.png")
+        write(root + "/web/src/main/resources/static/images/logo.png")
+        XCTAssertNil(ProjectLogo.logo(forDirectory: root))
+        XCTAssertEqual(ProjectLogo.source(forDirectory: root), "none")
         write(root + "/.walkie/logo.png")
-        XCTAssertEqual(ProjectLogo.files(inRoot: root).override, root + "/.walkie/logo.png")
+        XCTAssertEqual(ProjectLogo.override(inRoot: root), root + "/.walkie/logo.png")
         XCTAssertNotNil(ProjectLogo.logo(forDirectory: root + "/web"))
     }
 
     func testASquareTileIsRoundedAndFitsTheChip() throws {
-        write(root + "/logo.png")
+        write(root + "/.walkie/logo.png")
         let logo = try XCTUnwrap(ProjectLogo.logo(forDirectory: root))
         XCTAssertEqual(logo.size, NSSize(width: ProjectLogo.side, height: ProjectLogo.side))
         let rep = try XCTUnwrap(logo.representations.first as? NSBitmapImageRep)
