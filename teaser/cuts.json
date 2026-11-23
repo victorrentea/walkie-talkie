@@ -1,6 +1,6 @@
 {
  "_doc": "The edit. Per scene: a list of sub-cuts, played in order. clip = file in footage/ without .mp4 (default: the scene id); in/out = seconds of that clip; crop = [x, y, w, h] punch-in on the 1920x1080 source; blur = [x, y, w, h] smears that region of the source; mask = \"readout\" finds the yellow wheel-drag box in this cut and paints out its size badges and key hint as they move (unused since the takes hide them); line = index of the scene's line this cut starts under, or [line, part] for a part of a split line (cuts that follow share the time up to the next placed cut and are stretched together to fill it); start = seconds into the scene where this cut starts, instead of line; sub = \"top\" moves the subtitle to the top during this cut; speed = fix this cut's speed instead of stretching it. _target overrides a scene's target seconds from script.json (never below its speech); _tight lists scenes cut to the length of their speech; _at gives a scene's line start times by hand, one per line, and a list for a line splits it at its punctuation into that many parts, each with its own start (null = where the voice puts it). note = {text, point: [x, y], from: left|right|up|down, after: s} draws a yellow caption with an arrow to that point during the cut; struck = {text, over: [x, y, w, h], after: s} draws red struck-through text above that rect. v7: no crop anywhere (whole screen), every cut placed by start + speed.",
- "_target": {"s01-hook": 7.26, "s02-site": 7.26, "s03-move": 7.26, "s04-point": 12.1, "s06-review": 4.84, "s07-modes": 20.32, "s08-ask": 9.6, "s09-cost": 7.6, "s10-end": 4.3},
+ "_target": {"s01-hook": 7.26, "s02-site": 7.26, "s03-move": 7.26, "s04-point": 12.1, "s06-review": 4.84, "s07-modes": 20.32, "s08-ask": 8.2, "s09-cost": 7.6, "s10-end": 4.3, "s05-film": 4.84},
  "_tight": [],
  "_at": {
   "s01-hook": [0.3, [3.65, 4.8]],
@@ -9,7 +9,8 @@
   "s04-point": [1.2, [3.7, 4.45], 6.3],
   "s06-review": [0.3],
   "s07-modes": [0.3, 4.15, 7.8, 9.55, 11.7, [14.85, null]],
-  "s08-ask": [0.35, 4.3]
+  "s08-ask": [0.3, 3.95],
+  "s05-film": [0.2, 1.45]
  },
  "s01-hook": [
   {"in": 1.5, "out": 4.9, "start": 0, "speed": 1.0},
@@ -36,7 +37,8 @@
   {"in": 28.6, "out": 30.05, "start": 10.65, "speed": 1.0}
  ],
  "s05-film": [
-  {"in": 6.0, "out": 10.4}
+  {"in": 6.3, "out": 9.85, "start": 0, "speed": 1.0},
+  {"in": 16.6, "out": 17.88, "start": 3.55, "speed": 1.0}
  ],
  "s06-review": [
   {"in": 3.0, "out": 6.2, "start": 0, "speed": 1.0},
@@ -56,8 +58,9 @@
   {"clip": "s07-modes-d", "in": 13.0, "out": 15.58, "start": 17.75, "speed": 1.0, "sub": "top", "struck": {"text": "Resilience 4G", "over": [786, 836, 198, 44], "after": 0.4}}
  ],
  "s08-ask": [
-  {"in": 6.6, "out": 10.2, "line": 0},
-  {"in": 22.0, "out": 23.3, "line": 1, "speed": 1.0},
-  {"in": 29.0, "out": 32.9}
+  {"in": 2.2, "out": 5.9, "start": 0, "speed": 1.0},
+  {"in": 7.5, "out": 9.78, "start": 3.7, "speed": 1.9, "sub": "top"},
+  {"in": 14.9, "out": 15.6, "start": 4.9, "speed": 1.0, "sub": "top"},
+  {"in": 20.3, "out": 22.93, "start": 5.6, "speed": 1.0, "sub": "top"}
  ]
 }
