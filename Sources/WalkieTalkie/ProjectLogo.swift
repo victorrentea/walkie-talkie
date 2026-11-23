@@ -13,8 +13,9 @@ import AppKit
 ///
 /// 1. `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` — the project says so.
 /// 2. `ProjectIcons`' coloured mark for that folder name — the marks Victor
-///    chose for the spawn menu (🐱 petclinic, 🎓 training-assistant…), in their
-///    colours here.
+///    chose for the spawn menu (🐱 petclinic…), in their colours here; or its
+///    monochrome one where `ProjectIcons.markBeatsFiles` (training-assistant's
+///    mortarboard, black and white since 2026-11-23).
 /// 3. A file the project ships: `logo`, `icon`, `appicon`, `apple-touch-icon`,
 ///    `favicon` (in that order; svg, png, icns, ico) in the root and the usual
 ///    folders, one level of sub-modules included, then any `.icns` / the largest
@@ -99,6 +100,9 @@ enum ProjectLogo {
         let name = (root as NSString).lastPathComponent
         if let o = found.override { return "override \(o)" }
         if case .colour? = ProjectIcons.original(for: name) { return "ProjectIcons colour mark" }
+        if ProjectIcons.markBeatsFiles(name), case .template? = ProjectIcons.original(for: name) {
+            return "ProjectIcons template mark"
+        }
         if let f = found.discovered { return "file \(f)" }
         if case .template? = ProjectIcons.original(for: name) { return "ProjectIcons template mark" }
         return "none"
@@ -109,6 +113,7 @@ enum ProjectLogo {
         if let path = found.override, let image = load(path) { return image }
         let mark = ProjectIcons.original(for: name)
         if case .colour(let image)? = mark, let out = render(image) { return out }
+        if ProjectIcons.markBeatsFiles(name), case .template(let image)? = mark { return outlined(image) }
         if let path = found.discovered, let image = load(path) { return image }
         if case .template(let image)? = mark { return outlined(image) }
         return nil

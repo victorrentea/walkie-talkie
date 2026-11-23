@@ -71,6 +71,23 @@ final class ProjectLogoTests: XCTestCase {
         XCTAssertGreaterThan(middle.saturationComponent, 0.3, "the cat is yellow, not grey")
     }
 
+    /// training-assistant is its mortarboard in black and white (2026-11-23), on the
+    /// chip and in the spawn menu, whatever coloured 🎓 favicon the repo ships.
+    func testTrainingAssistantIsItsMortarboardInBlackAndWhite() throws {
+        let ta = (root as NSString).deletingLastPathComponent + "/training-assistant"
+        write(ta + "/static/favicon.png", colour: .systemGreen)
+        XCTAssertEqual(ProjectLogo.source(forDirectory: ta), "ProjectIcons template mark")
+        let logo = try XCTUnwrap(ProjectLogo.logo(forDirectory: ta))
+        let rep = try XCTUnwrap(logo.representations.first as? NSBitmapImageRep)
+        for x in 0..<rep.pixelsWide { for y in 0..<rep.pixelsHigh {
+            guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.alphaComponent > 0.1 else { continue }
+            XCTAssertLessThan(c.saturationComponent, 0.05, "black and white only, at \(x),\(y)")
+        }}
+        guard case .template? = ProjectIcons.mark(for: "training-assistant") else {
+            return XCTFail("the spawn menu draws it in the row's ink")
+        }
+    }
+
     func testTheLabelRemembersTheDirectoryItWasReadFrom() {
         let label = TerminalBinding.label(forDirectory: root)
         XCTAssertEqual(ProjectLogo.directory(forLabel: label), root)

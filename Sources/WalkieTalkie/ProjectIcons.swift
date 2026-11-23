@@ -81,8 +81,12 @@ enum ProjectIcons {
             let fx = Glyphs.emoji("𝓯𝔁", ink: 24, colour: .black)
             fx.isTemplate = true
             return .template(fx)
-        // The participant page's favicon (`static/favicon-new.svg`, the mortarboard).
-        case "training-assistant": return .colour(Glyphs.emoji("🎓", ink: 18))
+        // The participant page's favicon (`static/favicon-new.svg`, the mortarboard),
+        // in black and white since 2026-11-23 (Victor: *"logoul training assistant tre
+        // refăcut alb-negru și în popup de selecție sesiune nouă și în tooltip"*): the
+        // 🎓 emoji only went grey, its tassel still a colour blob; this is the same
+        // mortarboard as a glyph, in the row's ink here and white-rimmed on the chip.
+        case "training-assistant": return symbol("graduationcap.fill")
         // The review page's favicon (`human-review` `masthead.py`, `FAVICON_EMOJI`).
         case "human-review": return .colour(Glyphs.emoji("👱🏻‍♂️", ink: 18))
         // All his Chrome extensions in one private repo (2026-11-20, Victor: *"să-mi
@@ -100,6 +104,12 @@ enum ProjectIcons {
     /// rând … mai mari decât celelalte ca lățime"* at the slot's full height).
     static func bare(_ folder: String) -> Bool {
         folder == "victor-mac" || folder == "victor-effects"
+    }
+
+    /// Projects whose monochrome mark beats the picture the repo ships, on the chip
+    /// too (`ProjectLogo`): training-assistant's favicons are the coloured 🎓.
+    static func markBeatsFiles(_ folder: String) -> Bool {
+        folder == "training-assistant"
     }
 
     /// The image in its greys, its alpha kept.
