@@ -2318,6 +2318,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if body["close"] as? Bool == true { DispatchQueue.main.sync { ReplyPanel.close() } }
             // `wheel: n` — n notches of the wheel over the open pop-up (+ = rolled up, grows it).
             if let n = body["wheel"] as? Double { DispatchQueue.main.sync { ReplyPanel.wheelOpen(n) } }
+            // `select: {from, length}` (2026-11-23) — those characters of the open
+            // pop-up's words selected, as a drag over them would (length 0 clears).
+            if let sel = body["select"] as? [String: Any], let from = sel["from"] as? Int, let n = sel["length"] as? Int {
+                DispatchQueue.main.sync { ReplyPanel.testSelect(from: from, length: n) }
+            }
             // `link: {index, click?}` — the pointer over the open pop-up's
             // index-th link, through the same handlers as the real one, then
             // pressed and released when `click` (the opened URL is answered
@@ -2342,9 +2347,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let text = body["text"] as? String, !text.isEmpty else {
                 // `peek: true` — only the open pop-up's frame and words (`shown`).
                 let shown: Any = DispatchQueue.main.sync { ReplyPanel.shown ?? NSNull() }
+                let selected: Any = DispatchQueue.main.sync { ReplyPanel.selectedText ?? NSNull() }
                 return body["capturable"] != nil || body["close"] != nil || body["wheel"] != nil
-                    || body["peek"] != nil
-                    ? (200, ["ok": true, "frame": frame, "shown": shown]) : (400, ["ok": false, "error": "text required"])
+                    || body["peek"] != nil || body["select"] != nil
+                    ? (200, ["ok": true, "frame": frame, "shown": shown, "selected": selected, "held": ReplyPanel.hasSelection]) : (400, ["ok": false, "error": "text required"])
             }
             // `wait: "all"` waits for the 🔎 web check and the 🧐 review too.
             let waitAll = body["wait"] as? String == "all"
@@ -3016,6 +3022,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // ⌘⌃X — the local model, now (2026-09-28). The tap hands it over on main.
         hotkeys.onLocalNow = { [weak self] in self?.transcribeLocallyNow(from: "⌘⌃X") }
+        hotkeys.onReplyCopy = { [weak self] in self?.copyReplySelection() }
+        hotkeys.onReplySend = { [weak self] in self?.sendReplySelection() }
         hotkeys.onLocalToggle = { [weak self] in
             DispatchQueue.main.async {
                 guard let self else { return }
@@ -10380,6 +10388,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// What the chip calls that folder while he is talking at it.
     private static let spawnFolderName = (spawnDirectory as NSString).lastPathComponent
+
+    /// **⌃K: the words selected in the reply pop-up, on the clipboard** (2026-11-23).
+    /// The release of the selection copied them already; this is the key for it,
+    /// after the clipboard has moved on. The selection stays on screen.
+    private func copyReplySelection() {
+        guard let text = ReplyPanel.selectedText else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        Log.info("💬 ⌃K — \(text.count) chars of the reply pop-up's selection copied")
+        overlay.flash("📋 Copied", duration: 1.2)
+    }
+
+    /// **⌃⌥S: the words selected in the reply pop-up, sent to the bound session**
+    /// (2026-11-23) — as they are, by the terminal's own route, with its Return.
+    /// Nothing bound: nothing sent, the flash says how to bind. The selection stays.
+    private func sendReplySelection() {
+        guard let text = ReplyPanel.selectedText else { return }
+        guard let target = terminal.target else {
+            Log.info("💬 ⌃⌥S — nothing bound, the pop-up's selection not sent")
+            overlay.flash(BoundPromptGate.nothingBound, duration: 2.5)
+            return
+        }
+        let to = target.handle.tty ?? target.address
+        deliveriesInFlight += 1
+        deliveryQueue.async { [weak self] in
+            guard let self else { return }
+            let outcome = self.terminal.deliver(text, to: target)
+            DispatchQueue.main.async {
+                self.deliveriesInFlight -= 1
+                if case .delivered = outcome {
+                    Log.info("💬 ⌃⌥S — \(text.count) chars of the reply pop-up's selection sent to \(to)")
+                    self.overlay.flash("📤 Sent to \(target.label)", duration: 1.5)
+                } else {
+                    Log.info("💬 ⌃⌥S — the pop-up's selection not sent to \(to): \(outcome)")
+                    self.overlay.flash("⚠️ Not sent — \(to)", duration: 2.5)
+                }
+            }
+        }
+    }
 
     /// Type a message into the bound terminal, if there is one.
     ///

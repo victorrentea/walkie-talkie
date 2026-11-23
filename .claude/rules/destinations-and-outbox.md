@@ -604,6 +604,18 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   Checked with `claude -p` (Opus): *"Care e cota de TVA standard?"* + the clause → Portugal's 23 %, in English.
 
 
+- **A selection in the pop-up survives its redraws; ⌃K copies it, ⌃⌥S sends it** (2026-11-23,
+  Victor: *"I want to highlight part of the answer … to get people's attention on it. If the
+  adversarial rewrites it or the internet research finishes, I'm okay with losing my selection, but
+  not in between"*). Every repaint builds a new view — the running dots alone every 0.4 s — and the
+  selection went with the old one. `ReplyPanel.swap` carries it whenever the selected characters are
+  still the same at the same offset (a rewrite that moves them drops it); a repaint arriving while the
+  button is down on the words waits for the release (`selecting` / `pendingLive`). **⌃K** puts the
+  selection on the clipboard (the release already copies it); **⌃⌥S** delivers it, as is, with its
+  Return, to the bound terminal (`TerminalBinding.deliver`; nothing bound → `BoundPromptGate.nothingBound`).
+  Both are `HotkeyTap`'s **only while `ReplyPanel.hasSelection`** — ⌃K is the shell's kill-line the rest
+  of the time. Desk: `POST /test/quick {"select": {from, length}}` answers `selected` and `held`.
+
 ## 💸 The turn's cost by the pointer (2026-11-19, still since 2026-11-20, `TurnCost`)
 
 Victor: *"the amount of money paid for the last turn fired by the Walkie Talkie … followed by the

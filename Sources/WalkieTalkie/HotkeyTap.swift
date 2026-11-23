@@ -96,6 +96,13 @@ final class HotkeyTap {
     /// Flow's *paste last transcript*.
     var onLocalNow: (() -> Void)?
 
+    /// **⌃K / ⌃⌥S over words selected in the reply pop-up** (2026-11-23, Victor: *"once I
+    /// select the text, I should be able to press Control K to paste it to clipboard …
+    /// Control Alt S to send it to my current session"*). Taken only while something is
+    /// selected there (`ReplyPanel.hasSelection`); otherwise the keys are the front app's.
+    var onReplyCopy: (() -> Void)?
+    var onReplySend: (() -> Void)?
+
 
 
 
@@ -4187,6 +4194,19 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         // (`onPlainToPrompt`, left wired and unreached); now the key passes as at
         // rest, and `promptingMark` is not written, so Victor Mac's ⌃P takes it.
 
+        // ⌃K / ⌃⌥S — **the pop-up's selection** (2026-11-23): see `onReplyCopy`. Only
+        // with words selected in the reply pop-up: ⌃K is the shell's kill-line and
+        // must stay so the rest of the time. Autorepeat swallowed, not acted on.
+        if ctrl, !cmd, !flags.contains(.maskShift),
+           (keyCode == Self.VK_K && !opt) || (keyCode == Self.VK_S && opt),
+           ReplyPanel.hasSelection {
+            let name = keyCode == Self.VK_K ? "⌃K copy" : "⌃⌥S send"
+            if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return swallow("\(name) the pop-up's selection (autorepeat)", type, event) }
+            let send = keyCode == Self.VK_S
+            DispatchQueue.main.async { [weak self] in (send ? self?.onReplySend : self?.onReplyCopy)?() }
+            return swallow("\(name) the pop-up's selection", type, event)
+        }
+
         // ⌘⌃X — **the local model, now** (2026-09-28): see `onLocalNow`. Swallowed
         // always, like the two above — at rest too, where the relay flashes
         // *Nothing to transcribe locally* rather than let ⌘⌃X through to the
@@ -5894,6 +5914,8 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     private static let VK_V:       CGKeyCode = 9
     /// **C**, for Wispr's `copy_last_text` (`55+59+8` = ⌘⌃C). 8 is C.
     private static let VK_C:       CGKeyCode = 8
+    private static let VK_K:       CGKeyCode = 40
+    private static let VK_S:       CGKeyCode = 1
     private static let VK_COMMAND: CGKeyCode = 55
     private static let VK_ESC:     CGKeyCode = 53
     private static let VK_SPACE:   CGKeyCode = 49

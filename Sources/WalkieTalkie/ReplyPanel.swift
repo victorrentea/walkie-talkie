@@ -52,6 +52,72 @@ enum ReplyPanel {
     private static var openEntry: (text: String, label: String?, tty: String?, images: [URL])?
     static var queueFile: URL { Outbox.home.appendingPathComponent("reply-queue.json") }
 
+    // MARK: A selection that stays (2026-11-23)
+
+    /// **The words he selected stay selected while the pop-up is redrawn** (2026-11-23,
+    /// Victor: *"sometimes I want to highlight part of the answer … to get people's
+    /// attention on it. If the adversarial rewrites it or the internet research
+    /// finishes, I'm okay with losing my selection, but not in between"*). Every
+    /// repaint builds a new view — the running dots alone did it every 0.4 s, and
+    /// the selection went with the old view. `swap` carries it over whenever the
+    /// selected words are still the same characters at the same place; a rewrite
+    /// that moved them drops it. A repaint that lands while the button is still down
+    /// on the words waits for the release (`selecting`, `pendingLive`).
+    private static func swap(_ p: NSPanel, to root: ReplyRoot) {
+        let old = (p.contentView as? ReplyRoot)?.words
+        p.contentView = root
+        if let old, let new = root.words {
+            let r = old.selectedRange()
+            let was = old.string as NSString, now = new.string as NSString
+            if r.length > 0, NSMaxRange(r) <= now.length, now.substring(with: r) == was.substring(with: r) {
+                new.setSelectedRange(r)
+            }
+        }
+        noteSelection()
+    }
+
+    /// The selected words, for ⌃K and ⌃⌥S — main thread. The `\u{FFFC}` of a
+    /// picture (the 😠 attachment) is not text.
+    static var selectedText: String? {
+        guard let words = (panel?.contentView as? ReplyRoot)?.words else { return nil }
+        let r = words.selectedRange()
+        guard r.length > 0, NSMaxRange(r) <= (words.string as NSString).length else { return nil }
+        let text = (words.string as NSString).substring(with: r)
+            .replacingOccurrences(of: "\u{FFFC}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    /// **Something is selected in the pop-up** — read by the key tap, on its own
+    /// thread, so ⌃K and ⌃⌥S are taken only then and pass to the front app otherwise.
+    static var hasSelection: Bool { selectionLock.lock(); defer { selectionLock.unlock() }; return selectionHeld }
+    private static let selectionLock = NSLock()
+    private static var selectionHeld = false
+    fileprivate static func noteSelection() {
+        let on = selectedText != nil
+        selectionLock.lock(); selectionHeld = on; selectionLock.unlock()
+    }
+
+    /// Desk route `POST /test/quick {"select": {from, length}}`.
+    static func testSelect(from: Int, length: Int) {
+        guard let words = (panel?.contentView as? ReplyRoot)?.words else { return }
+        let all = (words.string as NSString).length
+        let start = max(0, min(from, all))
+        words.setSelectedRange(NSRange(location: start, length: max(0, min(length, all - start))))
+        noteSelection()
+    }
+
+    /// The button is down on the words: a repaint now would take the selection
+    /// being dragged out from under the pointer — it waits for the release.
+    fileprivate static var selecting = false
+    private static var pendingLive: (raw: String, label: String?, token: Int)?
+    fileprivate static func selectionDone() {
+        selecting = false
+        noteSelection()
+        guard let next = pendingLive else { return }
+        pendingLive = nil
+        live(next.raw, from: next.label, question: next.token)
+    }
+
     private static func saveQueue() {
         let all = (openEntry.map { [$0] } ?? []) + queue
         guard !all.isEmpty else { try? FileManager.default.removeItem(at: queueFile); return }
@@ -366,6 +432,10 @@ enum ReplyPanel {
     static func live(_ raw: String, from label: String?, question token: Int) {
         // ✕'d while it was still coming: the rest of it is not wanted.
         guard token != dismissedLive else { return }
+        if selecting, panel != nil, liveOpen {
+            pendingLive = (raw, label, token)
+            return
+        }
         animateDots(raw, from: label)
         var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { text = "…" }
@@ -381,7 +451,7 @@ enum ReplyPanel {
             let size = root.frame.size
             p.setFrame(onScreen(NSRect(x: p.frame.minX, y: p.frame.maxY - size.height,
                                        width: size.width, height: size.height)), display: false)
-            p.contentView = root
+            swap(p, to: root)
             p.invalidateShadow()
             // The pointer may be on a link: its tip again, on the new view.
             root.refreshHover()
@@ -539,6 +609,8 @@ enum ReplyPanel {
         p.hidesOnDeactivate = false
         p.acceptsMouseMovedEvents = true
         p.contentView = root
+        pendingLive = nil
+        noteSelection()
         let target = origin(for: root.frame.size, at: arrivedAt)
         p.setFrameOrigin(target)
         p.orderFrontRegardless()
@@ -635,7 +707,7 @@ enum ReplyPanel {
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * t }
         p.setFrame(onScreen(NSRect(x: lerp(w.centre.x, v.midX) - size.width / 2, y: lerp(w.centre.y, v.midY) - size.height / 2,
                                    width: size.width, height: size.height)), display: false)
-        p.contentView = root
+        swap(p, to: root)
         p.invalidateShadow()
         w.t = t
         w.set = p.frame
@@ -1201,6 +1273,7 @@ enum ReplyPanel {
         }
         root.hot = hot
         if let linked = body as? LinkedBody {
+            root.words = linked
             linked.onCopy = { [weak root, weak linked] rect in
                 guard let root, let linked else { return }
                 root.showCopied(under: root.convert(rect, from: linked))
@@ -1271,6 +1344,8 @@ enum ReplyPanel {
         defer { if wasShown { onClosed?() } }
         panel?.orderOut(nil)
         panel = nil
+        pendingLive = nil
+        noteSelection()
         if liveOpen {
             dismissedLive = liveToken
             onLiveDismissed?()
@@ -1381,6 +1456,8 @@ private final class ReplyWindow: NSPanel {
 /// underneath"*); `hot` are the clickable rects, where the hand is theirs.
 private final class ReplyRoot: NSView {
     var hot: [NSRect] = []
+    /// The answer's words — whose selection `ReplyPanel.swap` carries to the next view.
+    weak var words: LinkedBody?
     /// **The name is clicked through here, not through its label** (2026-10-08,
     /// Victor: *"even if I drag on the title, it should still be draggable"* —
     /// the `NSTextField` never moved the panel): a press on `link` that does not
@@ -1611,7 +1688,9 @@ private final class LinkedBody: NSTextView {
 
     /// AppKit's selection loop runs inside `super`; past it, what is selected is copied.
     override func mouseDown(with event: NSEvent) {
+        ReplyPanel.selecting = true
         super.mouseDown(with: event)
+        defer { ReplyPanel.selectionDone() }
         let r = selectedRange()
         guard r.length > 0, let lm = layoutManager, let tc = textContainer else { return }
         // A picture in the words (the 😠 attachment) is not text.
