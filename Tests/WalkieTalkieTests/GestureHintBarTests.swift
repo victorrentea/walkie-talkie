@@ -68,14 +68,15 @@ func testTheHiddenSwitchIsOffUnlessSet() {
     /// Googles it. 2026-11-11: 🔼 ↓ Googles it and answers it.
     func testAQuickQuestionAsks() {
         XCTAssertEqual(GestureHintBar.crosses(for: .init(listening: true, prompting: false, quick: true)), [
-            // 2026-11-22: ✨ (🔼 ↑) and the terminal (🔼 →) are not offered from a question.
-            Cross(click: "⚡ ask ⌘⌘", up: "", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: ""),
+            // 2026-11-22: the terminal (🔼 →) is not offered from a question;
+            // 2026-11-24: ✨ (🔼 ↑) is — the question becomes a new session's prompt.
+            Cross(click: "⚡ ask ⌘⌘", up: "✨ new", down: GestureHintBar.google + " + ⚡", left: "🗑️ discard", right: ""),
             Cross(click: "📸 / ⌃P", up: "", down: "⌨️ type", left: "", right: GestureHintBar.google + " Google"),
         ])
         // …with the mouse and without it: grey boxes, not missing ones.
         for noMouse in [false, true] {
             let front = GestureHintBar.bar(for: .init(listening: true, prompting: false, quick: true, noMouse: noMouse)).crosses[0]
-            XCTAssertEqual(front.up, "", "noMouse \(noMouse)")
+            XCTAssertEqual(front.up, "✨", "noMouse \(noMouse)")
             XCTAssertEqual(front.right, "", "noMouse \(noMouse)")
         }
     }

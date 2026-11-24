@@ -173,14 +173,15 @@ final class GestureHintBar {
             // shutter and ↓ the typing box, as while prompting; no kamikaze, no
             // film (`toggleFilm` refuses it) — a question's answer is the reply
             // pop-up. 🔽 → Googles it instead (2026-10-25, `onQuickGoogle`); 🔼 ↓ does both.
-            // **Neither ✨ nor the terminal is offered from a question** (2026-11-22,
-            // Victor: *"din modul question nu are sens să am ✨ sau prompt bound"*):
-            // both arms are grey boxes, and the tap swallows both flicks
-            // (`HotkeyTap.questionIgnores`).
+            // **The terminal is not offered from a question** (2026-11-22, Victor:
+            // *"din modul question nu are sens să am ✨ sau prompt bound"*): a grey
+            // box, and the tap swallows the flick (`HotkeyTap.questionIgnores`).
+            // **✨ is back on 2026-11-24** — the question becomes a new session's
+            // prompt (*"Vreau să-mi facă, nu să-mi răspundă"*).
             front.click = "⚡ ask"
             // 🔼 ↓ Googles it AND answers it (2026-11-11, `quickGoogleToo`).
             front.down = Self.google + " + ⚡"
-            front.up = ""
+            front.up = "✨ new"
             front.right = ""
             back.click = "📸 shot"
             back.up = ""

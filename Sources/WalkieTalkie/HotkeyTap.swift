@@ -2571,9 +2571,10 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
     /// The flicks a plain dictation ignores (2026-11-22): 🔼 → ↑ ↓ and 🔽 → ← ↑ ↓.
     /// Not F7 / F6 (its stops) nor F11 (its cancel).
     static let plainIgnores: Set<CGKeyCode> = [0x6D, 0x64, 0x65, 0x60, 0x63, 0x76, 0x6F]
-    /// The flicks a ⚡ question ignores (2026-11-22): 🔼 → and 🔼 ↑ — a question
-    /// is not turned into a terminal's or a new session's prompt.
-    static let questionIgnores: Set<CGKeyCode> = [0x6D, 0x64]
+    /// The flick a ⚡ question ignores (2026-11-22): 🔼 → — a question is not
+    /// turned into a bound terminal's prompt. 🔼 ↑ left the set on 2026-11-24:
+    /// it turns the question into a new session's prompt (`convertDictationToSpawn`).
+    static let questionIgnores: Set<CGKeyCode> = [0x6D]
 
     static let gestureNames: [CGKeyCode: String] = [
         0x63: "🔽 ← ⌃⌥⌘F3", 0x76: "🔽 ↑ ⌃⌥⌘F4", 0x60: "🔽 → ⌃⌥⌘F5", 0x61: "🔽 ⌃⌥⌘F6",
@@ -4272,12 +4273,15 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
                 Log.info("🎙️ \(gesture) over a plain dictation — nothing (🔼 ← cancels, 🔼 / 🔽 stop it)")
                 return swallow("\(gesture) — nothing in a plain dictation", type, event)
             }
-            // **A ⚡ question is not redirected** (2026-11-22, Victor: *"din modul
-            // question nu are sens să am ✨ sau prompt bound"*, then both — the bar
-            // and the flicks): 🔼 → and 🔼 ↑ are swallowed while a question records,
-            // no flash, the left-button bind chord included. 🔼 ends it, 🔼 ← cancels,
-            // 🔼 ↓ / 🔽 → Google. 🔼 → over the answer's pop-up is at rest (no
-            // question open) and still asks the follow-up.
+            // **A ⚡ question is not sent to the bound terminal** (2026-11-22, Victor:
+            // *"din modul question nu are sens să am ✨ sau prompt bound"*): 🔼 → is
+            // swallowed while a question records, no flash, the left-button bind chord
+            // included. **🔼 ↑ is back since 2026-11-24** (Victor: *"uneori întrebarea
+            // vrea să rezulte într-o discuție mai complicată … Vreau să-mi facă, nu
+            // să-mi răspundă"*): it reaches `onGestureSpawn` and the question becomes
+            // a new session's prompt. 🔼 ends it, 🔼 ← cancels, 🔼 ↓ / 🔽 → Google.
+            // 🔼 → over the answer's pop-up is at rest (no question open) and still
+            // asks the follow-up.
             if Self.questionIgnores.contains(keyCode), relayQuickOpen {
                 Log.info("⚡ \(gesture) over a question — nothing (🔼 asks it, 🔼 ← cancels)")
                 return swallow("\(gesture) — nothing in a ⚡ question", type, event)

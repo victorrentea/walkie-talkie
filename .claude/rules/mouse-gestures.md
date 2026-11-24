@@ -218,6 +218,20 @@ and of the bar *"ce sens are copy în plain dictation?? … scoate, că nu are s
   `evals/test_gesture_spec.py` rows *any flick but 🔼 ← during a plain dictation*, *right ⌘ ×2 during a
   plain dictation*. **Not made by hand on the mouse yet.**
 
+## 🔼 ↑ over a ⚡ question makes it a new session's prompt (2026-11-24)
+
+Victor: *"să pot să schimb din modul de întrebare în modul de agent, dând în sus Forward swipe up.
+Pentru că uneori întrebarea vrea să rezulte într-o discuție mai complicată de prototipare … Vreau
+să-mi facă, nu să-mi răspundă."* **Supersedes, for 🔼 ↑ only, the 2026-11-22 section below** — 🔼 →
+over a question still does nothing.
+
+- `HotkeyTap.questionIgnores` is `[F10]`: F8 goes on to `onGestureSpawn` → `convertDictationToSpawn`
+  (the question is a caret sentence, so `pasteMode` off and `dropQuestion(for: "a new session")`): the
+  same recording and pictures, the folder menu, no quick answer, no pop-up. Again = the folder menu again.
+- The bar's 🔼 ↑ over a question is `✨ new` again (`GestureHintBar.crosses`, the README's `⚡ Question` column).
+- Tests: `HotkeyTapGestureTests.testAQuestionIgnoresTheTerminalButNotTheNewSession`, `GestureHintBarTests
+  .testAQuickQuestionAsks`; spec row *🔼 forward · drag up over a ⚡ question*. **Not made by hand on the mouse.**
+
 ## A ⚡ question is not redirected: 🔼 ↑ and 🔼 → do nothing over it (2026-11-22)
 
 Victor: *"din modul question nu are sens să am ✨ sau prompt bound."* — first the bar, then, asked whether
@@ -231,7 +245,8 @@ make it a terminal / spawn prompt* and every row above that redirects one.**
 | 🔼 ↓ | Google it and answer it |
 | 🔽 → | Google only |
 | 🔽 · 🔽 ↓ | shutter · typing box (a question is a prompt) |
-| 🔼 → · 🔼 ↑ | nothing — swallowed, no flash |
+| 🔼 → | nothing — swallowed, no flash |
+| 🔼 ↑ | a new session's prompt (since 2026-11-24, above) |
 
 - **The bar**: `GestureHintBar.crosses` — both arms grey boxes over a question, mouse or none.
 - **The gate, in the tap**: `HotkeyTap.questionIgnores` (F10, F8) swallowed right after `plainIgnores`, before

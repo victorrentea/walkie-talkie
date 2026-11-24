@@ -145,7 +145,7 @@ final class HotkeyTapGestureTests: XCTestCase {
 
     /// 🔼 → and 🔼 ↑ over a question are swallowed and redirect nothing — also
     /// with the left button held (the bind chord); the question's own gestures act.
-    func testAQuestionIgnoresTheTerminalAndTheNewSession() {
+    func testAQuestionIgnoresTheTerminalButNotTheNewSession() {
         let tap = HotkeyTap()
         // Not `relayPromptOpen`: its setter writes ~/.walkie-talkie/prompting, the live app's mark.
         tap.relayQuickOpen = true
@@ -156,14 +156,15 @@ final class HotkeyTapGestureTests: XCTestCase {
         tap.onGestureKamikaze = { fired.append("🔼 ↓") }
         tap.onLocalCancel = { fired.append("🔼 ←") }
         XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F10, at: 100)))
-        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F8, at: 105)))
         wait()
-        XCTAssertEqual(fired, [], "neither flick reaches a handler while a question records")
+        XCTAssertEqual(fired, [], "🔼 → reaches no handler while a question records")
+        // 2026-11-24: 🔼 ↑ turns the question into a new session's prompt.
+        XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F8, at: 105)))
         XCTAssertTrue(tap.takesForTesting(.keyDown, chord(F9, at: 110)))
         XCTAssertTrue(tap.takesForTesting(.keyDown, chord(0x67, at: 115)))
         wait()
-        XCTAssertEqual(Set(fired), ["🔼 ↓", "🔼 ←"], "Google + answer and the cancel are the question's still")
-        XCTAssertEqual(HotkeyTap.questionIgnores, [F10, F8])
+        XCTAssertEqual(Set(fired), ["🔼 ↑", "🔼 ↓", "🔼 ←"], "new session, Google + answer and the cancel are the question's")
+        XCTAssertEqual(HotkeyTap.questionIgnores, [F10])
     }
 
     /// At rest — the answer's pop-up is that state — 🔼 → still reaches its

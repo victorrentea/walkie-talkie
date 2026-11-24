@@ -471,13 +471,28 @@ def spec(src: dict):
             ],
         },
         {
+            # Victor, 2026-11-24: "să pot să schimb din modul de întrebare în modul
+            # de agent, dând … Forward swipe up … Vreau să-mi facă, nu să-mi răspundă".
+            "row": ("🔼 forward", "drag up over a ⚡ question"),
+            "does": "the question becomes a NEW SESSION's prompt — same recording, the folder menu, no quick answer",
+            "checks": [
+                ("F8 is not swallowed over a question", "HotkeyTap `questionIgnores`",
+                 lambda: not has(src["HotkeyTap.swift"], r"static let questionIgnores: Set<CGKeyCode> = \[[^\]]*0x64")),
+                ("mid-sentence 🔼 ↑ converts the sentence to a spawn", "AppDelegate `onGestureSpawn`",
+                 lambda: has(src[ad], r"hotkeys\.onGestureSpawn = \{[\s\S]{0,600}?self\.convertDictationToSpawn\(\)")),
+                ("the conversion drops the question, so it is not also answered", "AppDelegate `convertDictationToSpawn`",
+                 lambda: has(function(src, ad, "convertDictationToSpawn"), r"dropQuestion\(for: \"a new session\"\)")),
+            ],
+        },
+        {
             # Victor, 2026-11-22: "din modul question nu are sens să am ✨ sau
             # prompt bound" — first the hint bar, then ("și-și") the flicks too.
-            "row": ("🔼 forward", "drag right / drag up over a ⚡ question"),
-            "does": "NOTHING — swallowed, no flash: a question is not turned into a terminal's or a new session's prompt (🔼 → over the ANSWER's pop-up, at rest, still asks the follow-up)",
+            # 2026-11-24: 🔼 ↑ is back — "Vreau să-mi facă, nu să-mi răspundă".
+            "row": ("🔼 forward", "drag right over a ⚡ question"),
+            "does": "NOTHING — swallowed, no flash: a question is not turned into the bound terminal's prompt (🔼 → over the ANSWER's pop-up, at rest, still asks the follow-up)",
             "checks": [
-                ("the two flicks are named once: F10 and F8", "HotkeyTap `questionIgnores`",
-                 lambda: has(src["HotkeyTap.swift"], r"static let questionIgnores: Set<CGKeyCode> = \[0x6D, 0x64\]")),
+                ("the one flick is named once: F10 (F8 left on 2026-11-24)", "HotkeyTap `questionIgnores`",
+                 lambda: has(src["HotkeyTap.swift"], r"static let questionIgnores: Set<CGKeyCode> = \[0x6D\]")),
                 ("an open question swallows them before any gesture's branch — the bind chord included", "HotkeyTap `handle`",
                  lambda: has(src["HotkeyTap.swift"],
                              r"if Self\.questionIgnores\.contains\(keyCode\), relayQuickOpen \{\s*Log\.info\([^\n]*\)\s*"
@@ -730,8 +745,8 @@ MUTATIONS = [
      "if Self.plainIgnores.contains(keyCode), cleanSentenceOpen {", "if false {"),
     ("🔼 → / 🔼 ↑ redirect a ⚡ question again (before 2026-11-22)", "HotkeyTap.swift",
      "if Self.questionIgnores.contains(keyCode), relayQuickOpen {", "if false {"),
-    ("🔼 ↑ turns a ⚡ question into a new session again (before 2026-11-22)", "HotkeyTap.swift",
-     "static let questionIgnores: Set<CGKeyCode> = [0x6D, 0x64]", "static let questionIgnores: Set<CGKeyCode> = [0x6D]"),
+    ("🔼 ↑ does nothing over a ⚡ question again (2026-11-22 → 11-24)", "HotkeyTap.swift",
+     "static let questionIgnores: Set<CGKeyCode> = [0x6D]", "static let questionIgnores: Set<CGKeyCode> = [0x6D, 0x64]"),
     ("kamikaze works over a plain dictation again (before 2026-11-22)", "HotkeyTap.swift",
      "[0x6D, 0x64, 0x65, 0x60, 0x63, 0x76, 0x6F]", "[0x6D, 0x64, 0x60, 0x63, 0x76, 0x6F]"),
     ("🔽 → starts the plain dictation at rest again (before 2026-11-22)", "HotkeyTap.swift",
