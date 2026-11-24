@@ -47,7 +47,24 @@ final class QuickAsk {
         The question may carry what was on his screen: pictures labelled 📸n, \
         selected text and picked elements in brackets, and file paths you cannot \
         open — use them to understand what he is asking about. When earlier turns \
-        of the conversation are given, answer the last question in their light.
+        of the conversation are given, answer the last question in their light. \
+        \(lookItUp)
+        """
+    /// **What memory cannot know is not answered from memory** (2026-11-24, Victor:
+    /// *"if my question flagrantly, obviously … requires recent data or forces an
+    /// internet research, do not answer from your training data. Rather than saying
+    /// you cannot research internet, because the second stage is deliberately spinning
+    /// off agents to research internet … You could just say let me Google that"*).
+    /// The first stage has no tools and said *I cannot browse* while 🌐 was already
+    /// searching under it; now it says only that it is being looked up.
+    static let lookItUp = """
+        A web search of the same question starts right after you and its answer \
+        replaces yours. So when the question plainly needs what you cannot know from \
+        memory — today's or recent news, events, prices, scores, weather, schedules, \
+        versions, anything that may have changed since your training — do not answer \
+        from memory, do not guess, and never say that you cannot search, browse or \
+        know: reply with only a few words saying it is being looked up, like \
+        "Let me Google that…", in the question's language.
         """
     /// **Each check writes the whole answer again** (2026-10-10, Victor: *"un
     /// răspuns imediat, apoi unul căutat, apoi unul criticat … în funcție de cât
@@ -80,7 +97,8 @@ final class QuickAsk {
         """ }
     static var webPrompt: String { """
         You were given a spoken question by Victor and a quick answer to it, written \
-        from memory without any checking. Search the web for evidence, writing \
+        from memory without any checking — it may only say that it is being looked \
+        up, then the answer is yours to find. Search the web for evidence, writing \
         nothing before your searches are done, and write the answer again: \
         corrected where the sources say otherwise, completed where they add \
         something that matters.

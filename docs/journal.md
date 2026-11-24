@@ -17166,3 +17166,27 @@ move (second box released, left-click drop) — and passes it to `fileArea`: mar
 offset in the frame's name, `pendingShotOffsets` and the inline token all read it. The press is only
 logged (`✂️ area released N s after the press — placed at the release`). A release after the sentence
 has closed still sends the picture on its own, as before.
+
+## 2026-11-24 — ⚡ "Let me Google that…", and the left edge ends with the review
+
+Victor: *"if my question flagrantly, obviously … requires recent data or forces an internet research,
+do not answer from your training data. Rather than saying you cannot research internet, because the
+second stage is deliberately spinning off agents to research internet. So don't tell me I can't
+research and then spin the research internet agents underneath. You could just say let me Google that
+… And once the questioning, the adversarial is all over, the question marks that come from the left,
+the animation should disappear progressively"*, then *"if I'm asking another follow-up question … the
+question mark starts floating again"*.
+
+Two things. The first stage (`--tools ""`) did not know the 🌐 check exists, so on *what's the weather
+today* it apologised for having no internet while the search was already running under it.
+`QuickAsk.lookItUp` at the end of `systemPrompt` tells it so and asks for a few words only; `webPrompt`
+is told the quick answer may be just that. Seven questions through `claude -p` with the app's prompt:
+four that need the web got `Let me Google that…` / `Caut imediat pe Google…`, three that do not were
+answered as before.
+
+The left edge was held by the pop-up for as long as it stood (2026-11-20, *"until I close the answer
+panel"*), so the marks went on for minutes over an answer long finished. `EdgeDust.questionHolds` now
+also wants `ReplyPanel.liveOpen`; when the review (or a 🪏 more) ends, the waiting edge's poll lets go
+after `patience` and the picture drains. `EdgeDust.hold(.left)` raises it again for a 🪏 more on a
+finished answer; a follow-up needs nothing, it is a sentence on that edge. The drain was not watched
+on the screen.

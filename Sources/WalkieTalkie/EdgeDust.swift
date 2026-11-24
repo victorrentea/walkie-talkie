@@ -110,7 +110,18 @@ final class EdgeDust {
     /// (2026-11-20, Victor: *"the question mark that comes from the left should appear
     /// … until I close the answer panel … even if I ask you to dig again … during your
     /// transcription process, your searching, your initial response"*).
+    /// **…until the answering is over, not until the pop-up closes** (2026-11-24, Victor:
+    /// *"once the questioning, the adversarial is all over, the question marks that come
+    /// from the left … should disappear progressively"*, *"if I'm asking another follow-up
+    /// question … the question mark starts floating again"*): the pop-up holds the left edge
+    /// only while it is still being written (answer, 🌐, 😠, a 🪏 more); then the poll lets
+    /// it go and the marks on their way run out (`drain`, ≤ 6.8 s). A 🪏 more brings it
+    /// back with `hold`; a follow-up is a new sentence on the same edge.
     var holds: ((Edge) -> Bool)?
+    /// Does the ⚡ pop-up hold `edge`? `shown`: it is on the screen; `writing`: not finished.
+    static func questionHolds(_ edge: Edge, shown: Bool, writing: Bool) -> Bool {
+        edge == .left && shown && writing
+    }
 
     private enum Phase: String { case down, listening, waiting, leaving }
     private var phase: Phase = .down
@@ -227,6 +238,21 @@ final class EdgeDust {
         guard phase == .listening || phase == .waiting else { return }
         if let only, edge != only { return }
         leave(sent: true, why: "the message is in")
+    }
+
+    /// **Up again with no sentence being said** (2026-11-24): a 🪏 more on a ⚡ answer whose
+    /// edge had already gone. Straight to `waiting`, kept by `holds`. Nothing when an edge
+    /// is up already (a sentence's, or this one still held).
+    func hold(_ wanted: Edge, why: String) {
+        guard phase == .down || phase == .leaving else { return }
+        micOpen = false
+        show(wanted)
+        guard phase == .listening else { return }
+        phase = .waiting
+        waitingFrom = CFAbsoluteTimeGetCurrent()
+        lastPending = waitingFrom
+        startPolling()
+        Log.info("🌫️ the \(wanted.rawValue) edge is held — \(why)")
     }
 
     /// What held `edge` is gone (the ⚡ pop-up closed): out now, quietly, rather than

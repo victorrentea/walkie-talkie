@@ -3757,9 +3757,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.settling || self.panelsComing > 0 || self.deliveriesInFlight > 0 || self.spawnsInFlight > 0
                 || self.spawnPending || self.overlay.sentPromptFrame != nil || self.caretLanding != 0
         }
-        // **The ⚡ question's edge stays while its reply pop-up does** (2026-11-20): through
-        // the transcription, the answer, 🌐, 😠 and every 🪏 more, until the pop-up is closed.
-        edgeDust.holds = { edge in edge == .left && ReplyPanel.quickShown }
+        // **The ⚡ question's edge stays while its reply pop-up is being written** (2026-11-20;
+        // *until it is closed* until 2026-11-24): through the transcription, the answer, 🌐, 😠
+        // and every 🪏 more — then it drains out by itself (`EdgeDust.questionHolds`).
+        edgeDust.holds = { edge in
+            EdgeDust.questionHolds(edge, shown: ReplyPanel.quickShown, writing: ReplyPanel.liveOpen)
+        }
         ReplyPanel.onClosed = { [weak self] in
             // A follow-up (🔼 → over it) closes the pop-up and opens the next question at
             // once — that sentence takes the edge back; only a close with nothing after it ends it.
@@ -7596,6 +7599,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // The first round's desk caller is answered now: its `end` will not come.
             sendChecked()
             digOffered = false
+            // The question's edge is back for the round (it left when the last one ended).
+            if HaloStyle.promptsWearDust,
+               FxHold.why(battery: BatteryFx.holdsEffects, filming: self.film != nil) == nil {
+                self.edgeDust.hold(.left, why: "🪏 more on the ⚡ answer")
+            }
             round += 1
             steps = [digging(0, agents)]
             paint(force: true)

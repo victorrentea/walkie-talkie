@@ -47,6 +47,13 @@ final class EdgeDustTests: XCTestCase {
     private let leftOne = NSRect(x: -2560, y: -200, width: 2560, height: 1440)
     private let below = NSRect(x: 100, y: -1080, width: 1920, height: 1080)
 
+    func testTheQuestionsEdgeIsHeldOnlyWhileItsAnswerIsBeingWritten() {
+        XCTAssertTrue(EdgeDust.questionHolds(.left, shown: true, writing: true))
+        XCTAssertFalse(EdgeDust.questionHolds(.left, shown: true, writing: false))   // reviewed: it drains out
+        XCTAssertFalse(EdgeDust.questionHolds(.left, shown: false, writing: true))
+        XCTAssertFalse(EdgeDust.questionHolds(.right, shown: true, writing: true))
+    }
+
     func testTheEdgeIsOnTheScreenThePointerIsOn() {
         let all = [retina, leftOne, below]
         XCTAssertEqual(EdgeDust.screen(under: NSPoint(x: 800, y: 500), of: all), retina)

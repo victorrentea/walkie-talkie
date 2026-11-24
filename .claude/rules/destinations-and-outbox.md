@@ -603,6 +603,19 @@ can"*, on his subscription; *"the key to bind it to. I think forward and left"*.
   in Romanian, the account's language). Log `⚡ 🌍 workshop in <country> today …`.
   Checked with `claude -p` (Opus): *"Care e cota de TVA standard?"* + the clause → Portugal's 23 %, in English.
 
+- **What memory cannot know is not answered from memory: `Let me Google that…`** (2026-11-24, Victor:
+  *"if my question flagrantly, obviously … requires recent data or forces an internet research, do not
+  answer from your training data. Rather than saying you cannot research internet, because the second
+  stage is deliberately spinning off agents to research internet … You could just say let me Google
+  that"*). `QuickAsk.lookItUp`, the end of `systemPrompt`: the first stage is told a web search follows
+  and replaces its answer, so for today's news, prices, scores, weather, versions it writes only that
+  it is being looked up, in the question's language — never *I cannot browse / I don't know*.
+  `webPrompt` says the quick answer may be only that. Checked with `claude -p` (Opus), the app's own
+  prompt: weather today, F1 last weekend, latest Spring Boot → `Let me Google that…`; *"Cât e cursul
+  euro azi?"* → `Caut imediat pe Google…`; Iceland's capital, mutex vs semaphore, Portugal's
+  population → answered as before. A waiting process started before the upgrade has the old prompt
+  for one question. **The left edge's marks end with the review** — `replace-wispr-and-halo.md`.
+
 
 - **A selection in the pop-up survives its redraws; ⌃K copies it, ⌃⌥S sends it** (2026-11-23,
   Victor: *"I want to highlight part of the answer … to get people's attention on it. If the

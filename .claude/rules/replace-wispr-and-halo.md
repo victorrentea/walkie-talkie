@@ -724,6 +724,17 @@ fade out foarte repede, după ce dictarea s-a injectat cu succes. În timp cât 
   `ReplyPanel.onClosed` → `EdgeDust.release(.left)` 0.25 s later (`quietFade`) unless a sentence is
   open — 🔼 → over the pop-up closes it and opens the follow-up, which takes the edge back. 🔼 ← still
   cuts it. Log `🌫️ the left edge goes — the ⚡ reply pop-up is closed`.
+- **⚠️ …until the answering is over, not until the pop-up is closed** (2026-11-24, Victor: *"once the
+  questioning, the adversarial is all over, the question marks that come from the left … should
+  disappear progressively"*, *"if I'm asking another follow-up question … the question mark starts
+  floating again"*). Supersedes the bullet above: `EdgeDust.questionHolds` = left && `quickShown` &&
+  `ReplyPanel.liveOpen` (the pop-up still being written: answer, 🌐, 😠, a 🪏 more). When the review
+  ends the poll lets go after `patience` (1.2 s) and the edge **drains** — no new marks, the ones on
+  their way run out (≤ 6.8 s), log `🌫️ the left edge goes — nothing of the sentence is on its way`.
+  A follow-up is a new sentence on the left edge; a 🪏 more on a finished answer brings it back with
+  `EdgeDust.hold(.left)` (not on battery, not while filming). Closing the pop-up earlier still
+  releases it. Test `testTheQuestionsEdgeIsHeldOnlyWhileItsAnswerIsBeingWritten`. **Not watched on
+  the screen yet.**
 - **⚠️ The caret's prompt has the bottom edge, its dust making the red pin now and then** (2026-11-22,
   Victor: *"atunci când fac promptare la caret, aș vrea să vină de jos … o animație similară cu cele care
   vin de sus sau din dreapta … punctele care vin să alcătuiască, din când în când, forme care seamănă cu
