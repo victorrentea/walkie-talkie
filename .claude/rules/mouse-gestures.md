@@ -228,6 +228,13 @@ over a question still does nothing.
 - `HotkeyTap.questionIgnores` is `[F10]`: F8 goes on to `onGestureSpawn` → `convertDictationToSpawn`
   (the question is a caret sentence, so `pasteMode` off and `dropQuestion(for: "a new session")`): the
   same recording and pictures, the folder menu, no quick answer, no pop-up. Again = the folder menu again.
+- **A follow-up takes the conversation with it** (same day, Victor: *"și transmite … ce am discutat deja ca
+  întrebări"*): `dropQuestion` copies `quickThread` (≤ `QuickAsk.turnsKept`) into `carriedQuestions` (an
+  `Envelope` field) when the question was a follow-up; `send` moves it onto `Message.earlier` and
+  `terminalLine` writes `QuickAsk.carried` under the words — `[Before this, I asked these as ⚡ quick
+  questions — continue from them:` then `Qn:` (the question's envelope), `  📸 <path>` per picture, `An:` (the
+  best answer it got, `ReplyPanel.plain`). A first question carries nothing. Log `⚡ N earlier question(s) go
+  with it`. Tests `QuickAskCarriedTests`. **Not seen on a live spawn.**
 - The bar's 🔼 ↑ over a question is `✨ new` again (`GestureHintBar.crosses`, the README's `⚡ Question` column).
 - Tests: `HotkeyTapGestureTests.testAQuestionIgnoresTheTerminalButNotTheNewSession`, `GestureHintBarTests
   .testAQuickQuestionAsks`; spec row *🔼 forward · drag up over a ⚡ question*. **Not made by hand on the mouse.**

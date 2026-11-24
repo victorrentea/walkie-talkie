@@ -1247,6 +1247,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **A follow-up to the ⚡ answer on screen** (2026-10-15): 🔼 → over its
     /// pop-up opens it (`askFollowUp`), and `askQuick` sends `quickThread` with it.
     private var quickFollowUp = false
+    /// **The ⚡ turns a question turned agent's prompt takes along** (2026-11-24,
+    /// Victor: *"transmite … ce am discutat deja ca întrebări"*): set by
+    /// `dropQuestion` from `quickThread` when the question was a follow-up,
+    /// moved onto `Message.earlier` by `send`, written by `QuickAsk.carried`.
+    private var carriedQuestions: [QuickAsk.Turn] = []
     /// **🔽 ← at rest: the first question for ChatGPT, said to this app**
     /// (2026-11-16, `ChatGPTVoice.toggle(question:)`). A ⚡ question in every
     /// respect while it is said — one effect, typed nowhere, 🔼 ends it — whose
@@ -1513,6 +1518,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         /// **🛑 Must not wait in the agent's queue** (2026-11-22): ⌃X ⌃S after the words,
         /// in a bound Claude Code tab — `TerminalBinding.deliver(_:to:interrupt:)`.
         var interrupt = false
+        /// **⚡ The questions asked before this one** (2026-11-24): a follow-up turned
+        /// into an agent's prompt carries the conversation — `QuickAsk.carried`.
+        var earlier: [QuickAsk.Turn] = []
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -4334,6 +4342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         kamikaze = false
         modelPick = nil
         interrupt = false
+        carriedQuestions = []
         speculative = false
         transcriptDisowned = false
         caretLanding = 0
@@ -6634,6 +6643,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pop-up (2026-10-15).
     private func dropQuestion(for label: String) {
         guard quickAsk else { return }
+        // A follow-up's earlier turns go with it — the agent continues the conversation.
+        if quickFollowUp, !quickThread.isEmpty {
+            carriedQuestions = Array(quickThread.suffix(QuickAsk.turnsKept))
+            Log.info("⚡ \(carriedQuestions.count) earlier question(s) go with it")
+        }
         quickAsk = false
         quickFollowUp = false
         quickGoogle = false
@@ -8017,6 +8031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         kamikaze = false
         modelPick = nil
         interrupt = false
+        carriedQuestions = []
         pasteMode = false
         clearSpawn()
         localRecordingApp = nil
@@ -11325,6 +11340,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if text.contains("?") { parts.append(questionHint) }
                 parts.append(dictionaryHint)
             }
+            if let clause = QuickAsk.carried(m.earlier) { parts.append(clause) }
         }
         parts.append(contentsOf: selectionsClause(m.selection, at: m.selectionAt,
                                                   source: m.selectionSource,
@@ -13503,6 +13519,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if kind == "dictation", modelPick != nil {
             if Thread.isMainThread { modelPick = nil } else { DispatchQueue.main.async { self.modelPick = nil } }
         }
+        // ⚡ The same: the earlier questions are this sentence's.
+        let earlier = kind == "dictation" ? carriedQuestions : []
+        if !carriedQuestions.isEmpty, kind == "dictation" {
+            if Thread.isMainThread { carriedQuestions = [] } else { DispatchQueue.main.async { self.carriedQuestions = [] } }
+        }
         // 🛑 The same: the mark is this sentence's, for a terminal only.
         let cutsIn = kind == "dictation" && interrupt
         if cutsIn {
@@ -13604,7 +13625,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                               mic: Self.mic(inHeard: heard),
                               deliveryKind: deliveryKind, target: spawn ? nil : target,
                               affect: affect, modelPick: pick,
-                              interrupt: cutsIn && !spawn && target != nil)
+                              interrupt: cutsIn && !spawn && target != nil,
+                              earlier: earlier)
 
         // Show what is about to go out — selection included, since that is part
         // of the prompt the agent receives, not a separate thing.
@@ -14376,6 +14398,7 @@ extension AppDelegate {
         var localRecordingApp: String?
         var kamikaze = false, contextAtWheelRelease = false
         var modelPick: ModelPick?
+        var carriedQuestions: [QuickAsk.Turn] = []
         var interrupt = false
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
@@ -14419,6 +14442,7 @@ extension AppDelegate {
         e.localRecordingApp = localRecordingApp
         e.kamikaze = kamikaze
         e.modelPick = modelPick
+        e.carriedQuestions = carriedQuestions
         e.interrupt = interrupt
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
@@ -14438,6 +14462,7 @@ extension AppDelegate {
         kamikaze = false
         modelPick = nil
         interrupt = false
+        carriedQuestions = []
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
         quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false
@@ -14483,6 +14508,7 @@ extension AppDelegate {
         localRecordingApp = e.localRecordingApp
         kamikaze = e.kamikaze
         modelPick = e.modelPick
+        carriedQuestions = e.carriedQuestions
         interrupt = e.interrupt
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence

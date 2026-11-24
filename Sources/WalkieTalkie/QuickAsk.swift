@@ -327,6 +327,23 @@ final class QuickAsk {
         return lines.joined(separator: "\n")
     }
 
+    /// **The ⚡ conversation, handed to an agent** (2026-11-24, Victor: *"transmite
+    /// … ce am discutat deja ca întrebări"*): a follow-up question turned into a
+    /// new session's prompt (🔼 ↑) carries the turns before it, each question as
+    /// it was asked (its envelope, pictures named there) and the best answer it
+    /// got. One clause under the words; nil with nothing before it.
+    static func carried(_ turns: [Turn]) -> String? {
+        guard !turns.isEmpty else { return nil }
+        var lines = ["[Before this, I asked these as ⚡ quick questions — continue from them:"]
+        for (i, t) in turns.enumerated() {
+            lines.append("Q\(i + 1): " + t.question.trimmingCharacters(in: .whitespacesAndNewlines))
+            for p in t.images { lines.append("  📸 " + p) }
+            let a = ReplyPanel.plain(t.answer).trimmingCharacters(in: .whitespacesAndNewlines)
+            lines.append("A\(i + 1): " + (a.isEmpty ? "(no answer yet)" : a))
+        }
+        return lines.joined(separator: "\n") + "]"
+    }
+
     static func pictures(_ images: [String], history: [Turn]) -> [(label: String, path: String)] {
         var all: [(String, String)] = []
         for (i, t) in history.enumerated() {
