@@ -22,7 +22,7 @@ import QuartzCore
 /// |---|---|---|
 /// | talking | nothing | the pin, plain |
 /// | `patience` of quiet, then `swell` | the heads fade in | the glint and the glow fade in |
-/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale`, still (no breath since 2026-11-10), glint unbroken, **no glow outside** (2026-10-22), a ring filling in the hole |
+/// | words in flight (`hold`) | heads ×2 | pin ×`holdScale` (1 since 2026-11-23 — no growth), still (no breath since 2026-11-10), glint unbroken, **no glow outside** (2026-10-22), a ring filling in the hole |
 /// | the ⌘V | cut | cut |
 ///
 /// **Always up while he talks**, because the pin answers *where*, and that is
@@ -80,7 +80,11 @@ final class DropArrow {
     /// **×1.4, and breathing up to `pulseScale` × that** (2026-10-20, Victor:
     /// *"once I end the dictation, it gets bigger … and pulsates smaller bigger,
     /// smaller bigger until the … transcription [ends]. Shining as well"*).
-    static let holdScale: CGFloat = 1.4
+    /// **×1 since 2026-11-23** (Victor: *"când termin dictarea să nu se mărească
+    /// dimensiunea, ci să rămână exact cum e și să înceapă să-și facă progress bar
+    /// înăuntru"*): the pin keeps its size at the close; the ring in its hole and
+    /// the glint are what say *in flight*.
+    static let holdScale: CGFloat = 1
     static let pulseScale: CGFloat = 1.15
     /// One breath, out and back.
     private static let pulsePeriod: CFTimeInterval = 0.9

@@ -4462,7 +4462,7 @@ extension CaretHalo {
                     arrowHost.wantsLayer = true
                     arrowHost.layer?.addSublayer(DropArrow.picture(scale: arrowScale, shining: shining, crossed: crossed,
                                                                         // In flight, the ring two thirds full (2026-10-20).
-                                                                        progress: arrowScale == DropArrow.holdScale ? 0.66 : 0))
+                                                                        progress: name == "words in flight" ? 0.66 : 0))
                     if let rep = arrowHost.bitmapImageRepForCachingDisplay(in: arrowHost.bounds) {
                         arrowHost.cacheDisplay(in: arrowHost.bounds, to: rep)
                         NSImage(size: cell, flipped: false) { r in rep.draw(in: r) }

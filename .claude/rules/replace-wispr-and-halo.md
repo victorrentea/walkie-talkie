@@ -390,6 +390,11 @@ tell that visually somehow"*. **Supersedes the six heads** in the two sections a
   crossed. A spinner, a creeping 97 % ring and a thin white arc were all tried that day and dropped.
   `halo.heads.progress` / `.localBudget` in `GET /test/state`; `WT_SHOOT_HALO`'s `words in flight`
   column draws it at two thirds.
+- **⚠️ The pin no longer grows at the close: `holdScale` is 1** (2026-11-23, Victor: *"când termin
+  dictarea să nu se mărească dimensiunea, ci să rămână exact cum e și să înceapă să-și facă progress
+  bar înăuntru"*). Supersedes the ×1.3 / ×1.4 above: from the close to the paste the pin stays 92 pt
+  where it stood; the ring filling in its hole, the unbroken glint and the missing outer glow are what
+  say *in flight*. `WT_SHOOT_HALO`'s `words in flight` column picks its ring by name, not by scale.
 - **The ring keeps its fill across a focus change** (2026-10-21, Victor: *"If I change the focus of a
   window during the progress bar … the wheel seems to start anew from scratch. It should continue
   where it left off"*). Clicking through a window with no caret (`no caret found in it — no pin`)
