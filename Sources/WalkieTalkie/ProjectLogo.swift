@@ -1,8 +1,10 @@
 import AppKit
 
-/// **The bound project's own logo, beside the walkie on the chip at rest**
+/// **The bound project's own logo, on the chip at rest**
 /// (2026-11-22, Victor: *"când sunt bound la un proiect, lângă iconița walkie să
-/// apară logoul proiectului (de ex. cat pt petclinic)"*).
+/// apară logoul proiectului (de ex. cat pt petclinic)"*). Since 2026-11-24 it
+/// stands **in place of** the walkie, not beside it; the walkie is left for the
+/// workspace and for projects with no logo.
 ///
 /// The project is the repo root of the directory the binding already read its
 /// `folder@branch` from: `TerminalBinding.label(forDirectory:)` notes the
@@ -252,8 +254,8 @@ enum ProjectLogo {
     // MARK: - at a desk
 
     /// `WT_SHOOT_PROJECT_LOGO=<dir>` with `WT_SHOOT_PROJECT_LOGO_FOLDERS=a:b`:
-    /// for each folder, the resting chip's two glyphs as it draws them (the
-    /// walkie, the gap, the logo) on a dark and on a light ground, at 8×, as
+    /// for each folder, the resting chip's glyph as it draws it (the logo in
+    /// the walkie's place, or the walkie when there is none) on a dark and on a light ground, at 8×, as
     /// `<dir>/<name>-dark.png` / `-light.png`. A folder with no logo is drawn
     /// too, so "nothing extra" can be looked at.
     static func shoot(into dir: String, folders: [String]) {
@@ -264,8 +266,9 @@ enum ProjectLogo {
             print("\(name): \(source(forDirectory: folder))")
             for (ground, colour) in [("dark", NSColor(white: 0.12, alpha: 1)), ("light", NSColor(white: 0.96, alpha: 1))] {
                 let walkie = Glyphs.walkieOutlined(height: 19)
-                let pad: CGFloat = 12, gap: CGFloat = 5, box: CGFloat = 20
-                let width = pad * 2 + box + (logo.map { gap + ($0.size.width * 19 / max($0.size.height, 1)).rounded() } ?? 0)
+                let pad: CGFloat = 12, box: CGFloat = 20
+                let logoW = logo.map { ($0.size.width * 19 / max($0.size.height, 1)).rounded() } ?? 0
+                let width = pad * 2 + max(box, logoW)
                 let height = pad * 2 + 21
                 let scale: CGFloat = 8
                 guard let rep = bitmap(Int(width * scale), Int(height * scale)) else { continue }
@@ -277,12 +280,13 @@ enum ProjectLogo {
                     let walkieRect = NSRect(x: pad + ((box - walkie.size.width) / 2).rounded(),
                                             y: pad + ((21 - walkie.size.height) / 2).rounded(),
                                             width: walkie.size.width, height: walkie.size.height)
-                    walkie.draw(in: walkieRect)
-                    // As the chip places it: the walkie's height, on its midline.
+                    // As the chip places it: in the walkie's place, at its height and midline.
                     if let logo, logo.size.height > 0 {
                         let h = walkieRect.height
-                        let w = (logo.size.width * h / logo.size.height).rounded()
-                        logo.draw(in: NSRect(x: pad + box + gap, y: walkieRect.midY - h / 2, width: w, height: h))
+                        logo.draw(in: NSRect(x: pad + max(0, ((box - logoW) / 2).rounded()),
+                                             y: walkieRect.midY - h / 2, width: logoW, height: h))
+                    } else {
+                        walkie.draw(in: walkieRect)
                     }
                 }
                 if let png = rep.representation(using: .png, properties: [:]) {

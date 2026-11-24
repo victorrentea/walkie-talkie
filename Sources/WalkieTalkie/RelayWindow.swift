@@ -1974,10 +1974,12 @@ private let heardLabel = NSTextField(labelWithString: "")
         // The gap belongs to the text, not to the icon: collapsed there is
         // nothing on its right, and reserving 5pt for it would leave the chip
         // visibly off-centre around its own icon.
+        // A resting logo stands *in place of* the walkie (`layoutTitleRow`), so it
+        // takes the icon column — wider than the column if the logo is.
         let titleWidth = ceil(titleLabel.frame.width)
             + (boundLabel != nil || spawnIcon != nil
-               ? glyphColumn + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
-            + (restingLogo.map { recordDotGap + $0.size.width } ?? 0)
+               ? max(glyphColumn, restingLogo.map { logoWidth($0) } ?? 0)
+                 + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
         // dictation starts, but that reservation is exactly the empty space that
@@ -3055,7 +3057,11 @@ private let heardLabel = NSTextField(labelWithString: "")
         // binding does: the icon is what says *a terminal*, which is the whole
         // of "as if I were already bound to one".
         let bound = boundLabel != nil || spawnIcon != nil || panelSpawning
-        titleGlyph.isHidden = !bound
+        // **The project's logo replaces the walkie at rest** (2026-11-24, Victor:
+        // *"cât sunt legat la un proiect să apară doar logoul acelui proiect lângă
+        // mouse în locul celei de walkie talkie; iconița de walkie doar dacă sunt
+        // legat la workspace sau la un proiect fără logo"*). No logo ⇒ the walkie.
+        titleGlyph.isHidden = !bound || restingLogo != nil
         // **Here rather than in `setBound`**, because the glyph is no longer a
         // property of the binding: it depends on whether a sentence is in flight,
         // which changes several times per dictation and never passes through
@@ -3080,8 +3086,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         // measured from — an app icon and a map pin are different shapes and
         // only a fixed box makes them the same size on screen.
         if bound { centre(titleGlyph, inRowOfHeight: titleRowHeight) }
-        // The walkie keeps its place whatever stands beside it: the logo takes
-        // the far side of the column, where a name would start.
+        // The logo sits where the walkie would: centred in the icon column (or
+        // flush left when wider than it), at the walkie's height and midline.
         projectGlyph.image = restingLogo
         projectGlyph.isHidden = restingLogo == nil
         // **As tall as the walkie, on the walkie's own midline** (2026-11-23,
@@ -3089,14 +3095,17 @@ private let heardLabel = NSTextField(labelWithString: "")
         // walkie"*): measured off the glyph actually standing there, not off the
         // row — an 18 pt logo centred on its own in the 21 pt row rounded half a
         // point below a 19 pt walkie and read as smaller and dropped.
+        var labelX = column + gap
         if let logo = restingLogo, logo.size.height > 0 {
             let walkie = titleGlyph.frame
             let h = walkie.height > 0 ? walkie.height : logo.size.height
-            let w = (logo.size.width * h / logo.size.height).rounded()
-            projectGlyph.frame = NSRect(x: column + gap, y: walkie.midY - h / 2, width: w, height: h)
+            let w = logoWidth(logo)
+            projectGlyph.frame = NSRect(x: max(0, ((glyphBox - w) / 2).rounded()),
+                                        y: (walkie.midY - h / 2).rounded(), width: w, height: h)
+            labelX = max(column, w) + gap
         }
-        centre(titleLabel, x: column + gap,
-               width: max(0, width - column - gap), inRowOfHeight: titleRowHeight)
+        centre(titleLabel, x: labelX,
+               width: max(0, width - labelX), inRowOfHeight: titleRowHeight)
     }
 
     /// Lay the thumbnails out in one row and answer how tall it came out.
@@ -4835,8 +4844,15 @@ private let heardLabel = NSTextField(labelWithString: "")
         layoutContent()
     }
 
-    /// The logo, while the chip is the walkie alone.
+    /// The logo, while the chip is at rest — drawn instead of the walkie.
     private var restingLogo: NSImage? { collapsed ? projectLogo : nil }
+
+    /// The logo's width once scaled to the walkie's height, as it is drawn.
+    private func logoWidth(_ logo: NSImage) -> CGFloat {
+        guard logo.size.height > 0 else { return 0 }
+        let h = Self.walkieIdleGlyph?.size.height ?? Self.walkieInk
+        return (logo.size.width * h / logo.size.height).rounded()
+    }
 
     /// The bound project's logo (`ProjectLogo`), nil for none. It is dropped with
     /// the binding (`setBound(label: nil)`), so it is set **after** `setBound`.

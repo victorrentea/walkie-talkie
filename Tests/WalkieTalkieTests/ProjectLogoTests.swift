@@ -1,7 +1,7 @@
 import XCTest
 @testable import WalkieTalkie
 
-/// The bound project's logo beside the resting walkie (2026-11-22).
+/// The bound project's logo in place of the resting walkie (2026-11-22, replacing it since 2026-11-24).
 final class ProjectLogoTests: XCTestCase {
     private var root = ""
 
@@ -97,7 +97,7 @@ final class ProjectLogoTests: XCTestCase {
         XCTAssertEqual(ProjectLogo.directory(forLabel: label), root)
     }
 
-    /// The chip draws the logo only where it draws the walkie, and the binding
+    /// The chip draws the logo only where it draws the walkie — instead of it — and the binding
     /// going takes it along.
     func testTheWiring() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -105,6 +105,8 @@ final class ProjectLogoTests: XCTestCase {
         let chip = try String(contentsOf: sources.appendingPathComponent("RelayWindow.swift"), encoding: .utf8)
         XCTAssertTrue(chip.contains("private var restingLogo: NSImage? { collapsed ? projectLogo : nil }"))
         XCTAssertTrue(chip.contains("if label == nil { projectLogo = nil }"))
+        // In place of the walkie, not beside it (2026-11-24).
+        XCTAssertTrue(chip.contains("titleGlyph.isHidden = !bound || restingLogo != nil"))
         let app = try String(contentsOf: sources.appendingPathComponent("AppDelegate.swift"), encoding: .utf8)
         XCTAssertTrue(app.contains("ProjectLogo.resolve(label: target.folder)"))
     }
