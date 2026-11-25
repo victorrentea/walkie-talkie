@@ -49,7 +49,7 @@ S2.1 read the submenu as the Accessibility tree shows it.
   Save the first line as TOPROW and the rest as AXROWS (drop the separator line, whose name reads "missing value").
   EXPECT:
    - TOPROW starts with "Mic: ".
-   - AXROWS has 6 rows. Row 1 starts with "Automatic — " and is enabled (true).
+   - AXROWS has 6 rows. Row 1 starts with "Auto: " and is enabled (true).
    - Every other row is enabled exactly when its device id is in AVAIL, in this order: xlr "Elgato Wave XLR", rx "DJI", stage "Stage Speakerphone", bose "Bose", mac "MacBook Pro Microphone".
    - Every disabled row's name ends with "— not connected".
    - Names and enabled flags match ROWS0 (the app's own copy, /engine mic.rows) row for row.
@@ -93,7 +93,7 @@ S2.3 pick the built-in microphone (always connected).
   CHECK: MIC_ENGINE_READ ; cat ~/.walkie-talkie/mic/choice
   EXPECT: chosen "mac", choice file "mac", and in rows the "💻 MacBook Pro Microphone" row has ticked true.
 
-S2.4 back to Automatic from the menu.
+S2.4 back to Auto from the menu.
   DO: OPEN_MENU, then:
   osascript <<'AS'
   tell application "System Events" to tell process "Walkie Talkie"
@@ -103,12 +103,12 @@ S2.4 back to Automatic from the menu.
     set R to (first menu item of M whose name starts with "Mic: ")
     click R
     delay 0.4
-    click (first menu item of menu 1 of R whose name starts with "Automatic")
+    click (first menu item of menu 1 of R whose name starts with "Auto:")
   end tell
   AS
   sleep 0.5
   CHECK: MIC_ENGINE_READ ; cat ~/.walkie-talkie/mic/choice
-  EXPECT: chosen "auto", choice file "auto", the Automatic row ticked.
+  EXPECT: chosen "auto", choice file "auto", the Auto row ticked.
 
 ALWAYS (after S2.4, or after a stop):
   curl -s -m5 $B/engine | python3 -c 'import json,sys;print(json.load(sys.stdin)["mic"]["chosen"])'   → if not "auto": curl -s -m20 -X POST $B/test/mic -H 'content-type: application/json' -d '{"id":"auto"}'

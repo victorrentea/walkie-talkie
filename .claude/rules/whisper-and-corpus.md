@@ -490,8 +490,8 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   desk with a projector fan in the room. → journal: same
 - **`InputDevice.known` is that order, once.** It is the menu's rows top to bottom *and* the ladder
   `resolve()` walks — a menu whose order disagreed with the automatic pick would teach the wrong
-  thing every time he opened it. The `Automatic` row spells it out
-  (`Automatic — 🎙️ ▸ 🎤 ▸ 🏛️ ▸ 🎧 ▸ 💻`) rather than asking him to remember it. → journal: same
+  thing every time he opened it. The `Auto` row spells it out
+  (`Auto: 🎙️ > 🎤 > 🏛️ > 🎧 > 💻` since 2026-11-25, no line under it) rather than asking him to remember it. → journal: same
 - **It is also `victor-mac`' list, row for row** (2026-09-22). That app transcribes the
   room continuously through the same five microphones and shows the same five rows in its own menu;
   `🏛️ Stage` is here only because it was there, and it sits *below* the two lavaliers rather than

@@ -385,8 +385,9 @@ and source should be selectable via menu too. those unavailable disabled"* — a
   inputs, eleven of them virtual (Loopback ×3, Wave Link ×2, Zoom, Teams, Webex, Iriun…). A menu
   offering all of them would be a device chooser, which System Settings already is; what it would
   not be is readable at a glance while he is teaching. → journal: same
-- **`Automatic` is first, ticked by default, and never disabled** — and it says what it does:
-  `Automatic — 🎙️ ▸ 🎤 ▸ 🎧 ▸ 💻`, the first of the four that is plugged in. **The rows below are
+- **`Auto` is first, ticked by default, and never disabled** — and it says what it does:
+  `Auto: 🎙️ > 🎤 > 🏛️ > 🎧 > 💻` (2026-11-25: was `Automatic — … ▸ …` over a separator; now no line —
+  it is one of the picks, not a heading), the first that is plugged in. **The rows below are
   in that same order**, because `InputDevice.known` is the one list that is both the menu and the
   ladder; a menu ordered differently from the automatic pick would teach the wrong preference every
   time he opened it. → journal: same
