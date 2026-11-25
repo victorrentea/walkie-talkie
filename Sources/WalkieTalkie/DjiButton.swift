@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import IOKit
 import CoreGraphics
 import IOKit.hid
@@ -64,6 +65,12 @@ enum DjiButton {
         queue.async {
             guard port == nil, let p = IONotificationPortCreate(kIOMainPortDefault) else { return }
             port = p
+            // **And on wake**: a receiver left plugged in does not re-enumerate,
+            // so no matching notification comes — the mapping is put back here.
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: nil) { _ in
+                DjiButton.queue.asyncAfter(deadline: .now() + 2.0) { if present() { apply(why: "wake") } }
+            }
             IONotificationPortSetDispatchQueue(p, queue)
             guard let match = IOServiceMatching(kIOHIDDeviceKey) as NSMutableDictionary? else { return }
             match[kIOHIDVendorIDKey] = vendor
