@@ -2555,9 +2555,27 @@ def _lock_holder() -> tuple[int, str] | None:
         return None
     try:
         os.kill(pid, 0)
-        return pid, started
     except Exception:
         return None
+    if _started_after(pid, started):
+        # **A recycled pid is not the holder** (2026-11-25, found by the Fable
+        # review): a runner that died without letting go left its pid here, and
+        # once macOS handed that pid to any long-lived process every later run —
+        # `teacher_label` included — refused for ever.
+        return None
+    return pid, started
+
+
+def _started_after(pid: int, stamp: str) -> bool:
+    """Did process `pid` start after the lock's `%Y-%m-%d %H:%M:%S` stamp?"""
+    try:
+        written = time.mktime(time.strptime(stamp.strip(), "%Y-%m-%d %H:%M:%S"))
+        out = subprocess.run(["/bin/ps", "-o", "lstart=", "-p", str(pid)], capture_output=True,
+                             text=True, timeout=5, env=dict(os.environ, LC_ALL="C")).stdout
+        began = time.mktime(time.strptime(out.strip(), "%a %b %d %H:%M:%S %Y"))
+    except Exception:
+        return False  # unknown: the pid keeps the lock, as before
+    return began > written + 2
 
 
 def take_runner_lock() -> tuple[bool, str]:
@@ -2580,8 +2598,31 @@ def take_runner_lock() -> tuple[bool, str]:
         return False, "pid %d has been running a scenario since %s" % holder
     try:
         os.makedirs(os.path.dirname(LOCK_PATH), exist_ok=True)
-        with open(LOCK_PATH, "w", encoding="utf-8") as handle:
-            handle.write("%d %s\n" % (os.getpid(), time.strftime("%Y-%m-%d %H:%M:%S")))
+        line = "%d %s\n" % (os.getpid(), time.strftime("%Y-%m-%d %H:%M:%S"))
+        if holder:  # ours already
+            with open(LOCK_PATH, "w", encoding="utf-8") as handle:
+                handle.write(line)
+            return True, "held by pid %d" % os.getpid()
+        # **Created whole, and only if absent** (2026-11-25): two runners started
+        # together both saw no holder and both wrote. A stale file is removed,
+        # then the lock is hard-linked into place, which fails if somebody else
+        # got there first — and a reader never sees a half-written file.
+        tmp = "%s.%d" % (LOCK_PATH, os.getpid())
+        with open(tmp, "w", encoding="utf-8") as handle:
+            handle.write(line)
+        try:
+            if os.path.exists(LOCK_PATH) and _lock_holder() is None:
+                try:
+                    os.remove(LOCK_PATH)
+                except FileNotFoundError:
+                    pass
+            os.link(tmp, LOCK_PATH)
+        except FileExistsError:
+            holder = _lock_holder()
+            return False, ("pid %d has been running a scenario since %s" % holder if holder
+                           else "another runner took the lock at the same moment")
+        finally:
+            os.remove(tmp)
         return True, "held by pid %d" % os.getpid()
     except Exception as exc:
         return True, "could not write the lockfile (%s) — going ahead" % exc

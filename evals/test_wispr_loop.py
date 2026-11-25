@@ -702,5 +702,50 @@ class OnlyItsOwnDocuments(unittest.TestCase):
         self.assertFalse([c for c in calls if "Untitled" in c or "notes.txt" in c])
 
 
+class RunnerLock(unittest.TestCase):
+    """One runner at a time, and a recycled pid does not hold the lock for ever
+    (Fable review, 2026-11-25). Temp lock file only."""
+
+    def setUp(self):
+        import tempfile
+        self._real = wl.LOCK_PATH
+        wl.LOCK_PATH = os.path.join(tempfile.mkdtemp(), "wispr-loop.lock")
+
+    def tearDown(self):
+        wl.LOCK_PATH = self._real
+
+    def write(self, pid, stamp):
+        with open(wl.LOCK_PATH, "w") as fh:
+            fh.write("%d %s\n" % (pid, stamp))
+
+    def test_a_free_lock_is_taken_and_released(self):
+        got, _ = wl.take_runner_lock()
+        self.assertTrue(got)
+        self.assertEqual(open(wl.LOCK_PATH).read().split()[0], str(os.getpid()))
+        wl.release_runner_lock()
+        self.assertFalse(os.path.exists(wl.LOCK_PATH))
+
+    def test_a_live_holder_refuses(self):
+        import time
+        self.write(os.getppid(), time.strftime("%Y-%m-%d %H:%M:%S"))
+        got, detail = wl.take_runner_lock()
+        self.assertFalse(got, detail)
+
+    def test_a_pid_that_started_after_the_lock_is_not_its_holder(self):
+        self.write(os.getppid(), "2000-01-01 00:00:00")
+        got, detail = wl.take_runner_lock()
+        self.assertTrue(got, detail)
+        wl.release_runner_lock()
+
+    def test_a_dead_holder_is_ignored(self):
+        import subprocess
+        p = subprocess.Popen(["true"])
+        p.wait()
+        self.write(p.pid, "2000-01-01 00:00:00")
+        got, detail = wl.take_runner_lock()
+        self.assertTrue(got, detail)
+        wl.release_runner_lock()
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
