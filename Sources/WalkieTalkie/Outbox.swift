@@ -434,12 +434,13 @@ enum Log {
     /// installed app's `relay.log`: 88 fake `mic lane: open 9 did not finish …
     /// abandoned` lines, word for word a real CoreAudio incident, read later as
     /// the app's behaviour. Decided here, at the open, for the whole bundle.
-    static let fileURL: URL = {
-        let dir = NSClassFromString("XCTestCase") != nil
-            ? FileManager.default.temporaryDirectory.appendingPathComponent("walkie-tests")
-            : Outbox.home
-        return dir.appendingPathComponent("relay.log")
-    }()
+    static let fileURL: URL = (testScratch ?? Outbox.home).appendingPathComponent("relay.log")
+
+    /// `$TMPDIR/walkie-tests` inside an XCTest bundle, nil in the app: where a
+    /// test process puts what would otherwise land in the live home.
+    static let testScratch: URL? = NSClassFromString("XCTestCase") != nil
+        ? FileManager.default.temporaryDirectory.appendingPathComponent("walkie-tests")
+        : nil
 
     private static let file: FileHandle? = {
         let url = fileURL

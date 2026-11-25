@@ -320,8 +320,11 @@ final class HotkeyTap {
     /// through instead of taking its own screenshot (Victor: *"take over the
     /// shortcut and block the addon … If I am dictating, it's I'm telling you
     /// first"*). The pid lets a file left by a crash be told from a live prompt.
-    static let promptingMark = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".walkie-talkie/prompting")
+    /// Under `swift test` a scratch file (Fable review, 2026-11-25): a test read
+    /// the installed app's mark, and one that opened a prompt would remove it.
+    static let promptingMark = (Log.testScratch
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkie-talkie"))
+        .appendingPathComponent("prompting")
 
     static func markPrompting(_ on: Bool) {
         // The photo run's launch must not clear the installed app's mark (2026-10-21).

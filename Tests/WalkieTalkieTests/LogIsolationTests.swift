@@ -9,4 +9,10 @@ final class LogIsolationTests: XCTestCase {
         XCTAssertFalse(Log.fileURL.path.hasPrefix(Outbox.defaultHome.path), Log.fileURL.path)
         XCTAssertEqual(Log.fileURL.lastPathComponent, "relay.log")
     }
+
+    /// Nor read or remove the installed app's `prompting` mark (Victor Mac's ⌃P reads it).
+    func testThePromptingMarkIsNotTheLiveOne() {
+        XCTAssertFalse(HotkeyTap.promptingMark.path.hasPrefix(Outbox.defaultHome.path),
+                       HotkeyTap.promptingMark.path)
+    }
 }
