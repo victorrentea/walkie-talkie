@@ -83,11 +83,19 @@ EOF
 # itself: an ungated cancel in the trap fired **four** ⌃Escapes into Wispr on
 # 2026-09-13 19:47, on top of the one the runner had already posted, and the
 # extra ones land on whatever dictation exists next.
+# All three ports, like every other caller here: the relay takes the first free
+# one of 8917–8919, and asking 8917 alone read a relay on 8918 as *not recording*
+# (Fable review, 2026-11-25). The first port that answers is the relay.
 wispr_act_stand_down() {
-  curl -s -m 3 "http://127.0.0.1:8917/test/state" 2>/dev/null \
-    | /usr/bin/grep -qE '"(isRecording|listening)": *true' || return 0
-  curl -s -m 5 -X POST "http://127.0.0.1:8917/test/cancel" \
-       -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true
+  local port state
+  for port in 8917 8918 8919; do
+    state=$(curl -s -m 3 "http://127.0.0.1:$port/test/state" 2>/dev/null)
+    [ -n "$state" ] || continue
+    printf '%s' "$state" | /usr/bin/grep -qE '"(isRecording|listening)": *true' || return 0
+    curl -s -m 5 -X POST "http://127.0.0.1:$port/test/cancel" \
+         -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true
+    return 0
+  done
 }
 
 # **And check that it took.** The device the run displaced can be gone by the
@@ -109,7 +117,18 @@ wispr_act_restore_input() {
     _wispr_act_post_input "$WISPR_ACT_FALLBACK_INPUT" >/dev/null 2>&1
     now=$(_wispr_act_post_input "" 2>/dev/null | sed -n 's/.*"input": *"\([^"]*\)".*/\1/p')
   fi
-  wispr_act_say "↩︎ system input is ${now:-$name}"
+  # No relay answered: nothing was restored, so say so instead of naming the old
+  # device as if it were back (Fable review, 2026-11-25).
+  if [ -z "$now" ] && command -v SwitchAudioSource >/dev/null 2>&1; then
+    SwitchAudioSource -t input -s "$name" >/dev/null 2>&1 \
+      || SwitchAudioSource -t input -s "$WISPR_ACT_FALLBACK_INPUT" >/dev/null 2>&1
+    now=$(SwitchAudioSource -c -t input 2>/dev/null)
+  fi
+  if [ -z "$now" ]; then
+    wispr_act_say "✗ the relay did not answer — the system input may still be the rig's device; set it back to '$name' by hand"
+    return 0
+  fi
+  wispr_act_say "↩︎ system input is $now"
 }
 
 # **Is the system default input any of our business?**
