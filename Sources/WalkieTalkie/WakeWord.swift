@@ -170,8 +170,14 @@ final class WakeWord {
     func pause() { send("pause") }
     func resume() { send("resume") }
 
+    /// The last `pause`/`resume`, on `queue`: the state lives in the helper, and
+    /// a relaunched one (a new microphone, a crash) starts unpaused — `launch`
+    /// replays it.
+    private var paused = false
+
     private func send(_ word: String) {
         queue.async { [self] in
+            if word == "pause" { paused = true } else if word == "resume" { paused = false }
             try? stdin?.write(contentsOf: Data((word + "\n").utf8))
         }
     }
@@ -266,6 +272,7 @@ final class WakeWord {
         }
         process = p
         stdin = input.fileHandleForWriting
+        if paused { try? stdin?.write(contentsOf: Data("pause\n".utf8)) }
         Log.info("👂 wake word helper up (pid \(p.processIdentifier)) on \(device.isEmpty ? "the default input" : device)"
                  + (claude ? " — hey claude ≥ \(Self.threshold)" : "") + (santa && sentences ? " — hey santa ≥ \(Self.santaThreshold)" : "")
                  + (gepetto ? " — hey gepetto ≥ \(Self.gepettoThreshold)" : "")
