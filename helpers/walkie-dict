@@ -2,7 +2,7 @@
 """walkie-dict — one dictionary for both engines (2026-11-09).
 
     walkie-dict add "<right>" [--heard "<as it came out>"]   # both dictionaries, then sync
-    walkie-dict sync [--dry-run]                             # merge both ways (Victor Mac, every 10 min)
+    walkie-dict sync [--dry-run] [--force]                   # merge both ways (Victor Mac, every 10 min)
     walkie-dict show [--no-open]                             # the dictionary as a page: who taught each word, when
     walkie-dict backfill                                     # the adds agents made before the log, from their transcripts
 
@@ -139,7 +139,8 @@ def wispr_put(db, every, heard, written):
     row = every.get(k)
     if row:
         db.execute("UPDATE Dictionary SET replacement = ?, isDeleted = 0, manualEntry = 1, "
-                   "source = 'manual', modifiedAt = ? WHERE phrase = ? AND teamDictionaryId = ?",
+                   "source = 'manual', modifiedAt = ? WHERE phrase = ? AND teamDictionaryId = ?"
+                   " AND isSnippet = 0",
                    (written, t, row[0], PERSONAL))
     else:
         db.execute("INSERT INTO Dictionary (id, phrase, replacement, teamDictionaryId, lastUsed, "
@@ -150,14 +151,27 @@ def wispr_put(db, every, heard, written):
 
 def wispr_delete(db, every, k):
     db.execute("UPDATE Dictionary SET isDeleted = 1, frequencyUsed = 0, modifiedAt = ? "
-               "WHERE phrase = ? AND teamDictionaryId = ?", (now(), every[k][0], PERSONAL))
+               "WHERE phrase = ? AND teamDictionaryId = ? AND isSnippet = 0",
+               (now(), every[k][0], PERSONAL))
 
 
 # ---- merge ------------------------------------------------------------------------------
 
-def sync(dry=False, quiet=False):
-    lines, local = read_local()
+#: The most one sync may delete from either side without `--force`: a side that is wholly
+#: gone (the file missing, Wispr signed out or reset) reads as *he deleted every word*, and
+#: Wispr's own sync would push those deletions to the cloud and his other devices
+#: (2026-11-25, found by the Fable review).
+MAX_DELETES = 5
+MAX_DELETE_FRACTION = 0.2
+
+
+def sync(dry=False, quiet=False, force=False):
     base = json.load(open(BASE)) if os.path.exists(BASE) else {}
+    if base and not os.path.exists(VOCAB) and not force:
+        sys.exit(f"walkie-dict: {VOCAB} is missing while the last sync agreed on "
+                 f"{len(base)} word(s) — refusing to read that as deleting them all from "
+                 "Wispr. Put the file back, or `walkie-dict sync --force`.")
+    lines, local = read_local()
     db = wispr()
     active, every = read_wispr(db)
     log = []
@@ -185,6 +199,11 @@ def sync(dry=False, quiet=False):
                 l_add.append((W[0], W[1])); log.append(f"local  + {render(W)}")
     if not quiet or log:
         print("\n".join(log) if log else "in sync")
+    limit = max(MAX_DELETES, int(len(base) * MAX_DELETE_FRACTION))
+    if not force and (len(w_rm) > limit or len(l_rm) > limit):
+        sys.exit(f"walkie-dict: this sync would delete {len(w_rm)} word(s) from Wispr and "
+                 f"{len(l_rm)} from {VOCAB} (more than {limit}) — refusing; one side has "
+                 "probably gone missing. Check both, then `walkie-dict sync --force`.")
     if dry:
         return
     if w_put or w_rm:
@@ -559,12 +578,16 @@ def main(argv):
     with open(LOCK, "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if argv[:1] == ["sync"]:
-            return sync(dry="--dry-run" in argv)
+            return sync(dry="--dry-run" in argv, force="--force" in argv)
         if argv[:1] == ["add"] and len(argv) >= 2:
             heard = argv[argv.index("--heard") + 1] if "--heard" in argv[:-1] else None
             right = argv[1]
             if not right.strip() or right.startswith("-"):
                 sys.exit("walkie-dict: add needs the right spelling first")
+            # A newline, an arrow or ` #` would write a line that parses as something else.
+            for part in (right, heard or ""):
+                if any(c in part for c in ("\n", "\r", "→", "->", " #")):
+                    sys.exit("walkie-dict: a word may not hold a newline, an arrow or ' #'")
             return add(right.strip(), heard.strip() if heard else None)
     sys.exit(__doc__.split("\n\n")[1])
 
