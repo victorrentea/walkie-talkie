@@ -114,20 +114,40 @@ enum IDEBridge {
     /// One file per window, because each VS Code window runs its own extension
     /// host. Stale files are normal — an editor killed with `-9` never gets to
     /// clean up — and are filtered by the ping, not by trusting the file.
-    private static func endpoints(kind: String) -> [Endpoint] {
+    ///
+    /// **A file whose published pid is gone is deleted here** (2026-11-25, the
+    /// Fable review): 29 dead IntelliJ files had piled up since August, every bind
+    /// pinged them one after another and `caret(pid:)` re-parsed them ~5 times a
+    /// second. Only `ESRCH` counts as gone — a pid another user owns answers
+    /// `EPERM` and stays.
+    ///
+    /// `bundleID`: for IntelliJ, whose published pid **is** the IDE's, only the
+    /// listeners running inside that application — ⌘⌃B in a second JetBrains IDE
+    /// without the plugin must not reach the first one's terminal. VS Code
+    /// publishes an extension host's pid, so it is not filtered that way.
+    private static func endpoints(kind: String, bundleID: String? = nil) -> [Endpoint] {
         let files = [registry, legacyRegistry].flatMap { dir in
             (try? FileManager.default.contentsOfDirectory(
                 at: dir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles])) ?? []
         }
-        return files.compactMap { url in
+        let found: [Endpoint] = files.compactMap { url in
             guard let data = try? Data(contentsOf: url),
                   let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
                   let app = obj["app"] as? String, app == kind,
                   let port = obj["port"] as? Int,
                   let token = obj["token"] as? String
             else { return nil }
-            return Endpoint(app: app, port: port, token: token, pid: (obj["pid"] as? Int).map { pid_t($0) })
+            let pid = (obj["pid"] as? Int).map { pid_t($0) }
+            if let pid, pid > 0, kill(pid, 0) != 0, errno == ESRCH {
+                try? FileManager.default.removeItem(at: url)
+                Log.info("🔌 \(kind): \(url.lastPathComponent) names pid \(pid), which is gone — deleted")
+                return nil
+            }
+            return Endpoint(app: app, port: port, token: token, pid: pid)
         }
+        guard kind == "intellij", let bundleID else { return found }
+        let pids = Set(NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier))
+        return found.filter { $0.pid.map(pids.contains) ?? true }
     }
 
     /// The window Victor is actually looking at.
@@ -146,8 +166,8 @@ enum IDEBridge {
     /// first in the folder listing was taken, and `spring` has no terminal. The
     /// window server names the window actually in front; the listener whose folder
     /// or open file is one of its ` — ` segments is that window.
-    private static func focusedEndpoint(kind: String, frontTitle: String?) -> Endpoint? {
-        let candidates = endpoints(kind: kind)
+    private static func focusedEndpoint(kind: String, bundleID: String, frontTitle: String?) -> Endpoint? {
+        let candidates = endpoints(kind: kind, bundleID: bundleID)
         let answers = candidates.map { request("GET", "/ping", on: $0) }
         guard let index = pickWindow(answers: answers, frontTitle: frontTitle) else { return nil }
         let focusedCount = answers.filter { ($0?["focused"] as? Bool) == true }.count
@@ -171,8 +191,12 @@ enum IDEBridge {
         // A single editor window that reports itself unfocused a beat after
         // ⌘⌃B — the key is pressed while it *is* in front, and `activate` on
         // the relay's own side can land in between. With nothing to
-        // disambiguate, the only candidate is the answer.
-        return answers.count == 1 ? 0 : nil
+        // disambiguate, the only candidate is the answer. **Only listeners that
+        // answered count** (2026-11-25, the Fable review): with stale files in the
+        // registry `answers.count` was 30 and this never fired — the bind fell
+        // back to the blind paste — and a lone dead file was index 0, `/bind` to a
+        // closed port, reported as *no terminal open*.
+        return live.count == 1 ? live[0] : nil
     }
 
     /// The names a window's title can carry: its folders and its open file.
@@ -208,7 +232,8 @@ enum IDEBridge {
     /// now, from the frontmost app when that is this editor.
     static func bind(bundleID: String, frontTitle: String? = nil) -> BindResult {
         guard let kind = kind(bundleID: bundleID),
-              let endpoint = focusedEndpoint(kind: kind, frontTitle: frontTitle ?? frontWindowTitle(bundleID: bundleID))
+              let endpoint = focusedEndpoint(kind: kind, bundleID: bundleID,
+                                             frontTitle: frontTitle ?? frontWindowTitle(bundleID: bundleID))
         else { return .noExtension }
         guard let obj = request("POST", "/bind", on: endpoint) else { return .noTerminal }
         guard let id = obj["id"] as? Int else { return .noTerminal }
@@ -266,7 +291,7 @@ enum IDEBridge {
     /// focused element, which is every time since VS Code 1.146.
     static func terminalFocused(bundleID: String) -> Bool? {
         guard let kind = kind(bundleID: bundleID) else { return nil }
-        let candidates = endpoints(kind: kind)
+        let candidates = endpoints(kind: kind, bundleID: bundleID)
         let answers = candidates.map { request("GET", "/ping", on: $0) }
         guard let index = pickWindow(answers: answers, frontTitle: frontWindowTitle(bundleID: bundleID))
         else { return nil }

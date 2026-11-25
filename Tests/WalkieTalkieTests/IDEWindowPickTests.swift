@@ -45,4 +45,13 @@ final class IDEWindowPickTests: XCTestCase {
         XCTAssertNil(IDEBridge.pickWindow(answers: [ping("a", focused: false), ping("b", focused: false)],
                                           frontTitle: nil))
     }
+
+    /// Stale registry files are listeners that do not answer (2026-11-25, the Fable
+    /// review: 29 dead IntelliJ files beside one live one). They do not count against
+    /// the lone-window fallback, and a lone dead one is no window at all.
+    func testDeadListenersDoNotCountAgainstTheLoneLiveOne() {
+        XCTAssertEqual(IDEBridge.pickWindow(answers: [nil, ping("a", focused: false), nil], frontTitle: "Welcome"), 1)
+        XCTAssertNil(IDEBridge.pickWindow(answers: [nil], frontTitle: nil))
+        XCTAssertNil(IDEBridge.pickWindow(answers: [nil, nil], frontTitle: "a"))
+    }
 }
