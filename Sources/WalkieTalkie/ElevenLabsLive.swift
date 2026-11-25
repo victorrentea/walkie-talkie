@@ -463,6 +463,9 @@ final class ElevenLabsLive {
                     self.correctionHoldUntil = CACurrentMediaTime() + 5
                     Log.error("💬 live correction failed — \(why); the next commit after 5 s covers the span again")
                 case .success(let r):
+                    // An empty answer (a breath, "hm") paces like a failure: without
+                    // the hold the 0.5 s tick re-uploads the growing span, each billed.
+                    if r.text.isEmpty { self.correctionHoldUntil = CACurrentMediaTime() + 5 }
                     guard !r.text.isEmpty, upTo <= self.segments.count else { return }
                     let before = self.segments[self.correctedSegments..<upTo].joined(separator: " ")
                     self.segments.replaceSubrange(self.correctedSegments..<upTo, with: [r.text])
