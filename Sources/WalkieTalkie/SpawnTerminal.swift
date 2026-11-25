@@ -463,7 +463,7 @@ enum SpawnTerminal {
           echo "$prompt"
           exec /bin/zsh -l
         fi
-        exec claude \(claudeFlags)\(flags.map { " " + $0 } ?? "") "$prompt"
+        exec claude \(claudeFlags)\(flags.map { " " + $0 } ?? "") -- "$prompt"
         """
     }
 
