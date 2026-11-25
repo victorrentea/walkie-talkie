@@ -238,7 +238,7 @@ enum GestureGuide {
              scene: .swipe(.forward, .up),
              lines: ["A new Claude Code session opens with your words.",
                      "Mid-prompt: these words go to a new session instead.",
-                     "While a ⚡ question records: nothing."]),
+                     "While a ⚡ question records: the question becomes a new session's prompt."]),
         Card(section: "forward", title: "Cancel — or ask ⚡", chord: "Hold Forward, swipe left",
              scene: .swipe(.forward, .left),
              lines: ["While dictating: throw the take away.",

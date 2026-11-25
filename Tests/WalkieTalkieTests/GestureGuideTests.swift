@@ -39,6 +39,7 @@ final class GestureGuideTests: XCTestCase {
             XCTAssertFalse(html.contains(gone), "the guide still says “\(gone)”")
         }
         for said in ["While a ⚡ question records: nothing.", "the words, then Return",
+                     "While a ⚡ question records: the question becomes a new session's prompt.",
                      "film that box alone", "At rest: nothing."] {
             XCTAssertTrue(html.contains(said), "the guide no longer says “\(said)”")
         }
