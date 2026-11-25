@@ -152,7 +152,10 @@ final class FilmVideo: NSObject {
         lock.unlock()
         if let done { return done }
         if first && running { stopStream() }
-        guard timeout > 0 else { return false }
+        // A stream not up yet has recorded nothing: no file will come, and the
+        // late start's own stop finishes it off the main thread — waiting here
+        // froze main for the whole timeout (2026-11-25, the Fable review).
+        guard timeout > 0, running else { return false }
         if finished.wait(timeout: .now() + timeout) == .timedOut {
             Log.error(String(format: "🎞️ the video was not finalised within %.1fs", timeout))
             return FileManager.default.fileExists(atPath: url.path)

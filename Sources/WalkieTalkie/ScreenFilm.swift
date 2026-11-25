@@ -260,7 +260,8 @@ final class ScreenFilm {
         // dictation while recording, the rec sign remained on screen"*).
         framesLock.lock(); ended = true; framesLock.unlock()
         FilmBorder.hide()
-        video?.stop()
+        // Nothing waits for the file: the folder is deleted below.
+        video?.stop(timeout: 0)
         slots.wait(); slots.wait()
         slots.signal(); slots.signal()
         try? FileManager.default.removeItem(at: dir)
