@@ -107,7 +107,7 @@ enum SelectionCapture {
         // Each call takes `Clipboard`'s lock on its own — never across the
         // keystroke or the sleeps (`Clipboard`, the 2026-10-09 crash).
         let before = Clipboard.changeCount
-        let saved = Clipboard.with(snapshotClipboard)
+        let saved = snapshotClipboard()
 
         KeySimulator.cmdC()
 
@@ -129,11 +129,13 @@ enum SelectionCapture {
 
     /// Snapshot every representation of the current clipboard item so restoring
     /// doesn't silently downgrade a rich copy (an image, RTF, a file URL) to
-    /// plain text.
-    private static func snapshotClipboard(_ pb: NSPasteboard) -> [NSPasteboard.PasteboardType: Data] {
+    /// plain text. The lock is taken per type, not round the whole loop: a
+    /// lazily provided type is a round trip to its owner, and main's 20 Hz
+    /// `PasteboardTimeline.tick` waits on the same lock.
+    private static func snapshotClipboard() -> [NSPasteboard.PasteboardType: Data] {
         var saved: [NSPasteboard.PasteboardType: Data] = [:]
-        for type in pb.types ?? [] {
-            if let data = pb.data(forType: type) { saved[type] = data }
+        for type in Clipboard.with({ $0.types }) ?? [] {
+            if let data = Clipboard.with({ $0.data(forType: type) }) { saved[type] = data }
         }
         return saved
     }
