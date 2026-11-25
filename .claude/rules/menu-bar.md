@@ -661,7 +661,19 @@ pagină, de ce permisiuni mai ai nevoie de dat și de ce ai nevoie de ele"*.
   the one bend in "no script": a dozen lines, delegated from `document`, and with JS off the page
   still shows every message minus a button.
   → journal: *Prompt Log: the outbox read back as a page*
-- **Copy copies the exact `line` from the outbox — byte for byte what the clipboard got at delivery (Q17).** `commit`
+- **The prompt is read as he made it** (2026-11-25, Victor: *"pune inline în prompturile astea pozele + dacă mut să
+  văd roșu-verde chenar … human-readable view … filmele să apară … cropul să apară selecția și de unde … zi și cărei
+  sesiune trimiteai"*). The card renders `line` (else `text`): each `[📸n]` is its picture **where it was said**, a
+  row of its own (`[📸0 auto]` a 150 px thumbnail); an area `[📸n✂️…]` is its cut-out beside the whole screen greyed
+  outside the box, **red, and green for `moved to` with a white arrow** — `AreaContext`'s colours, drawn as SVG over the
+  800 px copy in the original's pixels (`MessageLog.areaSVG`); `[selected|copied|typed: …]` a quote; the footer rows
+  (`MessageLog.split` / `isMeta`) become `<video>` players for `🎦n` (poster, contact-sheet link) and small chips.
+  **The head names the session**: `→ <tab title>` from `delivery.title`, which `Outbox.stampTitle` writes at the
+  send (one `liveTitles` on the outbox queue, terminal deliveries only, never in tests); an older row shows the tab's
+  title *now*, marked `title now`; a spawn reads `✨ new session in <folder>`. The page is built off main (titles cost
+  ~0.5 s). Tests: `MessageLogRenderTests` (`PROMPT_LOG_HTML=<file>` renders the real outbox to look at).
+- **Copy copies the exact `line` from the outbox, with `$WALKIE_SHOTS` spelled out** (2026-11-25, *"copiezi
+  promptul real … cu căi de fișiere"* — `MessageLog.copyText`); otherwise byte for byte what the clipboard got at delivery (Q17). `commit`
   writes `line` (the `terminalLine` the delivery used) into the JSON; older lines have none and
   `MessageLog.payload` re-assembles them — close, not identical. The payload rides in a **hidden
   `<pre>`**, not a `data-` attribute (a dictation is arbitrary text). `document.execCommand` is the

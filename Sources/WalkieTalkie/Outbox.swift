@@ -389,6 +389,8 @@ enum Outbox {
         if let affect = affect, !affect.isEmpty { obj["affect"] = affect }
 
         queue.async {
+            var obj = obj
+            stampTitle(&obj)
             // JSONSerialization (never string interpolation): dictated text and
             // screen selections are arbitrary and would otherwise forge JSON.
             guard var data = try? JSONSerialization.data(withJSONObject: obj, options: [.withoutEscapingSlashes]) else { return }
@@ -402,6 +404,26 @@ enum Outbox {
             try? handle.write(contentsOf: data)
             Log.info("→ sent \(kind) (\(data.count) bytes)")
         }
+    }
+
+    /// **Which session it went to, by the name he knows it by** (2026-11-25,
+    /// Victor: *"zi și cărei sesiune trimiteai (titlul sesiunii)"*). `to` says
+    /// `terminal:ttys004`, which nobody recognises a day later, and the tty is
+    /// reused by the next tab anyway. The tab's title at the moment of sending
+    /// — `✳ workspace — Taste volum în share Zoom` — is what Prompt Log shows.
+    ///
+    /// Read here, on the outbox's own queue: `liveTitles` is one `osascript`
+    /// (~0.5 s with twenty tabs), and nothing waits on this write. Not in tests:
+    /// a test process has no business asking the real Terminal anything.
+    static func stampTitle(_ obj: inout [String: Any]) {
+        guard Log.testScratch == nil,
+              var delivery = obj["delivery"] as? [String: Any], delivery["title"] == nil,
+              let to = delivery["to"] as? String, to.hasPrefix("terminal:ttys") else { return }
+        let tty = String(to.dropFirst("terminal:".count))
+        let titles = TerminalBinding.liveTitles().merging(OrcaBridge.liveTitles()) { terminal, _ in terminal }
+        guard let title = titles[tty], !title.isEmpty else { return }
+        delivery["title"] = title
+        obj["delivery"] = delivery
     }
 }
 
