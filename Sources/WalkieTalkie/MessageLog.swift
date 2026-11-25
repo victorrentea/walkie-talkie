@@ -84,18 +84,27 @@ enum MessageLog {
     /// live process while this function reads it, it has survived every change
     /// of schema the app has been through, and one truncated tail line is not a
     /// reason to refuse to show the other five hundred.
+    ///
+    /// **Read from the end, and stopped well past the cutoff** (2026-11-25, the
+    /// Fable review): every line since August was JSON-parsed before the 48 h
+    /// filter — 446 ms for 5,681 lines on main, at every open of Prompt History,
+    /// growing for ever. The file is appended in time order; the walk stops at
+    /// the first line older than `cutoff − readSlack`, so a line written a little
+    /// out of order near the edge is still seen.
     static func recent(now: Date = Date()) -> [Entry] {
         guard let data = try? Data(contentsOf: Outbox.outboxURL),
               let body = String(data: data, encoding: .utf8) else { return [] }
         let cutoff = now.addingTimeInterval(-window)
+        let stopAt = cutoff.addingTimeInterval(-readSlack)
 
         var entries: [Entry] = []
-        for line in body.split(separator: "\n", omittingEmptySubsequences: true) {
+        for line in body.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
             guard let obj = (try? JSONSerialization.jsonObject(with: Data(line.utf8)))
                     as? [String: Any],
                   let stamp = obj["ts"] as? String,
-                  let date = parse(stamp),
-                  date >= cutoff else { continue }
+                  let date = parse(stamp) else { continue }
+            if date < stopAt { break }
+            guard date >= cutoff else { continue }
 
             let text = (obj["text"] as? String) ?? ""
             var shots = (obj["paths"] as? [String]) ?? []
@@ -132,12 +141,18 @@ enum MessageLog {
     /// this is the same reader in reverse — with the fractional-seconds variant
     /// tried too, since a line written by an older build may carry them.
     private static func parse(_ stamp: String) -> Date? {
-        let plain = ISO8601DateFormatter()
-        if let d = plain.date(from: stamp) { return d }
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return fractional.date(from: stamp)
+        if let d = plainStamp.date(from: stamp) { return d }
+        return fractionalStamp.date(from: stamp)
     }
+    /// Built once, not twice per line (`ISO8601DateFormatter` is thread-safe).
+    private static let plainStamp = ISO8601DateFormatter()
+    private static let fractionalStamp: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    /// How far past the cutoff `recent` still reads before it trusts the order.
+    static let readSlack: TimeInterval = 3600
 
     // MARK: - Local time
 
