@@ -8,7 +8,7 @@ the same two things instead: a flat audio folder and a JSONL manifest with one
 
     python3 helpers/corpus_export.py --out ~/voice-dataset
     python3 helpers/corpus_export.py --out … --label teacher   # Wispr's reading
-    python3 helpers/corpus_export.py --out … --label edited    # only hand fixes
+    python3 helpers/corpus_export.py --out … --label edited    # Wispr's read-back
 
 ## Which column is the label, and why it is a flag rather than a default
 
@@ -17,8 +17,8 @@ Three columns could be the reference and they are not interchangeable:
 | `--label` | column | what a model trained on it learns |
 |---|---|---|
 | `teacher` | `teacher_text` | to **imitate Wispr Flow** on this voice — Wispr's raw `asrText`, no formatting |
-| `final` (default) | `final_text` | the best reference on hand: a hand correction where one exists, else the recogniser that produced the row |
-| `edited` | `edited_text` | only what Victor corrected **by hand** — the one supervision that could beat the teacher, and the smallest |
+| `final` (default) | `final_text` | the recogniser that produced the row (for a Wispr row, `editedText` before `formattedText` — Wispr's read-back, not a hand correction) |
+| `edited` | `edited_text` | Wispr's `editedText`: **not a hand correction** (2026-09-15) — Wispr reading back the box it pasted into, mostly its own `formattedText` |
 
 Mixing them silently would produce a set whose labels come from three different
 processes with no column saying which, and every evaluation after that is

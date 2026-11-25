@@ -24,9 +24,10 @@ corpus is *Wispr's own transcript*. Training on it is distillation: it can teach
 a smaller local model to imitate Wispr on Victor's voice — genuinely useful, that
 is the offline, free, private recogniser — but it cannot beat Wispr, because a
 student never outgrows a teacher it is only ever shown agreeing with. Going past
-Wispr needs labels Wispr did not write: the `editedText` column, where he fixed
-the transcript by hand, or a deliberate pass of reading and correcting. So the
-report counts those separately and always has.
+Wispr needs labels Wispr did not write: a deliberate pass of reading and
+correcting. The `editedText` column is not that — it is Wispr reading back the
+text box it pasted into (`corpus_harvest.py`, corrected 2026-09-15) — so the
+report counts it separately and says what it is.
 """
 
 import json
@@ -45,8 +46,10 @@ BASELINE = os.path.join(CORPUS, "baseline.json")
 ENV_FILE = os.path.join(HOME, ".claude/agentmail.env")
 
 REPORT_EVERY_DAYS = 14
-TO = "victorrentea@gmail.com"
-INBOX = "victor.flux@agentmail.to"
+#: Who gets the report and which AgentMail inbox sends it: `CORPUS_REPORT_TO` /
+#: `CORPUS_REPORT_INBOX`, from the environment or from this file (`KEY=value` lines).
+#: Not in the repo — it is public (2026-11-25, found by the Fable review).
+REPORT_ENV = os.path.join(HOME, ".walkie-talkie/corpus-report.env")
 
 # Hours of (audio, transcript) pairs, and what each buys for a single-speaker
 # fine-tune. `target` marks the one the progress bar is drawn against.
@@ -60,9 +63,9 @@ TIERS = [
 TARGET_HOURS = 10.0
 
 
-def env(key):
+def env(key, path=ENV_FILE):
     try:
-        with open(ENV_FILE) as fh:
+        with open(path) as fh:
             for line in fh:
                 if line.startswith(key + "="):
                     return line.split("=", 1)[1].strip()
@@ -225,26 +228,35 @@ def build(db):
         L.append("")
     L.append("The label problem")
     L.append("-" * 60)
-    L.append("  Human-corrected labels: %d of %d samples (%s)."
-             % (lq["n"], total["n"], fmt_hm(lq["seconds"])))
-    L.append("  Everything else is labelled with Wispr's own transcript, which")
+    L.append("  Hand-corrected labels: none. (%d of %d samples carry Wispr's editedText"
+             % (lq["n"], total["n"]))
+    L.append("  read-back, %s — not a correction of yours.)" % fmt_hm(lq["seconds"]))
+    L.append("  Everything is labelled with Wispr's own transcript, which")
     L.append("  makes this a distillation set: it can teach a local model to")
     L.append("  match Wispr on your voice — offline, free, private — but it")
     L.append("  cannot teach it to beat Wispr. For that the labels have to come")
-    L.append("  from somewhere Wispr isn't: the text you fixed by hand, or a")
-    L.append("  deliberate correction pass over a held-out hour.")
+    L.append("  from somewhere Wispr isn't: a deliberate correction pass over a")
+    L.append("  held-out hour.")
     L.append("")
     L.append("  Corpus: %s" % CORPUS)
     L.append("  Query it:  sqlite3 %s" % CORPUS_DB)
     return subject, "\n".join(L)
 
 
+def setting(key):
+    return os.environ.get(key) or env(key, REPORT_ENV)
+
+
 def send(subject, body):
     key = env("AGENTMAIL_API_KEY")
     if not key:
         raise RuntimeError("AGENTMAIL_API_KEY not found in %s" % ENV_FILE)
+    to, inbox = setting("CORPUS_REPORT_TO"), setting("CORPUS_REPORT_INBOX")
+    if not to or not inbox:
+        raise RuntimeError("CORPUS_REPORT_TO / CORPUS_REPORT_INBOX not set (env or %s)"
+                           % REPORT_ENV)
     payload = json.dumps({
-        "to": [TO],
+        "to": [to],
         "subject": subject,
         "text": body,
         "html": "<pre style=\"font:13px ui-monospace,SFMono-Regular,Menlo,monospace;"
@@ -252,7 +264,7 @@ def send(subject, body):
                 % body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"),
     }).encode("utf-8")
     req = urllib.request.Request(
-        "https://api.agentmail.to/v0/inboxes/%s/messages/send" % INBOX,
+        "https://api.agentmail.to/v0/inboxes/%s/messages/send" % inbox,
         data=payload, method="POST",
         headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=45, context=ssl.create_default_context()) as r:
@@ -297,7 +309,7 @@ def main():
     db.execute("INSERT OR REPLACE INTO state (key, value) VALUES ('last_report_at', ?)",
                (now.isoformat(),))
     db.commit()
-    print("report sent to %s" % TO)
+    print("report sent to %s" % setting("CORPUS_REPORT_TO"))
     return 0
 
 
