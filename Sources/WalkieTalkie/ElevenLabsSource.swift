@@ -374,7 +374,12 @@ final class ElevenLabsSource: DictationSource {
             // left to the settle's timeout.
             Log.error("🎙️ ElevenLabs: the microphone would not open — \(why)")
             stream?.stop()
-            guard self.isRecording, self.take == t else { return }
+            guard self.isRecording, self.take == t else {
+                // Stopped while the open was still out: its queued close will
+                // find no recording — let it say why.
+                if self.unanswered.contains(t) { self.openFailed[t] = why }
+                return
+            }
             self.isRecording = false
             self.settlePhase(.done("error"))
             self.answer(t) { self.didEnd?(.failed(why: why, audio: nil, duration: 0)) }
@@ -409,6 +414,7 @@ final class ElevenLabsSource: DictationSource {
     /// A take whose close will not answer — its lane was abandoned. Answered
     /// once: cancelled if he had cancelled it, failed otherwise. Main queue.
     private func failUnclosed(take t: Int, why: String) {
+        openFailed[t] = nil
         guard unanswered.contains(t), uploads[t] == nil else { return }
         forcedTakes.remove(t)
         let wasCancelled = closingCancelled.remove(t) != nil
@@ -466,6 +472,10 @@ final class ElevenLabsSource: DictationSource {
     private var forcedTakes: Set<Int> = []
     /// Takes cancelled between the stop and the close (wave 2).
     private var closingCancelled: Set<Int> = []
+    /// Takes whose microphone open failed after he had already stopped them
+    /// (2026-11-25, the Fable review): their close finds nothing recorded, and
+    /// must end as that failure, not as a silent take.
+    private var openFailed: [Int: String] = [:]
 
     // MARK: - Takes (Q12)
 
@@ -553,6 +563,7 @@ final class ElevenLabsSource: DictationSource {
     /// The tail of `stop()`, on the main queue, exactly as it always ran.
     private func finishRecording(_ closed: (url: URL, duration: TimeInterval)?, voiced: TimeInterval,
                                  hops: [MeterHop] = [], take t: Int, stoppedAt: Date?, markers: Bool) {
+        let openFailure = openFailed.removeValue(forKey: t)
         if closingCancelled.remove(t) != nil {
             forcedTakes.remove(t)
             Log.info("🗑️ take \(t) was cancelled while it closed — not uploaded")
@@ -564,6 +575,11 @@ final class ElevenLabsSource: DictationSource {
         }
         let forced = forcedTakes.remove(t) != nil
         guard let (wav, duration) = closed else {
+            if let why = openFailure {
+                Log.error("🎙️ ElevenLabs: take \(t) stopped before its failed open — \(why)")
+                answer(t) { settlePhase(.done("error")); didEnd?(.failed(why: why, audio: nil, duration: 0)) }
+                return
+            }
             Log.info("recording discarded — under \(MicRecorder.minimumDuration)s")
             answer(t) { settlePhase(.done("empty")); didEnd?(.silent("")) }
             return
