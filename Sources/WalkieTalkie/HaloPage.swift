@@ -111,10 +111,10 @@ final class HaloPage: NSView, HaloWebHost {
 
     /// The deepest folder holding both `a` and `b`: what the web view is
     /// allowed to read, so the page can load the engine from beside it.
-    private static func commonAncestor(_ a: URL, _ b: URL) -> URL {
+    static func commonAncestor(_ a: URL, _ b: URL) -> URL {
         let pa = a.standardizedFileURL.pathComponents, pb = b.standardizedFileURL.pathComponents
         var common: [String] = []
-        for (x, y) in zip(pa, pb) where x == y { common.append(x) }
+        for (x, y) in zip(pa, pb) { guard x == y else { break }; common.append(x) }
         return URL(fileURLWithPath: NSString.path(withComponents: common))
     }
 
