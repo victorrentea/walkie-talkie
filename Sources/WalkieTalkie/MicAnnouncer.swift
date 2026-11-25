@@ -102,17 +102,27 @@ final class MicAnnouncer {
     /// înaintea motorului folosit și device-ul de microfon, simbolul pentru
     /// microfonul în folosire la pornire"*) — the resolved device's glyph, the
     /// green tab's own, or `🎙️ <name>` for one `known` does not name.
+    ///
+    /// **The inputs are listed on `queue`, the tab shown on main** (2026-11-25, the
+    /// Fable review): `InputDevice.resolve()` is a `coreaudiod` round trip — *never
+    /// list the inputs on the main thread* (2026-10-09: 30 s unanswered froze the
+    /// app) — and this ran inside `applicationDidFinishLaunching`.
     func announceStartup(engine: String) {
         guard !RelayWindow.shooting else { return }
-        let r = InputDevice.resolve()
-        let mic = r.known?.glyph ?? r.device.map { "🎙️ \($0.name)" }
-        // **A slash between the microphone and the engine** (2026-10-08, Victor:
-        // *"put a slash between the emoji meaning the input source and … the
-        // transcription engine"*) — `🎤 / ☁️ ElevenLabs + Live` (the ☁️ first since 2026-10-09).
-        let text = [mic, engine].compactMap { $0 }.joined(separator: " \(Self.wave) ")
-        startupText = Self.readable(text)
-        Log.info("🚀 up on \(Self.readable(text)) — the launch tab")
-        tab.show(text, tint: Self.startupTint, hold: Self.startupHold)
+        queue.async { [weak self] in
+            let r = InputDevice.resolve()
+            let mic = r.known?.glyph ?? r.device.map { "🎙️ \($0.name)" }
+            // **A slash between the microphone and the engine** (2026-10-08, Victor:
+            // *"put a slash between the emoji meaning the input source and … the
+            // transcription engine"*) — `🎤 / ☁️ ElevenLabs + Live` (the ☁️ first since 2026-10-09).
+            let text = [mic, engine].compactMap { $0 }.joined(separator: " \(Self.wave) ")
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.startupText = Self.readable(text)
+                Log.info("🚀 up on \(Self.readable(text)) — the launch tab")
+                self.tab.show(text, tint: Self.startupTint, hold: Self.startupHold)
+            }
+        }
     }
 
     /// Restart the settle. Runs on `queue`.
