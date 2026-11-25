@@ -85,6 +85,9 @@ CONFIRM = {
 # "the peto", "Chipotle" (7 of 60 `say` takes heard; 60 of 60 with it).
 HINT = "Hey Santa. Hey Gepetto. Hey Claude."
 
+#: `InputDevice.neverRecord`, the same needle: never a microphone this helper opens.
+NEVER_RECORD = ("wh-1000",)
+
 
 def say(**event):
     sys.stdout.write(json.dumps(event) + "\n")
@@ -254,6 +257,17 @@ def main():
             except queue.Full:
                 pass
 
+        # **Never the WH-1000XM3's microphone** (`InputDevice.neverRecord`): with no
+        # device of the app's, the system default may be the headset's HFP mic, and
+        # holding it open drags its playback to 16 kHz mono for as long as the wake
+        # word listens (2026-11-25, found by the Fable review).
+        try:
+            chosen = sd.query_devices(device if device is not None else sd.default.device[0])["name"]
+        except Exception:
+            chosen = ""
+        if any(n in chosen.lower() for n in NEVER_RECORD):
+            say(event="error", error=f"microphone: {chosen} is never recorded through")
+            return 3
         try:
             stream = sd.InputStream(samplerate=16000, channels=1, dtype="int16", blocksize=1280,
                                     device=device, callback=on_audio)
@@ -380,7 +394,10 @@ def main():
         rms = math.sqrt(float(np.mean(chunk.astype(np.float32) ** 2))) if len(chunk) else 0.0
         if floor is None:
             floor = max(rms, 1.0)
-        floor = rms if rms < floor else floor * 1.02
+        # Never below 1: one chunk of exact zeros (a hardware mute, a device
+        # hand-over) left it at 0 for good, since 0 × 1.02 is 0 (Fable review,
+        # 2026-11-25) — and *voiced* became `rms > 180` alone.
+        floor = max(rms, 1.0) if rms < floor else floor * 1.02
         voiced = rms > max(180.0, floor * 10 ** (9 / 20))
         ring.append(chunk)
         spoken.append(voiced)
