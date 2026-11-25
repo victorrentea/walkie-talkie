@@ -171,7 +171,17 @@ final class ElevenLabsSource: DictationSource {
     /// Parsed on every `reloadKey()` — the file is three lines and neither the
     /// menu opening nor an engine pick is a hot path, and re-reading is what
     /// lets him paste the key in without restarting the app.
-    static var config: [String: String] = [:]
+    ///
+    /// **Read from three threads, written on main** (2026-11-25, the Fable
+    /// review: the URLSession queue, the retry's global queue, the live queue):
+    /// the table is parsed aside and published whole under a lock, so a reader
+    /// gets the old table or the new one — never a half-built one or none.
+    static var config: [String: String] {
+        configLock.lock(); defer { configLock.unlock() }
+        return configStore
+    }
+    private static var configStore: [String: String] = [:]
+    private static let configLock = NSLock()
 
     /// One value of `elevenlabs.env`, read straight from the file — for a
     /// switch read once at launch, before any `reloadKey()` has filled `config`.
@@ -189,7 +199,8 @@ final class ElevenLabsSource: DictationSource {
     }
 
     private static func loadConfig() {
-        config = [:]
+        var config: [String: String] = [:]
+        defer { configLock.lock(); configStore = config; configLock.unlock() }
         guard let text = try? String(contentsOf: configURL, encoding: .utf8) else { return }
         for line in text.split(separator: "\n") {
             let row = line.trimmingCharacters(in: .whitespaces)
