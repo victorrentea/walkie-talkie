@@ -51,7 +51,22 @@ final class WakeWordTests: XCTestCase {
         XCTAssertFalse(WakeWord.gepettoEnabled)
         XCTAssertFalse(WakeWord.menuTitle.contains("Gepetto"))
         XCTAssertTrue(WakeWord.gepettoMenuTitle.contains("Hey Gepetto"))
-        XCTAssertTrue(WakeWord.listens(enabled: false || true, onBattery: false))
+    }
+
+    /// The OR lives in `WakeWord.listens`, so the test reads that property: only
+    /// Gepetto ticked still keeps the helper up (Fable review, 2026-11-25 — the
+    /// old assertion wrote its own `false || true`).
+    func testGepettoAloneKeepsTheHelperListening() throws {
+        try XCTSkipIf(BatteryFx.onBattery, "on battery the helper never listens")
+        let d = UserDefaults.standard
+        let wasWake = d.object(forKey: "wakeWord"), wasGepetto = d.object(forKey: "wakeGepetto")
+        defer { d.set(wasWake, forKey: "wakeWord"); d.set(wasGepetto, forKey: "wakeGepetto") }
+        WakeWord.enabled = false
+        try XCTSkipIf(WakeWord.enabled, "WT_WAKE_WORD overrides the tick here")
+        WakeWord.gepettoEnabled = true
+        XCTAssertTrue(WakeWord.listens)
+        WakeWord.gepettoEnabled = false
+        XCTAssertFalse(WakeWord.listens)
     }
 
     func testAQuestionOpeningIsTakenOff() {
