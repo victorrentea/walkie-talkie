@@ -9995,6 +9995,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory, near: near,
                                                      flags: m.modelPick?.cliFlags)
+            // 🧠 The session the pick went to, off the main thread (`ps`); nil while its `claude`
+            // is not up yet — then nothing is remembered, and its ring starts as an unknown one's.
+            let picked: TerminalBinding.TTYOwner? = {
+                guard m.modelPick != nil, case .opened(let tty) = outcome else { return nil }
+                return TerminalBinding.agentProcess(onTTY: tty)
+            }()
             DispatchQueue.main.async {
                 // Not `clearSpawn()`: `send` already cleared this sentence's
                 // flags, and seconds later they may be the *next* sentence's
@@ -10006,7 +10012,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // screen of evidence, and a flash would be a panel thrown over
                 // his work to repeat what it already shows.
                 case .opened(let tty):
-                    if let pick = m.modelPick { ModelSwitch.remember(pick, tty: tty) }
+                    if let pick = m.modelPick { ModelSwitch.remember(pick, tty: tty, session: picked) }
                     self.adoptSpawnedWindow(tty: tty, session: (m.directory, launched)) { [weak self] bound in
                         guard let self = self else { return }
                         if let serial, let bound {
@@ -10566,15 +10572,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         deliveryQueue.async { [weak self] in
             guard let self = self else { return }
             // 🧠 **The model first, then the words** (2026-11-21, `ModelSwitch`): Claude Code's
-            // own `/model` and `/effort`, each a line of its own, by the same route.
+            // own `/model` and `/effort`, each a line of its own, by the same route — only when the
+            // ring was moved for this sentence (2026-11-25: nothing remembered is ever re-sent).
             if let pick = m.modelPick {
                 var switched = true
-                for command in pick.commands {
+                for command in ModelSwitch.commands(for: pick) {
                     guard case .delivered = self.terminal.deliver(command, to: target) else { switched = false; break }
                 }
                 Log.info("🧠 \(switched ? "switched" : "could not switch") \(target.handle.tty ?? target.address) to \(pick.label) before the prompt")
-                if switched, let tty = target.handle.tty {
-                    DispatchQueue.main.async { ModelSwitch.remember(pick, tty: tty) }
+                if let tty = target.handle.tty {
+                    // Kept only for this very session (its `claude`), so a restart or a reused tty
+                    // knows nothing; a switch that did not land forgets the tty.
+                    let session = switched ? TerminalBinding.agentProcess(onTTY: tty) : nil
+                    DispatchQueue.main.async { ModelSwitch.remember(pick, tty: tty, session: session) }
                 }
             }
             // 🛑 **An interrupt does not wait in the queue** (2026-11-22): ⌃X ⌃S once the
@@ -11340,6 +11350,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// **🔽 → while a prompt records** (2026-11-21, `ModelSwitch`): the next model round the
     /// ring from the one the session has now — Opus / high → Fable / medium → Sonnet / high
     /// (2026-11-22) — and the flick that comes back to the session's own takes the mark off.
+    /// The session's own is known only when Walkie switched that very session in this run
+    /// (2026-11-25); otherwise the ring starts at Opus / high and only a moved ring sends anything.
     /// A bound or a new session only — a caret prompt has none to switch.
     private func toggleModelPick() {
         let wordsComing = listening || settling || fallingBack || source.phase.isWaitingForWords
@@ -11352,7 +11364,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         let tty = spawnPending ? nil : (latch?.target ?? terminal.target)?.handle.tty
-        guard let pick = ModelSwitch.flick(marked: modelPick, session: ModelSwitch.current(tty: tty)) else {
+        // 🧠 Known only if Walkie switched this very session in this run (2026-11-25); `ps` only then.
+        let session = ModelSwitch.knows(tty: tty) ? tty.flatMap(TerminalBinding.agentProcess(onTTY:)) : nil
+        guard let pick = ModelSwitch.flick(marked: modelPick, session: ModelSwitch.current(tty: tty, session: session)) else {
             modelPick = nil
             Log.info("🧠 model switch taken back")
             return

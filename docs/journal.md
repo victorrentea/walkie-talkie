@@ -17218,3 +17218,13 @@ color:var(--color-gray-000)}`, `--color-clay:#d97757`, `--color-gray-000:#fff` (
 off screen (`RoomPickTests.testTheSelectionIsClayInAWindowThatIsNotKey`, a non-key window rendered
 with `cacheDisplay`); not yet watched on the real pop-up.
 
+## 2026-11-25 — 🧠 The model ring sends only what he picks, and knows only the session it switched
+
+The Fable review: `ModelSwitch` kept what each tty was last switched to in memory, never cleared, so
+after a restart every session counted as Opus / high and a reused tty inherited the last tab's pick —
+the ring offered the wrong next model and could skip the one he wanted. Victor: *"dacă îl modific
+explicit, injectezi model effort; dacă nu ating, nu reinjectezi"*. Delivery already typed `/model` +
+`/effort` only for a sentence marked with 🔽 →; now the memory is tied to the session's own `claude`
+process (pid + start time), and a session this run did not switch is unknown: its ring offers all three,
+starting at Opus / high. `ModelSwitchTests`; not yet watched on a live session.
+

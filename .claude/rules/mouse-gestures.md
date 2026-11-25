@@ -332,6 +332,17 @@ Victor: *"la gestul de back cu swipe stânga în timpul dictării, dacă e dicta
   marked (after the session's own at first); back at the session's own = the mark off. A session on
   Opus: Fable → Sonnet → none; one Walkie switched to Fable: Sonnet → Opus → none. Supersedes *the
   other of the two* below. Tests `ModelSwitchTests`.
+- **Only a moved ring sends, and nothing is assumed** (2026-11-25, after the Fable review: the per-tty
+  memory outlived its session — a restart forgot it, a reused tty inherited it). Victor: *"dacă îl
+  modific explicit, injectezi model effort; dacă nu ating, nu reinjectezi"*. A sentence whose ring was
+  not moved types no `/model` / `/effort`. `ModelSwitch` keeps a pick per tty **and** that session's
+  `claude` process (`TerminalBinding.agentProcess(onTTY:)`: the oldest `claude` on the tty, pid + start
+  time; `ps` only when the tty has an entry), in memory only. A session not switched by this run of
+  Walkie — after a restart, on a reused tty, a `claude` restarted in the tab, a spawn — is **unknown**:
+  its ring is its own → Opus / high → Fable / medium → Sonnet / high → its own (`flick(marked:session: nil)`),
+  so Opus / high is a real pick there. A known one keeps the ring above (starts after it, skips it).
+  A switch that did not land, or whose `claude` `ps` cannot find, forgets the tty. Same order, glyphs
+  and chip labels; nothing new on screen.
 
 
 Victor: *"în timpul dictării să dau cu butonul de back și să-mi facă swipe dreapta … să se schimbe
@@ -342,8 +353,8 @@ creier în față și apoi fable/med. Dacă repet gestul, să bucleze … înapo
   `plainToggle`, which refused it there), its own re-fire guard on `lastF5At`. A ⚡ question keeps
   its Google.
 - **`AppDelegate.toggleModelPick`**: the other of `ModelPick.opusHigh` / `.fableMedium` than the
-  session has now (`ModelSwitch.current(tty:)` — what Walkie last switched that tty to, else Opus /
-  high; a spawn counts as Opus / high); again = taken back. `modelPick` is an `Envelope` field, cleared
+  session has now (`ModelSwitch.current(tty:session:)` — what Walkie switched that very session to in
+  this run, else unknown since 2026-11-25, above; until then *else Opus / high*); again = taken back. `modelPick` is an `Envelope` field, cleared
   with `kamikaze` at a new sentence and a cancel; the chip shows `🧠 Fable/med` / `🧠 Opus/high` (`RelayWindow.modelRow`,
   shot `listening-model-switch`); the hint bar's 🔽 → reads `🧠 model`. A caret prompt has no session
   to switch: flash `🧠 Only for a bound or a new session`.

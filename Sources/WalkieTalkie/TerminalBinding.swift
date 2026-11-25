@@ -723,6 +723,28 @@ final class TerminalBinding {
         return pick.map { TTYOwner(pid: $0.pid, started: $0.started) }
     }
 
+    /// **The Claude session on a tty, as a `TTYOwner`** (2026-11-25, `ModelSwitch`) — the oldest
+    /// `claude` process on it (a `claude -p` the session starts is newer), by pid and start time.
+    /// Neither a tab closed and its tty reused nor a `claude` restarted in the same tab is the
+    /// session Walkie switched: both have another process here. nil when no `claude` runs on the tty or `ps` cannot say. Runs `ps`.
+    static func agentProcess(onTTY tty: String) -> TTYOwner? {
+        let device = (tty as NSString).lastPathComponent
+        guard let out = run("/bin/ps", ["-t", device, "-o", "pid=,lstart=,comm="],
+                            environment: ["LC_ALL": "C", "PATH": "/usr/bin:/bin"]) else { return nil }
+        var oldest: TTYOwner?
+        for line in out.components(separatedBy: "\n") {
+            let f = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
+            // pid Dow Mon DD HH:MM:SS YYYY comm…
+            guard f.count >= 7, let pid = Int32(f[0]),
+                  let started = lstartFormatter.date(from: f[2...5].joined(separator: " ")),
+                  (f[6...].joined(separator: " ") as NSString).lastPathComponent == "claude"
+            else { continue }
+            let owner = TTYOwner(pid: pid, started: Int(started.timeIntervalSince1970))
+            if oldest.map({ (owner.started, owner.pid) < ($0.started, $0.pid) }) ?? true { oldest = owner }
+        }
+        return oldest
+    }
+
     /// `ps -o lstart`'s `Sep 26 01:26:23 2026` (the weekday dropped by the caller),
     /// in the Mac's own zone — the only thing that matters is that bind and poll
     /// parse it the same way.
