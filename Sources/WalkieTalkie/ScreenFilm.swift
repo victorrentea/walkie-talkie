@@ -218,7 +218,8 @@ final class ScreenFilm {
         timer = nil
         framesLock.lock(); ended = true; framesLock.unlock()
         FilmBorder.hide()
-        let duration = CACurrentMediaTime() - startedAt
+        // Never past the ceiling: the frames and the video end there.
+        let duration = min(CACurrentMediaTime() - startedAt, Self.maxSeconds)
         let videoOK = video?.stop() ?? false
         // Drain: two permits means at most two encodes in flight, so taking both
         // is *the encoder is finished*.
@@ -275,9 +276,11 @@ final class ScreenFilm {
     private func tick() {
         autoreleasepool {
             guard CACurrentMediaTime() - startedAt < Self.maxSeconds else {
+                // `timer` is main's (`stop` / `discard`): the ticks past the
+                // ceiling only return, once `ended` is set, until `stop` cancels it.
+                framesLock.lock(); let first = !ended; ended = true; framesLock.unlock()
+                guard first else { return }
                 Log.info("🎬 \(Int(Self.maxSeconds))s ceiling reached — stopping the recording")
-                timer?.cancel()
-                timer = nil
                 FilmBorder.hide()
                 video?.stop(timeout: 0)
                 return
