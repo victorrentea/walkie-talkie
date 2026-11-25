@@ -344,12 +344,16 @@ me to dismiss it explicitly"*.
 - **🎙️ The room's last 30/60 s, offered as a ⚡ question opens** (2026-11-25, `RoomPick.swift`):
   🔼 ← at rest (and 🔼 → over an answer, a follow-up) asks Victor Mac
   `GET 127.0.0.1:55123/transcript/tail?seconds=30|60` (its `RecentSpeech`, loopback only) and, if a
-  window has ≥ 5 words, shows a modal ~70 pt over the pointer: *Last 30 s* / *Last 60 s* with their
-  word counts. Static, never key, clay (#D97757) on hover, gone with the question. **A click ends the
+  window has ≥ 5 words, shows a modal: *🎙️ Last 30 s* / *🎙️ Last 60 s* with their word counts.
+  **It is the spawn menu's twin** (2026-11-25, Victor: *"should look just like the one to open a new
+  session. and should fade out at the same delay"*): built from `SpawnFolderMenu`'s own parts — HUD
+  blur, 12 pt secondary header, 17 pt rows lit in the selection colour, hand cursor, down-right of
+  the pointer — and its clock: `solidSeconds` (3.5 s) solid, `fadeSeconds` (1 s) linear fade, held
+  while the pointer is on it. Never key; gone with the question if that ends first. **A click ends the
   question as 🔼 would** (`quickRoom` + `endDictation`): his words are the question, the window its
   topic (`RoomTranscript.prompt(question:)`, header `<words> · 🎙️ 30 s`); **said nothing** →
   `dictationEndedForGood` asks the window alone (header `🎙️ 30 s «…quote»`, find the question or the
-  claims, ✅/❌/❓ a line). No click: nothing changes. Windows are fetched at the open, so they hold
+  claims, ✅/❌/❓ a line). No click (faded out): nothing changes. Windows are fetched at the open, so they hold
   what was said *before* he spoke. `WT_ROOM_PICK=0` turns the offer off. Desk: `POST /test/quick
   {"room": 30}` clicks it; `{"roomShot": {"path": …}}` draws it into a PNG, never on a screen.
 - **The panel**: **zooms in out of the pointer** (2026-10-08 afternoon, Victor: *"should not swipe in from the bottom, but zoom in … from small to its final size, by also increasing in opacity"* — the toast rising from the screen's bottom lived one build): scale 0.3 → 1 and alpha 0 → 1 over 0.3 s, ease-out cubic, no overshoot, around the edge's centre nearest the pointer; sitting **centred on the pointer's x, its top edge 14 pt under the pointer** (above it when there is no room) — below-right until that day; does not follow,

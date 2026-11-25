@@ -17,7 +17,8 @@ import AppKit
 /// it; said nothing, the window alone is checked. It replaced Victor Mac' 🔬
 /// Fact-check menu rows, which pushed the same window to `POST /ask`.
 ///
-/// No click: the modal goes with the question, and nothing changes.
+/// No click: the modal fades out as the spawn menu does (3.5 s solid, 1 s fade,
+/// held while the pointer is on it) or goes with the question, and nothing changes.
 /// `WT_ROOM_PICK=0` turns the offer off.
 struct RoomTranscript: Equatable {
     let seconds: Int
@@ -108,23 +109,39 @@ struct RoomTranscript: Equatable {
     }
 }
 
-/// **The modal**: two buttons by the pointer, *Last 30 s* / *Last 60 s*, each
-/// with its word count; a window with too few words is greyed and does not click.
-/// It sits where the pointer was when the question opened and does not follow
-/// (nothing rides the pointer but the chip). Never key, never activating —
-/// the dictation keeps the keyboard and the front app keeps its focus.
+/// **The modal — the spawn menu's twin** (2026-11-25, Victor: *"the modal showing
+/// on question mode should look just like the one to open a new session. and
+/// should fade out at the same delay"*). So it is built from `SpawnFolderMenu`'s
+/// own parts rather than copies of them: the HUD-blur surface (`addSurface`), the
+/// secondary 12 pt header, 17 pt rows `rowHeight` tall lit in the selection
+/// colour under the hand, the hand cursor over the whole panel, and the same
+/// place — down and to the right of the pointer (`SpawnFolderMenu.origin`).
+/// The rows: *🎙️ Last 30 s* / *🎙️ Last 60 s*, each with its word count; a window
+/// with too few words is dimmed and does not click. Under them, the quote of the
+/// longer window, in the header's ink.
+///
+/// **The same clock**: `SpawnFolderMenu.solidSeconds` solid, then a linear fade
+/// over `fadeSeconds`; the pointer on it holds it (mid-fade included — a click
+/// still lands while it fades) and leaving lets the fade run. Faded out, the
+/// question goes on without a topic, as if never offered. Never key, never
+/// activating — the dictation keeps the keyboard and the front app its focus.
 enum RoomPick {
     private static var panel: NSPanel?
     private static var rooms: [Int: RoomTranscript] = [:]
     private static var onPick: ((RoomTranscript) -> Void)?
     private static var token = 0
+    /// The solid period; then `watch` follows the pointer every 0.1 s.
+    private static var timer: Timer?
+    private static var watch: Timer?
+    private static var solidOver = false
+    private static var fading = false
+    /// Bumped by every fade and un-fade, so a stale fade's completion cannot
+    /// hide a panel the hand has made solid again.
+    private static var generation = 0
 
     static var isOpen: Bool { panel != nil }
     static var frame: NSRect? { panel?.frame }
     static var offered: [Int: RoomTranscript] { rooms }
-
-    /// Clay, the Claude blog's selection colour (`--color-clay`, claude.com).
-    static let clay = NSColor(srgbRed: 0xD9 / 255.0, green: 0x77 / 255.0, blue: 0x57 / 255.0, alpha: 1)
 
     static var enabled: Bool { ProcessInfo.processInfo.environment["WT_ROOM_PICK"] != "0" }
 
@@ -160,6 +177,14 @@ enum RoomPick {
 
     static func close() {
         token += 1
+        generation += 1
+        timer?.invalidate()
+        timer = nil
+        watch?.invalidate()
+        watch = nil
+        solidOver = false
+        fading = false
+        if panel != nil { NSCursor.arrow.set() }
         panel?.orderOut(nil)
         panel = nil
         rooms = [:]
@@ -167,9 +192,13 @@ enum RoomPick {
     }
 
     /// Desk route: the modal for these windows, drawn into a PNG, never on a screen.
+    /// The blur has nothing behind it off screen, so a dark HUD-like ground
+    /// stands in for it.
     static func snapshot(_ got: [Int: RoomTranscript], to url: URL) -> Bool {
         let view = RoomPickView(rooms: got)
+        view.appearance = NSAppearance(named: .darkAqua)
         let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.backgroundColor = NSColor(white: 0.16, alpha: 1)
         window.contentView = view
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
         view.cacheDisplay(in: view.bounds, to: rep)
@@ -188,135 +217,205 @@ enum RoomPick {
         p.hasShadow = true
         p.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)) + 1)
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        // In the room's share like the reply pop-up; out of the shutter's frames.
+        // In the room's share like the spawn menu; out of the shutter's frames.
         p.sharingType = ReplyPanel.capturable ? .readOnly : .none
         p.hidesOnDeactivate = false
         p.acceptsMouseMovedEvents = true
         p.contentView = view
-        p.setFrameOrigin(origin(for: view.frame.size, at: point))
+        p.setFrameOrigin(SpawnFolderMenu.origin(for: view.frame.size, at: point))
+        p.alphaValue = 1
         p.orderFrontRegardless()
         panel = p
+        startClock()
     }
 
-    /// Centred on the pointer's x, its bottom edge `above` over the pointer —
-    /// clear of the chip and the halo — and inside the pointer's screen.
-    static let above: CGFloat = 70
-    private static func origin(for size: NSSize, at point: NSPoint) -> NSPoint {
-        let screen = NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) } ?? NSScreen.main
-        let v = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
-        var o = NSPoint(x: point.x - size.width / 2, y: point.y + above)
-        // No room above: under the pointer instead.
-        if o.y + size.height > v.maxY { o.y = point.y - above - size.height }
-        o.x = min(max(o.x, v.minX + 8), v.maxX - size.width - 8)
-        o.y = min(max(o.y, v.minY + 8), v.maxY - size.height - 8)
-        return o
+    // MARK: - The clock, as the spawn menu's
+
+    private static func startClock() {
+        timer?.invalidate()
+        watch?.invalidate()
+        watch = nil
+        solidOver = false
+        fading = false
+        let t = Timer.scheduledTimer(withTimeInterval: SpawnFolderMenu.solidSeconds, repeats: false) { _ in
+            solidOver = true
+            let w = Timer(timeInterval: 0.1, repeats: true) { _ in followPointer() }
+            RunLoop.main.add(w, forMode: .common)
+            watch = w
+            followPointer()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    private static func pointerOnPanel() -> Bool {
+        guard let p = panel else { return false }
+        return NSMouseInRect(NSEvent.mouseLocation, p.frame, false)
+    }
+
+    /// The hand arriving or leaving (the view's tracking area), and every 0.1 s
+    /// past the solid period: on it → solid, off it → fading.
+    static func followPointer() {
+        guard panel != nil else { return }
+        let on = pointerOnPanel()
+        if on && fading { unfade() } else if !on && !fading && solidOver { fade() }
+    }
+
+    private static func unfade() {
+        guard let p = panel else { return }
+        generation += 1
+        fading = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            p.animator().alphaValue = 1
+        }
+    }
+
+    private static func fade() {
+        guard let p = panel else { return }
+        generation += 1
+        let gen = generation
+        fading = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = SpawnFolderMenu.fadeSeconds
+            ctx.timingFunction = CAMediaTimingFunction(name: .linear)
+            p.animator().alphaValue = 0
+        }, completionHandler: {
+            guard panel === p && generation == gen else { return }
+            if pointerOnPanel() { unfade(); return }
+            Log.info("🎙️ the ⚡ question's room modal faded out, nothing picked")
+            close()
+        })
     }
 }
 
-/// The modal's surface: a title, two buttons, the quote of the longer window.
+/// The modal's surface: the spawn menu's header, rows and ground.
 private final class RoomPickView: NSView {
     private let rooms: [Int: RoomTranscript]
-    private var buttons: [(seconds: Int, rect: NSRect)] = []
+    private var rows: [(seconds: Int, rect: NSRect)] = []
     private var hover: Int?
-    private var pressed: Int?
+    /// The rows are drawn here, over the blur — the root's own `draw` is under it.
+    private let canvas = Canvas()
 
+    private typealias M = SpawnFolderMenu
     private static let width: CGFloat = 300
-    private static let pad: CGFloat = 12
-    private static let buttonHeight: CGFloat = 46
+    private static let header = "Research what was just said…"
+    private static let countFont = NSFont.systemFont(ofSize: 13)
 
     init(rooms: [Int: RoomTranscript]) {
         self.rooms = rooms
         let quote = RoomTranscript.windows.reversed().compactMap { rooms[$0] }.first(where: \.usable)?.quote(limit: 90) ?? ""
-        let title = Self.label("🎙️ Research what was just said", size: 13, weight: .semibold, color: .white)
-        let hint = Self.label(quote.isEmpty ? "" : "«\(quote)»", size: 11, weight: .regular,
-                              color: NSColor(white: 1, alpha: 0.55))
+        let textWidth = Self.width - 2 * (M.pad + M.rowInset)
+        let hint = NSTextField(wrappingLabelWithString: quote.isEmpty ? "" : "«\(quote)»")
+        hint.font = M.headerFont
+        hint.textColor = .secondaryLabelColor
         hint.maximumNumberOfLines = 2
         hint.lineBreakMode = .byTruncatingHead
-        hint.preferredMaxLayoutWidth = Self.width - 2 * Self.pad
-        let hintHeight = quote.isEmpty ? 0 : ceil(hint.sizeThatFits(NSSize(width: Self.width - 2 * Self.pad, height: 100)).height)
-        let height = Self.pad + 18 + 8 + Self.buttonHeight + (hintHeight > 0 ? 8 + hintHeight : 0) + Self.pad
+        hint.preferredMaxLayoutWidth = textWidth
+        hint.isSelectable = false
+        let hintHeight = quote.isEmpty ? 0 : ceil(hint.sizeThatFits(NSSize(width: textWidth, height: 100)).height)
+        let rowsHeight = CGFloat(RoomTranscript.windows.count) * M.rowHeight
+        let height = M.pad + M.headerHeight + rowsHeight + (hintHeight > 0 ? 4 + hintHeight + 4 : 0) + M.pad
         super.init(frame: NSRect(x: 0, y: 0, width: Self.width, height: height))
-        wantsLayer = true
-        layer?.cornerRadius = 12
-        layer?.backgroundColor = NSColor(white: 0.1, alpha: 0.95).cgColor
+        M.addSurface(to: self)
+        canvas.frame = bounds
+        canvas.autoresizingMask = [.width, .height]
+        canvas.paint = { [unowned self] in self.drawRows() }
+        addSubview(canvas)
 
-        title.frame = NSRect(x: Self.pad, y: height - Self.pad - 18, width: Self.width - 2 * Self.pad, height: 18)
+        // Top-down: the header, the rows, the quote — in a view that is not flipped.
+        var top = height - M.pad
+        let title = NSTextField(labelWithString: Self.header)
+        title.font = M.headerFont
+        title.textColor = .secondaryLabelColor
+        let th = title.intrinsicContentSize.height
+        title.frame = NSRect(x: M.pad + M.rowInset, y: top - M.headerHeight + (M.headerHeight - th) / 2,
+                             width: textWidth, height: th)
         addSubview(title)
-        let count = CGFloat(RoomTranscript.windows.count)
-        let gap: CGFloat = 10
-        let w = (Self.width - 2 * Self.pad - gap * (count - 1)) / count
-        let y = title.frame.minY - 8 - Self.buttonHeight
-        for (i, s) in RoomTranscript.windows.enumerated() {
-            buttons.append((s, NSRect(x: Self.pad + CGFloat(i) * (w + gap), y: y, width: w, height: Self.buttonHeight)))
+        top -= M.headerHeight
+        for s in RoomTranscript.windows {
+            top -= M.rowHeight
+            rows.append((s, NSRect(x: M.pad, y: top, width: Self.width - 2 * M.pad, height: M.rowHeight)))
         }
         if hintHeight > 0 {
-            hint.frame = NSRect(x: Self.pad, y: Self.pad, width: Self.width - 2 * Self.pad, height: hintHeight)
+            hint.frame = NSRect(x: M.pad + M.rowInset, y: M.pad + 4, width: textWidth, height: hintHeight)
             addSubview(hint)
         }
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
-                                       owner: self, userInfo: nil))
     }
     required init?(coder: NSCoder) { fatalError() }
-
-    private static func label(_ text: String, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSTextField {
-        let t = NSTextField(labelWithString: text)
-        t.font = .systemFont(ofSize: size, weight: weight)
-        t.textColor = color
-        t.isSelectable = false
-        return t
-    }
 
     override var isFlipped: Bool { false }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
 
-    private func button(at p: NSPoint) -> Int? {
-        buttons.first { $0.rect.contains(p) && rooms[$0.seconds]?.usable == true }?.seconds
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .mouseMoved, .cursorUpdate,
+                                                 .activeAlways, .inVisibleRect],
+                                       owner: self))
     }
 
-    override func mouseMoved(with event: NSEvent) { setHover(button(at: convert(event.locationInWindow, from: nil))) }
-    override func mouseExited(with event: NSEvent) { setHover(nil) }
+    private func row(at p: NSPoint) -> Int? {
+        rows.first { $0.rect.contains(p) && rooms[$0.seconds]?.usable == true }?.seconds
+    }
+
+    // The hand over the whole panel, as on the spawn menu.
+    override func cursorUpdate(with event: NSEvent) { NSCursor.pointingHand.set() }
+    override func mouseEntered(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+        RoomPick.followPointer()
+    }
+    override func mouseMoved(with event: NSEvent) {
+        NSCursor.pointingHand.set()
+        setHover(row(at: convert(event.locationInWindow, from: nil)))
+    }
+    override func mouseExited(with event: NSEvent) {
+        setHover(nil)
+        NSCursor.arrow.set()
+        RoomPick.followPointer()
+    }
     private func setHover(_ s: Int?) {
         guard s != hover else { return }
         hover = s
-        needsDisplay = true
+        canvas.needsDisplay = true
     }
 
+    // A click on a row picks it, as the spawn menu's rows do.
     override func mouseDown(with event: NSEvent) {
-        pressed = button(at: convert(event.locationInWindow, from: nil))
-        needsDisplay = true
-    }
-    override func mouseUp(with event: NSEvent) {
-        let s = button(at: convert(event.locationInWindow, from: nil))
-        defer { pressed = nil; needsDisplay = true }
-        guard let s, s == pressed else { return }
+        guard let s = row(at: convert(event.locationInWindow, from: nil)) else { return }
         Log.info("🎙️ \(s) s clicked in the ⚡ question's modal")
         RoomPick.choose(s)
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        for b in buttons {
-            let room = rooms[b.seconds]
+    private final class Canvas: NSView {
+        var paint: (() -> Void)?
+        override func draw(_ dirtyRect: NSRect) { paint?() }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+
+    private func drawRows() {
+        for r in rows {
+            let room = rooms[r.seconds]
             let usable = room?.usable == true
-            let path = NSBezierPath(roundedRect: b.rect, xRadius: 8, yRadius: 8)
-            let lit = usable && (hover == b.seconds || pressed == b.seconds)
-            (lit ? RoomPick.clay : NSColor(white: 1, alpha: usable ? 0.12 : 0.05)).setFill()
-            path.fill()
-            if usable && !lit {
-                RoomPick.clay.withAlphaComponent(0.8).setStroke()
-                path.lineWidth = 1
-                path.stroke()
+            let lit = usable && hover == r.seconds
+            if lit {
+                NSColor.selectedContentBackgroundColor.withAlphaComponent(0.9).setFill()
+                NSBezierPath(roundedRect: r.rect.insetBy(dx: 0, dy: 1), xRadius: 6, yRadius: 6).fill()
             }
-            let ink = NSColor(white: 1, alpha: usable ? 1 : 0.35)
-            let center = NSMutableParagraphStyle()
-            center.alignment = .center
-            let top = NSAttributedString(string: "Last \(b.seconds) s", attributes: [
-                .font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: ink, .paragraphStyle: center])
-            let sub = NSAttributedString(string: room.map { "\($0.words) words" } ?? "no transcript", attributes: [
-                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: ink.withAlphaComponent(usable ? 0.75 : 0.35),
-                .paragraphStyle: center])
-            top.draw(in: NSRect(x: b.rect.minX, y: b.rect.midY - 1, width: b.rect.width, height: 19))
-            sub.draw(in: NSRect(x: b.rect.minX, y: b.rect.minY + 6, width: b.rect.width, height: 15))
+            let ink = lit ? NSColor.white : (usable ? NSColor.labelColor : NSColor.tertiaryLabelColor)
+            let name = NSAttributedString(string: "🎙️ Last \(r.seconds) s",
+                                          attributes: [.font: M.rowFont, .foregroundColor: ink])
+            let ns = name.size()
+            name.draw(at: NSPoint(x: r.rect.minX + M.rowInset, y: r.rect.midY - ns.height / 2))
+            let count = NSAttributedString(
+                string: room.map { "\($0.words) words" } ?? "no transcript",
+                attributes: [.font: Self.countFont,
+                             .foregroundColor: lit ? NSColor.white.withAlphaComponent(0.85)
+                                 : (usable ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor)])
+            let cs = count.size()
+            count.draw(at: NSPoint(x: r.rect.maxX - M.rowInset - cs.width, y: r.rect.midY - cs.height / 2))
         }
     }
 }

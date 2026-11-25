@@ -223,11 +223,11 @@ enum SpawnFolderMenu {
 
     /// The chip's face, for the chip's reason — this is the same hand talking,
     /// an inch from the same pointer.
-    private static let rowFont = NSFont.systemFont(ofSize: 17)
-    private static let headerFont = NSFont.systemFont(ofSize: 12)
-    private static let rowHeight: CGFloat = 28
-    private static let headerHeight: CGFloat = 20
-    private static let pad: CGFloat = 8
+    static let rowFont = NSFont.systemFont(ofSize: 17)
+    static let headerFont = NSFont.systemFont(ofSize: 12)
+    static let rowHeight: CGFloat = 28
+    static let headerHeight: CGFloat = 20
+    static let pad: CGFloat = 8
     /// The inset of a row's text inside its own highlight.
     static let rowInset: CGFloat = 10
     /// The star's box, at the trailing edge of every row.
@@ -256,7 +256,7 @@ enum SpawnFolderMenu {
     private static let radius: CGFloat = 10
     /// How far off the pointer the corner sits — `RelayWindow.anchorGap`'s width,
     /// mirrored, since this hangs off the other side of the cursor.
-    private static let gap: CGFloat = 10
+    static let gap: CGFloat = 10
     /// The strip at the top and bottom of a menu taller than the screen, where
     /// the ▲ / ▼ sit (`ScrollArrow`).
     static let arrowHeight: CGFloat = 18
@@ -841,7 +841,7 @@ enum SpawnFolderMenu {
 
     /// The menu's ground: rounded, the HUD blur behind it. Shared by the menu
     /// and its submenu so the two read as one surface.
-    private static func addSurface(to root: NSView) {
+    static func addSurface(to root: NSView) {
         root.wantsLayer = true
         root.layer?.cornerRadius = radius
         root.layer?.masksToBounds = true
@@ -1289,7 +1289,7 @@ enum SpawnFolderMenu {
     }
 
     /// The visible frame of the screen the pointer is on.
-    private static func screenFrame(at point: CGPoint) -> NSRect {
+    static func screenFrame(at point: CGPoint) -> NSRect {
         let screen = NSScreen.screens.first { NSMouseInRect(point, $0.frame, false) }
             ?? NSScreen.main ?? NSScreen.screens.first
         return screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1000, height: 1000)
@@ -1310,7 +1310,7 @@ enum SpawnFolderMenu {
     /// frame of **the screen the pointer is on** rather than the main one. At a
     /// corner the clamp can slide it under the pointer; a menu three rows from
     /// the cursor is answerable and one half off the edge is not.
-    private static func origin(for size: NSSize, at point: CGPoint) -> NSPoint {
+    static func origin(for size: NSSize, at point: CGPoint) -> NSPoint {
         let visible = screenFrame(at: point)
 
         // Left edge just right of the pointer; flipped left if it would hang off.
