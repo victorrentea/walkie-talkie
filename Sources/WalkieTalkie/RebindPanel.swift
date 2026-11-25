@@ -678,11 +678,14 @@ private final class RowView: NSView {
         // The words he typed, picked out of the sentence they were found in —
         // the row's whole job is to let him recognise the session without
         // reading it, and the match is what he is scanning for.
-        let low = row.subtitle.lowercased() as NSString
+        // Searched case-insensitively in the original, not in a lowercased copy:
+        // `lowercased()` can lengthen it (`İ` → two units) and push a range past
+        // `sub`'s end (2026-11-25, Fable review).
+        let low = row.subtitle as NSString
         for term in row.terms where !term.isEmpty {
             var from = 0
             while from < low.length {
-                let range = low.range(of: term, options: [],
+                let range = low.range(of: term, options: [.caseInsensitive],
                                       range: NSRange(location: from, length: low.length - from))
                 guard range.location != NSNotFound else { break }
                 sub.addAttributes([.foregroundColor: strong,
