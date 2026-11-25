@@ -5140,7 +5140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let shown = !answeringInBackground && DictationEditor.asksModel(line)
                 DictationEditor.shared.edit(line, pid: pid, language: result.language) { [weak self] edited in
                     guard let self else { return }
-                    self.pasteText(edited + mic, to: pid)
+                    // `deliver` ended this settle; one standing now is the next sentence's.
+                    self.pasteText(edited + mic, to: pid, settles: false)
                     self.pinLanded(landing, "the edited words were pasted")
                     if submit { self.submitAfterCleanWords() }
                     self.pasteHint.pulse(reason: "an edited plain sentence has just landed")
@@ -8270,7 +8271,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.isBound {
                     self.send(kind: "dictation", text: r.text, app: "recovered")
                 } else {
-                    self.pasteText(r.text)
+                    self.pasteText(r.text, settles: false)
                 }
             }
         }
@@ -14230,7 +14231,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             overlay.flash("⚠️ nothing dictated yet", duration: 3)
             return
         }
-        pasteText(text, after: fromMenu ? 0.25 : 0.0)
+        pasteText(text, after: fromMenu ? 0.25 : 0.0, settles: false)
     }
 
     /// **Words onto the clipboard, then ⌘V at the caret.** The one delivery this
