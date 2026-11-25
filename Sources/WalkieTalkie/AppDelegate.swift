@@ -6221,6 +6221,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !bg else { return }
         if listening {
             listening = false
+            // No close came, so no `FaceRead.end()`: the camera goes off now.
+            FaceRead.shared.discard()
             overlay.setListening(false)
             // A sentence that ended before its close: `endDictation` may have
             // put the row up, and no settle was opened to take it down.

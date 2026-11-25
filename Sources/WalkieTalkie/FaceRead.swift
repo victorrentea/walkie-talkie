@@ -230,7 +230,23 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var lastFrame: CFAbsoluteTime = 0
     private var frames: [Frame] = []
     private var running = false
+    /// Which take the ceiling's delayed stop belongs to.
+    private var serial = 0
+    /// **No take films longer than this** (2026-11-25, the Fable review): a
+    /// sentence that ends without its close (the microphone did not open) never
+    /// calls `end()`, and the camera stayed on until the next sentence closed.
+    /// A minute past the dictation's own ceiling (`RelayWindow.overrunCeiling`).
+    static let ceiling: TimeInterval = RelayWindow.overrunCeiling + 60
+    /// **`take()` never waits on `queue`** (2026-11-25, the Fable review): the
+    /// queue is also where the camera starts (`startRunning` blocks ~1 s) and
+    /// where the blink helper is written to, and `take()` runs on main. The
+    /// verdict sits behind this lock; `take()` waits only for an `end()` already
+    /// asked for, and at most `takeWait`.
+    private let verdict = NSCondition()
+    private var endsPending = 0
+    static let takeWait: TimeInterval = 0.5
     /// The last finished take's reading, for the delivery that follows its close.
+    /// Under `verdict`.
     private var finished: (reading: Reading, at: CFAbsoluteTime)?
 
     static var baselineURL: URL {
@@ -247,7 +263,12 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     func begin() {
         guard Self.enabled, ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
         queue.async { [self] in
-            guard !running else { return }
+            // A take still running here is one whose sentence ended without its
+            // close: its frames are not this sentence's — stop it and start fresh.
+            if running {
+                Log.info("🙂 a take left running by a sentence that never closed — stopped, \(frames.count) frame(s) dropped")
+                running = false; session?.stopRunning(); session = nil; frames = []
+            }
             switch AVCaptureDevice.authorizationStatus(for: .video) {
             case .authorized: break
             case .notDetermined:
@@ -283,14 +304,25 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             lastFrame = 0
             running = true
             session = s
+            serial &+= 1
+            let mine = serial
             s.startRunning()
+            queue.asyncAfter(deadline: .now() + Self.ceiling) { [self] in
+                guard serial == mine, running, let open = session else { return }
+                // The frames stay for an `end()` that may still come; the light goes off.
+                open.stopRunning()
+                session = nil
+                Log.info("🙂 the camera ran \(Int(Self.ceiling)) s with no close — stopped")
+            }
         }
     }
 
     /// The microphone closed. Stops the camera and keeps the verdict for the
     /// delivery (`take()`); the take also teaches the baseline.
     func end() {
+        verdict.lock(); endsPending += 1; verdict.unlock()
         queue.async { [self] in
+            defer { verdict.lock(); endsPending -= 1; verdict.broadcast(); verdict.unlock() }
             guard running else { return }
             running = false
             session?.stopRunning()
@@ -299,7 +331,7 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
             let judgedOn = baseline
             baseline.learn(frames)
             saveBaseline()
-            finished = (reading, CFAbsoluteTimeGetCurrent())
+            verdict.lock(); finished = (reading, CFAbsoluteTimeGetCurrent()); verdict.unlock()
             let ruler = Self.ruler(frames, base: judgedOn)
             Log.info("🙂 face: \(reading.faces) of \(reading.frames) frames with a face"
                      + (reading.tag.map { " — \($0)" } ?? " — no tag")
@@ -313,18 +345,19 @@ final class FaceRead: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     /// The verdict of the take that closed last, once, if it closed in the
     /// last two minutes (a delivery waits on its transcript, never longer).
     func take() -> Reading? {
-        queue.sync {
-            defer { finished = nil }
-            guard let f = finished, CFAbsoluteTimeGetCurrent() - f.at < 120 else { return nil }
-            return f.reading
-        }
+        verdict.lock(); defer { verdict.unlock() }
+        let until = Date().addingTimeInterval(Self.takeWait)
+        while endsPending > 0, verdict.wait(until: until) {}
+        defer { finished = nil }
+        guard let f = finished, CFAbsoluteTimeGetCurrent() - f.at < 120 else { return nil }
+        return f.reading
     }
 
     /// A take that is dropped (cancelled, a plain sentence) leaves nothing behind.
     func discard() {
         queue.async { [self] in
             if running { running = false; session?.stopRunning(); session = nil; frames = [] }
-            finished = nil
+            verdict.lock(); finished = nil; verdict.unlock()
         }
     }
 

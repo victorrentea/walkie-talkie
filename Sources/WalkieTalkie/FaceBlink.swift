@@ -83,6 +83,10 @@ final class FaceBlink {
         }
         process = p
         input = inPipe.fileHandleForWriting
+        // Non-blocking, so a helper that stops reading cannot wedge `FaceRead`'s
+        // queue in a write (`send`).
+        let wfd = inPipe.fileHandleForWriting.fileDescriptor
+        _ = fcntl(wfd, F_SETFL, fcntl(wfd, F_GETFL) | O_NONBLOCK)
         output = outPipe.fileHandleForReading.fileDescriptor
         pending = Data()
         ready = false
@@ -107,7 +111,10 @@ final class FaceBlink {
         var head = Data()
         withUnsafeBytes(of: seq.bigEndian) { head.append(contentsOf: $0) }
         withUnsafeBytes(of: UInt32(jpeg.count).bigEndian) { head.append(contentsOf: $0) }
-        do { try input.write(contentsOf: head + jpeg) } catch { stop(); return nil }
+        guard Self.send(head + jpeg, to: input.fileDescriptor, within: wait) else {
+            Log.error("🙂 blink helper is not reading its frames — stopped")
+            stop(); return nil
+        }
         let deadline = CFAbsoluteTimeGetCurrent() + wait
         while true {
             let left = deadline - CFAbsoluteTimeGetCurrent()
@@ -125,6 +132,29 @@ final class FaceBlink {
         process = nil
         input = nil
         ready = false
+    }
+
+    /// **The whole frame into the helper's pipe, or false** (2026-11-25, the
+    /// Fable review): a ~50 KB JPEG does not fit a 64 KB pipe whose reader has
+    /// stopped (SIGSTOP, a hang in MediaPipe), and a blocking write never
+    /// returned — the queue was gone, the camera stayed on, `take()` hung main.
+    /// The fd is non-blocking; a frame not taken within `within` is a dead helper.
+    static func send(_ data: Data, to fd: Int32, within wait: TimeInterval) -> Bool {
+        let deadline = CFAbsoluteTimeGetCurrent() + wait
+        return data.withUnsafeBytes { raw -> Bool in
+            guard let base = raw.baseAddress else { return true }
+            var off = 0
+            while off < raw.count {
+                let n = Darwin.write(fd, base + off, raw.count - off)
+                if n > 0 { off += n; continue }
+                if n < 0, errno != EAGAIN, errno != EINTR { return false }
+                let left = deadline - CFAbsoluteTimeGetCurrent()
+                guard left > 0 else { return false }
+                var p = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+                _ = poll(&p, 1, Int32(max(1, left * 1000)))
+            }
+            return true
+        }
     }
 
     /// The next whole line from the helper, waiting at most `wait` seconds.
