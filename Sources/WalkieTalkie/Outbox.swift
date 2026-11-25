@@ -428,10 +428,23 @@ enum Log {
     /// Opened once, appended to for the life of the process. Failing to open it
     /// is not worth reporting anywhere — the only place a complaint could go is
     /// the log that could not be opened.
+    /// **Never the live app's log under `swift test`** (2026-11-25). `file` opens
+    /// once, at the first line any test logs — long before the one test class
+    /// that moved `Outbox.home` ran — so every test's lines went into the
+    /// installed app's `relay.log`: 88 fake `mic lane: open 9 did not finish …
+    /// abandoned` lines, word for word a real CoreAudio incident, read later as
+    /// the app's behaviour. Decided here, at the open, for the whole bundle.
+    static let fileURL: URL = {
+        let dir = NSClassFromString("XCTestCase") != nil
+            ? FileManager.default.temporaryDirectory.appendingPathComponent("walkie-tests")
+            : Outbox.home
+        return dir.appendingPathComponent("relay.log")
+    }()
+
     private static let file: FileHandle? = {
-        let url = Outbox.home.appendingPathComponent("relay.log")
+        let url = fileURL
         let fm = FileManager.default
-        try? fm.createDirectory(at: Outbox.home, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         // **`O_APPEND`, not a seek to the end** (2026-10-21). A handle that seeks
         // once writes at its own offset forever after, so a second process on the
         // same file — a photo run, a test build — wrote over the installed app's
