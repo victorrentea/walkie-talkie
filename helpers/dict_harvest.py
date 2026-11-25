@@ -295,13 +295,21 @@ def main():
                 r = subprocess.run([WALKIE_DICT, "add", e["right"], "--heard", e["heard"]], capture_output=True, text=True,
                                    env=dict(os.environ, WALKIE_DICT_BY="harvest"))
                 entry["walkie_dict"] = (r.stdout + r.stderr).strip()[-200:]
+                if r.returncode != 0:
+                    # Not promoted: the next run tries again (Fable review, 2026-11-25).
+                    review.append(entry)
+                    continue
                 e["promoted"] = dt.datetime.now().strftime("%Y-%m-%d")
             applied.append(entry)
         elif (e["heard"].lower(), e["right"]) in seen_now:
             review.append(entry)
     if not a.dry_run:
         os.makedirs(OUT, exist_ok=True)
-        json.dump(ledger, open(LEDGER, "w"), ensure_ascii=False, indent=1)
+        # Atomic: a kill mid-dump left a truncated ledger that every later run and
+        # `walkie-dict show` failed to load.
+        with open(LEDGER + ".tmp", "w") as fh:
+            json.dump(ledger, fh, ensure_ascii=False, indent=1)
+        os.replace(LEDGER + ".tmp", LEDGER)
 
     os.makedirs(OUT, exist_ok=True)
     stamp = dt.datetime.now().strftime("%Y-%m-%d")
