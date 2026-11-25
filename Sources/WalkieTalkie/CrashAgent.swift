@@ -34,6 +34,9 @@ enum CrashAgent {
 
     static func checkAtLaunch() {
         guard !RelayWindow.shooting else { return }
+        // A `--home <scratch>` run has no `crash-seen` of its own and would brief
+        // an agent on months-old reports of the installed app (as `AgentRules.install`).
+        guard Outbox.home == Outbox.defaultHome else { return }
         DispatchQueue.global(qos: .utility).async { check() }
     }
 
