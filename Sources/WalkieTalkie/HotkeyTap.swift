@@ -2947,6 +2947,7 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
         let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".walkie-talkie/hangs")
         DispatchQueue.global(qos: .utility).async {
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            Self.pruneHangs(in: dir)
             let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd-HH-mm-ss"
             let out = dir.appendingPathComponent("hang-\(f.string(from: Date())).txt")
             let p = Process()
@@ -2957,6 +2958,27 @@ private let VK_ESCAPE: CGKeyCode = 0x35        // esc
             do { try p.run(); Log.info("🧊 sampling the stall into \(out.path)") }
             catch { Log.error("🧊 could not sample the stall: \(error)") }
         }
+    }
+
+    /// **`hangs/` keeps the newest `keepHangs` samples** (2026-11-25, the Fable
+    /// review: 432 files, 116 MB, nothing ever removed one). They are diagnostics,
+    /// not corpus; the oldest go before each new one is written, so the sample
+    /// about to be taken is the newest of what is kept.
+    static let keepHangs = 50
+
+    /// The `hang-*.txt` names to delete so that, with one more written, `keep`
+    /// remain — oldest first by name (the name is the stamp).
+    static func hangsToPrune(_ names: [String], keep: Int) -> [String] {
+        let hangs = names.filter { $0.hasPrefix("hang-") && $0.hasSuffix(".txt") }.sorted()
+        return Array(hangs.prefix(max(0, hangs.count - max(0, keep - 1))))
+    }
+
+    private static func pruneHangs(in dir: URL) {
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
+        let gone = hangsToPrune(names, keep: keepHangs)
+        for name in gone { try? fm.removeItem(at: dir.appendingPathComponent(name)) }
+        if !gone.isEmpty { Log.info("🧊 hangs/: \(gone.count) oldest sample(s) removed, \(keepHangs - 1) kept") }
     }
 
     /// **Right ⌘ ×2 (right ⌥ ×2 until 2026-10-20) over an open prompt ends it, as 🔼 would** (2026-10-09; F5 too until 2026-10-19).

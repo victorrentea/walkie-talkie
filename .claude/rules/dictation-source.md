@@ -223,7 +223,7 @@ He rules out **any focus move and the Scratchpad**. Plan: `docs/wispr-injection-
 - **A frozen app swallows nothing** (`MainStallGate`, 2026-09-24, after a 32-min deadlock ate a
   61-word sentence): main thread beats every **0.1 s** (0.5 until 2026-09-26); silent 3 s → the tap
   passes every event until it beats and no mouse button is down, and samples into
-  `~/.walkie-talkie/hangs/`. Known cost: a stall clearing after Wispr pasted may deliver twice.
+  `~/.walkie-talkie/hangs/` (the newest 50 kept since 2026-11-25, `HotkeyTap.keepHangs`). Known cost: a stall clearing after Wispr pasted may deliver twice.
   **Since 2026-09-26 (batch 4):** the clock is **uptime** (`HotkeyTap.uptime`, `CLOCK_UPTIME_RAW` =
   `mach_absolute_time`, which does not advance in sleep — `mach_continuous_time` does; the false
   `🧊 195 s` of 09-25 was a closed lid); a 10 Hz watchdog on the tap's run loop opens the gate within
