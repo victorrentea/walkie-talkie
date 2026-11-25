@@ -242,7 +242,11 @@ final class ProjectMHalo: NSView, HaloWebHost {
             let me = ObjectIdentifier(self)
             DispatchQueue.main.async { FluidTuner.shared.detach(id: me) }
         }
-        if let r = renderer { renderQueue.sync { pmh_destroy(r) } }
+        // **Async, never sync** (2026-11-25, Fable review): the last release can
+        // be a render-queue block's own `self`, and then this deinit runs *on*
+        // `renderQueue`, where a `sync` onto it traps. Queued after every block
+        // already holding `r`, so nothing uses it once destroyed.
+        if let r = renderer { renderQueue.async { pmh_destroy(r) } }
     }
 
     override var isFlipped: Bool { false }
