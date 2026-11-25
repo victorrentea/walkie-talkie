@@ -525,6 +525,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
     "height" : 46,
+    "image" : "flash-question-open.png",
+    "note" : "**Nothing is typed into the dialog and no Return lands on it** (one used to pick option 1 and drop the words). The prompt waits and goes by itself the moment the question is answered; after five minutes it is kept like an undelivered one, `⚠️ Question still open — find the prompt in Prompt History or ⌘V`. Told by the `walkie-inbox` mod's `.dialog` flag, and in Terminal.app by the screen too.",
+    "shape" : "flash",
+    "slug" : "flash-question-open",
+    "title" : "Flash — a question is open, the prompt waits",
+    "when" : "Six seconds, when a prompt reaches a Claude Code session that shows a dialog — a permission, the plan's approval, an AskUserQuestion — or one opens between the text and its Return (2026-11-25).",
+    "width" : 305
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
     "image" : "flash-kamikaze-queued.png",
     "note" : "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. With no prompt anywhere, `☠️ No prompt to kamikaze`.",
     "shape" : "flash",
@@ -716,7 +728,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 102,
+    "height" : 126,
     "image" : "prompt-autosend-paused.png",
     "note" : "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
     "shape" : "panel",
@@ -920,7 +932,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 149,
+    "height" : 132,
     "image" : "prompt-editing.png",
     "note" : "The clock stops (`⏎ Send` with no seconds) and the field holds *only his words*: the `📸` and `↪` decorations the preview adds are not his, so they must not be in the box he is typing in. Nothing takes him out of it except Send or Cancel.",
     "shape" : "panel",

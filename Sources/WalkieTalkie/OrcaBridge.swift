@@ -201,16 +201,28 @@ enum OrcaBridge {
     /// (`waitsToSendNow`, `asksForReview`, `stillInPrompt`, `submitted`): the chunk, 0.5 s, a Return,
     /// then up to four more Returns watched for 4 s, and ⌃X ⌃S on a sentence queued behind a turn.
     /// A copy rather than a shared loop, so the Terminal.app path is not touched by an experiment.
-    enum Delivery { case delivered, noPane, refused }
+    ///
+    /// **Never into an open dialog** (2026-11-25, `DialogGate`): the mod's flag before the
+    /// text, before the first Return and before every watched one; the screen reads this
+    /// loop already makes before every watched Return. `.dialog(typed:)` — nothing more
+    /// was sent; `resume` — a try after one stopped past its text: the pane is read first.
+    enum Delivery { case delivered, noPane, refused, dialog(typed: Bool) }
 
     /// `.noPane` = no Orca pane on that tty (the caller's `targetGone`); `.refused` =
     /// Orca would not take the line (nothing typed).
     static func deliver(_ text: String, tty: String,
-                        interrupt: Bool = false, sentNow: (() -> Void)? = nil) -> Delivery {
+                        interrupt: Bool = false, sentNow: (() -> Void)? = nil,
+                        resume: Bool = false) -> Delivery {
         guard let pane = pane(tty: tty) else { return .noPane }
         let h = pane.handle
-        guard type(text, handle: h) else { return .refused }
-        usleep(500_000)
+        if resume, let seen = screen(handle: h), TerminalBinding.stillInPrompt(tail: seen, sent: text) {
+            Log.info("▶️ 🐋 \((tty as NSString).lastPathComponent): the sentence is still in the box — only its Return")
+        } else {
+            if DialogGate.flagUp(tty: tty) { return .dialog(typed: false) }
+            guard type(text, handle: h) else { return .refused }
+            usleep(500_000)
+        }
+        if DialogGate.flagUp(tty: tty) { return .dialog(typed: true) }
         // A refused Return is not a delivery (2026-11-25, Fable review): the watch
         // below reads the pane and presses again while the sentence is still in the box.
         if !pressReturn(handle: h) { Log.error("⌨️ 🐋 the first Return was refused — watching the pane to press it again") }
@@ -221,7 +233,10 @@ enum OrcaBridge {
         while true {
             let shown = String(tail.suffix(600))
             // 🛑 An interrupt sentence: on the queue itself too (`TerminalBinding.sendsNow`).
+            let dialog = DialogGate.flagUp(tty: tty) || DialogGate.screenShowsDialog(tail: tail, sent: text)
             if TerminalBinding.sendsNow(tail: tail, sent: text, interrupt: interrupt) {
+                // Queued already: a dialog now only costs the chord.
+                if dialog { Log.info("⏸ 🐋 ⌃X ⌃S not pressed — a dialog is open; the sentence stays queued"); break }
                 if type(TerminalBinding.sendNowChord, handle: h) {
                     _ = pressReturn(handle: h)
                     Log.info("⌨️ 🐋 ⌃X ⌃S — the sentence was queued behind a running turn, sent now\(interrupt ? " (🛑 interrupt)" : "")")
@@ -233,6 +248,7 @@ enum OrcaBridge {
             if TerminalBinding.asksForReview(tail: shown, sent: text) { why = "Claude Code read the block as a paste and asked to review it" }
             else if TerminalBinding.stillInPrompt(tail: tail, sent: text) { why = "the sentence was still in the prompt box" }
             if let why, presses < 4 {
+                if dialog { return .dialog(typed: true) }
                 guard pressReturn(handle: h) else { break }
                 presses += 1
                 Log.info("⌨️ 🐋 Return #\(presses + 2) — \(why)")

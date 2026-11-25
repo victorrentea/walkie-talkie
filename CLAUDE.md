@@ -140,6 +140,9 @@ hooks (`overlay-chip.md`, `replace-wispr-and-halo.md`).
   Returns (watched 4 s, ~1/s — 2026-09-29) while the tab reads back the sentence still under `❯` or `review and press Enter to send`
   *after* the sentence's own echo (2026-09-28: Claude Code folds a Return within ~150 ms of a large
   chunk into the paste — `terminal-binding.md`).
+- **A keystroke into an open dialog** (2026-11-25) — a Claude Code dialog drops the words and a Return
+  picks option 1 (11-23: a public repo created). Every text, Return and ⌃X ⌃S goes through
+  `TerminalBinding.holdingForDialogs` (`DialogGate`: the mod's `.dialog` flag + Terminal's screen) — `terminal-binding.md`.
 - **A typing affordance on the overlay** (`RelayPanel.wantsKey` only while editing).
 - **A leash/smoothing/spring** on cursor-following; **a ✕ by the pointer**; **border, blur or
   shadow** on anything that rides the pointer; **an emoji where the mouse should be drawn**

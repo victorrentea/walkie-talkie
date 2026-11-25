@@ -123,6 +123,34 @@ this way. Log `📍 a plain dictation over Claude Code on ttysNNN — …`.
 - **Shots travel as paths, not a `📸 ×2` count.** An agent can do nothing with a number and everything with something to `Read`; `[selected: …]`, `[look at: …]`, `[context: …]`, `[elements I picked in Chrome: …]` mirror the outbox keys. → journal: *The words, a blank line, then one clause per line (2026-09-07)*
 - **Keep `[this text was dictated in RO or EN]`, on dictation only, naming both languages always.** A transcript looks typed, so a mis-heard word reads as chosen: the recogniser turned `Wispr Relay` into `risparerile ei`. The detected code was tried for one commit and dropped — plain Romanian came back labelled `en` in the very recording used to test it, and a clause naming the wrong language aims the phonetics at a language the words were never said in. Do not add advice after it (*"skip the rest of details - are obvious"*). → journal: *The words, a blank line, then one clause per line (2026-09-07)*
 
+## ⏸ Never a keystroke into an open dialog (2026-11-25, `DialogGate`)
+
+- **A sentence typed into a Claude Code dialog is dropped and its Return picks option 1** — measured on
+  Bash/Write permissions, plan approval, AskUserQuestion, folder trust; three real cases (10-07, 10-22,
+  11-23: a public repo created and pushed). → journal: *⏸ Never a keystroke into an open dialog*
+- **Ask before every keystroke script**: the text, the Return 0.5 s later, every watched Return, ⌃X ⌃S —
+  `TerminalBinding.holdingForDialogs` around Terminal.app, Orca, tmux and IDE-with-tty deliveries and
+  `submitPrompt` (the caret prompt, kamikaze). A new keystroke path must go through it.
+- **Two readings.** The `walkie-inbox` mod's `inbox/<tty>/.dialog` (written at `classic.PermissionRequest` /
+  `classic.Elicitation`, before the dialog is drawn; cleared when `$.prompt.fill` stops answering
+  `refusal: 'dialog'`), **trusted only beside a fresh `.alive` (< 10 s)**; the beat's `dialog: 1` tells this
+  mod from an older one. For tmux it is the **pane's** pty (`#{pane_tty}`), not the client tty. And in
+  **Terminal.app the screen, inside the same AppleScript** that types or presses (`DialogGate.appleScript`,
+  mirrored by `screenShowsDialog`; `DialogGateTests` runs both on the same cases): after the last `❯` the
+  box starts `N.` or carries `Esc to cancel` / `Enter to select` / `Enter to confirm`; a box starting with
+  the sentence's own opening is the sentence. **Never `ctrl+g to edit`** — the ordinary prompt shows it as
+  a 5 s hint after a long sentence. **Never a separate pre-read `osascript`** (+0.35 s a sentence).
+- **Open → send nothing, hold, send by itself.** The delivery queue waits (flag: every 150 ms; screen
+  only: a fresh try every 1 s), the flash `⏸ A question is open — answer it first` once, the guard and
+  owner asked again before the next try. **No Return into a dialog that opened after the text**: the next
+  try reads the box and presses only the Return when the sentence is still there. **5 minutes** → nothing
+  sent, `Outcome.heldTooLong` → kept undelivered (`⚠️ Question still open — …`). ⌃X ⌃S under a dialog is
+  skipped (the sentence stays queued).
+- **Gaps**: tmux / IDE / Orca's first Return have only the flag; a dialog that is not a permission (the
+  auto-mode onboarding, the usage-limit menu) is caught on Terminal.app's screen alone.
+- Lab: `DialogLabTests` (opt-in: `WT_DIALOG_LAB_PANE`, `WT_DIALOG_LAB_TTY`, `TMUX_TMPDIR` of a lab server
+  whose session runs the mod with `--plugin-dir`) drives the real `deliver` into a pane showing a dialog.
+
 ## The bind flight (`BindFlight.swift`)
 
 - **One panel per screen — nothing else works.** A single panel spanning the union of displays measured `-1920,0 5568×2197`, laid the layer exactly on the source window, and still drew on one screen: `com.apple.spaces spans-displays` is unset by default, so each display has its own Space and no window spans two; `canJoinAllSpaces` does not buy it back. `constrainFrameRect` was also genuinely clamping (plain `NSPanel` never inherited `RelayPanel`'s override) — fix both. Verified by burst-capturing a non-primary display: strong-blue pixels 178 → 3070 the frame the rectangle arrived. → journal: *The bind flight*

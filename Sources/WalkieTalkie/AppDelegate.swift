@@ -2713,6 +2713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case .targetGone(let why): answer["outcome"] = "targetGone: \(why)"
                 case .wouldRunAsShell(let c): answer["outcome"] = "wouldRunAsShell: \(c)"
                 case .failed(let why): answer["outcome"] = "failed: \(why)"
+                case .heldTooLong(let why): answer["outcome"] = "heldTooLong: \(why)"
                 }
             }
             return answer
@@ -3790,6 +3791,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cornerTunnel.stillDelivering = { [weak self] in
             guard let self else { return false }
             return self.panelsComing > 0 || self.deliveriesInFlight > 0 || self.spawnsInFlight > 0 || self.caretLanding != 0
+        }
+        // ⏸ **A sentence waiting for a question to be answered** (2026-11-25,
+        // `DialogGate`): said once, when the wait starts. It goes by itself.
+        TerminalBinding.onDialogHold = { [weak self] tty, held in
+            guard held else { return }
+            DispatchQueue.main.async {
+                Log.info("⏸ \(tty): the flash says a question is open")
+                self?.overlay.flash(DialogGate.held, duration: 6)
+            }
         }
         cornerTunnel.standIn = (adopt: { [weak self] in self?.caretHalo.adoptCornerOrbit() ?? false },
                                 end: { [weak self] in self?.caretHalo.endCornerOrbit() })
@@ -10693,6 +10703,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if m.kind == "dictation" {
                         self.keepUndelivered(m, line: line, wanted: to, lost: "Terminal closed", why: what)
                     }
+                case .heldTooLong(let why):
+                    // **A question that stayed open** (2026-11-25, `DialogGate`): nothing
+                    // was typed into it; the prompt is kept like any that reached nobody.
+                    if m.kind == "dictation" {
+                        self.keepUndelivered(m, line: line, wanted: to, lost: DialogGate.gaveUp, why: why)
+                    }
                 default:
                     break
                 }
@@ -10735,6 +10751,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .failed(let why):
             Log.error("⌨️ delivery failed: \(why)")
             overlay.flash("⚠️ \(why)", duration: 5)
+        case .heldTooLong(let why):
+            // A dictation's flash is `keepUndelivered`'s; anything else (⌃⌥S, a
+            // kamikaze, the 🧠 switch) says it here. The binding stays.
+            Log.error("⏸ \(why) — not sent" + (kept ? "; the prompt is kept (Prompt History, clipboard)" : ""))
+            if !kept { overlay.flash("⚠️ \(DialogGate.gaveUp) — not sent", duration: 5) }
         }
     }
 
@@ -11147,10 +11168,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // The pin goes when the words are in the box, not when the Return
             // watch after them ends (2026-11-20) — that was ~1–1.5 s later.
+            var questionOpen = false
             let submitted = tty.map { into in
                 TerminalBinding.submitPrompt(line, toTTY: into, typed: {
                     DispatchQueue.main.async { self?.pinLanded(landing, "typed into Claude Code on \(into) — the Return follows") }
-                })
+                }, heldTooLong: { questionOpen = true })
             } ?? false
             let vscodeTTY = submitted ? nil : vscodeClaude
             DispatchQueue.main.async {
@@ -11179,6 +11201,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             }
                         }
                     }
+                    return
+                }
+                // **A question stayed open in that Claude Code** (2026-11-25): nothing
+                // was typed into it, and the caret it was meant for is minutes old —
+                // never pasted anywhere; the clipboard holds it.
+                if questionOpen, let tty {
+                    self.pinLanded(landing, "held for a question in Claude Code on \(tty), never sent")
+                    self.holdOnClipboard(line, why: "the caret prompt a question kept out")
+                    self.promptWentNowhere(serial, why: "a question stayed open in Claude Code on \(tty)")
+                    self.overlay.flash(BoundPromptGate.undelivered(DialogGate.gaveUp), duration: 6)
                     return
                 }
                 // `deliver` ended this sentence's settle before the hop; a

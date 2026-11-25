@@ -17261,3 +17261,57 @@ Victor Mac seizes the button and now calls `POST /question/toggle` (its `DjiLink
 sentence recording, words in flight, or a start `startBlocker` would refuse → 409 `refused` with why,
 nothing touched. Not a `/test/*` route because another app calls it in daily use, as the restart calls
 `/bind`; the token gate covers it like every route but the four open ones. Not yet pressed on the receiver.
+
+## 2026-11-25 — ⏸ Never a keystroke into an open dialog: the sentence waits for the question
+
+The night's investigation (Claude Code 2.1.332, Haiku, a tmux lab): a sentence typed into a Claude Code
+session that shows a dialog — a Bash or Write permission, the plan's *Would you like to proceed?*, an
+AskUserQuestion, the folder trust — is **dropped**, and the chunk's own `\r` or the Return 0.5 s later
+**picks option 1**. Three real cases in relay.log: 10-07 (an AUQ answered *Both (Recommended)*), 10-22 (a
+wiki published on *Away from it*) and 11-23 (a **public repo created and pushed** on option 1 of *"ce nume
+pun pe repo-ul public nou"*, while the sentence asking for its URL was lost). Victor's mode is auto, so the
+real vectors are AskUserQuestion (every session) and ExitPlanMode.
+
+**The `walkie-inbox` mod flags the dialog** (v0.2.0): `classic.PermissionRequest` (Bash, Write,
+ExitPlanMode, AskUserQuestion — in default, plan and auto mode) and `classic.Elicitation` write
+`inbox/<tty>/.dialog` beside `.alive`, ~130 ms **before** the dialog is drawn. Nothing announces the close
+(Esc or *No* fire no settings hook; `PostToolUse` only after the tool ran), so while the flag stands the
+mod polls an empty `$.prompt.fill({text: '', mode: 'insert'})` every 150 ms: refused with `refusal:
+'dialog'` exactly while a dialog holds the keys, a no-op on the draft otherwise; the first other answer
+deletes the flag. Also checked at every tool call's end and at `ElicitationResult`; a leftover is checked
+at `session.start`, deleted at `session.end`. A raise that lands while a close is being written is put
+back (`raised` counter). The beat says `dialog: 1`. Silent: `$.ui.log` draws a line in his transcript.
+
+**Walkie asks before every keystroke script** (`DialogGate`, `TerminalBinding.holdingForDialogs`): the
+text, the Return 0.5 s later, every watched Return, ⌃X ⌃S — on Terminal.app tabs, Orca panes, tmux panes
+and IDE terminals with a tty. Two readings: the mod's flag (one `stat`; trusted only beside a fresh
+`.alive`, < 10 s), and **in Terminal.app the screen, inside the very AppleScript that types or presses**
+(no extra `osascript`): after the last `❯` a dialog's box starts with its highlighted option (`❯ 1. Yes`,
+`❯ 2. Blue`) or carries its footer (`Esc to cancel`, `Enter to select`, `Enter to confirm`); a box that
+starts with the sentence's own opening is the sentence. **Not `ctrl+g to edit`**: the plan dialog shows
+it, but so does the ordinary prompt — 2.1.332 draws `ctrl+g to edit in <editor>` as a 5 s hint under the
+box (`external-editor-hint`, read in the binary), right after a long envelope is typed. Orca checks its
+own reads in the watch. Either says *open* → nothing is sent; the delivery queue holds the sentence
+(later ones wait behind it, never overtake), flashes `⏸ A question is open — answer it first` (6 s,
+once), and sends it the moment the flag clears (≤ 150 ms) or, when only the screen saw it, at the first
+clear read (one try a second). The shell guard and the tab's owner are asked again after a hold. A
+dialog that opens **between the text and its Return** gets no Return: logged, held, and the next try
+reads the box first — the sentence still there gets only its Return, else it is typed again. After
+**5 minutes** nothing more is sent: `.heldTooLong` → kept like any undelivered prompt (outbox row,
+clipboard, `⚠️ Question still open — find the prompt in Prompt History or ⌘V`); a caret prompt into
+Claude Code the same, never pasted elsewhere. ⌃X ⌃S is skipped under a dialog (the sentence stays
+queued).
+
+Gaps: tmux, IDE and Orca's first Return have only the flag — no mod, an older one, or a dialog that is
+not a permission (the lab met *Teach auto mode about your environment?* right after an answer, the flag
+down) is caught on Terminal.app alone. `claude -p`, Codex, Copilot: Terminal.app's screen check only.
+
+Proven: `DialogGateTests` (flag fresh/stale/missing, an older mod, the screen on the lab's captures incl.
+a dialog quoted above the box, the AppleScript twin run by `osascript` on the same cases, hold → release
+in ~150 ms, a resume after a stopped Return, screen-only retries, the 5-minute give-up); the mod's
+`dialog.test.ts`; **end to end in the tmux lab** (`--plugin-dir` the mod, Haiku, `TMUX_TMPDIR` of its
+own): AUQ open → flag up; `DialogLabTests` (opt-in, `WT_DIALOG_LAB_PANE`) ran
+Walkie's real `deliver` into the pane: held 96 s with the question on screen, answered *Blue* by hand →
+flag down 70 ms later → the sentence typed and answered (`LAB-OK`); the AUQ got *Blue*, not option 1.
+Bash permission Esc → flag down in 114 ms; approved with a `sleep 4` → down in 187 ms, 4 s before the
+tool ended. Not yet watched in the installed app.

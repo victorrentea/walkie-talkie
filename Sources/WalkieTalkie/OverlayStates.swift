@@ -499,6 +499,14 @@ enum OverlayStates {
                 o.flash(BoundPromptGate.undelivered("Terminal closed"), duration: 60)
             },
 
+            Shot(slug: "flash-question-open", group: "Flashes", title: "Flash — a question is open, the prompt waits",
+                 when: "Six seconds, when a prompt reaches a Claude Code session that shows a dialog — a permission, the plan's approval, an AskUserQuestion — or one opens between the text and its Return (2026-11-25).",
+                 note: "**Nothing is typed into the dialog and no Return lands on it** (one used to pick option 1 and drop the words). The prompt waits and goes by itself the moment the question is answered; after five minutes it is kept like an undelivered one, `⚠️ Question still open — find the prompt in Prompt History or ⌘V`. Told by the `walkie-inbox` mod's `.dialog` flag, and in Terminal.app by the screen too.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.flash(DialogGate.held, duration: 60)
+            },
+
             Shot(slug: "flash-kamikaze-queued", group: "Flashes", title: "Flash — kamikaze queued on a prompt on its way",
                  when: "1.5 s, on 🔼 ↓ after the words are done but before the prompt has landed — a spawn opening, a bound delivery still typing, a caret prompt still pressing Return (2026-10-10).",
                  note: "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. With no prompt anywhere, `☠️ No prompt to kamikaze`.",

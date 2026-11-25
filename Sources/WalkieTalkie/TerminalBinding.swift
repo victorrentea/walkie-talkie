@@ -254,7 +254,16 @@ final class TerminalBinding {
         /// Nothing is sent, and nothing is written to the outbox.
         case wouldRunAsShell(String)
         case failed(String)
+        /// **A dialog stayed open for `DialogGate.holdLimit`** (2026-11-25): the
+        /// sentence waited for it and was never typed (or its Return never pressed).
+        /// The caller keeps it undelivered.
+        case heldTooLong(String)
     }
+
+    /// **The sentence is waiting for a dialog in this tty to close** (2026-11-25) —
+    /// `true` when the hold starts, `false` when it ends (delivered or given up).
+    /// Called on the delivery thread; `AppDelegate` flashes `DialogGate.held`.
+    static var onDialogHold: ((_ tty: String, _ held: Bool) -> Void)?
 
     private var current: Target?
     private let lock = NSLock()
@@ -867,11 +876,20 @@ final class TerminalBinding {
                 break
             }
             if Self.deliverToInbox(line, tty: tty) { return .delivered }
-            guard Self.writeToTerminalApp(line, tty: tty, interrupt: interrupt, sentNow: sentNow) else {
-                unbind()
-                return .targetGone("no Terminal.app tab on \(target.address)")
+            // **Never into an open dialog** (2026-11-25, `DialogGate`): held, and the
+            // guard asked again before a try that follows a hold.
+            var tries = 0
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { resume in
+                tries += 1
+                if tries > 1, let refused = Self.recheck(tty: tty, target: target) { return .done(refused) }
+                switch Self.writeToTerminalApp(line, tty: tty, interrupt: interrupt, sentNow: sentNow, resume: resume) {
+                case .delivered: return .done(.delivered)
+                case .gone: return .done(.targetGone("no Terminal.app tab on \(target.address)"))
+                case .dialog(let typed): return .dialog(typed: typed)
+                }
             }
-            return .delivered
+            if case .targetGone = outcome { unbind() }
+            return outcome
 
         case .orca(let tty):
             // Exactly the Terminal.app tab's checks — the pane is a tty under a
@@ -893,13 +911,19 @@ final class TerminalBinding {
                 break
             }
             if Self.deliverToInbox(line, tty: tty) { return .delivered }
-            switch OrcaBridge.deliver(line, tty: tty, interrupt: interrupt, sentNow: sentNow) {
-            case .delivered: return .delivered
-            case .refused: return .failed("Orca would not take the line")
-            case .noPane:
-                unbind()
-                return .targetGone("no Orca pane on \(target.address)")
+            var tries = 0
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { resume in
+                tries += 1
+                if tries > 1, let refused = Self.recheck(tty: tty, target: target) { return .done(refused) }
+                switch OrcaBridge.deliver(line, tty: tty, interrupt: interrupt, sentNow: sentNow, resume: resume) {
+                case .delivered: return .done(.delivered)
+                case .refused: return .done(.failed("Orca would not take the line"))
+                case .noPane: return .done(.targetGone("no Orca pane on \(target.address)"))
+                case .dialog(let typed): return .dialog(typed: typed)
+                }
             }
+            if case .targetGone = outcome { unbind() }
+            return outcome
 
         case .tmux(let pane, _):
             switch Self.tmuxPaneCommand(pane) {
@@ -911,10 +935,23 @@ final class TerminalBinding {
             case .some:
                 break
             }
-            guard Self.writeToTmux(line, pane: pane) else {
-                return .failed("tmux send-keys failed")
+            // The flag sits under the pane's own pty (where `claude` runs), not the
+            // client's tty the handle carries.
+            let tty = Self.tmux(["display-message", "-p", "-t", pane, "#{pane_tty}"]) ?? ""
+            var tries = 0
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { resume in
+                tries += 1
+                if tries > 1 {
+                    switch Self.tmuxPaneCommand(pane) {
+                    case .none: return .done(.targetGone("tmux pane \(pane) is gone"))
+                    case .some(let command) where Self.refusesDelivery(command): return .done(.wouldRunAsShell(command))
+                    case .some: break
+                    }
+                }
+                return Self.writeToTmux(line, pane: pane, tty: tty, resume: resume)
             }
-            return .delivered
+            if case .targetGone = outcome { unbind() }
+            return outcome
 
         case .ide(let handle):
             // **The same guard the tty paths get**, and the reason the shell pid
@@ -945,10 +982,23 @@ final class TerminalBinding {
             case .some:
                 break
             }
-            guard IDEBridge.send(line, to: handle) else {
-                return .failed("\(handle.name) did not take the line")
+            // The extension types the text and its Return itself, 120 ms apart: the
+            // flag is asked once, before (2026-11-25).
+            var tries = 0
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { _ in
+                tries += 1
+                if tries > 1 {
+                    switch Self.foregroundCommand(onTTY: tty) {
+                    case .none: return .done(.targetGone("\(handle.name) is gone"))
+                    case .some(let command) where Self.refusesDelivery(command): return .done(.wouldRunAsShell(command))
+                    case .some: break
+                    }
+                }
+                if DialogGate.flagUp(tty: tty) { return .dialog(typed: false) }
+                return .done(IDEBridge.send(line, to: handle) ? .delivered : .failed("\(handle.name) did not take the line"))
             }
-            return .delivered
+            if case .targetGone = outcome { unbind() }
+            return outcome
 
         case .keystroke(let pid, let app):
             guard let running = NSRunningApplication(processIdentifier: pid), !running.isTerminated else {
@@ -961,6 +1011,77 @@ final class TerminalBinding {
             // differently for exactly that reason.
             return Self.paste(line, into: running) ? .delivered : .failed("paste into \(app) failed")
         }
+    }
+
+    // MARK: - An open dialog holds the sentence (2026-11-25)
+
+    /// The tab's owner and the shell guard, asked again before a try that follows a
+    /// hold: in the minutes a question stood open he may have quit the session.
+    private static func recheck(tty: String, target: Target) -> Outcome? {
+        if let owner = target.owner, let now = tabOwner(onTTY: tty), now != owner {
+            return .targetGone("the bound tab was closed (\(target.address) is another tab now)")
+        }
+        switch foregroundCommand(onTTY: tty) {
+        case .none: return .targetGone("\(target.address) is gone")
+        case .some(let command) where refusesDelivery(command): return .wouldRunAsShell(command)
+        case .some: return nil
+        }
+    }
+
+    /// What one try at typing into a tty did.
+    enum Attempt {
+        case done(Outcome)
+        /// A dialog was open — by the mod's flag or on the screen — and nothing more
+        /// was sent. `typed`: the text had gone in already, its Return had not (it
+        /// most likely sits in the box under the dialog, or was dropped).
+        case dialog(typed: Bool)
+    }
+
+    /// **Type into `tty` only while no dialog holds its keys** (2026-11-25, `DialogGate`).
+    /// `attempt(resume)` checks before each keystroke and answers `.dialog` instead of
+    /// sending; this waits — on the mod's flag every 150 ms, or, when only the screen
+    /// saw the dialog, a fresh try every second — and tries again. `resume` is true once
+    /// a try was stopped after its text: the next one reads the box first and only
+    /// presses the Return when the sentence is still there. After `holdLimit`: nothing
+    /// more is sent, `.heldTooLong`. On the delivery queue, so a later sentence waits
+    /// behind this one and never overtakes it.
+    static func holdingForDialogs(tty: String, chars: Int,
+                                  limit: TimeInterval = DialogGate.holdLimit,
+                                  screenPoll: TimeInterval = DialogGate.screenPoll,
+                                  _ attempt: (_ resume: Bool) -> Attempt) -> Outcome {
+        let short = (tty as NSString).lastPathComponent
+        let deadline = Date().addingTimeInterval(limit)
+        let started = Date()
+        var resume = false
+        var held = false
+        func hold(_ why: String) {
+            Log.info("⏸ \(short): \(why) — the sentence (\(chars) chars) waits\(DialogGate.modFlags(tty: tty) ? "" : " (no dialog-flagging mod on this tty: the screen alone tells)")")
+            if !held { held = true; onDialogHold?(short, true) }
+        }
+        func release() { if held { onDialogHold?(short, false) } }
+        while true {
+            if DialogGate.flagUp(tty: tty) {
+                hold("a dialog is open (the session's flag)")
+                if DialogGate.waitWhileFlagged(tty: tty, until: deadline) == .gaveUp { break }
+            }
+            switch attempt(resume) {
+            case .done(let outcome):
+                if held { Log.info("▶️ \(short): the dialog closed — sent after \(Int(Date().timeIntervalSince(started))) s on hold") }
+                release()
+                return outcome
+            case .dialog(let typed):
+                if typed && !resume {
+                    Log.error("⏸ \(short): a dialog opened between the text and its Return — Return not pressed; the text sits under the dialog or was dropped")
+                }
+                resume = resume || typed
+                hold(typed ? "a dialog stopped the Return" : "a dialog is open")
+            }
+            if Date() >= deadline { break }
+            if !DialogGate.flagUp(tty: tty) { Thread.sleep(forTimeInterval: screenPoll) }
+        }
+        release()
+        Log.error("⏸ \(short): the dialog stayed open \(Int(limit)) s — nothing sent, the sentence is kept")
+        return .heldTooLong("a question stayed open in \(short) for \(Int(limit / 60)) min")
     }
 
     // MARK: - The session's inbox (2026-10-08)
@@ -2048,10 +2169,31 @@ final class TerminalBinding {
     /// on an empty Claude Code prompt is not provably nothing (prompt
     /// suggestions sit there as ghost text), and because a tab that did not
     /// ask must not be pressed again.
+    /// What `writeToTerminalApp` did: `dialog` — a dialog was open and nothing more
+    /// was sent (`typed`: after the text, before its Return).
+    enum Typed: Equatable { case delivered, gone, dialog(typed: Bool) }
+
     private static func writeToTerminalApp(_ text: String, tty: String,
                                            typed: (() -> Void)? = nil,
                                            interrupt: Bool = false,
-                                           sentNow: (() -> Void)? = nil) -> Bool {
+                                           sentNow: (() -> Void)? = nil,
+                                           resume: Bool = false) -> Typed {
+        // **Never a keystroke into an open dialog** (2026-11-25, `DialogGate`): every
+        // script below reads the tab first and answers `dialog` instead of typing or
+        // pressing when what follows the last `❯` is one — inside the same `osascript`,
+        // so it costs no launch. `DialogGate.flagUp` (the mod's flag, a `stat`) is asked
+        // before each script too: it stands ~130 ms before the dialog is drawn.
+        let handler = DialogGate.appleScript
+        func look(_ opening: String) -> String {
+            """
+                            try
+                                set c to (history of t) as text
+                                if (count c) > 1500 then set c to text -1500 thru -1 of c
+                                if my dialogShown(c, "\(escape(opening))") then return "dialog"
+                            end try
+            """
+        }
+        let opening = DialogGate.opening(text)
         // **The text and the Return are two scripts since 2026-11-20**, so the
         // caller hears *the words are in the box* the moment they are
         // (`typed`) — the caret pin went only when the whole Return watch below
@@ -2065,6 +2207,7 @@ final class TerminalBinding {
                 repeat with t in tabs of w
                     try
                         if tty of t is "\(escape(tty))" then
+        \(look(""))
                             do script "\(escape(text))" in t
                             return "ok"
                         end if
@@ -2073,10 +2216,39 @@ final class TerminalBinding {
             end repeat
             return "gone"
         end tell
+        \(handler)
         """
-        guard osascript(type) == "ok" else { return false }
+        // The `history` read, for a try after one a dialog stopped between the text
+        // and its Return: the sentence still in the box gets only its Return.
+        let read = """
+        tell application "Terminal"
+            repeat with w in windows
+                repeat with t in tabs of w
+                    try
+                        if tty of t is "\(escape(tty))" then
+                            set c to (history of t) as text
+                            if (count c) > 1500 then set c to text -1500 thru -1 of c
+                            return "ok" & linefeed & c
+                        end if
+                    end try
+                end repeat
+            end repeat
+            return "gone"
+        end tell
+        """
+        let inBox = resume && (osascript(read).map { $0.hasPrefix("ok\n") && stillInPrompt(tail: String($0.dropFirst(3)), sent: text) } ?? false)
+        if inBox {
+            Log.info("▶️ \(tty): the sentence is still in the box — only its Return")
+        } else {
+            if DialogGate.flagUp(tty: tty) { return .dialog(typed: false) }
+            switch osascript(type) {
+            case "ok"?: break
+            case "dialog"?: return .dialog(typed: false)
+            default: return .gone
+            }
+        }
         let typedAt = Date()
-        typed?()
+        if !inBox { typed?() }
         // 0.5 s, not 0.12 (2026-09-28): Claude Code folds a key that arrives
         // within ~150 ms of a large chunk into the paste, and a Return inside a
         // paste is a newline. Both Returns became blank lines under the
@@ -2089,6 +2261,7 @@ final class TerminalBinding {
                 repeat with t in tabs of w
                     try
                         if tty of t is "\(escape(tty))" then
+        \(look(opening))
                             do script "" in t
                             delay 0.35
                             -- Its own try: the text is already in the tab, and a
@@ -2110,17 +2283,22 @@ final class TerminalBinding {
             end repeat
             return "gone"
         end tell
+        \(handler)
         """
         // **The words are already in the box**: only a tab that is really gone
         // makes this a failed delivery. A Return script that timed out or failed
         // (a stalled Terminal, a huge `history`) must not be reported as a closed
         // tab — that unbound a live session, flashed `Terminal closed`, and the
         // caret prompt pasted the sentence a second time into the same box.
+        // **A dialog that opened in these 0.5 s gets no Return** (2026-11-25): it would
+        // pick option 1. The text sits in the box under it (or was dropped).
+        if DialogGate.flagUp(tty: tty) { return .dialog(typed: true) }
         let returned = osascript(script)
-        if returned == "gone" { return false }
+        if returned == "gone" { return .gone }
+        if returned == "dialog" { return .dialog(typed: true) }
         guard let answer = returned, answer == "ok" || answer.hasPrefix("ok\n") else {
             Log.error("⌨️ \(tty): typed, Return unconfirmed — its script did not answer")
-            return true
+            return .delivered
         }
         var tail = answer == "ok" ? "" : String(answer.dropFirst(3))
         // The tab's last 600 characters, decided here rather than in the script
@@ -2130,28 +2308,13 @@ final class TerminalBinding {
         // Victor: *"tot nu dă Enter după dictare bound"*); the last read that
         // showed nothing is logged, squashed, so a stalled sentence leaves
         // the screen it stalled on in `relay.log`.
-        let read = """
-        tell application "Terminal"
-            repeat with w in windows
-                repeat with t in tabs of w
-                    try
-                        if tty of t is "\(escape(tty))" then
-                            set c to (history of t) as text
-                            if (count c) > 1500 then set c to text -1500 thru -1 of c
-                            return "ok" & linefeed & c
-                        end if
-                    end try
-                end repeat
-            end repeat
-            return "gone"
-        end tell
-        """
         let again = """
         tell application "Terminal"
             repeat with w in windows
                 repeat with t in tabs of w
                     try
                         if tty of t is "\(escape(tty))" then
+        \(look(opening))
                             do script "" in t
                             return "ok"
                         end if
@@ -2160,6 +2323,7 @@ final class TerminalBinding {
             end repeat
             return "gone"
         end tell
+        \(handler)
         """
         // Claude Code's `chat:sendNow`. `do script` adds its `\r`, in the same write:
         // measured on a busy Haiku session, the chord still lands, and on an idle
@@ -2170,6 +2334,7 @@ final class TerminalBinding {
                 repeat with t in tabs of w
                     try
                         if tty of t is "\(escape(tty))" then
+        \(look(opening))
                             do script ((ASCII character 24) & (ASCII character 19)) in t
                             return "ok"
                         end if
@@ -2178,6 +2343,7 @@ final class TerminalBinding {
             end repeat
             return "gone"
         end tell
+        \(handler)
         """
         // **Press again while the sentence is still in the prompt box** (2026-09-28):
         // the hint (`asksForReview`) is one reason, the sentence sitting under `❯`
@@ -2213,7 +2379,12 @@ final class TerminalBinding {
             // `sendsNow`): the hint is not always in the 600 read, the box's own
             // `Press up to edit queued messages` is.
             if sendsNow(tail: tail, sent: text, interrupt: interrupt) {
-                guard osascript(sendNow) == "ok" else { break }
+                // A dialog now: the sentence is queued already — it goes when the
+                // turn reads it; ⌃X ⌃S is not worth a keystroke into the dialog.
+                if DialogGate.flagUp(tty: tty) { Log.info("⏸ \(tty): ⌃X ⌃S not pressed — a dialog is open; the sentence stays queued"); break }
+                let pressed = osascript(sendNow)
+                if pressed == "dialog" { Log.info("⏸ \(tty): ⌃X ⌃S not pressed — the tab shows a dialog; the sentence stays queued"); break }
+                guard pressed == "ok" else { break }
                 Log.info("⌨️ ⌃X ⌃S — the sentence was queued behind a running turn, sent now\(interrupt ? " (🛑 interrupt)" : "")")
                 sentNow?()
                 break
@@ -2222,7 +2393,10 @@ final class TerminalBinding {
             if asksForReview(tail: shown, sent: text) { why = "Claude Code read the block as a paste and asked to review it" }
             else if stillInPrompt(tail: tail, sent: text) { why = "the sentence was still in the prompt box" }
             if let why, presses < 4 {
-                guard osascript(again) == "ok" else { break }
+                if DialogGate.flagUp(tty: tty) { return .dialog(typed: true) }
+                let pressed = osascript(again)
+                if pressed == "dialog" { return .dialog(typed: true) }
+                guard pressed == "ok" else { break }
                 presses += 1
                 Log.info("⌨️ Return #\(presses + 2) — \(why)")
                 usleep(500_000)
@@ -2252,7 +2426,7 @@ final class TerminalBinding {
             let seen = box.filter { !$0.isWhitespace }.prefix(200)
             Log.info("⌨️ \(presses) extra Return(s), \(reads) read-back(s) — tail: …\(seen)")
         }
-        return true
+        return .delivered
     }
 
     /// The sentence's opening is on screen **above** the last `❯` and not after
@@ -2347,9 +2521,21 @@ final class TerminalBinding {
     /// `-l` sends the text **literally**, so a dictation containing the word
     /// "Enter" or a `;` cannot turn into a key name or a command separator.
     /// The Return is a second call for the same reason.
-    private static func writeToTmux(_ text: String, pane: String) -> Bool {
-        guard tmux(["send-keys", "-t", pane, "-l", "--", text]) != nil else { return false }
-        return tmux(["send-keys", "-t", pane, "Enter"]) != nil
+    ///
+    /// **The mod's flag is asked before each of the two** (2026-11-25, `DialogGate`):
+    /// a dialog between them gets no Enter. `resume` (a try after one that typed and
+    /// was stopped): the pane is captured first, and a sentence still in its box gets
+    /// only the Enter.
+    private static func writeToTmux(_ text: String, pane: String, tty: String, resume: Bool = false) -> Attempt {
+        let inBox = resume && (tmux(["capture-pane", "-p", "-t", pane]).map { stillInPrompt(tail: $0, sent: text) } ?? false)
+        if inBox {
+            Log.info("▶️ \(pane): the sentence is still in the box — only its Enter")
+        } else {
+            if DialogGate.flagUp(tty: tty) { return .dialog(typed: false) }
+            guard tmux(["send-keys", "-t", pane, "-l", "--", text]) != nil else { return .done(.failed("tmux send-keys failed")) }
+        }
+        if DialogGate.flagUp(tty: tty) { return .dialog(typed: true) }
+        return .done(tmux(["send-keys", "-t", pane, "Enter"]) != nil ? .delivered : .failed("tmux send-keys failed"))
     }
 
     private static func tmux(_ args: [String]) -> String? {
@@ -2742,10 +2928,23 @@ final class TerminalBinding {
     /// binding.
     /// `typed` runs (on this thread) once the words are in the box, before
     /// the Return — the caret pin's cue (2026-11-20).
-    static func submitPrompt(_ text: String, toTTY tty: String, typed: (() -> Void)? = nil) -> Bool {
+    ///
+    /// **Held while a dialog is open** (2026-11-25, `DialogGate`), like a bound
+    /// delivery; `heldTooLong` runs when it never closed (nothing sent, false).
+    static func submitPrompt(_ text: String, toTTY tty: String, typed: (() -> Void)? = nil,
+                             heldTooLong: (() -> Void)? = nil) -> Bool {
         let line = singleLine(text)
         guard !line.isEmpty else { return false }
-        return writeToTerminalApp(line, tty: tty, typed: typed)
+        let outcome = holdingForDialogs(tty: tty, chars: line.count) { resume in
+            switch writeToTerminalApp(line, tty: tty, typed: typed, resume: resume) {
+            case .delivered: return .done(.delivered)
+            case .gone: return .done(.targetGone(tty))
+            case .dialog(let typed): return .dialog(typed: typed)
+            }
+        }
+        if case .heldTooLong = outcome { heldTooLong?() }
+        if case .delivered = outcome { return true }
+        return false
     }
 
     /// Would typing here run a command rather than talk to a program?
