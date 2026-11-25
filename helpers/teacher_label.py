@@ -678,8 +678,10 @@ def main(argv):
                                        "as JSONL here, as each label lands")
     ap.add_argument(
         "--source", action="append",
-        help="which samples to label (default: addons-mic and whisper-local — "
-             "the ones with no teacher reading. 'wispr' rows already have one)")
+        help="which samples to label (default: addons-mic, whisper-local and "
+             "elevenlabs — "
+             "the ones with no teacher reading. 'wispr' and 'wispr-flow' rows "
+             "already have one)")
     ap.add_argument("--quiet-minutes", type=float, default=QUIET_MINUTES,
                     metavar="MIN",
                     help="suspend while somebody is using this Mac and resume "
@@ -689,7 +691,8 @@ def main(argv):
                          "he is watching, never for a night")
     args = ap.parse_args(argv)
 
-    sources = args.source or ["addons-mic", "whisper-local"]
+    # `wispr-flow` rows are left out: their words are already Wispr's.
+    sources = args.source or ["addons-mic", "whisper-local", "elevenlabs"]
     limit = None if args.all else args.limit
 
     if not CORPUS_DB.exists():

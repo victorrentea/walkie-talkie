@@ -160,5 +160,22 @@ class UnclosedWindows(unittest.TestCase):
                                            ch.rig_windows()))
 
 
+class ManifestSource(unittest.TestCase):
+    """A relay line is filed under the engine that made its words (Fable review,
+    2026-11-25: 4,563 Wispr and Scribe samples had been filed as the local model's)."""
+
+    def test_the_engine_names_the_source(self):
+        self.assertEqual(ch.manifest_source({"engine": "wispr-flow"}), "wispr-flow")
+        self.assertEqual(ch.manifest_source({"engine": "elevenlabs"}), "elevenlabs")
+        self.assertEqual(ch.manifest_source({"engine": "whisper-local"}), "whisper-local")
+
+    def test_the_harvesters_own_lines_stay_wispr(self):
+        self.assertEqual(ch.manifest_source({"engine": "wispr", "wisprTs": "x"}), "wispr")
+        self.assertEqual(ch.manifest_source({"wisprTs": "x"}), "wispr")
+
+    def test_a_line_from_before_engines_is_the_local_models(self):
+        self.assertEqual(ch.manifest_source({}), "whisper-local")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

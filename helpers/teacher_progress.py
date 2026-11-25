@@ -34,13 +34,14 @@ def figures(db):
         return row[0], row[1] / 3600.0
 
     total = one("1=1")
-    # Rows harvested from Wispr arrive with Wispr's own reading already on them.
-    theirs = one("source = 'wispr'")
-    queue = one("source <> 'wispr'")
+    # Rows harvested from Wispr arrive with Wispr's own reading already on them,
+    # and so do the relay's `wispr-flow` sentences.
+    theirs = one("source IN ('wispr', 'wispr-flow')")
+    queue = one("source NOT IN ('wispr', 'wispr-flow')")
     done = one("teacher_text IS NOT NULL AND teacher_text <> ''")
-    tiny = one("source <> 'wispr' AND seconds < ? AND (teacher_text IS NULL"
+    tiny = one("source NOT IN ('wispr', 'wispr-flow') AND seconds < ? AND (teacher_text IS NULL"
                " OR teacher_text = '')", (MIN_SECONDS,))
-    left = one("source <> 'wispr' AND seconds >= ? AND (teacher_text IS NULL"
+    left = one("source NOT IN ('wispr', 'wispr-flow') AND seconds >= ? AND (teacher_text IS NULL"
                " OR teacher_text = '')", (MIN_SECONDS,))
     return total, theirs, queue, done, tiny, left
 

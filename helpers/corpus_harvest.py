@@ -79,7 +79,7 @@ MIN_WAV_BYTES = 45
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS samples (
     id            TEXT PRIMARY KEY,   -- Wispr transcriptEntityId, or the relay's stem
-    source        TEXT NOT NULL,      -- 'wispr' | 'whisper-local'
+    source        TEXT NOT NULL,      -- 'wispr' | 'whisper-local' | 'wispr-flow' | 'elevenlabs' | 'addons-mic'
     ts            TEXT,               -- ISO 8601, UTC
     wav           TEXT,               -- path relative to the corpus root
     txt           TEXT,
@@ -177,6 +177,21 @@ def open_corpus():
     return db
 
 
+def manifest_source(o):
+    """The `source` of a manifest line: the engine that made its words.
+
+    Until 2026-11-25 every relay line was filed `whisper-local` whatever its `engine`
+    (found by the Fable review): 4,208 `wispr-flow` and 355 `elevenlabs` samples were
+    counted as the local model's, queued for a teacher reading they already had, and
+    exported under the wrong name. A line with no engine is the local model's (the
+    relay wrote none before it had other engines); this harvester's own lines say
+    `wispr`.
+    """
+    if o.get("engine"):
+        return o["engine"]
+    return "wispr" if o.get("wisprTs") else "whisper-local"
+
+
 def import_manifest(db):
     """Fold the pre-existing corpus.jsonl into the table, once.
 
@@ -216,7 +231,7 @@ def import_manifest(db):
                 " formatted_text, edited_text, final_text, app, mic, harvested_at)"
                 " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (sid,
-                 "wispr" if o.get("wisprTs") else "whisper-local",
+                 manifest_source(o),
                  o.get("ts"), wav_rel, o.get("txt"), o.get("bytes"),
                  o.get("duration"), o.get("duration"),
                  facts.get("sample_rate"), facts.get("channels"), facts.get("bits"),

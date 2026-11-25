@@ -94,7 +94,10 @@ def card(idx, total, rec, secs, out_png):
         y += 54
 
     y = max(y + 40, 470)
-    d.text((48, y), "local whisper had:", font=f_small, fill=(95, 130, 190))
+    # The engine that made the sample's words — not always the local model
+    # (a `wispr-flow` sample's are Wispr's own).
+    d.text((48, y), f"{rec.get('source') or 'local whisper'} had:", font=f_small,
+           fill=(95, 130, 190))
     y += 34
     student = (rec.get("asr_text") or rec.get("final_text") or "").strip()
     for line in textwrap.wrap(student, width=62)[:5]:
@@ -170,7 +173,7 @@ def main(argv):
         lines.append(
             f"[{i:03d}]  {secs:5.1f}s  {rec.get('language') or '?'}  {dst.name}\n"
             f"  wispr : {rec['teacher_text'].strip()}\n"
-            f"  local : {(rec.get('asr_text') or '').strip()}\n")
+            f"  {rec.get('source') or 'local'} : {(rec.get('asr_text') or '').strip()}\n")
 
         with open(pack / "review.jsonl", "a", encoding="utf-8") as fh:
             fh.write(json.dumps({**rec, "clip": dst.name,
@@ -179,7 +182,7 @@ def main(argv):
     header = (f"Wispr Flow teacher labels — {len(items)} clips, "
               f"{total_sec/60:.1f} min of audio\n"
               f"'wispr' is what Wispr Flow transcribed from the loopback device;\n"
-              f"'local' is what the local whisper had said about the same audio.\n"
+              f"the second line is what the sample's own engine (its source) had said.\n"
               + "=" * 72 + "\n\n")
     (pack / "transcripts.txt").write_text(header + "\n".join(lines), encoding="utf-8")
 
