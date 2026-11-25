@@ -68,8 +68,10 @@ enum AutoAttach {
 /// **One thing copied, read off the general pasteboard** — for the clipboard
 /// half of `AutoAttach`.
 enum CopiedItem {
-    /// `gif`: the animated GIF behind it, when there is one (`AnimatedCopy`).
-    case image(CGImage, gif: Data?)
+    /// `gif`: the animated GIF behind it, when the board carried it (Safari).
+    /// `fetchGIF`: the page's `<img src>` that may name one (Chrome) — fetched
+    /// **after** the still is filed, never before (`gifPlan`).
+    case image(CGImage, gif: Data?, fetchGIF: String?)
     case files([String])
     case text(String)
 
@@ -113,7 +115,7 @@ enum CopiedItem {
                       let data = board.data(forType: types.contains(.png) ? .png : .tiff),
                       let source = CGImageSourceCreateWithData(data as CFData, nil),
                       let image = CGImageSourceCreateImageAtIndex(source, 0, nil) {
-                item = .image(image, gif: nil)
+                item = .image(image, gif: nil, fetchGIF: nil)
                 gif = board.data(forType: AnimatedCopy.gifType)
                 html = board.string(forType: .html)
             } else if types.contains(.string),
@@ -124,12 +126,24 @@ enum CopiedItem {
             }
             return board.changeCount == count ? item : nil
         }
-        guard case .image(let image, _) = item else { return item }
-        if let data = gif, AnimatedCopy.isAnimated(data) { return .image(image, gif: data) }
-        if let src = html.flatMap(AnimatedCopy.imageSource(inHTML:)), AnimatedCopy.mayBeGIF(src),
-           let data = AnimatedCopy.fetch(src) {
-            return .image(image, gif: data)
+        guard case .image(let image, _, _) = item else { return item }
+        let plan = gifPlan(board: gif, html: html)
+        return .image(image, gif: plan.gif, fetchGIF: plan.fetch)
+    }
+
+    /// **The still is filed at once; a GIF to download comes after it**
+    /// (2026-11-25, found by the Fable review). The agent reads the JPEG — the
+    /// GIF only moves the preview — yet `read` used to wait up to 6 s on the
+    /// download before returning: the picture was dropped (or numbered into the
+    /// next prompt) when the sentence ended meanwhile, and the 250 ms poll stood
+    /// still, losing the copies made in those seconds. No network here: the
+    /// board's own GIF bytes are used as they are, a `src` that may name one is
+    /// only handed on, for `AnimatedCopy.fetch` once the picture is in the prompt.
+    static func gifPlan(board gif: Data?, html: String?) -> (gif: Data?, fetch: String?) {
+        if let gif, AnimatedCopy.isAnimated(gif) { return (gif, nil) }
+        if let src = html.flatMap(AnimatedCopy.imageSource(inHTML:)), AnimatedCopy.mayBeGIF(src) {
+            return (nil, src)
         }
-        return item
+        return (nil, nil)
     }
 }

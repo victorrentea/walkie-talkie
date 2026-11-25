@@ -97,6 +97,40 @@ final class AnimatedCopyTests: XCTestCase {
         XCTAssertEqual(seen, ["red", "blue"], "both frames drawn across four repaints 0.1 s apart")
     }
 
+    /// **The still is filed at once** (2026-11-25): the board's own GIF is used
+    /// as it is; a `src` that may name one is handed on to fetch after filing —
+    /// `gifPlan` does no network, so a slow or dead URL cannot hold the picture.
+    func testGIFPlanNeverDownloadsBeforeFiling() {
+        let gif = twoFrameGIF()
+        let fromBoard = CopiedItem.gifPlan(board: gif, html: #"<img src="https://x.test/a.gif">"#)
+        XCTAssertEqual(fromBoard.gif, gif)
+        XCTAssertNil(fromBoard.fetch, "the board's GIF wins; nothing to fetch")
+
+        let dead = "https://10.255.255.1/never.gif"   // unroutable: a fetch would hang
+        let started = Date()
+        let fromPage = CopiedItem.gifPlan(board: nil, html: "<img src=\"\(dead)\">")
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.5)
+        XCTAssertNil(fromPage.gif)
+        XCTAssertEqual(fromPage.fetch, dead)
+
+        let still = CopiedItem.gifPlan(board: Data("not a gif".utf8), html: #"<img src="https://x.test/a.jpg">"#)
+        XCTAssertNil(still.gif)
+        XCTAssertNil(still.fetch)
+    }
+
+    /// The late GIF upgrades the filed picture — and only while it is still there.
+    func testALateGIFUpgradesOnlyAPictureStillOnDisk() throws {
+        let dir = NSTemporaryDirectory() + "animated-copy-\(UUID())"
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: dir) }
+        let picture = dir + "/screenshot-2-original.jpg"
+        XCTAssertFalse(AnimatedCopy.upgrade(twoFrameGIF(), beside: picture), "no picture, no GIF")
+        XCTAssertNil(AnimatedCopy.gif(beside: picture))
+        try Data([0xFF, 0xD8]).write(to: URL(fileURLWithPath: picture))
+        XCTAssertTrue(AnimatedCopy.upgrade(twoFrameGIF(), beside: picture))
+        XCTAssertEqual(AnimatedCopy.gif(beside: picture), dir + "/screenshot-2.gif")
+    }
+
     func testFetchesARealOne() throws {
         guard let url = ProcessInfo.processInfo.environment["WT_GIF_URL"] else { throw XCTSkip("WT_GIF_URL unset") }
         let data = try XCTUnwrap(AnimatedCopy.fetch(url))

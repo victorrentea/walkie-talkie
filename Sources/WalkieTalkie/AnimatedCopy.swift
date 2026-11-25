@@ -76,17 +76,27 @@ enum AnimatedCopy {
         return url.deletingLastPathComponent().appendingPathComponent(stem + ".gif").path
     }
 
-    /// Keeps the GIF beside the picture `fileImage` wrote.
+    /// Keeps the GIF beside the picture `fileImage` wrote. Atomic: a GIF that
+    /// lands late (`upgrade`) may be read by the panel at that very moment.
     @discardableResult
     static func keep(_ gif: Data, beside picture: String) -> Bool {
         let path = gifPath(beside: picture)
         do {
-            try gif.write(to: URL(fileURLWithPath: path))
+            try gif.write(to: URL(fileURLWithPath: path), options: .atomic)
             return true
         } catch {
             Log.error("could not keep the copied GIF at \((path as NSString).lastPathComponent): \(error)")
             return false
         }
+    }
+
+    /// **A GIF fetched after its still was filed** (`CopiedItem.gifPlan`):
+    /// kept beside the picture only while the picture is still where it was
+    /// filed — a prompt cancelled or swept away meanwhile gets nothing.
+    @discardableResult
+    static func upgrade(_ gif: Data, beside picture: String) -> Bool {
+        guard FileManager.default.fileExists(atPath: picture) else { return false }
+        return keep(gif, beside: picture)
     }
 
     /// The GIF beside a picture, when there is one.

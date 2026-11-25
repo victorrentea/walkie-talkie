@@ -12654,8 +12654,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// which is what he copies them for. Counted on the chip like a prompt's.
     private func fileCopied(_ item: CopiedItem, at moment: Date, opened: Date, window: String?) {
         switch item {
-        case .image(let image, let gif):
-            fileCopiedImage(image, gif: gif, at: moment, opened: opened, window: window)
+        case .image(let image, let gif, let fetchGIF):
+            fileCopiedImage(image, gif: gif, fetchGIF: fetchGIF, at: moment, opened: opened, window: window)
         case .files(let paths):
             fileCopiedText(paths.joined(separator: "\n"), at: moment, opened: opened, window: window,
                            receipt: paths.count == 1 ? (paths[0] as NSString).lastPathComponent
@@ -12711,7 +12711,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The tail of `fileArea`, for an image off the pasteboard: a numbered
     /// picture in the same list (`screenshot-N`, `📸N 📋 copied`), counted on
     /// the chip, flying into it from the pointer.
-    private func fileCopiedImage(_ image: CGImage, gif: Data?, at moment: Date, opened: Date, window: String?) {
+    /// `fetchGIF`: a GIF to download for the preview, **after** the still is
+    /// filed (`CopiedItem.gifPlan`) — it upgrades this same picture when it lands.
+    private func fileCopiedImage(_ image: CGImage, gif: Data?, fetchGIF: String?,
+                                 at moment: Date, opened: Date, window: String?) {
         guard let number = reservePicture(at: moment) else { return }
         let offset = moment.timeIntervalSince(opened)
         guard let frame = ScreenCapture.fileImage(image, offset: offset, index: number,
@@ -12744,6 +12747,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         armOrphanFlush()
         Log.info("📋 copied image \(image.width)x\(image.height) attached as 📸\(number) (\(count) picture(s) so far)")
         publishShotCount()
+        // The picture is in the prompt already; the GIF, when one comes within
+        // `AnimatedCopy.fetch`'s 6 s, only makes the same preview move — off
+        // `clipboardQueue`, so the 250 ms poll goes on meanwhile.
+        if let fetchGIF {
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let data = AnimatedCopy.fetch(fetchGIF) else { return }
+                guard AnimatedCopy.upgrade(data, beside: path) else {
+                    Log.info("📋 copied image \(number)'s GIF came after its picture was gone — not kept")
+                    return
+                }
+                Log.info("📋 copied image \(number) is an animated GIF (\(data.count / 1024) KB, fetched after filing) — the panel plays it")
+                DispatchQueue.main.async { self?.overlay.gifArrived(beside: path) }
+            }
+        }
         // From a thumbnail-sized box at the pointer: it came from the clipboard,
         // not from a display, so a whole screen shrinking would say the wrong thing.
         let mouse = NSEvent.mouseLocation

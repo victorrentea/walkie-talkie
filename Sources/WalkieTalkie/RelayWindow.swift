@@ -3467,6 +3467,17 @@ private let heardLabel = NSTextField(labelWithString: "")
         }
     }
 
+    /// **A copied GIF that landed after its still was filed**
+    /// (`AnimatedCopy.upgrade`): a panel already showing that picture lays out
+    /// again, so the same picture starts to move. Main queue.
+    func gifArrived(beside picture: String) {
+        let gif = AnimatedCopy.gifPath(beside: picture)
+        guard sentPrompt != nil,
+              promptInlineShots.values.contains(where: { AnimatedCopy.gifPath(beside: $0) == gif })
+                || promptShots.contains(where: { AnimatedCopy.gifPath(beside: $0.path) == gif }) else { return }
+        layoutContent()
+    }
+
     /// Repaints the words at `AnimatedCopy.tick` while a GIF is in them; a
     /// repaint, never a relayout.
     private func syncGIFTicker() {
