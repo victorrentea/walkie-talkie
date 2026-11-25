@@ -136,6 +136,13 @@ final class WisprFlowSource: DictationSource {
         return HotkeyTap.scratchpadIsConfigured ? .scratchpad : .sink
     }
 
+    /// `wrapMode != .off`, without reading Wispr's shortcuts — for the 0.5 s sweep.
+    private var wrapMayOpenScratchpad: Bool {
+        guard wrapWispr else { return false }
+        if let modeOverride { return modeOverride != .off }
+        return !hotkeys.wisprFirewallOn
+    }
+
     var wrapReason: String {
         guard wrapWispr else { return "the wrap is off (WT_WRAP_WISPR / POST /test/wrap-mode — there is no menu row since 2026-09-14) — Wispr inserts where the focus is and the relay only draws the ring" }
         if let modeOverride {
@@ -1106,8 +1113,16 @@ final class WisprFlowSource: DictationSource {
         // looking, and by +3 s and +15 s — where the runner found it standing —
         // nothing was watching at all. One AX existence read every half second,
         // and only while this source says nothing is going on.
+        //
+        // **Only while the relay can open the Scratchpad at all** (2026-11-25):
+        // with the firewall up (`wrapMode == .off`) nothing here toggles it, and
+        // each tick asked LaunchServices and Wispr's AX on the main thread for
+        // nothing — 243 of 432 hang captures had this tick on the stack. Not
+        // idle = no read; `wrapMode` itself is not asked because it reads
+        // Wispr's shortcut file.
         WisprScratchpad.startIdleSweep { [weak self] in
             guard let self else { return true }
+            guard self.wrapMayOpenScratchpad else { return false }
             return self.state.phase == .idle && !self.capturing
                 && !self.machineRecording && !self.speculative
         }
@@ -4092,7 +4107,12 @@ final class WisprFlowSource: DictationSource {
     /// `…/Contents/Resources/swift-helper-app-dist/Wispr Flow.app` as well, so a
     /// check written on either reports Wispr running when only the helper is —
     /// the same trap `open -a "Wispr Flow"` is in *Never reintroduce* for.
-    static var wisprMainPid: pid_t {
+    ///
+    /// **Kept, not asked each time** (2026-11-25): the walk over every running
+    /// application reads `executableURL` through LaunchServices, and it held the
+    /// main thread for whole 2 s hang samples (`CachedProcess`).
+    static var wisprMainPid: pid_t { mainPidCache.pid }
+    private static let mainPidCache = CachedProcess {
         NSWorkspace.shared.runningApplications.first {
             $0.executableURL?.path == mainExecutable
         }?.processIdentifier ?? 0

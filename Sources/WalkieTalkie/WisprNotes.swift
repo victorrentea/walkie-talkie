@@ -636,12 +636,18 @@ enum WisprScratchpad {
     private static var warnedAboutSystemWide = false
 
     private static func appElement() -> (AXUIElement, pid_t)? {
-        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.electron.wispr-flow").first
-                ?? NSWorkspace.shared.runningApplications.first(where: {
-                    $0.bundleIdentifier == "com.electron.wispr-flow" })
-        else { return nil }
-        wisprPid = app.processIdentifier
-        return (AXUIElementCreateApplication(app.processIdentifier), app.processIdentifier)
+        let pid = pidCache.pid
+        guard pid > 0 else { return nil }
+        wisprPid = pid
+        return (AXUIElementCreateApplication(pid), pid)
+    }
+    /// The bundle-id lookup, kept (2026-11-25): asked through LaunchServices on
+    /// every orphan tick, it was on the main thread in 243 of 432 hang captures —
+    /// `CachedProcess` asks again only when an app launches or quits, or the pid dies.
+    private static let pidCache = CachedProcess {
+        (NSRunningApplication.runningApplications(withBundleIdentifier: "com.electron.wispr-flow").first
+            ?? NSWorkspace.shared.runningApplications.first(where: {
+                $0.bundleIdentifier == "com.electron.wispr-flow" }))?.processIdentifier ?? 0
     }
 
     /// The Scratchpad's own window element, by title.
