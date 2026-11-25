@@ -816,6 +816,10 @@ final class QuickAsk {
         w.onStep = onStep.map { f in { step in if !run.cancelled { f(step) } } }
         w.onResult = { text, error in finish(text, error) }
         w.onExit = { w in finish(nil, "the model exited — \(w.stderrTail)") }
+        // Started early, staged late: a worker that already exited ran its
+        // `terminationHandler` with no `onExit`, and only the timeout (240 s for
+        // the reviewer) would end the stage (2026-11-25, Fable review).
+        guard w.alive else { return finish(nil, "the model exited — \(w.stderrTail)") }
         w.send(input)
         queue.asyncAfter(deadline: .now() + timeout) { finish(nil, "nothing in \(Int(timeout)) s") }
     }
@@ -913,8 +917,15 @@ final class QuickAsk {
             let line: [String: Any] = ["type": "user", "message": ["role": "user", "content": content]]
             guard var data = try? JSONSerialization.data(withJSONObject: line) else { return }
             data.append(0x0A)
-            try? stdin.fileHandleForWriting.write(contentsOf: data)
+            // **Written on the worker's own queue** (2026-11-25, Fable review): a
+            // question with pictures is larger than the 64 KB pipe buffer, so the
+            // write returns only once the child reads it — on `QuickAsk.queue` that
+            // held up every timeout, and `cancel()`'s `queue.sync` held the main thread.
+            let handle = stdin.fileHandleForWriting
+            writer.async { try? handle.write(contentsOf: data) }
         }
+        /// Writes and the close, in order, off whatever queue asked for them.
+        private let writer = DispatchQueue(label: "ro.victorrentea.walkie-talkie.quickask.write")
 
         func stop() {
             onExit = nil
@@ -922,7 +933,10 @@ final class QuickAsk {
             onResult = nil
             onText = nil
             onStep = nil
-            try? stdin.fileHandleForWriting.close()
+            // After any write still queued; one stuck on a child that does not
+            // read ends when `terminate` closes the pipe's far end.
+            let handle = stdin.fileHandleForWriting
+            writer.async { try? handle.close() }
             if process.isRunning { process.terminate() }
         }
 
