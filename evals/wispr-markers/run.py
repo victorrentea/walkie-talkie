@@ -33,6 +33,9 @@ import wave
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "helpers"))
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
 CLIPS = os.path.join(HERE, "clips")
 WORK = os.path.join(HERE, "work")
 RESULTS = os.path.join(HERE, "results.jsonl")

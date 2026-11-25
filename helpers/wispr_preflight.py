@@ -28,6 +28,10 @@ import sys
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
+
 HOME = os.path.expanduser("~")
 WISPR_CONFIG = os.path.join(HOME, "Library/Application Support/Wispr Flow/config.json")
 PORTS = (8917, 8918, 8919)
@@ -36,7 +40,14 @@ INSTALLED = "/Applications/Walkie Talkie.app"
 
 # ── the relay's HTTP surface ─────────────────────────────────────────────────
 def relay_port(timeout: float = 2.0) -> int | None:
-    """First of 8917–8919 that answers. `ElementPicker` takes the first free one."""
+    """First of 8917–8919 that answers. `ElementPicker` takes the first free one.
+
+    The one that takes this home's token first (`walkie_token.find_port`), so a
+    `WALKIE_HOME` run finds its own instance; else the first that answers the open
+    `GET /target`, so a missing token surfaces as a 401 rather than *no relay*."""
+    found = walkie_token.find_port(timeout)
+    if found:
+        return found
     for port in PORTS:
         try:
             urllib.request.urlopen("http://127.0.0.1:%d/target" % port, timeout=timeout).read()

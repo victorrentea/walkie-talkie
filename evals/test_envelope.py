@@ -46,6 +46,10 @@ import unittest
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "helpers"))
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
+
 PORTS = (8917, 8918, 8919)
 OUTBOX = os.path.expanduser("~/.walkie-talkie/outbox.jsonl")
 # **Where the sentences go: a Terminal tab running `cat > /dev/null`.** It used to
@@ -111,7 +115,8 @@ def _find_relay():
     for port in PORTS:
         try:
             base = "http://localhost:%d" % port
-            if _get(base, "/up", timeout=2).get("ok"):
+            # `/up` went with the extension (2026-11-20); `/test/state` needs the token.
+            if _get(base, "/test/state", timeout=2).get("ok"):
                 return base
         except Exception:
             continue

@@ -7,6 +7,19 @@ paths:
 ---
 # Testing at a desk — the loopback control surface
 
+**Every route needs `X-Walkie-Token` since 2026-11-25** (`LoopbackToken.swift`) — the contents of
+`<home>/test-token` (`~/.walkie-talkie/test-token`, or the `--home` dir; scripts take it from
+`$WALKIE_HOME`), 256 random bits written 0600 at every launch, so re-read it after a relaunch, never
+cache it. Without it → `401 {"error": "token"}`. Shell: `curl -H "X-Walkie-Token: $(cat
+~/.walkie-talkie/test-token)" 127.0.0.1:8917/test/state`; Python: `import walkie_token;
+walkie_token.install()` (`helpers/walkie_token.py` — every `urlopen` to 8917–8919 then carries it;
+`find_port()` = the first port that takes this home's token). In the Tart guest read the guest's own
+file, inside the guest (`tools/vm-lab.sh api`). **Open without it, on purpose:** `GET /engine` and `GET
+/target` (configuration, device names, the bound tab — no words, nothing that acts) and `POST /reply` /
+`POST /ask` (their own `reply-token` in the body — never give an agent `test-token` for those).
+`GET /test/state`, `/test/sink`, `/test/wispr-notes` carry his words, the chip and the clipboard's
+history, so they are gated like every other route, `/bind` and `POST /engine` included.
+
 `ElementPicker` (the name outlived the Chrome extension, removed 2026-11-20) listens on the first free
 port of 8917–8919; a caller tries all three. `/bind`, `/unbind`, `/target` work at rest.
 Real Wispr dictations end to end: `tools/wispr-loop.sh <scenario>` (scenarios, preconditions and

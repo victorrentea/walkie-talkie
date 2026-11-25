@@ -20,6 +20,8 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "helpers"))
 import wispr_loopback as wl  # noqa: E402
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
 
 
 def bridge_off():

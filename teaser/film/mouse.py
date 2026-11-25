@@ -81,9 +81,17 @@ def key(code, names, down):
 T0 = float(sys.argv[2]) if len(sys.argv) > 2 else time.time()
 
 
+def _token():
+    """X-Walkie-Token (2026-11-25), the guest's own — this file is pushed into the guest alone."""
+    import os
+    try: return {"X-Walkie-Token": open(os.path.expanduser("~/.walkie-talkie/test-token")).read().strip()}
+    except OSError: return {}
+
+
 def api(path, body=None):
     import urllib.request
-    try: urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8917/" + path, data=json.dumps(body or {}).encode()), timeout=20).read()
+    try: urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8917/" + path, data=json.dumps(body or {}).encode(),
+                                                       headers=_token()), timeout=20).read()
     except Exception as e: print("api", path, e)
 
 
@@ -127,7 +135,8 @@ for op in json.loads(sys.argv[1] if len(sys.argv) > 1 else sys.stdin.read()):
         end = time.time() + (a[1] if len(a) > 1 else 20)
         while time.time() < end:
             try:
-                d = json.load(urllib.request.urlopen("http://127.0.0.1:8917/test/state", timeout=5))
+                d = json.load(urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8917/test/state",
+                                                                            headers=_token()), timeout=5))
                 if eval(a[0]): break
             except Exception as e: err = e
             time.sleep(0.05)

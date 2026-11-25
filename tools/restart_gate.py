@@ -63,6 +63,9 @@ import subprocess
 import sys
 import time
 import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "helpers"))
+import walkie_token  # noqa: E402 — the loopback's X-Walkie-Token (2026-11-25)
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -284,7 +287,10 @@ def fetch_state() -> dict | None:
     installed = installed_pids()
     for port in PORTS:
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/test/state", timeout=3) as r:
+            # The token is read at every ask: across a relaunch the file changes.
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/test/state",
+                                         headers=walkie_token.headers(home_dir=str(home())))
+            with urllib.request.urlopen(req, timeout=3) as r:
                 body = r.read()
             if body:
                 state = json.loads(body)

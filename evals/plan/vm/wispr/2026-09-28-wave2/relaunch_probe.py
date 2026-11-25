@@ -3,7 +3,7 @@ A recorder opened BEFORE the relaunch records 10 s of BlackHole input; a clip is
 BlackHole from a separate process starting at +1.5 s; Wispr is relaunched through the app's
 /test/wispr-proc at +1.0 s (or not, for the control). Prints the voiced share per 0.5 s window
 and whether the player process raised."""
-import json, subprocess, sys, time, urllib.request, numpy as np, sounddevice as sd
+import json, os, subprocess, sys, time, urllib.request, numpy as np, sounddevice as sd
 relaunch = sys.argv[1] == "relaunch"
 CLIP = sys.argv[2]
 idx = [i for i, d in enumerate(sd.query_devices()) if "blackhole" in d["name"].lower()][0]
@@ -11,7 +11,8 @@ rec = sd.rec(int(48000 * 10), 48000, channels=2, device=idx, dtype="float32")
 t0 = time.time()
 time.sleep(1.0)
 if relaunch:
-    r = urllib.request.Request("http://127.0.0.1:8917/test/wispr-proc", data=b'{"relaunch": true}', method="POST")
+    r = urllib.request.Request("http://127.0.0.1:8917/test/wispr-proc", data=b'{"relaunch": true}', method="POST",
+                               headers={"X-Walkie-Token": open(os.path.expanduser("~/.walkie-talkie/test-token")).read().strip()})  # 2026-11-25
     print("relaunch:", urllib.request.urlopen(r, timeout=30).read()[:120], "at +%.2f s" % (time.time() - t0))
 time.sleep(max(0, 1.5 - (time.time() - t0)))
 player = subprocess.run([sys.executable, "-c", """

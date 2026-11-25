@@ -26,6 +26,9 @@ are in `VENDOR_ONLY`; a case that would reach the real service is SKIPped when t
 than `WT_ELEVEN_MIN_CREDITS` (3000) of `WT_ELEVEN_QUOTA` (10000) credits left, or the usage cannot
 be read. `WT_FAKE_SCRIBE=0` sends every ElevenLabs case to the real service, under that cap."""
 import json, os, signal, subprocess, sys, time, urllib.request, urllib.error, datetime, traceback, re, wave, shutil
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "helpers"))
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
 
 HOME = os.path.expanduser("~/.walkie-talkie")
 LOG = HOME + "/relay.log"
@@ -135,14 +138,8 @@ def tmo(p99):
 
 # ---------------------------------------------------------------- transport
 def _port():
-    for p in (8917, 8918, 8919):
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{p}/up", timeout=2) as r:
-                if json.load(r).get("ok"):
-                    return p
-        except Exception:
-            pass
-    return None
+    # The first port that takes this home's token (`/up` went with the extension, 2026-11-20).
+    return walkie_token.find_port(timeout=2)
 
 # No relay is not fatal at import: `--help`, `--list` and `--changed-since … --list` need none.
 # The first request without one exits as before.

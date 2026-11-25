@@ -30,9 +30,14 @@ that `WT_SHOT_MARKERS=1` is still a way back.
 """
 
 import json
+import os
 import sys
 import unittest
 import urllib.request
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "helpers"))
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
 
 PORTS = (8917, 8918, 8919)
 
@@ -41,7 +46,8 @@ def _find_relay():
     for port in PORTS:
         try:
             base = "http://localhost:%d" % port
-            with urllib.request.urlopen(base + "/up", timeout=2) as r:
+            # `/up` went with the extension (2026-11-20); `/test/state` needs the token.
+            with urllib.request.urlopen(base + "/test/state", timeout=2) as r:
                 if json.loads(r.read().decode()).get("ok"):
                     return base
         except Exception:

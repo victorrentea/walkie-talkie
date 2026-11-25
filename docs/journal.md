@@ -17228,3 +17228,24 @@ explicit, injectezi model effort; dacă nu ating, nu reinjectezi"*. Delivery alr
 process (pid + start time), and a session this run did not switch is unknown: its ring offers all three,
 starting at Opus / high. `ModelSwitchTests`; not yet watched on a live session.
 
+
+## 2026-11-25 — 🔑 Every loopback route but four asks for `X-Walkie-Token`
+
+Victor: the `/test/*` routes must require a token. `BrowserGate` kept web pages out, never a local
+process: a container that sets `Host: 127.0.0.1`, a sandboxed agent or any script could spawn Claude in
+auto mode, type into the bound terminal, write files through a `png` path or kill Wispr. Now
+`<home>/test-token` (256 random bits, new at every launch, written 0600 through an `O_EXCL` temp file
+and `rename`, under `--home` like everything else) is required as `X-Walkie-Token` by every route —
+`/bind`, `/unbind`, `POST /engine` and every `/test/*`, `GET /test/state` included, since it carries
+his words and the chip — compared in constant time, 401 otherwise. **Open: `GET /engine`, `GET
+/target`** (configuration and the bound tab, nothing secret, nothing that acts) **and `/reply`, `/ask`**
+(their own `reply-token`, kept separate so an agent that may answer does not get to drive the app).
+The gate also accepts what the home's file holds *now*, so a second process on the same home (the
+overlay-states shoot keeps its token to itself; a debug build without `--home` does not) never locks
+the callers out of the installed app. Callers read the file at every request, so a relaunch needs
+nothing: `relay-restart.sh` (`relay_auth`), `tools/restart_gate.py`, `helpers/walkie_token.py`
+(`install()` — every `urlopen` to 8917–8919 carries it; `find_port()`), the harness, evals, VM chains
+and the teaser's guest helpers (the guest's own file, read inside the guest). The harness's and
+`test_envelope`'s port probe asked `/up`, gone with the extension on 2026-11-20 — they ask
+`/test/state` now. **victor-mac's DJI Link ×2 (`POST /test/chat-voice`) gets 401 until it sends the
+token.** `LoopbackTokenTests`; not yet run against the installed app.

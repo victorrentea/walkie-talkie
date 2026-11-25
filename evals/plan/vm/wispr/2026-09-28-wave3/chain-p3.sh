@@ -1,15 +1,15 @@
 #!/bin/bash
 # wave 3, phase 2 on e6cfca7 (fix batch 2 + per-take WT_KEEP_TAKES + TW1 bar): the rest of P2a, P2b, the soak, the phase-1 leftovers.
 N=~/wt-lab/night/wispr3; mkdir -p $N; C=$N/chain-p3.log
-eng() { curl -s -m 60 -X POST 127.0.0.1:8917/engine -d '{"id":"wispr"}' >/dev/null; }
+eng() { curl -s -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -m 60 -X POST 127.0.0.1:8917/engine -d '{"id":"wispr"}' >/dev/null; }
 pfclean() { echo "pf rules after $1: $(sudo pfctl -a com.apple/wt-chaos -s rules 2>/dev/null | wc -l) in the anchor" >> $C; }
-warm() { for i in $(seq 1 30); do curl -s -m 10 -X POST 127.0.0.1:8917/test/whisper -d '{}' | grep -q '"ready":true' && return; sleep 10; done; }
-st() { curl -s -m 10 127.0.0.1:8917/test/state; }
+warm() { for i in $(seq 1 30); do curl -s -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -m 10 -X POST 127.0.0.1:8917/test/whisper -d '{}' | grep -q '"ready":true' && return; sleep 10; done; }
+st() { curl -s -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -m 10 127.0.0.1:8917/test/state; }
 ghost() {  # Wispr's microphone open with nothing of ours listening: finding E; relaunch Wispr, log it
   local s; s=$(st)
   if echo "$s" | /usr/bin/python3 -c 'import json,sys; s=json.load(sys.stdin); w=s.get("wisprLive") or {}; sys.exit(0 if w.get("micOpen") and not s.get("listening") and not w.get("captureOpen") else 1)'; then
     echo "GHOST mic open before $1 at $(date -u +%T) — relaunching Wispr" >> $C
-    curl -s -m 60 -X POST 127.0.0.1:8917/test/wispr-proc -d '{"relaunch":true}' >> $C; echo >> $C; sleep 25
+    curl -s -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -m 60 -X POST 127.0.0.1:8917/test/wispr-proc -d '{"relaunch":true}' >> $C; echo >> $C; sleep 25
   fi; }
 drain() { for i in $(seq 1 40); do st | grep -q '"busy":false' && return; ghost drain; sleep 10; done; echo "drain gave up $(date -u +%T)" >> $C; }
 phase() { drain; ghost "$1"; warm; eng; echo "$1 start $(date -u +%T)" >> $C; bash ~/wt-lab/run-w3phase.sh "$@"; }

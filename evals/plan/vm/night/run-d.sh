@@ -3,7 +3,9 @@
 cap=$1; per=$2; shift 2
 N=$HOME/wt-lab/night; mkdir -p "$N"; L="$N/run-D.log"
 t0=$(date +%s); i=0
-busy() { curl -fsS -m 5 http://127.0.0.1:8917/test/state 2>/dev/null | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["busy"])' 2>/dev/null; }
+# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one.
+wt_auth() { printf 'X-Walkie-Token: %s' "$(cat "${WALKIE_HOME:-$HOME/.walkie-talkie}/test-token" 2>/dev/null)"; }
+busy() { curl -fsS -m 5 -H "$(wt_auth)" http://127.0.0.1:8917/test/state 2>/dev/null | /usr/bin/python3 -c 'import json,sys; print(json.load(sys.stdin)["busy"])' 2>/dev/null; }
 echo "start D cap=${cap}s per=${per}s $(date)" >> "$L"
 for id in "$@"; do
   i=$((i+1)); nn=$(printf %02d $i)

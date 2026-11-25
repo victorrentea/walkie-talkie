@@ -3,7 +3,7 @@
 # then S: a 0.2-scale smoke of TS2/TS4/TS5 and the full TS1/TS3/TS6 (the soak author's ask).
 N=~/wt-lab/night/wispr
 until grep -q CHAINDONE $N/chain-wave2a.log 2>/dev/null; do sleep 5; done
-eng() { curl -s -m 60 -X POST 127.0.0.1:8917/engine -d '{"id":"wispr"}' >/dev/null; }
+eng() { curl -s -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -m 60 -X POST 127.0.0.1:8917/engine -d '{"id":"wispr"}' >/dev/null; }
 pfclean() { echo "pf rules after $1: $(sudo pfctl -a com.apple/wt-chaos -s rules 2>/dev/null | wc -l) in the anchor" >> $N/chain-wave2b.log; }
 sleep 10
 P=$N/probe-relaunch.log; C=~/.walkie-talkie/voice-corpus/2026-09-18/21-05-35-11l735.wav

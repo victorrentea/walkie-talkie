@@ -10,6 +10,10 @@ import Network
 /// Inspector* Chrome extension's ⌘⇧ element picks, and every later route moved in
 /// beside it rather than open a second port scheme. The extension, the picks and
 /// the music bridge were removed on 2026-11-20 (docs/journal.md); the routes stayed.
+///
+/// **Every route but `GET /engine`, `GET /target`, `/reply` and `/ask` asks for
+/// `X-Walkie-Token`** (2026-11-25) — the token in `<home>/test-token`, new at
+/// every launch; `LoopbackToken` says why and what stays open.
 final class ElementPicker {
 
     /// Point the relay at the terminal that is in front **right now**, and
@@ -444,9 +448,19 @@ final class ElementPicker {
 
     private(set) var port: UInt16?
     private var listener: NWListener?
+    /// This launch's `X-Walkie-Token` (`LoopbackToken`), issued by `start()`.
+    private(set) var testToken = ""
+    /// The last 401 logged per path — a caller without the token polling at
+    /// 10 Hz would otherwise fill the log.
+    private var refusalLogged: [String: Date] = [:]
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.inspect")
 
-    func start() { bind(0) }
+    func start() {
+        // The overlay-states shoot is a second process beside the installed app:
+        // it keeps its token to itself rather than replace the app's file.
+        testToken = LoopbackToken.issue(home: Outbox.home, persist: !RelayWindow.shooting)
+        bind(0)
+    }
 
     func stop() {
         listener?.cancel()
@@ -516,6 +530,17 @@ final class ElementPicker {
         if BrowserGate.refuses(host: request.host, origin: request.origin, fetchSite: request.fetchSite) {
             Log.info("🚫 refused \(request.method) \(request.path.prefix(60)) from a web page")
             return respond(conn, 403, ["ok": false, "error": "not from a web page"])
+        }
+        if !LoopbackToken.allows(method: request.method, path: request.path, presented: request.token,
+                                 own: testToken, onDisk: { LoopbackToken.read(home: Outbox.home) }) {
+            let file = LoopbackToken.url(home: Outbox.home).path
+            let key = "\(request.method) \(request.path)"
+            if Date().timeIntervalSince(refusalLogged[key] ?? .distantPast) > 60 {
+                refusalLogged[key] = Date()
+                Log.info("🔑 refused \(key.prefix(60)) — \(request.token == nil ? "no" : "wrong") X-Walkie-Token (\(file))")
+            }
+            return respond(conn, 401, ["ok": false, "error": "token",
+                                       "need": "X-Walkie-Token: the contents of \(file)"])
         }
         switch (request.method, request.path) {
         // Bind / unbind / inspect the terminal a dictation gets typed into.
@@ -1356,6 +1381,8 @@ final class ElementPicker {
         case 200: return "OK"
         case 204: return "No Content"
         case 400: return "Bad Request"
+        case 401: return "Unauthorized"
+        case 403: return "Forbidden"
         case 409: return "Conflict"
         case 503: return "Service Unavailable"
         default:  return "Not Found"
@@ -1368,6 +1395,8 @@ final class ElementPicker {
         let host: String?
         let origin: String?
         let fetchSite: String?
+        /// `X-Walkie-Token`, as sent.
+        let token: String?
         let method: String
         let path: String
         let body: Data
@@ -1392,6 +1421,7 @@ final class ElementPicker {
             self.host = header("host")
             self.origin = header("origin")
             self.fetchSite = header("sec-fetch-site")
+            self.token = header(LoopbackToken.header)
 
             let body = buffer[range.upperBound...]
             guard body.count >= length else { return nil }
@@ -1409,9 +1439,9 @@ final class ElementPicker {
 /// aim at it**: loopback keeps other machines out, not the browser on this one. A
 /// page cannot read a CORS-refused answer, but its POST has already been obeyed.
 ///
-/// A token would mean teaching every eval, lab script and `curl` one, so this goes
-/// by what browsers cannot help saying and tools never say. `Origin` is set on
-/// their POSTs, `Sec-Fetch-Site` on everything else (an `<img>` has no `Origin`),
+/// It goes by what browsers cannot help saying and tools never say (since
+/// 2026-11-25 `LoopbackToken` stands behind it for every other caller). `Origin` is
+/// set on their POSTs, `Sec-Fetch-Site` on everything else (an `<img>` has no `Origin`),
 /// and a page can set neither. An extension's service worker says
 /// `chrome-extension://` and is refused too (2026-11-20: the one extension that
 /// had a reason to call here is gone). `Host` stops DNS rebinding, where a page's

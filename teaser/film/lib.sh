@@ -7,8 +7,9 @@ TEASER_DIR="$(dirname "$FILM_DIR")"
 g()   { tart exec "$VM" "$@"; }                       # a command in the guest, as admin, in Aqua
 gsh() { tart exec "$VM" bash -lc "$1"; }               # a shell line in the guest
 api() {                                               # api <path> [json] → the app's control port
-  if [ -n "${2:-}" ]; then g curl -fsS -m 60 -X POST "http://127.0.0.1:8917/$1" -d "$2"
-  else g curl -fsS -m 60 "http://127.0.0.1:8917/$1"; fi
+  # X-Walkie-Token (2026-11-25): the guest's own, read inside the guest at every call.
+  if [ -n "${2:-}" ]; then g bash -c 'curl -fsS -m 60 -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -X POST "http://127.0.0.1:8917/$0" -d "$1"' "$1" "$2"
+  else g bash -c 'curl -fsS -m 60 -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" "http://127.0.0.1:8917/$0"' "$1"; fi
 }
 shot() { g screencapture -x /tmp/film-shot.png && g cat /tmp/film-shot.png > "${1:-/tmp/wt-guest.png}"; }
 push() { tart exec -i "$VM" sh -c "cat > '$2'" < "$1"; }   # push <host file> <guest path>

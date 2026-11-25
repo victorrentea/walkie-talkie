@@ -28,6 +28,10 @@ reachable**: the key on this Mac is scoped to speech-to-text
 and it is Romanian, which is what the recogniser needs.
 """
 import argparse, json, pathlib, subprocess, sys, time, urllib.request
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "helpers"))
+import walkie_token  # noqa: E402 — X-Walkie-Token on every call to the relay (2026-11-25)
+walkie_token.install()
 
 BASE = "http://127.0.0.1:8917"
 NOWHERE = "ttys999"

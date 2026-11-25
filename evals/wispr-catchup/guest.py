@@ -39,12 +39,23 @@ ROW_TIMEOUT = 60.0
 
 
 # ── the relay's loopback port ────────────────────────────────────────────────
+def _token_headers():
+    """X-Walkie-Token (2026-11-25). Inline, not `helpers/walkie_token.py`: this file is
+    copied into the guest alone. Read at every call — a relaunch writes a new one."""
+    try:
+        with open(os.path.expanduser(os.environ.get("WALKIE_HOME") or "~/.walkie-talkie") + "/test-token") as f:
+            return {"X-Walkie-Token": f.read().strip()}
+    except OSError:
+        return {}
+
+
 def api(path, body=None, timeout=10):
     for port in (8917, 8918, 8919):
         try:
             data = None if body is None else json.dumps(body).encode()
             req = urllib.request.Request("http://127.0.0.1:%d/%s" % (port, path), data=data,
-                                         method="POST" if data is not None else "GET")
+                                         method="POST" if data is not None else "GET",
+                                         headers=_token_headers())
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 raw = r.read()
             try:

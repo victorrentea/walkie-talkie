@@ -104,13 +104,17 @@ cmd_deploy() {
   die "$APP launched but its control port never answered"
 }
 
+# The token is the guest's own (2026-11-25, X-Walkie-Token): read inside the guest, at
+# every call — `$0`/`$1` carry the URL and the body past the quoting.
 cmd_api() {
   local path="${1:?path}" body="${2:-}" port
   for port in 8917 8918 8919; do
     if [ -n "$body" ]; then
-      g curl -fsS -m 30 -X POST "http://127.0.0.1:$port/$path" -d "$body" && return 0
+      g bash -c 'curl -fsS -m 30 -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" -X POST "$0" -d "$1"' \
+        "http://127.0.0.1:$port/$path" "$body" && return 0
     else
-      g curl -fsS -m 30 "http://127.0.0.1:$port/$path" && return 0
+      g bash -c 'curl -fsS -m 30 -H "X-Walkie-Token: $(cat ~/.walkie-talkie/test-token 2>/dev/null)" "$0"' \
+        "http://127.0.0.1:$port/$path" && return 0
     fi
   done
   return 1
