@@ -82,12 +82,27 @@ enum CopiedItem {
     /// Order: files before an image (a PNG copied in Finder carries its icon as
     /// TIFF — the file is what he meant), an image before text (Chrome's Copy
     /// Image carries the URL as text too).
+    /// **A password manager's copy is never filed** — the markers 1Password,
+    /// Passwords and Keychain put on a secret (nspasteboard.org). The app's own
+    /// standard: `DictationEditor.privateApps` does not read their screens either.
+    static let secretTypes: Set<String> = ["org.nspasteboard.ConcealedType",
+                                           "org.nspasteboard.TransientType",
+                                           "com.agilebits.onepassword"]
+
+    static func isSecret(_ types: [String]) -> Bool {
+        types.contains(where: secretTypes.contains)
+    }
+
     static func read(expecting count: Int) -> CopiedItem? {
         // The GIF's bytes or the page's `<img src>`, read under the lock and
         // fetched after it — a download must not hold the pasteboard.
         var gif: Data?, html: String?
         let item = Clipboard.with { board -> CopiedItem? in
             guard board.changeCount == count, let types = board.types else { return nil }
+            if isSecret(types.map(\.rawValue)) {
+                Log.info("📋 clipboard moved (\(count)) — concealed, not attached")
+                return nil
+            }
             var item: CopiedItem?
             if types.contains(.fileURL),
                let urls = board.readObjects(forClasses: [NSURL.self],
