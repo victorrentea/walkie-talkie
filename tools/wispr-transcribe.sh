@@ -68,7 +68,7 @@ while [ $# -gt 0 ]; do
     --transcript)  ARGS+=(--transcript "$2"); shift 2 ;;
     --dry-run)     DRY_RUN=1; ARGS+=(--dry-run); shift ;;
     --switch-input) FORCE_SWITCH=1; shift ;;
-    --wait-routes) WAIT_ROUTES="${2:-600}"; shift 2 ;;
+    --wait-routes) case "${2:-}" in ''|*[!0-9]*) WAIT_ROUTES=600; shift ;; *) WAIT_ROUTES="$2"; shift 2 ;; esac ;;
     -h|--help)     sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*)            wispr_act_say "unknown flag: $1"; exit 2 ;;
     *)             WAV="$1"; shift ;;

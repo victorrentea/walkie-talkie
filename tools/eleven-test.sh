@@ -69,8 +69,10 @@ if [ "${1:-}" = "--corpus" ]; then
     echo "ElevenLabs $model — the $n newest corpus samples, against the transcript on disk"
     echo
     # The .txt beside each .wav is what the engine that recorded it heard.
-    find "$CORPUS" -name '*.wav' -type f -print0 2>/dev/null \
-        | xargs -0 ls -t 2>/dev/null | head -"$n" | while read -r wav; do
+    # Sorted in one process: `xargs ls -t` split 13k files into batches of 5000
+    # and sorted each alone, so `head` took the newest of an arbitrary batch.
+    find "$CORPUS" -name '*.wav' -type f -exec stat -f '%m %N' {} + 2>/dev/null \
+        | sort -rn | head -"$n" | cut -d' ' -f2- | while read -r wav; do
         txt="${wav%.wav}.txt"
         echo "── $(basename "$wav")"
         echo "   on disk: $(cat "$txt" 2>/dev/null || echo '(no transcript)')"

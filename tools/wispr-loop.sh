@@ -91,7 +91,7 @@ while [ $# -gt 0 ]; do
     --switch-input) FORCE_SWITCH=1; shift ;;
     # For the hour between "the routes are being written" and "the routes are
     # there": poll instead of failing, so this can be started and left.
-    --wait-routes) WAIT_ROUTES="${2:-600}"; shift 2 ;;
+    --wait-routes) case "${2:-}" in ''|*[!0-9]*) WAIT_ROUTES=600; shift ;; *) WAIT_ROUTES="$2"; shift 2 ;; esac ;;
     --speaker)
       say "✗ there is no --speaker here. It plays Victor's own voice out loud on his"
       say "  machine, which an unattended harness must never do. Use tools/wispr-test.sh"
