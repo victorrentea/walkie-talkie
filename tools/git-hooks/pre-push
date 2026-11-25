@@ -1,5 +1,5 @@
 #!/bin/bash
-# Queues a background Claude review of what is being pushed to main, then lets the push go on.
+# Queues a background Claude review of what is being pushed to main/master, then lets the push go on.
 # Never blocks or fails a push: the review runs detached, after the push, in tools/review-push.sh.
 # Installed with `git config core.hooksPath tools/git-hooks` (local config, per checkout).
 # WT_NO_REVIEW=1 git push … skips it once.
@@ -9,7 +9,7 @@ repo=$(git rev-parse --show-toplevel) || exit 0
 zero=0000000000000000000000000000000000000000
 
 while read -r _local_ref local_sha remote_ref remote_sha; do
-  [ "$remote_ref" = "refs/heads/main" ] || continue   # branches go through PRs and the GitHub Action
+  case "$remote_ref" in refs/heads/main|refs/heads/master) ;; *) continue ;; esac   # branches: PRs + the Action
   [ "$local_sha" = "$zero" ] && continue               # a delete, nothing to review
   [ "$remote_sha" = "$zero" ] && remote_sha="$local_sha~1"
   nohup "$repo/tools/review-push.sh" "$remote_sha" "$local_sha" </dev/null >/dev/null 2>&1 &

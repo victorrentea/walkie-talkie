@@ -1,7 +1,7 @@
 name: Claude
 
 # Claude on the Max subscription (CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`), never an API key.
-# - review: every non-draft PR, on open and on each push (pushes straight to main are reviewed
+# - review: every non-draft PR, on open and on each push (pushes straight to master are reviewed
 #   locally by tools/git-hooks/pre-push instead).
 # - mention: `@claude …` in a PR/issue comment, from someone with write access (the action checks).
 # Fork PRs are skipped by the action itself; secrets never reach them.
