@@ -378,26 +378,49 @@ enum TurnCost {
         armed[short] = ["since": since.timeIntervalSince1970, "why": why]
         saveArmed()
         DispatchQueue.global(qos: .utility).async {
-            run(short: short, since: since, why: why)
-            DispatchQueue.main.async { watching[short] = nil; armed[short] = nil; saveArmed() }
+            let switched = run(short: short, since: since, why: why)
+            DispatchQueue.main.async {
+                // A prompt that came in meanwhile went to the session now on the tty.
+                let pending = watching[short] == true
+                watching[short] = nil; armed[short] = nil; saveArmed()
+                if switched, pending { watch(tty: short, why: why + ", new session") }
+            }
         }
     }
 
-    private static func run(short: String, since: Date, why: String) {
+    /// True when the watch ended because another session took the tty.
+    @discardableResult
+    private static func run(short: String, since: Date, why: String) -> Bool {
         // The session: the mod's beat, fresh. A spawn's comes up a few seconds after its launch.
         var transcript: URL?
+        var watched: String?
         let deadline = Date().addingTimeInterval(sessionWait)
         while transcript == nil, Date() < deadline {
-            if let id = session(onTTY: short) { transcript = self.transcript(ofSession: id) }
+            if let id = session(onTTY: short) { transcript = self.transcript(ofSession: id); watched = id }
             if transcript == nil { Thread.sleep(forTimeInterval: 1) }
         }
         guard let url = transcript else {
             Log.info("💸 \(short): no Claude Code session there — no cost float (\(why))")
-            return
+            return false
+        }
+        // **Still that session on the tty?** A turn that
+        // never writes `turn_duration` (the session closed, or was interrupted and
+        // left) parked this watch for `turnWait` and swallowed every later prompt
+        // to the tty — a new session's in a new tab with the same number too.
+        var checkedAt = Date()
+        var gone = 0
+        func stillThere() -> Bool? {
+            guard Date().timeIntervalSince(checkedAt) >= 10 else { return true }
+            checkedAt = Date()
+            let now = session(onTTY: short)
+            if now == watched { gone = 0; return true }
+            if now != nil { return nil }       // another session
+            gone += 1
+            return gone < 3                    // ~30 s with no session at all
         }
         let fm = FileManager.default
         func size() -> UInt64? { (try? fm.attributesOfItem(atPath: url.path))?[.size] as? UInt64 }
-        guard let now = size() else { return }
+        guard let now = size() else { return false }
         // From the end of the last turn that closed before the prompt left.
         var from = lastTurnEnd(in: url, before: now, stampedBefore: stamp(since.addingTimeInterval(-1)))?.next ?? 0
         var mustSeePrompt = false
@@ -416,24 +439,34 @@ enum TurnCost {
                     }
                 }
                 if end == nil {
-                    if mustSeePrompt, !turn.sawPrompt, Date() > promptBy { return }
+                    if mustSeePrompt, !turn.sawPrompt, Date() > promptBy { return false }
+                    switch stillThere() {
+                    case true?: break
+                    case false?:
+                        Log.info("💸 \(short): the session is gone, its turn never closed — watch ended")
+                        return false
+                    case nil:
+                        Log.info("💸 \(short): another session took the tty — watch ended")
+                        return true
+                    }
                     Thread.sleep(forTimeInterval: 1)
                 }
             }
             guard let closed = end else {
                 Log.info("💸 \(short): no turn ended in \(Int(turnWait / 3600)) h — given up")
-                return
+                return false
             }
             addSubagents(of: url, to: &turn)
             if turn.responses > 0 { report(turn, short: short) }
             // A second prompt during the watch that started a turn of its own: watch that one too.
             var again = false
             DispatchQueue.main.sync { again = watching[short] == true; watching[short] = false }
-            guard again else { return }
+            guard again else { return false }
             from = closed
             mustSeePrompt = true
             DispatchQueue.main.async { armed[short]?["since"] = Date().timeIntervalSince1970; saveArmed() }
         }
+        return false
     }
 
     // MARK: - Saying it
