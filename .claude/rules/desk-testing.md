@@ -10,18 +10,24 @@ paths:
 **Every route needs `X-Walkie-Token` since 2026-11-25** (`LoopbackToken.swift`) — the contents of
 `<home>/test-token` (`~/.walkie-talkie/test-token`, or the `--home` dir; scripts take it from
 `$WALKIE_HOME`), 256 random bits written 0600 at every launch, so re-read it after a relaunch, never
-cache it. Without it → `401 {"error": "token"}`. Shell: `curl -H "X-Walkie-Token: $(cat
-~/.walkie-talkie/test-token)" 127.0.0.1:8917/test/state`; Python: `import walkie_token;
-walkie_token.install()` (`helpers/walkie_token.py` — every `urlopen` to 8917–8919 then carries it;
-`find_port()` = the first port that takes this home's token). In the Tart guest read the guest's own
-file, inside the guest (`tools/vm-lab.sh api`). **Open without it, on purpose:** `GET /engine` and `GET
-/target` (configuration, device names, the bound tab — no words, nothing that acts) and `POST /reply` /
-`POST /ask` (their own `reply-token` in the body — never give an agent `test-token` for those).
-`GET /test/state`, `/test/sink`, `/test/wispr-notes` carry his words, the chip and the clipboard's
-history, so they are gated like every other route, `/bind` and `POST /engine` included.
+cache it. Without it → `401 {"error": "token"}`. **Send it only to the port in `<home>/test-port`**
+(the one the app bound; `starting` until its listener is up — then wait) and **never in argv**
+(`ps` shows argv to every account) — both since the Fable review the same evening. Shell:
+`. helpers/walkie_auth.sh; P=$(wt_ports); curl -H @<(wt_auth $P) 127.0.0.1:$P/test/state`
+(`wt_auth PORT` prints the header only for the app's own port); Python: `import walkie_token;
+walkie_token.install()` (`helpers/walkie_token.py` — every `urlopen` to the app's port then carries it;
+`find_port()` = that port when it takes this home's token; `targets()` / `headers(port)` for explicit
+requests). No `test-port` at all = an app from before it: 8917 alone. In the Tart guest read the guest's
+own files, inside the guest (`tools/vm-lab.sh api`). The files are believed only as a regular file of
+his, mode 0600 (`O_NOFOLLOW`), and the app `chmod 700`s its home at launch. **Open without it:** only
+`POST /reply` / `POST /ask` (their own `reply-token` in the body, compared in constant time — never give
+an agent `test-token` for those). `GET /engine` and `GET /target` are gated since the same review (the
+bound tab's title and folder), like `GET /test/state`, `/test/sink`, `/test/wispr-notes`, `/bind` and
+`POST /engine`.
 
 `ElementPicker` (the name outlived the Chrome extension, removed 2026-11-20) listens on the first free
-port of 8917–8919; a caller tries all three. `/bind`, `/unbind`, `/target` work at rest.
+port of 8917–8919 and names it in `<home>/test-port`; a caller asks that one (an app from before the
+gate, with neither file, is asked on all three, tokenless). `/bind`, `/unbind`, `/target` work at rest.
 Real Wispr dictations end to end: `tools/wispr-loop.sh <scenario>` (scenarios, preconditions and
 timings in `docs/loopback.md`; it takes `~/.walkie-talkie/wispr-loop.lock` — never run two).
 The whole suite runs **inside the Tart guest, on demand only** (2026-09-29, Victor: *"I will only

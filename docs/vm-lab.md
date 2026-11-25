@@ -320,7 +320,8 @@ IP=$(tart ip wt-lab)
 # the repo mirror: REPO in the cases = ~/wt-lab (9.4 MB tar, 2.5 min to unpack on the USB disk)
 COPYFILE_DISABLE=1 tar -cf - --exclude __pycache__ --exclude evals/work --exclude evals/plan/vm \
   relay-restart.sh safe-restart.sh tools/restart_gate.py helpers evals | ssh $KH admin@$IP 'tar -C ~/wt-lab -xf -'
-ssh $KH admin@$IP 'curl -s -X POST 127.0.0.1:8917/engine -d "{\"id\":\"eleven-live\"}"'
+# the guest's own token, to the guest app's own port, read inside the guest (2026-11-25)
+ssh $KH admin@$IP '. ~/wt-lab/helpers/walkie_auth.sh; P=$(wt_ports); curl -s -H @<(wt_auth $P) -X POST 127.0.0.1:$P/engine -d "{\"id\":\"eleven-live\"}"'
 # a phase: launched through `tart exec` (the Automation grant is tart-guest-agent's), detached with nohup
 tart exec wt-lab sh -c "nohup bash ~/wt-lab/run-phase.sh A 1200 'LC1,LC2,…' >/dev/null 2>&1 </dev/null & echo launched"
 ssh $KH admin@$IP 'tail ~/wt-lab/night/run-A.log'    # poll over SSH; PHASEDONE marks the end

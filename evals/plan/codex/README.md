@@ -54,22 +54,23 @@ the 440 Hz check first), and the corpus clip `2026-09-18/21-05-35-11l735.wav`.
 ## Manual cleanup if Codex stops midway
 
 Every prompt ends with an ALWAYS block, and the wrapper restores the binding and closes the witnesses on exit. If the
-run was killed before either could act, do this by hand (`B=http://127.0.0.1:8917`, or whichever of 8917–8919
-answers `/up`):
+run was killed before either could act, do this by hand, from the repo: `. helpers/walkie_auth.sh; P=$(wt_ports);
+B=http://127.0.0.1:$P` — the app's own port (`~/.walkie-talkie/test-port`); every route needs the token, and
+`-H @<(wt_auth $P)` sends it there only, never in argv (2026-11-25):
 
 - **Menu or panel left open**: `osascript -e 'tell application "System Events" to key code 53'` (⎋), once per level.
 - **Autosend back to 1**: `defaults read ro.victorrentea.wispr-relay autosend`. If it reads 0 (or
-  `curl -s $B/test/state` says `"autosend":false`), click **Autosend** in the 🤖 menu once. Do not use
+  `curl -s -H @<(wt_auth $P) $B/test/state` says `"autosend":false`), click **Autosend** in the 🤖 menu once. Do not use
   `defaults write`: the running app keeps its own copy and would not see the change (`POST /test/autosend` is gap G6,
   not built yet).
-- **Mic back to auto**: `curl -s -X POST $B/test/mic -H 'content-type: application/json' -d '{"id":"auto"}'`. Then
+- **Mic back to auto**: `curl -s -X POST $B/test/mic -H @<(wt_auth $P) -H 'content-type: application/json' -d '{"id":"auto"}'`. Then
   check that `~/.walkie-talkie/mic/choice` reads `auto`. Also clear the S6 override:
   `… /test/mic -d '{"device":null}'`, then check that `/engine` shows `mic.override` null.
-- **Engine**: `curl -s -X POST $B/engine -H 'content-type: application/json' -d '{"id":"<the engine you had>"}'`
+- **Engine**: `curl -s -X POST $B/engine -H @<(wt_auth $P) -H 'content-type: application/json' -d '{"id":"<the engine you had>"}'`
   (S1 prints `ENG0` in its evidence).
 - **A sentence left open**: when `/test/state` shows `listening` or `isRecording` true,
-  `curl -s -X POST $B/test/cancel -d '{}'`. Never leave `awaitingBind` true.
-- **Unbind**: `curl -s -X POST $B/unbind -d '{}'`, or rebind your own terminal:
+  `curl -s -X POST $B/test/cancel -H @<(wt_auth $P) -d '{}'`. Never leave `awaitingBind` true.
+- **Unbind**: `curl -s -X POST $B/unbind -H @<(wt_auth $P) -d '{}'`, or rebind your own terminal:
   `… /bind -d '{"tty":"ttysNNN"}'`.
 - **Witness windows**: `pkill -x cat -t ttysNNN` for each tty in `$W/*.tty`, then
   `osascript -e 'tell application "Terminal" to close (every window whose name contains "wt-witness")'`.

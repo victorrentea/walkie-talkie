@@ -636,7 +636,7 @@ receiver's button and called `POST /test/chat-voice`); one press still mutes the
 | a ⚡ question records (the 🔽 ← Codex one too) | ends it as 🔼 does (`endDictation`) — answered |
 | any other sentence records, words in flight, a start the app would refuse | nothing — 409 with why |
 
-- Victor Mac posts `POST /question/toggle` (token from `test-token`); the decision is
+- Victor Mac posts `POST /question/toggle` (token from `test-token`, to the port in `test-port` only); the decision is
   `QuestionToggle.decide`, `QuestionToggleTests`. Desk row in `desk-testing.md`.
 - Unlike 🔼 ← at rest it never cancels: a ⚡ answer still coming is replaced by the new question
   (`QuickAsk.ask` ends the last run); a held prompt panel is not cancelled either.

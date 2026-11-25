@@ -107,7 +107,9 @@ below therefore reads Wispr's `micDevice` directly.
    push-to-talk is right ⌥ + right ⇧ (`prefs.user.shortcuts` `"61+60": "ptt"`), the rig posts
    that (`WISPR_PTT_KEYS` default `61,60`), and `WT_WISPR_STANDALONE=1` in `elevenlabs.env` makes
    the relay leave every Wispr sentence it did not start alone — so **the Engine may stay
-   `eleven-live`**. Check: `curl -s localhost:8917/test/state` → `"wisprStandalone":true`. If it
+   `eleven-live`**. Check (every route needs the token since 2026-11-25 — `. helpers/walkie_auth.sh;
+   P=$(wt_ports)` once, then `-H @<(wt_auth $P)` sends it to the app's own port only):
+   `curl -s -H @<(wt_auth $P) 127.0.0.1:$P/test/state` → `"wisprStandalone":true`. If it
    says `false` (flag gone, old build), fall back to the old rule: `POST /engine {"id":"wispr"}`
    for the night — on 26→27 Sep the old chord `54+61` (right ⌘⌥, Walkie's clean dictation) made
    every clip a relay dictation and burned the ElevenLabs quota in 30 min.
@@ -116,7 +118,7 @@ below therefore reads Wispr's `micDevice` directly.
 2. Wispr running (`/usr/bin/pgrep -f "^/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"`).
 3. `python3 helpers/wispr_preflight.py --no-idle-check` → exit 0 (mic row must say
    `Wispr microphone: 🎓 TO Wispr — the device this plays into`, or `unnamed` right after a re-pin).
-4. `curl -s localhost:8917/target` → `"bound":false`. `curl -s localhost:8917/test/state` →
+4. `curl -s -H @<(wt_auth $P) 127.0.0.1:$P/target` → `"bound":false`. `curl -s -H @<(wt_auth $P) 127.0.0.1:$P/test/state` →
    `"busy":false`.
 5. `~/.walkie-talkie/wispr-loop.lock` absent or its pid dead.
 6. `cat ~/.walkie-talkie/teacher-cooldown` in the past (or absent).
@@ -162,8 +164,9 @@ sqlite3 "file:$HOME/Library/Application Support/Wispr Flow/flow.sqlite?mode=ro" 
    SELECT 'stuck', COUNT(*) FROM History WHERE timestamp BETWEEN datetime('now','-50 minutes') AND datetime('now','-2 minutes') AND COALESCE(status,'') IN ('','recording','processing');"
 sqlite3 -readonly $S/voice-corpus/corpus.db \
   "SELECT 'tonight', COUNT(*), ROUND(SUM(seconds)/60,1) || ' min' FROM samples WHERE teacher_at >= '$(cat $S/teacher-night.started-utc)'"
-curl -s -m 3 localhost:8917/target; echo
-curl -s -m 3 localhost:8917/test/state | python3 -c "import sys,json;d=json.load(sys.stdin);print({k:d.get(k) for k in ('busy','phase','lastFailure')})"
+. helpers/walkie_auth.sh; P=$(wt_ports)   # the token, to the app's own port only (2026-11-25)
+curl -s -m 3 -H @<(wt_auth $P) 127.0.0.1:$P/target; echo
+curl -s -m 3 -H @<(wt_auth $P) 127.0.0.1:$P/test/state | python3 -c "import sys,json;d=json.load(sys.stdin);print({k:d.get(k) for k in ('busy','phase','lastFailure')})"
 cat $S/wispr-loop.lock 2>/dev/null || echo "no lock file"
 python3 helpers/teacher_progress.py
 ```
