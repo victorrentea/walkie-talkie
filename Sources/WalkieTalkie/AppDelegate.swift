@@ -2259,8 +2259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // reaches his real Wispr), C/H6 a held right-hand modifier pair.
         // **An agent's answer, beside the pointer** (2026-10-07, `ReplyPanel`).
         picker.onReply = { body in
-            guard body["token"] as? String == Self.replyToken else {
-                Log.error("💬 POST /reply refused — wrong or missing token")
+            guard LoopbackToken.replyTokenMatches(body["token"], expected: Self.replyToken, route: "/reply") else {
                 return (403, ["ok": false, "error": "token"])
             }
             // **Pictures ride the answer** (2026-10-09, Victor: *"the reply bubble
@@ -2317,8 +2316,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // answer a question"*): the ⚡ quick question, its header and its prompt
         // supplied by the caller. Fire-and-forget: the answer is the pop-up.
         picker.onAsk = { [weak self] body in
-            guard body["token"] as? String == Self.replyToken else {
-                Log.error("⚡ POST /ask refused — wrong or missing token")
+            guard LoopbackToken.replyTokenMatches(body["token"], expected: Self.replyToken, route: "/ask") else {
                 return (403, ["ok": false, "error": "token"])
             }
             guard let self, let text = body["text"] as? String,

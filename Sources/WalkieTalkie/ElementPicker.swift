@@ -11,9 +11,9 @@ import Network
 /// beside it rather than open a second port scheme. The extension, the picks and
 /// the music bridge were removed on 2026-11-20 (docs/journal.md); the routes stayed.
 ///
-/// **Every route but `GET /engine`, `GET /target`, `/reply` and `/ask` asks for
-/// `X-Walkie-Token`** (2026-11-25) — the token in `<home>/test-token`, new at
-/// every launch; `LoopbackToken` says why and what stays open.
+/// **Every route but `/reply` and `/ask` asks for `X-Walkie-Token`** (2026-11-25)
+/// — the token in `<home>/test-token`, new at every launch, sent only to the port
+/// `<home>/test-port` names; `LoopbackToken` says why and what stays open.
 final class ElementPicker {
 
     /// Point the relay at the terminal that is in front **right now**, and
@@ -453,15 +453,20 @@ final class ElementPicker {
     private var listener: NWListener?
     /// This launch's `X-Walkie-Token` (`LoopbackToken`), issued by `start()`.
     private(set) var testToken = ""
-    /// The last 401 logged per path — a caller without the token polling at
-    /// 10 Hz would otherwise fill the log.
-    private var refusalLogged: [String: Date] = [:]
+    /// Whether the home's file may admit a caller too (`LoopbackToken.trustsDisk`).
+    private var trustDisk = false
+    /// Which 401s get a log line — a caller without the token polling at 10 Hz
+    /// would otherwise fill the log; bounded in keys and lines (`RefusalThrottle`).
+    /// Touched on `queue` only.
+    private var refusals = RefusalThrottle()
     private let queue = DispatchQueue(label: "ro.victorrentea.wispr-relay.inspect")
 
     func start() {
         // The overlay-states shoot is a second process beside the installed app:
         // it keeps its token to itself rather than replace the app's file.
-        testToken = LoopbackToken.issue(home: Outbox.home, persist: !RelayWindow.shooting)
+        let persist = !RelayWindow.shooting
+        testToken = LoopbackToken.issue(home: Outbox.home, persist: persist)
+        trustDisk = LoopbackToken.trustsDisk(issued: testToken, persist: persist, home: Outbox.home)
         bind(0)
     }
 
@@ -491,6 +496,8 @@ final class ElementPicker {
             switch state {
             case .ready:
                 self.port = candidate
+                // After the token (`start()`): a caller sends it here and nowhere else.
+                if !RelayWindow.shooting { LoopbackToken.publishPort(candidate, home: Outbox.home) }
                 Log.info("loopback control on 127.0.0.1:\(candidate)")
             case .failed:
                 // Almost always another relay already holding it.
@@ -535,15 +542,17 @@ final class ElementPicker {
             return respond(conn, 403, ["ok": false, "error": "not from a web page"])
         }
         if !LoopbackToken.allows(method: request.method, path: request.path, presented: request.token,
-                                 own: testToken, onDisk: { LoopbackToken.read(home: Outbox.home) }) {
-            let file = LoopbackToken.url(home: Outbox.home).path
-            let key = "\(request.method) \(request.path)"
-            if Date().timeIntervalSince(refusalLogged[key] ?? .distantPast) > 60 {
-                refusalLogged[key] = Date()
-                Log.info("🔑 refused \(key.prefix(60)) — \(request.token == nil ? "no" : "wrong") X-Walkie-Token (\(file))")
+                                 own: testToken,
+                                 onDisk: { self.trustDisk ? LoopbackToken.read(home: Outbox.home) : nil }) {
+            if let line = refusals.admit(RefusalThrottle.key(request.method, request.path)) {
+                Log.info("🔑 refused \(line.key) — \(request.token == nil ? "no" : "wrong") X-Walkie-Token"
+                         + " (\(LoopbackToken.url(home: Outbox.home).path))"
+                         + (line.suppressed > 0 ? " — \(line.suppressed) more refusal(s) not logged" : ""))
             }
+            // No path in the answer: the home names the account.
             return respond(conn, 401, ["ok": false, "error": "token",
-                                       "need": "X-Walkie-Token: the contents of \(file)"])
+                                       "need": "X-Walkie-Token: the contents of test-token in the app's home,"
+                                           + " sent only to the port test-port names"])
         }
         switch (request.method, request.path) {
         // Bind / unbind / inspect the terminal a dictation gets typed into.
