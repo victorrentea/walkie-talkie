@@ -232,6 +232,7 @@ final class WisprFlowSource: DictationSource {
     /// as a fix. This is the first answer `putTheFrontBack` tries; `focusPid` is
     /// the fallback.
     private var frontBeforeLast: pid_t = 0
+    private var frontObserver: NSObjectProtocol?
 
     /// When the front was last given back, newest last — a rate limit and
     /// nothing more. Wispr and the relay each activating in answer to the other
@@ -1144,8 +1145,11 @@ final class WisprFlowSource: DictationSource {
                 }
             }
         }
-        // Whose keyboard it is, kept current — see `lastFrontPid`.
-        NSWorkspace.shared.notificationCenter.addObserver(
+        // Whose keyboard it is, kept current — see `lastFrontPid`. **Once**
+        // (2026-11-25, Fable review): `prepare()` runs at every switch to Wispr,
+        // and a second observer made `frontBeforeLast == lastFrontPid`.
+        guard frontObserver == nil else { return }
+        frontObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
             object: nil, queue: .main) { [weak self] note in
                 guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
