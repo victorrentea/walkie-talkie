@@ -572,8 +572,9 @@ final class TerminalBinding {
         case .keystroke(let pid, _): fresh = Self.focusedWindow(pid: pid).title
         // The window's own title, exactly as for a paste target: the panel has
         // no title of its own that means anything to Victor, and both IDEs put
-        // the project first in the window title.
-        case .ide: fresh = nil
+        // the project first in the window title. Kept as read at bind: `nil`
+        // here wiped it on the first poll.
+        case .ide: fresh = existing.title
         }
         let folder = currentFolder(for: existing)
         guard fresh != existing.title || folder != existing.folder else { return nil }
@@ -2088,7 +2089,17 @@ final class TerminalBinding {
             return "gone"
         end tell
         """
-        guard let answer = osascript(script), answer == "ok" || answer.hasPrefix("ok\n") else { return false }
+        // **The words are already in the box**: only a tab that is really gone
+        // makes this a failed delivery. A Return script that timed out or failed
+        // (a stalled Terminal, a huge `history`) must not be reported as a closed
+        // tab — that unbound a live session, flashed `Terminal closed`, and the
+        // caret prompt pasted the sentence a second time into the same box.
+        let returned = osascript(script)
+        if returned == "gone" { return false }
+        guard let answer = returned, answer == "ok" || answer.hasPrefix("ok\n") else {
+            Log.error("⌨️ \(tty): typed, Return unconfirmed — its script did not answer")
+            return true
+        }
         var tail = answer == "ok" ? "" : String(answer.dropFirst(3))
         // The tab's last 600 characters, decided here rather than in the script
         // so the echo can be told from the hint (`asksForReview`). **Read up to
