@@ -99,7 +99,12 @@ echo "$S — ${NAME:-?} · $SECS s pe rundă · centru $PX,$PY"
 "$BLACKBIN" & BLACK=$!
 # `halo_lock_release` e chemat aici pe mână: `trap` e global, deci linia asta îl
 # înlocuiește pe cel pus de `tools/halo-lock.sh`.
-trap 'kill $BLACK 2>/dev/null; warp $ORIG; halo_lock_release' EXIT INT TERM
+# **INT/TERM ies, nu se întorc în buclă** (review Fable, 2026-11-25): un handler
+# comun care nu face `exit` curăța (fundal, cursor, lacăt) și apoi bucla `for spec`
+# mergea mai departe — warp pe centru și o rută nouă filmată fără 🔒 și fără lacăt,
+# după un Ctrl-C sau un dublu-click pe 🔒. Acum doar EXIT curăță, o singură dată.
+cleanup() { kill $BLACK 2>/dev/null; warp $ORIG; halo_lock_release; }
+trap cleanup EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
 sleep 0.8
 
 for spec in "$@"; do

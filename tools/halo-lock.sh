@@ -43,7 +43,9 @@ for _i in $(seq 1 900); do            # 30 de minute, apoi renunțăm zgomotos
   if mkdir "$HALO_LOCK" 2>/dev/null; then
     echo $$ > "$HALO_LOCK/pid"
     printf 'pid %s · %s · %s\n' "$$" "${HALO_LOCK_WHO:-$(basename "$0")}" "$(date '+%H:%M:%S')" > "$HALO_LOCK/holder"
-    trap halo_lock_release EXIT INT TERM
+    # INT/TERM only `exit`: a handler that returns lets the caller run on with
+    # the lock gone (Fable review, 2026-11-25); EXIT then releases it once.
+    trap halo_lock_release EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
     break
   fi
   # **Deținătorul mort se detectează după proces, nu după ceas.** Laptopul a
