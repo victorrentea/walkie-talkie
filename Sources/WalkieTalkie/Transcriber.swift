@@ -431,6 +431,13 @@ final class LocalWhisper {
 
             Log.info("\(self.tag) starting (\(python) \(helper)) — loading weights")
             guard let hello = self.readLine(timeout: Self.helloBudget) else {
+                // A hello that did not parse, or a failed poll, leaves the helper
+                // up but never ready — and the next `start()` would answer
+                // "ready" on `proc != nil`. Let it go, as the timeout does.
+                if let p = self.proc {
+                    Darwin.kill(p.processIdentifier, SIGKILL)
+                    self.markDead("never said it was ready")
+                }
                 onReady("the model did not come up within \(Int(Self.helloBudget))s"); return
             }
             if let ok = hello["ready"] as? Bool, ok {
