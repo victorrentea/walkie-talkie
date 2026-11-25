@@ -14478,7 +14478,7 @@ extension AppDelegate {
         var quickAsk = false, quickFollowUp = false, quickGoogle = false, quickGoogleToo = false
         var quickRoom: RoomTranscript?
         var chatAsk = false
-        var latchedAtCaret = false, cleanRedirected = false
+        var latchedAtCaret = false, cleanRedirected = false, cleanAutoBound = false
         var latch: Latch?
         var latchedMouse: CGPoint?
         var pendingPromptWarning: String?
@@ -14522,7 +14522,7 @@ extension AppDelegate {
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
         e.quickGoogle = quickGoogle; e.quickGoogleToo = quickGoogleToo; e.chatAsk = chatAsk; e.quickRoom = quickRoom
-        e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
+        e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected; e.cleanAutoBound = cleanAutoBound
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
         e.pendingVia = pendingVia; e.pendingEngine = pendingEngine; e.pendingHeard = pendingHeard; e.pendingDeliveryKind = pendingDeliveryKind
@@ -14541,7 +14541,7 @@ extension AppDelegate {
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
         quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false; quickRoom = nil
         chatAsk = false
-        latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
+        latchedAtCaret = false; cleanRedirected = false; cleanAutoBound = false; latch = nil; latchedMouse = nil
         pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
         pendingAffect = nil
         pendingFilms = []
@@ -14588,7 +14588,7 @@ extension AppDelegate {
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp
         quickGoogle = e.quickGoogle; quickGoogleToo = e.quickGoogleToo; chatAsk = e.chatAsk; quickRoom = e.quickRoom
-        latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
+        latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected; cleanAutoBound = e.cleanAutoBound
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning
         pendingVia = e.pendingVia; pendingEngine = e.pendingEngine; pendingHeard = e.pendingHeard; pendingDeliveryKind = e.pendingDeliveryKind
