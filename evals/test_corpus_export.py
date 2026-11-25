@@ -60,5 +60,15 @@ class SpeakingRate(unittest.TestCase):
         self.assertFalse(ce.too_fast("orice text", None))
 
 
+class Days(unittest.TestCase):
+    """Validation takes whole days, so the day must be the date, not the folder."""
+
+    def test_a_dictation_is_its_folders_day(self):
+        self.assertEqual(ce.day_of("2026-09-14/10-00-00-abc.wav"), "2026-09-14")
+
+    def test_a_teaching_clip_is_its_date_not_mic(self):
+        self.assertEqual(ce.day_of("mic/2026-09-14/10-00-00.wav"), "2026-09-14")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

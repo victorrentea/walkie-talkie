@@ -95,6 +95,20 @@ def wav_seconds(path):
         return w.getnframes() / float(w.getframerate())
 
 
+def day_of(wav: str) -> str:
+    """The calendar day a sample was recorded, off its corpus path.
+
+    `mic_corpus_ingest` files the teaching room under `mic/<day>/…`; reading the
+    first component made all of it one "day" called `mic`, which sorts after every
+    date and so went to validation whole — 6.8 h of teaching and nothing else,
+    none of it in training (2026-11-25, found by the Fable review).
+    """
+    parts = wav.split("/")
+    if parts[0] == "mic" and len(parts) > 2:
+        return parts[1]
+    return parts[0]
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True)
@@ -152,7 +166,7 @@ def main(argv):
             dropped["more words than the audio can hold"] += 1
             continue
 
-        day = rec["wav"].split("/")[0]
+        day = day_of(rec["wav"])
         rel = f"audio/{rec['id']}.wav"
         if args.copy_audio:
             shutil.copy2(src, out / rel)
