@@ -3238,7 +3238,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // the local engine is up. Close it: a double click is by definition
             // faster than `MicRecorder.minimumDuration`, so the recording is
             // dropped by the guard there rather than transcribed and sent.
-            if self.listening { self.endDictation() }
+            // On main: the stop draws and moves the sentence; only the bind
+            // below needs to be off it.
+            DispatchQueue.main.sync { if self.listening { self.endDictation() } }
             _ = self.bindFrontmostTerminal()
         }
         hotkeys.onPromptEnter = { [weak self] in self?.overlay.sendHeldPrompt() }
@@ -12978,7 +12980,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.publishShotCount()
                 return
             }
-            self.send(kind: "screenshot", paths: [path])
+            // `send` reads main-only state (`panelsComing`, the film): hop first.
+            DispatchQueue.main.async { self.send(kind: "screenshot", paths: [path]) }
         }
     }
 
@@ -13158,7 +13161,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard attaching else {
             // The sentence ended while he was framing. The picture is still
             // worth having on its own — same rule the shutter follows.
-            send(kind: "screenshot", paths: [path])
+            // Called off main; `send` reads main-only state (`panelsComing`, the film).
+            DispatchQueue.main.async { self.send(kind: "screenshot", paths: [path]) }
             return path
         }
         armOrphanFlush()
