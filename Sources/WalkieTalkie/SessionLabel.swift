@@ -14,7 +14,14 @@ import Foundation
 /// somewhere else.
 enum SessionLabel {
 
-    static var value: String = derive()
+    /// Written on main, read from the HTTP listener, the outbox and the corpus
+    /// writers — hence the lock.
+    static var value: String {
+        get { lock.lock(); defer { lock.unlock() }; return stored }
+        set { lock.lock(); stored = newValue; lock.unlock() }
+    }
+    private static let lock = NSLock()
+    private static var stored: String = derive()
 
     private static var overridden = false
 
@@ -25,16 +32,27 @@ enum SessionLabel {
 
     /// Re-read the branch periodically: Victor switches branches mid-session, and
     /// an overlay still claiming `@master` while he works on a feature branch is a
-    /// label that lies. Returns true when it changed, so the caller can relayout
-    /// (the title drives the overlay's width).
-    @discardableResult
-    static func refresh() -> Bool {
-        guard !overridden else { return false }
-        let fresh = derive()
-        guard fresh != value else { return false }
-        value = fresh
-        return true
+    /// label that lies. `changed` runs on main when it did, so the caller can
+    /// relayout (the title drives the overlay's width).
+    ///
+    /// **`git` runs off main** (2026-11-25, found by the Fable review): a 10 s
+    /// timer forking `git` on main was a hitch every tick, and a `git` that
+    /// stalled froze the app. One read at a time; main only publishes it.
+    static func refresh(_ changed: @escaping () -> Void = {}) {
+        guard !overridden, !reading else { return }
+        reading = true
+        DispatchQueue.global(qos: .utility).async {
+            let fresh = derive()
+            DispatchQueue.main.async {
+                reading = false
+                guard !overridden, fresh != value else { return }
+                value = fresh
+                changed()
+            }
+        }
     }
+    /// A read in flight — main thread only.
+    private static var reading = false
 
     private static func derive() -> String {
         let cwd = FileManager.default.currentDirectoryPath

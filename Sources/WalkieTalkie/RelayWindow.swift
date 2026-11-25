@@ -1912,9 +1912,10 @@ private let heardLabel = NSTextField(labelWithString: "")
             // It is asked unconditionally, ahead of the early return: a title
             // that changed while the branch did not is the common case.
             self.onRefreshBound?()
-            guard SessionLabel.refresh() else { return }
-            self.applyTitleText()
-            self.layoutContent()          // the title drives the overlay's width
+            SessionLabel.refresh { [weak self] in
+                self?.applyTitleText()
+                self?.layoutContent()     // the title drives the overlay's width
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         labelTimer = timer
