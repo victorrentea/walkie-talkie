@@ -10897,12 +10897,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // with its offset, context frame first at 0:00, the way `send` does.
         let screen = full ? pendingScreen : nil
         let fullOffsets = (screen != nil ? [0] : []) + pendingShotOffsets
+        let offsets = pendingShotOffsets
         let markerNumbers = shotMarkerNumbers
         pendingShots = []
         pendingShotOffsets = []
         let sources = shotSources
         let mice = shotMice, areas = shotAreas, sizes = shotSizes
-        let offsets = pendingShotOffsets
         shotSources = [:]
         shotMice = [:]
         shotAreas = [:]
@@ -10990,6 +10990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 2026-09-19: *"if I'm dictating at caret, we still don't do an initial
         // screenshot"*), so `screen` is nil and the numbering starts at 📸1.
         let envelope = Message(kind: "dictation", text: words, selection: nil,
+                               inlinedShots: inlinedShots,
                                paths: shots, screen: nil,
                                shotOffsets: offsets, mice: mice, areas: areas, sizes: sizes,
                                sources: sources, app: nil)
