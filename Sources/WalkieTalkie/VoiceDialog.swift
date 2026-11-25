@@ -240,12 +240,16 @@ final class VoiceDialog: NSObject {
         stopAudio()
         if let id = threadId { rpc("thread/realtime/stop", ["threadId": id]) { _ in } }
         let p = process
+        let pipe = stdin
         process = nil
         io.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             p?.terminate()
-            self?.stdin = nil
-            self?.waiting.removeAll()
-            self?.buffer.removeAll()
+            // Only this session's state: a `start()` inside the 0.6 s has its
+            // own pipe and callbacks, which this cleanup must not wipe.
+            guard let self, self.stdin === pipe else { return }
+            self.stdin = nil
+            self.waiting.removeAll()
+            self.buffer.removeAll()
         }
         threadId = nil
         WakeWord.shared.resume()
@@ -366,8 +370,11 @@ final class VoiceDialog: NSObject {
                             self.send(["id": id, "result": ["success": true, "contentItems": [["type": "inputText", "text": said]]]])
                         }
                     } else {
-                        // Nothing else here needs approving.
-                        send(["id": id, "result": ["decision": "approved"]])
+                        // The thread is `read-only` with `approvalPolicy: never`, so
+                        // nothing else should ask. Whatever does is refused, not
+                        // approved unread — the input is a room's microphone.
+                        Log.error("🗣️ voice dialog — refused the server's unexpected request \(method)")
+                        send(["id": id, "error": ["code": -32601, "message": "not supported by this client"]])
                     }
                 } else {
                     let params = message["params"] as? [String: Any] ?? [:]
