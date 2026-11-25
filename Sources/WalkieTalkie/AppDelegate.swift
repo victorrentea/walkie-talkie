@@ -11101,6 +11101,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.info("⏎ caret prompt typed into Claude Code on \(tty) and submitted — \(line.count) chars")
                 self.pinLanded(landing, "typed into Claude Code on \(tty)")
                 self.lastDictation = line
+                // Q17: `do script` never touched the pasteboard — the one caret
+                // destination that is not a `pasteText`.
+                self.holdOnClipboard(line, why: "the caret prompt (typed into Claude Code)")
                 self.offerKamikaze(already: already, at: tty, serial: serial) { [weak self] in
                     DispatchQueue.global(qos: .userInitiated).async {
                         // The session may have ended since (the offer lasts):
