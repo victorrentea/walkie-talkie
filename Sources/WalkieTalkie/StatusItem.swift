@@ -870,7 +870,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     private let gepettoRow = NSMenuItem(title: WakeWord.gepettoMenuTitle, action: nil, keyEquivalent: "")
     private let faceRow = NSMenuItem(title: FaceRead.menuTitle, action: nil, keyEquivalent: "")
     /// **💸 Turn cost** (2026-11-20): the cost float when a prompted turn ends (`TurnCost.enabled`).
-    private let turnCostRow = NSMenuItem(title: "💸 Turn cost", action: nil, keyEquivalent: "")
+    private let turnCostRow = NSMenuItem(title: "💸 Show last turn cost", action: nil, keyEquivalent: "")
     /// **🐋 Orca (experimental)** (2026-11-19): new sessions open as Orca tabs,
     /// ⌘⌃B binds Orca's front pane, the spawn menu lists Orca's sessions.
     private let orcaRow = NSMenuItem(title: OrcaBridge.menuTitle, action: nil, keyEquivalent: "")

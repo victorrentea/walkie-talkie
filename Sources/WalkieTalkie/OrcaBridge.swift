@@ -24,7 +24,7 @@ import AppKit
 enum OrcaBridge {
     static let bundleID = "com.stablyai.orca"
     static let appName = "Orca"
-    static let menuTitle = "Orca (experimental)"
+    static let menuTitle = "Send to Orca IDE (experimental)"
     static let defaultsKey = "orcaIntegration"
     static let cli = "/Applications/Orca.app/Contents/Resources/bin/orca"
 

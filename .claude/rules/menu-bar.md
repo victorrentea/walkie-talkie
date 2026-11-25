@@ -22,7 +22,7 @@ that are right now in engine top level."*
 
 - **The menu, top to bottom (2026-11-21):** header · Paste last prompt ⌘V / Prompt History (opens the
   Full Log, no submenu) / Recover Dictation / Replay Last Heard Audio · Mic ▸ / Engine ▸ / Gestures ▸ / 𝓯𝔁 ▸ / Autosend / Auto-attach ▸ / squelch ·
-  **the engine switches** (Live captions (local) — off by default since 2026-11-22, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Orca (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed, 💸 Turn cost since 2026-11-20 — `TurnCost.enabled`, on by default) · **Gesture Guide** · `Built …` · Quit.
+  **the engine switches** (Live captions (local) — off by default since 2026-11-22, 👂 Hey Claude, 🗣️ Hey Gepetto — its own tick since 2026-11-15, 🙂 Read my face, 🐋 Send to Orca IDE (experimental) since 2026-11-19 — `OrcaBridge.enabled`, off by default, greyed when Orca is not installed, 💸 Show last turn cost since 2026-11-20 (renamed 2026-11-25) — `TurnCost.enabled`, on by default) · **Gesture Guide** · `Built …` · Quit.
 - **Gesture Guide lives in `Gestures ▸`, under the Logi row; `Custom` is a switch below the two** (2026-11-22,
   Victor: *"gestures guide să fie intrare de sub 'logi' din submeniul gestures. și mai adaugă încă un meniu
   'custom' în gestures"*) — supersedes *· Gesture Guide ·* as a top-level row in the bullet above. The submenu,
