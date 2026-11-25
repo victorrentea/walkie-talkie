@@ -264,13 +264,32 @@ def home() -> Path:
     return Path(os.environ.get("WALKIE_HOME", Path.home() / ".walkie-talkie"))
 
 
+def is_installed_app(state: dict, installed: set[int]) -> bool:
+    """**Is this `/test/state` the installed app's?** (Fable review, 2026-11-25) A
+    `.build/debug` instance (a photo run, a halo demo, a `--home` test) that binds
+    8917 while the installed app relaunches on 8918 used to be read as *the*
+    relay — its idle state let a restart through while he dictated into the
+    installed one. With no installed app found, or a state without a pid, any
+    answer still counts, as before."""
+    pid = state.get("pid")
+    return not installed or not isinstance(pid, int) or pid in installed
+
+
+def installed_pids() -> set[int]:
+    out = subprocess.run(["pgrep", "-f", APP_EXEC], capture_output=True, text=True).stdout
+    return {int(p) for p in out.split() if p.isdigit()}
+
+
 def fetch_state() -> dict | None:
+    installed = installed_pids()
     for port in PORTS:
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/test/state", timeout=3) as r:
                 body = r.read()
             if body:
-                return json.loads(body)
+                state = json.loads(body)
+                if is_installed_app(state, installed):
+                    return state
         except Exception:
             continue
     return None

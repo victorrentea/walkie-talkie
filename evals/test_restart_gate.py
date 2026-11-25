@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
-from restart_gate import QUIET_AFTER_DELIVERY, Gate, busy_reasons, runner_lock_reason  # noqa: E402
+from restart_gate import QUIET_AFTER_DELIVERY, Gate, busy_reasons, is_installed_app, runner_lock_reason  # noqa: E402
 
 T0 = 1_800_000_000.0
 
@@ -256,6 +256,20 @@ class OldBuildTest(unittest.TestCase):
              "awaitingBind": True, "arrowsUp": True, "filming": True}
         self.assertEqual(busy_reasons(s), ["dictating", "microphone open", "Wispr sentence",
                                            "transcribing", "held for a bind", "delivering", "filming"])
+
+
+class WhichRelayTest(unittest.TestCase):
+    """A debug instance on a lower port is not the installed app (Fable review, 2026-11-25)."""
+
+    def test_a_debug_instance_is_not_the_installed_app(self):
+        self.assertFalse(is_installed_app(idle(pid=900), {501}))
+
+    def test_the_installed_app_is_believed(self):
+        self.assertTrue(is_installed_app(idle(pid=501), {501}))
+
+    def test_no_installed_app_or_no_pid_believes_any_answer(self):
+        self.assertTrue(is_installed_app(idle(pid=900), set()))
+        self.assertTrue(is_installed_app(idle(), {501}))
 
 
 if __name__ == "__main__":
