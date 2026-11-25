@@ -211,7 +211,9 @@ enum OrcaBridge {
         let h = pane.handle
         guard type(text, handle: h) else { return .refused }
         usleep(500_000)
-        guard pressReturn(handle: h) else { return .delivered }
+        // A refused Return is not a delivery (2026-11-25, Fable review): the watch
+        // below reads the pane and presses again while the sentence is still in the box.
+        if !pressReturn(handle: h) { Log.error("⌨️ 🐋 the first Return was refused — watching the pane to press it again") }
         usleep(350_000)
         var tail = screen(handle: h) ?? ""
         var presses = 0, reads = 1, lookedAgain = false
