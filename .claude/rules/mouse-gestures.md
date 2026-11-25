@@ -622,3 +622,22 @@ text to ChatGPT new chat, and then open the dialog mode."*
   *once more* found no start button (the call was connecting), fell back to ⌃⇧V — the toggle — and
   ended it. After a question the microphone now gets 12 s, and the retry presses a start button or
   nothing. Still unproven: whether a call started while the text answer streams stays up.
+
+## ⚡ The DJI Link ×2 asks the quick question (2026-11-25)
+
+Victor: Link pressed twice on the DJI receiver starts the ⚡ quick question, so he can ask from across the
+room with no mouse; twice again while it records ends it, and it is answered. **Supersedes, for Link ×2,
+2026-11-16's *two presses = ChatGPT's voice on / off*** (Victor Mac' `DjiLinkButton`, which seizes the
+receiver's button and called `POST /test/chat-voice`); one press still mutes the receiver there.
+
+| Link ×2 while | does |
+|---|---|
+| nothing records | a ⚡ question — `openQuickQuestion`, the very method 🔼 ← at rest calls |
+| a ⚡ question records (the 🔽 ← Codex one too) | ends it as 🔼 does (`endDictation`) — answered |
+| any other sentence records, words in flight, a start the app would refuse | nothing — 409 with why |
+
+- Victor Mac posts `POST /question/toggle` (token from `test-token`); the decision is
+  `QuestionToggle.decide`, `QuestionToggleTests`. Desk row in `desk-testing.md`.
+- Unlike 🔼 ← at rest it never cancels: a ⚡ answer still coming is replaced by the new question
+  (`QuickAsk.ask` ends the last run); a held prompt panel is not cancelled either.
+- **Not pressed on the receiver yet.**

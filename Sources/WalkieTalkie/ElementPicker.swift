@@ -33,6 +33,9 @@ final class ElementPicker {
     /// `bound-tty` carried one: a tty now hosted by another tab is then refused.
     var onBindTTY: ((String, String?, String?) -> [String: Any]?)?
     var onUnbind: (() -> Void)?
+    /// `POST /question/toggle` — a ⚡ question opened at rest, ended while it
+    /// records, refused over any other sentence (`QuestionToggle`). Run on main.
+    var onQuestionToggle: (() -> (status: Int, body: [String: Any]))?
     /// The current binding, for `GET /target` — so a caller can ask without
     /// changing anything.
     var describeTarget: (() -> [String: Any]?)?
@@ -566,6 +569,14 @@ final class ElementPicker {
         case ("POST", "/unbind"):
             onUnbind?()
             respond(conn, 200, ["ok": true, "bound": false])
+
+        // ⚡ The quick question without the mouse (2026-11-25, `QuestionToggle`):
+        // Victor Mac' DJI Link ×2. Not a `/test/*` route — another app calls it
+        // in daily use, like `/bind`; behind the token like every route.
+        case ("POST", "/question/toggle"):
+            var answer = QuestionToggle.answer(.refuse("Walkie Talkie is not wired yet"))
+            DispatchQueue.main.sync { if let a = onQuestionToggle?() { answer = a } }
+            respond(conn, answer.status, answer.body)
 
         // Put a sentence through the whole dictation path without speaking one.
         //

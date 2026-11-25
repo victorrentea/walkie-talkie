@@ -2778,10 +2778,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     return
                 }
                 guard !self.source.phase.isWaitingForWords else { return }
-                Log.info("⚡ 🔼 ← at rest — a quick question for \(QuickAsk.shared.model)")
-                self.startDictation(paste: true, quick: true)
-                self.offerRoom()
+                self.openQuickQuestion(by: "🔼 ← at rest")
             }
+        }
+        // ⚡ without the mouse (2026-11-25): Victor Mac' DJI Link ×2 → `POST
+        // /question/toggle`. At rest the question 🔼 ← opens; over it, 🔼's end.
+        picker.onQuestionToggle = { [weak self] in
+            guard let self else { return QuestionToggle.answer(.refuse("Walkie Talkie is quitting")) }
+            let open = self.listening || self.source.isRecording
+            let verdict = QuestionToggle.decide(open: open, quick: self.quickAsk,
+                                                wordsInFlight: self.source.phase.isWaitingForWords,
+                                                blocked: open ? nil : self.startBlocker())
+            switch verdict {
+            case .start: self.openQuickQuestion(by: "POST /question/toggle (DJI Link ×2) at rest")
+            case .end:
+                Log.info("⚡ POST /question/toggle (DJI Link ×2) over the ⚡ question — it ends, as 🔼 ends it")
+                self.endDictation()
+            case .refuse(let why): Log.info("⚡ POST /question/toggle refused — \(why)")
+            }
+            return QuestionToggle.answer(verdict)
         }
         // 🔽 ← with a microphone open (2026-10-21): 🔼 ←'s cancel, never its
         // ⚡ question — the tap only raises this mid-sentence. A sentence that
@@ -7449,6 +7464,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("⚡ 🔼 → over the quick answer — a follow-up, \(quickThread.count) turn(s) before it; the pop-up goes in ❓")
         ReplyPanel.shatter(.questions)
         startDictation(paste: true, quick: true, followUp: true)
+        offerRoom()
+    }
+
+    /// **A ⚡ quick question opens** — 🔼 ← at rest (`onLocalCancel`) and
+    /// `POST /question/toggle` (the DJI Link ×2) share it; each caller has
+    /// already found nothing to cancel and no words in flight.
+    private func openQuickQuestion(by gesture: String) {
+        Log.info("⚡ \(gesture) — a quick question for \(QuickAsk.shared.model)")
+        startDictation(paste: true, quick: true)
         offerRoom()
     }
 

@@ -17249,3 +17249,15 @@ and the teaser's guest helpers (the guest's own file, read inside the guest). Th
 `test_envelope`'s port probe asked `/up`, gone with the extension on 2026-11-20 — they ask
 `/test/state` now. **victor-mac's DJI Link ×2 (`POST /test/chat-voice`) gets 401 until it sends the
 token.** `LoopbackTokenTests`; not yet run against the installed app.
+
+## 2026-11-25 — ⚡ The DJI Link ×2 asks the quick question: `POST /question/toggle`
+
+Victor: pressing the DJI receiver's Link button twice should start the ⚡ quick question (🔼 ← at rest),
+so he can ask from across the room with no mouse; twice again while it records ends it and it is answered.
+It replaces Link ×2's ChatGPT voice on / off (`POST /test/chat-voice`); one press still mutes the receiver.
+Victor Mac seizes the button and now calls `POST /question/toggle` (its `DjiLinkButton.toggleQuestion`).
+`QuestionToggle.decide` (pure, `QuestionToggleTests`): at rest → `openQuickQuestion`, the same method
+🔼 ← at rest calls now (`started`); a ⚡ question recording → 🔼's `endDictation` (`ended`); any other
+sentence recording, words in flight, or a start `startBlocker` would refuse → 409 `refused` with why,
+nothing touched. Not a `/test/*` route because another app calls it in daily use, as the restart calls
+`/bind`; the token gate covers it like every route but the four open ones. Not yet pressed on the receiver.
