@@ -193,9 +193,16 @@ enum ReplyPanel {
     /// `screencapture` runs off the main thread, the window is touched on it.
     /// `inShotChanged` takes the other capturable windows out with it (the prompt
     /// panel under the ⌥⇧ zoom, `RelayWindow.applySharing`).
+    ///
+    /// **Re-entrant**: captures overlap (a film's 5 Hz tick on `captureQueue`
+    /// while the shutter's `screencapture` runs on a global queue), so the windows
+    /// come back only when the last one still shooting is done (`shotDepth`, main).
     static func outOfShot<T>(_ body: () throws -> T) rethrows -> T {
         func share(_ type: NSWindow.SharingType, inShot: Bool) {
             let apply = {
+                shotDepth += inShot ? 1 : -1
+                // Another capture is still taking its picture: leave them out.
+                guard inShot || shotDepth == 0 else { return }
                 // First, so `RoomShare`'s setter lets a `.none` through for the shot.
                 self.inShot = inShot
                 RoomShare.shot(inShot)
@@ -215,6 +222,8 @@ enum ReplyPanel {
     }
     /// The shutter is taking its picture — every capturable window is out of it.
     private(set) static var inShot = false
+    /// How many `outOfShot` bodies are running — main thread only.
+    private static var shotDepth = 0
     static var inShotChanged: [() -> Void] = []
     /// The open pop-up's frame, global Cocoa points.
     static var frame: NSRect? { panel?.frame }
