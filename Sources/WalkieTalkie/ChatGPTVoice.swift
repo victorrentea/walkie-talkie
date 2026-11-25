@@ -142,15 +142,24 @@ enum ChatGPTVoice {
                         // live run in five lost the key there).
                         var tries = 0
                         while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
-                        // Only the conversation: both side bars shut.
-                        if let target { closeBars(window: target) }
+                        // Only the conversation: both side bars shut. A key posted
+                        // on the HID tap goes to whatever is in front — never
+                        // without the app there.
+                        if let target {
+                            if inFront(pid) { closeBars(window: target) }
+                            else { Log.info("🗣️ ChatGPT voice — lost the front after the link, bars left as they are") }
+                        }
                         if question != nil {
                             // The prefill lands with the page; then Return sends it.
                             usleep(300_000)
                             var tries = 0
                             while !inFront(pid), tries < 20 { usleep(100_000); tries += 1 }
-                            press(36, under: [])
-                            Log.info("🗣️ ChatGPT voice — the question is in the new chat, Return pressed")
+                            if inFront(pid) {
+                                press(36, under: [])
+                                Log.info("🗣️ ChatGPT voice — the question is in the new chat, Return pressed")
+                            } else {
+                                Log.info("🗣️ ChatGPT voice — lost the front before the Return, not pressed (it would land in the app in front)")
+                            }
                             // The page becomes the thread's before it has a voice button.
                             usleep(600_000)
                         }
@@ -352,6 +361,7 @@ enum ChatGPTVoice {
             if attempt > 0 { usleep(200_000) }
             if let label = pressVoiceButton(pid: pid, stop: stop) { return "“\(label)”" }
         }
+        guard inFront(pid) else { return "nothing (no \(stop ? "stop" : "start") button, and the app not in front for ⌃⇧V)" }
         pressToggle()
         return "⌃⇧V (no \(stop ? "stop" : "start") button in the window)"
     }
