@@ -72,3 +72,19 @@ final class BrowserGateTests: XCTestCase {
         }
     }
 }
+
+/// The loopback server's request parser runs before `BrowserGate`: a negative
+/// `Content-Length` must not trap in `prefix` (it took the relay down).
+final class LoopbackRequestTests: XCTestCase {
+    func testANegativeLengthIsAnEmptyBody() {
+        let raw = Data("GET /x HTTP/1.1\r\nContent-Length: -1\r\n\r\n".utf8)
+        let request = ElementPicker.Request(raw)
+        XCTAssertEqual(request?.path, "/x")
+        XCTAssertEqual(request?.body.count, 0)
+    }
+
+    func testTheBodyIsCutAtItsLength() {
+        let raw = Data("POST /y HTTP/1.1\r\nContent-Length: 2\r\n\r\nabc".utf8)
+        XCTAssertEqual(ElementPicker.Request(raw).map { String(decoding: $0.body, as: UTF8.self) }, "ab")
+    }
+}

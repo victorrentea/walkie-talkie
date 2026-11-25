@@ -1364,7 +1364,7 @@ final class ElementPicker {
 
     /// A request is only a request once its body is all here — `nil` means "keep
     /// reading", which is the only signal the receive loop needs.
-    private struct Request {
+    struct Request {
         let host: String?
         let origin: String?
         let fetchSite: String?
@@ -1387,7 +1387,8 @@ final class ElementPicker {
                     return parts[1].trimmingCharacters(in: .whitespaces)
                 }.first
             }
-            let length = header("content-length").flatMap { Int($0) } ?? 0
+            // Clamped: `prefix` traps on a negative length, and `Int("-1")` parses.
+            let length = max(0, header("content-length").flatMap { Int($0) } ?? 0)
             self.host = header("host")
             self.origin = header("origin")
             self.fetchSite = header("sec-fetch-site")
