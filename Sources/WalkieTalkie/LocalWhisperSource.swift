@@ -268,7 +268,11 @@ final class LocalWhisperSource: DictationSource {
                 return
             }
             Log.error("🎙️ local: the microphone would not open — \(why)")
-            guard self.isRecording, self.take == t else { return }
+            // **Already stopped behind the open** (2026-11-25, the Fable review): its
+            // close finds no session and would end it `.silent("")` — *under
+            // 0.35 s*, no banner — after he spoke for seconds. Failed out loud
+            // here, as a lane given up is; the close then finds it answered.
+            guard self.isRecording, self.take == t else { self.failUnclosed(job, why: why); return }
             self.isRecording = false
             self.recordingJob = nil
             self.stopChunkWatch()
