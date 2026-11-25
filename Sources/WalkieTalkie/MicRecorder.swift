@@ -1,4 +1,5 @@
 import AVFoundation
+import ObjCTry
 import CoreAudio
 
 /// The relay's own microphone — the only one in the loop.
@@ -795,19 +796,33 @@ final class MicRecorder {
 
         // Belt and braces: a second tap on one bus is the other way this call
         // throws, and `removeTap` on a bus with none is a no-op.
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
-            self?.append(buffer)
-        }
-        engine.prepare()
-        do { try engine.start() } catch {
-            input.removeTap(onBus: 0)
+        //
+        // **Through `WTTry`** (2026-11-25, F4 of the 2026-10-13 audio review, still
+        // open until the Fable review found it): a device that changes format
+        // between `inputFormat` above and `installTap` here raises `Input HW format
+        // and tap format not matching` — an NSException Swift cannot catch, the
+        // 2026-09-01 SIGABRT. Now it fails the open, with its reason.
+        func unwind() {
+            _ = WTTry { input.removeTap(onBus: 0) }
             lock.lock()
             isRecording = false
             let failed = file
             file = nil; converter = nil; outputFormat = nil; url = nil; startedAt = nil
             lock.unlock()
             withExtendedLifetime(failed) {}   // released here, outside the lock
+        }
+        if let raised = WTTry({
+            input.removeTap(onBus: 0)
+            input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
+                self?.append(buffer)
+            }
+            engine.prepare()
+        }) {
+            unwind()
+            return "the microphone changed while it was being opened: \(raised.localizedDescription)"
+        }
+        do { try engine.start() } catch {
+            unwind()
             return "microphone unavailable: \(error.localizedDescription)"
         }
         Log.info("mic: \(destination == nil ? "metering" : "recording") through \(device) — \(Int(inFormat.sampleRate))Hz × \(inFormat.channelCount)ch")
@@ -838,7 +853,6 @@ final class MicRecorder {
     /// at peak 0 is said to stay DEAF (→ Recover, batch 2's path).
     private func watchForSilentEngine() {
         observeConfiguration()
-        stallTimer?.cancel()
         let t = DispatchSource.makeTimerSource(queue: restartQueue)
         let opened = Date()
         t.schedule(deadline: .now() + 1.0, repeating: 0.5)
@@ -854,10 +868,16 @@ final class MicRecorder {
             if let zero { self.handle(zero); return }
             let gap = Date().timeIntervalSince(last)
             guard gap >= 1.0, restarts < 5 else { return }
-            self.restartTap(why: String(format: "no audio buffer for %.1f s%@", gap, self.engine.isRunning ? "" : " — the engine had stopped"))
+            self.restartTap(why: String(format: "no audio buffer for %.1f s", gap), notesStoppedEngine: true)
         }
-        stallTimer = t
-        t.resume()
+        // **`stallTimer` belongs to `restartQueue`** (2026-11-25, F5): its handler
+        // writes it there, and this ran on the lane's queue — two queues, one `var`.
+        restartQueue.async { [weak self] in
+            guard let self else { t.cancel(); return }
+            self.stallTimer?.cancel()
+            self.stallTimer = t
+            t.resume()
+        }
     }
 
     /// The one clock `ZeroPeakWatch` is fed on — monotonic, seconds.
@@ -869,13 +889,18 @@ final class MicRecorder {
         case let .restart(step, buffers, seconds):
             var why = String(format: "%d buffers with peak 0 for %.1f s", buffers, seconds)
             if step > 1 { why += " — restart \(step - 1) did not bring audio back" }
-            why += " [\(deviceReadout())]"
-            restartTap(why: why, mode: step == 1 ? .tap : .rebuild, step: step)
+            restartTap(why: why, mode: step == 1 ? .tap : .rebuild, step: step, readout: true)
         case let .cameBack(step, peak, after):
             Log.error(String(format: "🔁 mic: audio came back after restart %d — peak %d, %.1f s after it", step, peak, after))
         case let .gaveUp(restarts, buffers, seconds):
+            // Read under `lifecycle` and only on a take still open (F5): `close()`
+            // replaces `engine` on the lane's queue.
+            lifecycle.lock()
+            lock.lock(); let recording = isRecording; lock.unlock()
+            let readout = recording ? deviceReadout() : "closed"
+            lifecycle.unlock()
             Log.error(String(format: "🔁 mic: %d restart(s) did not bring audio back — %d buffers with peak 0 over %.1f s [%@]; the take stays DEAF",
-                             restarts, buffers, seconds, deviceReadout()))
+                             restarts, buffers, seconds, readout))
         }
     }
 
@@ -898,10 +923,17 @@ final class MicRecorder {
 
     /// Re-reads the device's format and puts the tap back; the WAV (16 kHz mono)
     /// goes on. `restartQueue`; takes `lifecycle`, never `lock` across the engine.
-    private func restartTap(why: String, mode: RestartMode = .tap, step: Int = 0) {
+    /// `readout`: append `deviceReadout()`; `notesStoppedEngine`: say so when the
+    /// engine had stopped — both read here, under `lifecycle`, not by the caller
+    /// (F5 of the 2026-10-13 audio review: `close()` swaps `engine` under it).
+    private func restartTap(why: String, mode: RestartMode = .tap, step: Int = 0,
+                            readout: Bool = false, notesStoppedEngine: Bool = false) {
         lifecycle.lock(); defer { lifecycle.unlock() }
         lock.lock(); let recording = isRecording; let device = health.device; lock.unlock()
         guard recording else { return }
+        var why = why
+        if notesStoppedEngine, !engine.isRunning { why += " — the engine had stopped" }
+        if readout { why += " [\(deviceReadout())]" }
         var retired: AVAudioEngine?
         switch mode {
         case .tap: break
@@ -925,11 +957,20 @@ final class MicRecorder {
         zeroWatch.tapRestarted(at: Self.clock())
         lock.unlock()
         withExtendedLifetime(retired) {}   // the old engine goes here, outside the lock
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
-            self?.append(buffer)
+        // **Through `WTTry`** (F4): a restart runs exactly when the format moves,
+        // and a second change between `inputFormat` and `installTap` raised an
+        // NSException Swift cannot catch — the process aborted mid-dictation.
+        if let raised = WTTry({
+            input.removeTap(onBus: 0)
+            input.installTap(onBus: 0, bufferSize: 4096, format: inFormat) { [weak self] buffer, _ in
+                self?.append(buffer)
+            }
+            engine.prepare()
+        }) {
+            Log.error("🔁 mic: \(why) — the tap on \(chosen) could not be put back, the device changed again: "
+                      + "\(raised.localizedDescription); the recording stays silent")
+            return
         }
-        engine.prepare()
         let how: String
         switch mode {
         case .tap: how = step > 0 ? "tap restarted (step \(step)) on" : "tap restarted on"
@@ -947,7 +988,7 @@ final class MicRecorder {
     /// things that turn a flowing stream into zeros from outside this process:
     /// the input muted, its volume at 0, a nominal rate that is no longer the
     /// one the tap was built for, and another process running the device.
-    /// Reads only; `restartQueue`, no lock held.
+    /// Reads only; `restartQueue`, under `lifecycle` (never `lock`).
     private func deviceReadout() -> String {
         guard let unit = engine.inputNode.audioUnit else { return "no audio unit" }
         var id = AudioDeviceID(0)

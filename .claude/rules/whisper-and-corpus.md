@@ -824,7 +824,10 @@ question, … să faci direct treaba într-un terminal nou"*.
   again, crashed the app: CoreAudio's IO thread called a NULL IOProc while `AudioOutputUnitStop`
   waited for it (Wispr feed hand-over, 18:29:44). `AudioBridge` and `restartTap(.rebuild)` already
   did this. The full review of this class, with the findings still open (blocking `WisprWatch` IPC
-  on main/tap, `ShotMarker` without `WTTry`, unguarded `installTap`): `docs/audio-lifecycle-review-2026-10-13.md`.
+  on main/tap, `ShotMarker` without `WTTry`): `docs/audio-lifecycle-review-2026-10-13.md`. **F4 and F5 are
+  closed since 2026-11-25**: `MicRecorder` wires its tap through `WTTry` in `start` and `restartTap` (a
+  raise fails the open / logs, never aborts), reads `engine` for the watchdog's readouts only under
+  `lifecycle`, and `stallTimer` is `restartQueue`'s alone.
 - **Never hold `MicRecorder.lock` across a call into `AVAudioEngine`** (2026-09-24). The tap
   callback runs inside AVFAudio's realtime-messenger mutex and takes `lock` in `append`;
   `removeTap` waits for that mutex. `stop()` holding `lock` across `removeTap` froze the whole app
