@@ -3255,6 +3255,29 @@ def scenario_wrap_off(ctx) -> Result:
     return result
 
 
+def _installed_relay_pid() -> int | None:
+    """The pid of the installed app's executable, read off `ps -o comm=`.
+
+    The executable path alone, like `wispr_preflight.relay_process`: a command
+    line that only *mentions* the bundle is not the app.
+    """
+    try:
+        out = subprocess.run(["/bin/ps", "-Ao", "pid=,comm="], capture_output=True,
+                             text=True, timeout=10).stdout
+    except Exception:
+        return None
+    for line in out.splitlines():
+        pid, _, binary = line.strip().partition(" ")
+        binary = binary.strip()
+        if binary.startswith(pf.INSTALLED) and (binary.endswith("/WalkieTalkie")
+                                                or binary.endswith("/Walkie Talkie")):
+            try:
+                return int(pid)
+            except ValueError:
+                return None
+    return None
+
+
 def scenario_wispr_alone(ctx) -> Result:
     """**Does Wispr still work with Walkie Talkie switched off?**
 
@@ -3296,12 +3319,17 @@ def scenario_wispr_alone(ctx) -> Result:
         result.note("bound tty before the stand-down: %s" % (tty or "nothing"))
 
         if relay.dry_run:
-            print("   · pkill -f '/Applications/Walkie Talkie.app'  (stand the app down)")
+            print("   · kill <the installed app's pid>  (stand the app down)")
             victim = "victim.txt"
         else:
             victim = _open_victim(ctx.scratch)
-            subprocess.run(["/usr/bin/pkill", "-f", "/Applications/Walkie Talkie.app"],
-                           capture_output=True, timeout=10)
+            # **The app's own pid, not `pkill -f <bundle path>`** (2026-11-25,
+            # found by the Fable review): `-f` matches every command line that
+            # merely mentions the bundle — a `ditto`/`codesign` of another
+            # session's install, a `find` over it — and SIGTERMed those too.
+            pid = _installed_relay_pid()
+            if pid:
+                subprocess.run(["/bin/kill", str(pid)], capture_output=True, timeout=10)
             time.sleep(1.0)
         result.check(bool(victim), "a victim document, front and key", victim or "none")
 
