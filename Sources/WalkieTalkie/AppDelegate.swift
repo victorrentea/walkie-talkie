@@ -9971,7 +9971,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Read on the main thread, before the hop: `NSEvent.mouseLocation` is
         // the fallback for a sentence that never closed a microphone, and
-        // `latchedMouse` is cleared by `clearSpawn` a moment from now.
+        // `latchedMouse` is the next sentence's once its microphone closes.
         let near = latchedMouse ?? NSEvent.mouseLocation
         let launched = Date()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -9979,7 +9979,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let outcome = SpawnTerminal.launchClaude(prompt: line, directory: m.directory, near: near,
                                                      flags: m.modelPick?.cliFlags)
             DispatchQueue.main.async {
-                self.clearSpawn()
+                // Not `clearSpawn()`: `send` already cleared this sentence's
+                // flags, and seconds later they may be the *next* sentence's
+                // (a spawn picked while this one's panel was held).
+                self.clearSpawnChipIfIdle()
                 switch outcome {
                 // **Silent**, like every other delivery that landed: the window
                 // is in front with the session running in it, which is a whole
@@ -10450,6 +10453,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // dictation cancelled inside those three seconds must not leave a menu
         // on screen offering a folder to a session nobody is going to open.
         guard !answeringInBackground else { return }
+        SpawnFolderMenu.hide()
+        overlay.setSpawnDestination(nil)
+    }
+
+    /// The chip half of `clearSpawn`, for a sentence already sent (its flags
+    /// went with its `Message`): the menu and the `✨` row go only when no newer
+    /// sentence owns the chip — its flags and rows are not ours to wipe.
+    private func clearSpawnChipIfIdle() {
+        guard !listening, !speculative, !settling, !spawnPending, !answeringInBackground else { return }
         SpawnFolderMenu.hide()
         overlay.setSpawnDestination(nil)
     }
@@ -14301,7 +14313,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         heldCancelReason = nil
         guard send else {
             Log.info("✕ cancelled — \(m.text?.count ?? 0) chars never left the overlay\(cancelledBy.map { " (\($0) while the panel was held — Q6)" } ?? "")")
-            if m.spawn { clearSpawn() }
+            if m.spawn { clearSpawnChipIfIdle() }
             overlay.flash("✕ cancelled", duration: 2.0)
             // Q17: the words he just read are finished text — on the clipboard.
             if let t = m.text, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
