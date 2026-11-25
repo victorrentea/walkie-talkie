@@ -206,7 +206,13 @@ enum TranscriptGuard {
         var kept = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var cut = ""
         while true {
-            let body = kept.trimmingCharacters(in: CharacterSet(charactersIn: ".!?… "))
+            // The stretch between leading and trailing `.!?… ` — a slice of
+            // `kept` itself, so `end` indexes `kept` (a trimmed copy did not: a
+            // take opening with `…` cut inside a word).
+            let edge: (Character) -> Bool = { ".!?… ".contains($0) }
+            guard let first = kept.firstIndex(where: { !edge($0) }),
+                  let last = kept.lastIndex(where: { !edge($0) }) else { break }
+            let body = kept[first...last]
             guard let end = body.lastIndex(where: { ".!?…".contains($0) }) else { break }
             let head = String(kept[...end]).trimmingCharacters(in: .whitespaces)
             let tail = String(kept[kept.index(after: end)...]).trimmingCharacters(in: .whitespaces)

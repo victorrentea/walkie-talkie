@@ -175,6 +175,11 @@ final class TranscriptGuardTests: XCTestCase {
                        "Sunt lipit îndrealtul.")
         // Two of them.
         XCTAssertEqual(TranscriptGuard.cutStockTail("Gata. Thank you. Thanks for watching!")?.kept, "Gata.")
+        // A take that opens with punctuation: the cut is where the sentence ends.
+        let lead = TranscriptGuard.cutStockTail("…Bine. Thank you.")
+        XCTAssertEqual(lead?.kept, "…Bine.")
+        XCTAssertEqual(lead?.cut, "Thank you.")
+        XCTAssertEqual(TranscriptGuard.cutStockTail("?a b. Thank you.")?.kept, "?a b.")
     }
 
     func testWhatIsNotASignOffStays() {
