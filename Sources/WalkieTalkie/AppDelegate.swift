@@ -132,6 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the first or teach the envelope a new shape. The envelope learned the
     /// shape; replacing what he deliberately captured was never acceptable.
     private var pendingFilms: [ScreenFilm.Result] = []
+    /// **Films stopped and still being finished off main** (2026-11-25,
+    /// `ScreenFilm.Stopping`), oldest first: each moves to `pendingFilms` when it
+    /// is done, or is waited for by `takeFilms` when the sentence ends first.
+    /// Main only.
+    private var filmsStopping: [ScreenFilm.Stopping] = []
     /// **🔽 ↑ was made with the wheel still down on a box** (2026-11-22,
     /// `filmTheBoxUnderTheWheel`): the crop that comes back before this moment is
     /// filmed, not filed as a picture. A deadline, not a flag — a crop that never
@@ -6664,7 +6669,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Anything attached to the open sentence — pictures (taken or on their
     /// way), a film, highlights, typed notes.
     private var hasAttachments: Bool {
-        if film != nil || !pendingFilms.isEmpty { return true }
+        if film != nil || !filmsStopping.isEmpty || !pendingFilms.isEmpty { return true }
         stateLock.lock()
         defer { stateLock.unlock() }
         return picturesTaken > 0 || !pendingShots.isEmpty || pendingScreen != nil
@@ -7106,7 +7111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard Self.sentenceQueueOn else { return "the sentence queue is off" }
         if parkedSentence.map({ !$0.finished }) ?? false { return "two sentences are already in flight" }
         if spawnPending || spawnPickInFlight != nil { return "it is opening a new session" }
-        if film != nil { return "it is still filming" }
+        if film != nil || !filmsStopping.isEmpty { return "it is still filming" }
         return nil
     }
 
@@ -8140,6 +8145,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         for stale in pendingFilms { try? FileManager.default.removeItem(at: stale.dir) }
         pendingFilms = []
+        // One still being finished is deleted when it is (`filmFinished`).
+        if !answeringInBackground {
+            filmsStopping.forEach { $0.discarded = true }
+            filmsStopping = []
+        }
 
         stateLock.lock()
         pendingShots = []
@@ -8690,27 +8700,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CropSelectionOverlay.dragMoved(toCG: corner)
     }
 
+    /// The film ends here, at once — `film` nil, the REC border down, the effects
+    /// back (`FxHold`); its video, last frames and sheet are finished off main
+    /// (2026-11-25) and land in `filmFinished`.
     private func stopFilm() {
         if let running = film {
             film = nil
             overlay.setFilming(false)
-            guard let result = running.stop() else {
-                overlay.flash("⚠️ the recording caught no frames", duration: 5)
-                syncBorrowedGestures()
-                return
-            }
-            pendingFilms.append(result)
-            // **The row stays, with the finished pair on it** (2026-09-18). The
-            // sentence is carrying the film now, and the icon column read
-            // downwards is exactly *what this message is carrying* — `📸 ×3` does
-            // not vanish when the shutter stops either.
-            overlay.addFilmCarried(seconds: result.duration, frames: result.frames.count)
-            publishShotCount()
+            filmsStopping.append(running.stop { [weak self] in self?.filmFinished($0) })
             // The effects held for the film come back (`FxHold`).
             syncBorrowedGestures()
-            overlay.flash(String(format: "🎥 %.1fs, %d frames", result.duration, result.frames.count),
-                          duration: 2)
         }
+    }
+
+    /// A film `stopFilm` handed off main is finished. Main. Not in
+    /// `filmsStopping` any more: the delivery took it (`takeFilms`) or a cancel
+    /// threw it away.
+    private func filmFinished(_ stopping: ScreenFilm.Stopping) {
+        guard let i = filmsStopping.firstIndex(where: { $0 === stopping }) else {
+            if stopping.discarded, let dir = stopping.wait()?.dir {
+                try? FileManager.default.removeItem(at: dir)
+                Log.info("🎬 a film finished after its sentence was cancelled — deleted")
+            }
+            return
+        }
+        filmsStopping.remove(at: i)
+        guard let result = stopping.wait() else {
+            overlay.flash("⚠️ the recording caught no frames", duration: 5)
+            return
+        }
+        pendingFilms.append(result)
+        // **The row stays, with the finished pair on it** (2026-09-18). The
+        // sentence is carrying the film now, and the icon column read
+        // downwards is exactly *what this message is carrying* — `📸 ×3` does
+        // not vanish when the shutter stops either.
+        overlay.addFilmCarried(seconds: result.duration, frames: result.frames.count)
+        publishShotCount()
+        overlay.flash(String(format: "🎥 %.1fs, %d frames", result.duration, result.frames.count),
+                      duration: 2)
     }
 
     /// `area` (AppKit global points) on `screen`: that box alone, ringed by
@@ -8777,6 +8804,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Main thread — `film` and `pendingFilm` are main's, and this is called from
     /// the same place the rest of the pending state is drained.
     private func takeFilms() -> [ScreenFilm.Result] {
+        // **A film still being finished is waited for**: the sentence carries it
+        // whole, never half-written, and never leaves it to land on the next one.
+        if !answeringInBackground, !filmsStopping.isEmpty {
+            let finishing = filmsStopping
+            filmsStopping = []
+            Log.info("🎬 the sentence ended while \(finishing.count) film(s) were being finished — waiting for them")
+            pendingFilms += finishing.compactMap { $0.wait() }
+        }
         // A parked sentence's delivery (Q12) never takes the film the live one
         // is recording — `queueRefusal` never parks one that is filming.
         if !answeringInBackground, let running = film {
@@ -13446,7 +13481,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A plain sentence waiting for its ✍️ edit has not been pasted yet (review 2026-10-22).
         if DictationEditor.shared.inFlight > 0 { why.append("editing") }
         if spawnsInFlight > 0 { why.append("spawning") }
-        if film != nil { why.append("filming") }
+        if film != nil || !filmsStopping.isEmpty { why.append("filming") }
         return why
     }
 
@@ -14712,7 +14747,7 @@ extension AppDelegate {
         // What the park cannot carry: a spawn (its folder menu and pick are
         // the window's), a film still recording, a prompt panel of its own.
         if spawnPending || spawnPickInFlight != nil { return "the sentence in flight is opening a new session" }
-        if film != nil { return "the sentence in flight is still filming" }
+        if film != nil || !filmsStopping.isEmpty { return "the sentence in flight is still filming" }
         // **A start within a beat of the stop is the same click twice**: the
         // side buttons' re-fire window, for the one gesture that has none here.
         let sinceStop = CFAbsoluteTimeGetCurrent() - settlingFrom

@@ -27,8 +27,9 @@ final class FxHoldTests: XCTestCase {
         let take = try XCTUnwrap(source.range(of: "private func takeFilms() -> [ScreenFilm.Result] {"))
         let abandon = try XCTUnwrap(source.range(of: "private func abandonDictation("))
         let toggleBody = source[toggle.upperBound..<take.lowerBound]
-        // The stop with frames, the stop without, the start.
-        XCTAssertEqual(toggleBody.components(separatedBy: "syncBorrowedGestures()").count - 1, 3)
+        // The stop (at once, frames or none — they are finished off main since
+        // 2026-11-25) and the start.
+        XCTAssertEqual(toggleBody.components(separatedBy: "syncBorrowedGestures()").count - 1, 2)
         XCTAssertTrue(source[take.upperBound..<abandon.lowerBound].contains("syncBorrowedGestures()"))
     }
 

@@ -213,18 +213,62 @@ final class ScreenFilm {
         }
     }
 
-    /// Stop, wait for the encoder to drain, and compose the sheet.
+    /// Stop, wait for the encoder to drain, and compose the sheet — all of it on
+    /// the calling thread (the delivery's `takeFilms`, the shoot harness).
     ///
     /// Returns nil when nothing usable was captured — a recording with no frames
     /// must not reach the envelope as an empty attachment the agent then reasons
     /// about.
     func stop() -> Result? {
+        finish(duration: halt())
+    }
+
+    /// **A stop being finished off the main thread** (2026-11-25, found by the
+    /// Fable review): the video's finalisation (≤ 2 s), the encoder's drain and
+    /// the sheet are no longer waited for on main. `wait()` is the delivery's
+    /// way to take the film whole — never half-written.
+    final class Stopping {
+        fileprivate let done = DispatchGroup()
+        /// Written before `done` is left; read after it.
+        fileprivate var result: Result?
+        /// Set by the owner on main when the sentence was cancelled meanwhile:
+        /// the finished film is deleted, not delivered.
+        var discarded = false
+        /// The finished film, or nil when it caught nothing. Blocks until then.
+        func wait() -> Result? {
+            done.wait()
+            return result
+        }
+    }
+
+    /// `stop()`, with only the cheap half on main (the timer, `ended`, the
+    /// border); the rest on a utility queue, then `completion` on main.
+    func stop(completion: @escaping (Stopping) -> Void) -> Stopping {
+        let duration = halt()
+        let stopping = Stopping()
+        stopping.done.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            stopping.result = self.finish(duration: duration)
+            stopping.done.leave()
+            DispatchQueue.main.async { completion(stopping) }
+        }
+        return stopping
+    }
+
+    /// The main-thread half of a stop: no more ticks, the border down, and the
+    /// length the film will say. Never past the ceiling: the frames and the
+    /// video end there.
+    private func halt() -> TimeInterval {
         timer?.cancel()
         timer = nil
         framesLock.lock(); ended = true; framesLock.unlock()
         FilmBorder.hide()
-        // Never past the ceiling: the frames and the video end there.
-        let duration = min(CACurrentMediaTime() - startedAt, Self.maxSeconds)
+        return min(CACurrentMediaTime() - startedAt, Self.maxSeconds)
+    }
+
+    /// The waiting half: the video file, the encoder's last frames, the sheet
+    /// and the poster. Touches no AppKit window, needs nothing from main.
+    private func finish(duration: TimeInterval) -> Result? {
         let videoOK = video?.stop() ?? false
         // Drain: two permits means at most two encodes in flight, so taking both
         // is *the encoder is finished*.

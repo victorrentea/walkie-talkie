@@ -326,6 +326,14 @@ PRECEDENT cropuită."* **Supersedes *🔽 ↑ after a wheel crop films that area
   tick that took a slot and then waited for main hung both — every `WT_SHOOT_FILM` run, and the app
   whenever a stop landed mid-grab. The tick grabs first, then takes a slot, and drops its frame once
   `ended` is set; the harness runs the main run loop instead of `Thread.sleep`.
+- **A stop is finished off main** (2026-11-25, the Fable review): `stopFilm` (🔽 ↑, the badge, the
+  shutter, the 30 s ceiling via `ScreenFilm.onCeiling`) ends the film on main at once — `film` nil, the
+  border down, `FxHold` released — and `ScreenFilm.stop(completion:)` waits for the video (≤ 2 s), the
+  encoder and the sheet on a utility queue; `filmFinished` then files it (row, `🎥` flash). Until then it
+  sits in `filmsStopping`, which counts as an attachment, holds the restart and refuses a park.
+  **`takeFilms` waits for every film still being finished** before the envelope is built — a film is
+  never delivered half-written nor left to land on the next sentence. A film still *running* at the
+  sentence's end is stopped there synchronously, as before (the delivery needs it whole either way).
 
 ## The film's full-rate video (2026-10-27, `FilmVideo.swift`)
 
