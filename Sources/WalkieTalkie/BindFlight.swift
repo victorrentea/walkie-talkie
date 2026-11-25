@@ -231,8 +231,8 @@ enum BindFlight {
         cancel()
         guard source.width > 1, source.height > 1 else { return }
 
-        // **Grabbed before the panels exist, not after.** The panels are excluded
-        // from captures anyway (`sharingType = .none`), but the grab is also the
+        // **Grabbed before the panels exist, not after.** The overlays are kept
+        // out of it by `ReplyPanel.outOfShot` (`grab`), but the grab is also the
         // slowest thing here, and doing it first means the picture is ready for
         // frame one — a flight that started as an outline and acquired its
         // contents a few frames in would flicker at the only moment the eye is
@@ -431,7 +431,11 @@ enum BindFlight {
         let flipped = CGRect(x: source.minX,
                              y: primary.frame.maxY - source.maxY,
                              width: source.width, height: source.height)
-        return CGWindowListCreateImage(flipped, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
+        // Inside `outOfShot`, like every capture: outside a shot the panels are
+        // `.readOnly` (`RoomShare`), so the chip and the halo would be in it.
+        return ReplyPanel.outOfShot {
+            CGWindowListCreateImage(flipped, .optionOnScreenOnly, kCGNullWindowID, [.bestResolution])
+        }
     }
 
     /// Cubic ease-in-out: it leaves the window unhurriedly enough to be followed
