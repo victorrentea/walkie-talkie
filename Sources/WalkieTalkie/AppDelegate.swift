@@ -1272,6 +1272,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// pop-up with its 🌐 + 🧐 checks as ever, and the browser on the query
     /// (`QuickAsk.ask(search:)`, its own process, started at the flick).
     private var quickGoogleToo = false
+    /// **🎙️ The room's last 30/60 s, picked in the ⚡ question's modal** (2026-11-25,
+    /// `RoomPick`): the question's research topic. Set by the click, which also
+    /// ends the sentence; `deliver` frames it with his words, `dictationEndedForGood`
+    /// asks it alone when he said nothing.
+    private var quickRoom: RoomTranscript?
 
     /// **A bound prompt with nothing bound does not start** (2026-11-22). Victor:
     /// *"Dacă n-am niciun terminal legat … nu pot să pornesc o dictare bound. Ideea
@@ -2322,6 +2327,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // `capturable` alone just flips the switch — every reply pop-up after
             // it shows up in a screenshot (agents' answers included).
             if let c = body["capturable"] as? Bool { DispatchQueue.main.sync { ReplyPanel.capturable = c } }
+            // `room: 30 | 60` (2026-11-25) — that window clicked in the ⚡ question's
+            // modal (`RoomPick`), as the real click would; `roomShot: {path, seconds?: [30, 60]}`
+            // — the modal for the windows Victor Mac answers now, drawn into a PNG, never on a screen.
+            if let r = body["room"] as? Int {
+                let (picked, offered): (Bool, [Int]) = DispatchQueue.main.sync { (RoomPick.choose(r), RoomPick.offered.keys.sorted()) }
+                return (picked ? 200 : 409, ["ok": picked, "offered": offered])
+            }
+            if let shot = body["roomShot"] as? [String: Any], let path = shot["path"] as? String {
+                let wanted = shot["seconds"] as? [Int] ?? RoomTranscript.windows
+                let done = DispatchSemaphore(value: 0)
+                var got: [Int: RoomTranscript] = [:]
+                RoomTranscript.fetch(wanted) { got = $0; done.signal() }
+                _ = done.wait(timeout: .now() + 3)
+                let ok = DispatchQueue.main.sync { RoomPick.snapshot(got, to: URL(fileURLWithPath: path)) }
+                let words = got.mapValues(\.words).reduce(into: [String: Int]()) { $0["\($1.key)"] = $1.value }
+                return (ok ? 200 : 500, ["ok": ok, "words": words, "open": DispatchQueue.main.sync { RoomPick.isOpen }])
+            }
             // `close` takes the open reply pop-up down, as its ✕ would.
             if body["close"] as? Bool == true { DispatchQueue.main.sync { ReplyPanel.close() } }
             // `wheel: n` — n notches of the wheel over the open pop-up (+ = rolled up, grows it).
@@ -2752,6 +2774,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard !self.source.phase.isWaitingForWords else { return }
                 Log.info("⚡ 🔼 ← at rest — a quick question for \(QuickAsk.shared.model)")
                 self.startDictation(paste: true, quick: true)
+                self.offerRoom()
             }
         }
         // 🔽 ← with a microphone open (2026-10-21): 🔼 ←'s cancel, never its
@@ -4847,6 +4870,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let chat = quick && chatAsk
         let google = quick && quickGoogle
         let googleToo = quick && quickGoogleToo && !google
+        let room = quick && !chat ? quickRoom : nil
+        quickRoom = nil
+        if quick, !answeringInBackground { RoomPick.close() }
         quickAsk = false
         quickFollowUp = false
         quickGoogle = false
@@ -4994,8 +5020,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ChatGPTVoice.toggle(fresh: true, question: asked) { [weak self] words in self?.overlay.flash(words, duration: 2) }
                 return
             }
-            if google { googleQuestion(asked, prompt: line, images: pictures) }
-            else { askQuick(asked, prompt: line, images: pictures, followUp: followUp, google: googleToo) }
+            // 🎙️ A window of the room picked in the modal: the topic, his words the question.
+            let header = room.map { $0.header(asked: asked) } ?? asked
+            let framed = room.map { $0.prompt(question: line) } ?? line
+            if google { googleQuestion(header, prompt: framed, images: pictures) }
+            else { askQuick(header, prompt: framed, images: pictures, followUp: followUp, google: googleToo) }
             return
         }
         pendingPromptWarning = result.warning
@@ -6117,6 +6146,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let kamikazeAlone = wordless && kamikaze && !quickAsk && !spawnPending
             && !(cleanSentence && !cleanRedirected)
+        // 🎙️ A window of the room picked, nothing said: the window alone is the question.
+        let roomAlone = wordless && quickAsk && !chatAsk ? quickRoom : nil
+        let roomFollowUp = quickFollowUp
+        if quickAsk, !bg { RoomPick.close() }
         let aloneAtCaret = latchedAtCaret, aloneTo = latch?.target
         // A sentence that never reached `deliver` must not hand its kind to the
         // next one (`caretPrompt` / `cleanSentence`, 2026-09-23).
@@ -6127,6 +6160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             quickFollowUp = false
             quickGoogle = false
             quickGoogleToo = false
+            quickRoom = nil
             chatAsk = false
             submitAfterClean = false
         }
@@ -6160,7 +6194,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             endSettling(reason: why)
             // A device turned down to nothing is said first (2026-10-15,
             // `InputDevice.silencedReason`): Recover cannot fix a take at -60 dB.
-            if let silenced = InputDevice.silencedReason() {
+            if roomAlone != nil {
+                Log.info("🎙️ \(why) — no words over the picked window; it is asked alone")
+            } else if let silenced = InputDevice.silencedReason() {
                 Log.error("🔇 \(why) — \(silenced)")
                 overlay.flash("⚠️ \(why) — \(silenced). Turn it up, then recover it from the menu", duration: 12)
             } else if audio == nil {
@@ -6177,6 +6213,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             clearCancelledDictationState()
         }
         if kamikazeAlone { kamikazeWithoutWords(atCaret: aloneAtCaret, to: aloneTo) }
+        if let room = roomAlone {
+            Log.info("🎙️ nothing said — the room's last \(room.seconds) s go to the quick model alone")
+            askQuick(room.header(asked: nil), prompt: room.prompt(question: nil), followUp: roomFollowUp)
+        }
         guard !bg else { return }
         if listening {
             listening = false
@@ -6655,6 +6695,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickFollowUp = false
         quickGoogle = false
         quickGoogleToo = false
+        quickRoom = nil
+        RoomPick.close()
         chatAsk = false
         Log.info("⚡ the question goes to \(label) as a prompt — no quick answer")
     }
@@ -6806,6 +6848,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         quickFollowUp = quick && followUp
         quickGoogle = false
         quickGoogleToo = false
+        quickRoom = nil
         chatAsk = quick && chat
         wakeTake = wake
         // A wake whose sentence ended with neither words nor a cancel.
@@ -7381,6 +7424,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("⚡ 🔼 → over the quick answer — a follow-up, \(quickThread.count) turn(s) before it; the pop-up goes in ❓")
         ReplyPanel.shatter(.questions)
         startDictation(paste: true, quick: true, followUp: true)
+        offerRoom()
+    }
+
+    /// **🎙️ The modal: the room's last 30 s or 60 s as the question's topic**
+    /// (2026-11-25, `RoomPick`). Asked of Victor Mac as the question opens — the
+    /// windows hold what was said *before* he spoke. A click ends the question.
+    private func offerRoom() {
+        guard quickAsk, !chatAsk else { return }
+        RoomPick.offer(at: NSEvent.mouseLocation, still: { [weak self] in
+            // Not `listening`: Wispr's microphone opens a beat after the gesture, and
+            // Victor Mac may answer first. A question that ended has put `quickAsk` down.
+            guard let self else { return false }
+            return self.quickAsk && !self.chatAsk
+        }, pick: { [weak self] room in
+            guard let self, self.quickAsk, self.listening || self.source.isRecording else { return }
+            Log.info("🎙️ the room's last \(room.seconds) s (\(room.words) words) is the ⚡ question's topic — the question ends")
+            self.quickRoom = room
+            self.overlay.flash("🎙️ Last \(room.seconds) s", duration: 1.5)
+            self.endDictation()
+        })
     }
 
     /// **The question, as a Google search** (2026-10-25, `quickGoogle`): the
@@ -14411,6 +14474,7 @@ extension AppDelegate {
         var spawnPending = false, spawnFolder: String?
         var pasteMode = false, caretPrompt = false, cleanSentence = false, submitAfterClean = false
         var quickAsk = false, quickFollowUp = false, quickGoogle = false, quickGoogleToo = false
+        var quickRoom: RoomTranscript?
         var chatAsk = false
         var latchedAtCaret = false, cleanRedirected = false
         var latch: Latch?
@@ -14455,7 +14519,7 @@ extension AppDelegate {
         e.spawnPending = spawnPending; e.spawnFolder = spawnFolder
         e.pasteMode = pasteMode; e.caretPrompt = caretPrompt; e.cleanSentence = cleanSentence
         e.submitAfterClean = submitAfterClean; e.quickAsk = quickAsk; e.quickFollowUp = quickFollowUp
-        e.quickGoogle = quickGoogle; e.quickGoogleToo = quickGoogleToo; e.chatAsk = chatAsk
+        e.quickGoogle = quickGoogle; e.quickGoogleToo = quickGoogleToo; e.chatAsk = chatAsk; e.quickRoom = quickRoom
         e.latchedAtCaret = latchedAtCaret; e.cleanRedirected = cleanRedirected
         e.latch = latch; e.latchedMouse = latchedMouse
         e.pendingPromptWarning = pendingPromptWarning
@@ -14473,7 +14537,7 @@ extension AppDelegate {
         carriedQuestions = []
         spawnPending = false; spawnFolder = nil
         pasteMode = false; caretPrompt = false; cleanSentence = false; submitAfterClean = false
-        quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false
+        quickAsk = false; quickFollowUp = false; quickGoogle = false; quickGoogleToo = false; quickRoom = nil
         chatAsk = false
         latchedAtCaret = false; cleanRedirected = false; latch = nil; latchedMouse = nil
         pendingPromptWarning = nil; pendingVia = nil; pendingEngine = nil; pendingHeard = nil; pendingDeliveryKind = nil
@@ -14521,7 +14585,7 @@ extension AppDelegate {
         spawnPending = e.spawnPending; spawnFolder = e.spawnFolder
         pasteMode = e.pasteMode; caretPrompt = e.caretPrompt; cleanSentence = e.cleanSentence
         submitAfterClean = e.submitAfterClean; quickAsk = e.quickAsk; quickFollowUp = e.quickFollowUp
-        quickGoogle = e.quickGoogle; quickGoogleToo = e.quickGoogleToo; chatAsk = e.chatAsk
+        quickGoogle = e.quickGoogle; quickGoogleToo = e.quickGoogleToo; chatAsk = e.chatAsk; quickRoom = e.quickRoom
         latchedAtCaret = e.latchedAtCaret; cleanRedirected = e.cleanRedirected
         latch = e.latch; latchedMouse = e.latchedMouse
         pendingPromptWarning = e.pendingPromptWarning

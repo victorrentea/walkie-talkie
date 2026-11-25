@@ -1655,7 +1655,7 @@ private final class LinkedBody: NSTextView {
 
     convenience init(_ text: NSAttributedString, width: CGFloat) {
         let storage = NSTextStorage(attributedString: text)
-        let layout = NSLayoutManager()
+        let layout = ClaySelectionLayout()
         storage.addLayoutManager(layout)
         let container = NSTextContainer(size: NSSize(width: width, height: .greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
@@ -1663,12 +1663,26 @@ private final class LinkedBody: NSTextView {
         self.init(frame: NSRect(x: 0, y: 0, width: width, height: 10), textContainer: container)
         isEditable = false
         isSelectable = true
-        // The panel is never key: the selection is drawn in the inactive
-        // colour, which `darkAqua` keeps visible on the dark panel.
+        // The panel is never key: AppKit would draw the selection in the inactive
+        // colour. `ClaySelectionLayout` paints it clay instead, the words white
+        // over it (`setSelectedRanges`).
         appearance = NSAppearance(named: .darkAqua)
+        selectedTextAttributes = [.backgroundColor: ClaySelectionLayout.clay, .foregroundColor: NSColor.white]
         drawsBackground = false
         textContainerInset = .zero
         isVerticallyResizable = false
+    }
+
+    /// **White words on the clay** (2026-11-25): a temporary attribute, so the
+    /// text itself — its link and trail colours — is untouched under it.
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        guard let lm = layoutManager else { return }
+        let all = NSRange(location: 0, length: (string as NSString).length)
+        lm.removeTemporaryAttribute(.foregroundColor, forCharacterRange: all)
+        for r in ranges.map(\.rangeValue) where r.length > 0 {
+            lm.addTemporaryAttribute(.foregroundColor, value: NSColor.white, forCharacterRange: r)
+        }
     }
 
     var naturalHeight: CGFloat {
@@ -1752,6 +1766,32 @@ private final class LinkedBody: NSTextView {
             if r.insetBy(dx: -4, dy: -2).contains(p) { rect = r; stop.pointee = true }
         }
         return (index, rect == .zero ? lm.boundingRect(forGlyphRange: glyphs, in: tc) : rect)
+    }
+}
+
+/// **The selection in the Claude blog's orange** (2026-11-25, Victor: *"în panelul
+/// cu răspuns al walkie (pt întrebări sau cel normal) să pot selecta textul cu
+/// selecție cu fundal portocaliu, aceeași nuanță de pe claude.ai blog"*): claude.com's
+/// `::selection { background: var(--color-clay) /* #d97757 */; color: #fff }`.
+/// The panel is never key, so AppKit fills the selection with the *unemphasized*
+/// system colour whatever `selectedTextAttributes` says; this swaps either
+/// selection colour for clay as it is filled. Nothing else in the words is
+/// drawn with those two system colours.
+final class ClaySelectionLayout: NSLayoutManager {
+    static let clay = NSColor(srgbRed: 0xD9 / 255.0, green: 0x77 / 255.0, blue: 0x57 / 255.0, alpha: 1)
+
+    static func isSelectionColour(_ c: NSColor) -> Bool {
+        c == .selectedTextBackgroundColor || c == .unemphasizedSelectedTextBackgroundColor
+            || c == .selectedContentBackgroundColor || c == .unemphasizedSelectedContentBackgroundColor
+    }
+
+    override func fillBackgroundRectArray(_ rectArray: UnsafePointer<NSRect>, count rectCount: Int,
+                                          forCharacterRange charRange: NSRange, color: NSColor) {
+        guard Self.isSelectionColour(color) else {
+            return super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: color)
+        }
+        Self.clay.setFill()
+        super.fillBackgroundRectArray(rectArray, count: rectCount, forCharacterRange: charRange, color: Self.clay)
     }
 }
 

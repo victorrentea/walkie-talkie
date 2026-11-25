@@ -339,9 +339,19 @@ me to dismiss it explicitly"*.
 - **`POST /ask {token, text, prompt?}`** (2026-10-15) is the other direction: another app *asks* a ⚡
   quick question for him — `askQuick(text, prompt:)`, so `text` is the pop-up's header and `prompt`
   (default `text`) what the model gets; the same answer, 🌐 search and 🧐 review as one he dictated.
-  Same token, same 403 (`⚡ POST /ask refused`), answers 200 at once. Its one caller today is the
-  addons app's 🔬 Fact-check, which sends the last ~30 s of the room's transcript framed as
-  "overheard — check the claims".
+  Same token, same 403 (`⚡ POST /ask refused`), answers 200 at once. Its caller until 2026-11-25
+  was Victor Mac' 🔬 Fact-check rows (removed); it stays for desks and scripts.
+- **🎙️ The room's last 30/60 s, offered as a ⚡ question opens** (2026-11-25, `RoomPick.swift`):
+  🔼 ← at rest (and 🔼 → over an answer, a follow-up) asks Victor Mac
+  `GET 127.0.0.1:55123/transcript/tail?seconds=30|60` (its `RecentSpeech`, loopback only) and, if a
+  window has ≥ 5 words, shows a modal ~70 pt over the pointer: *Last 30 s* / *Last 60 s* with their
+  word counts. Static, never key, clay (#D97757) on hover, gone with the question. **A click ends the
+  question as 🔼 would** (`quickRoom` + `endDictation`): his words are the question, the window its
+  topic (`RoomTranscript.prompt(question:)`, header `<words> · 🎙️ 30 s`); **said nothing** →
+  `dictationEndedForGood` asks the window alone (header `🎙️ 30 s «…quote»`, find the question or the
+  claims, ✅/❌/❓ a line). No click: nothing changes. Windows are fetched at the open, so they hold
+  what was said *before* he spoke. `WT_ROOM_PICK=0` turns the offer off. Desk: `POST /test/quick
+  {"room": 30}` clicks it; `{"roomShot": {"path": …}}` draws it into a PNG, never on a screen.
 - **The panel**: **zooms in out of the pointer** (2026-10-08 afternoon, Victor: *"should not swipe in from the bottom, but zoom in … from small to its final size, by also increasing in opacity"* — the toast rising from the screen's bottom lived one build): scale 0.3 → 1 and alpha 0 → 1 over 0.3 s, ease-out cubic, no overshoot, around the edge's centre nearest the pointer; sitting **centred on the pointer's x, its top edge 14 pt under the pointer** (above it when there is no room) — below-right until that day; does not follow,
   `sharingType = .none`, ≤ 400 chars, header: the walkie icon, then `<folder> — <task from the tab title>` (else `<folder> · <tty>`; `walkie-reply` sends the tty of its first ancestor that has one). **The name is a link**: hand cursor + underline on hover, a click binds that terminal (`rebindFromMenu`, from "the answer panel", `fly: true` — bound, brought forward, and **its window's outline flies into the chip**, the mouse bind's receipt, outlined), **and closes the panel** (2026-10-08: *"it did not close the window. Should have"*). The header is the body's 15 pt (semibold, 60 % white), one line, `…` at the end. **The walkie (26 pt, 2026-10-08) is the other click**: hand cursor, and a click puts that terminal in front **centred on the Retina, at once, no flight** (`TerminalBinding.presentOnRetina` — size kept, shrunk to the visible frame; lid closed → the pointer's screen), closes the panel, **binds nothing** (Victor: *"pop in front … on the retina in the center of the screen … with no animation"*; log `💬 the answer's walkie clicked`). **It stays until the ✕** (drawn, as large as the walkie since 2026-10-08,
   first-mouse) or a click on the name — no clock, no bar**. **A newer answer queues behind it** and comes up at the pointer once it is closed (2026-10-08: *"să nu apară una peste alta … pe rând, stau la coadă"*); log `… queued behind the open one — N waiting` (Victor: *"NO PROGRESSBAR. i have to manually

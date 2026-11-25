@@ -17190,3 +17190,31 @@ also wants `ReplyPanel.liveOpen`; when the review (or a 🪏 more) ends, the wai
 after `patience` and the picture drains. `EdgeDust.hold(.left)` raises it again for a 🪏 more on a
 finished answer; a follow-up needs nothing, it is a sentence on that edge. The drain was not watched
 on the screen.
+
+## 2026-11-25 — 🎙️ A ⚡ question can take the room's last 30/60 s as its topic; the reply pop-up selects in clay
+
+Victor (by mail): *"Când deschid modul întrebare, să apară o modală care să-mi permită să aleg 30 s
+sau 60 s din transcrierea continuă din spate, în care să identifice o întrebare sau fact să verifice
+și să considere asta tema de research pentru întrebare. Poate întreba victor-mac să obțină această
+transcriere. În plus, în panelul cu răspuns al walkie (pt întrebări sau cel normal) să pot selecta
+textul cu selecție cu fundal portocaliu, aceeași nuanță de pe claude.ai blog. Și scoate fact check
+menu entries din victor-mac."*
+
+**The modal** (`RoomPick`, `RoomTranscript`): the ⚡ question fetches both windows from Victor Mac'
+new `GET /transcript/tail` at its open (≈ the whisper file, ~8 s behind speech), and shows them only
+when one has ≥ 5 words. The click ends the question, because the pick is the last thing he does: the
+words already said become his question about the window; none → the window alone, framed as the old
+🔬 Fact-check framed it (find the question or claims, ✅/❌/❓ a line). The `.failed(heardNothing)`
+banner is skipped in that case — nothing was lost. The pick rides parked sentences (`Envelope.quickRoom`).
+The direction flipped: Victor Mac pushed to `POST /ask` from two menu rows; now Walkie pulls, and the
+rows are gone (victor-mac `docs/recent-speech.md`).
+
+**The selection colour**: claude.com/blog's CSS is `::selection{background:var(--color-clay);
+color:var(--color-gray-000)}`, `--color-clay:#d97757`, `--color-gray-000:#fff` (read from its
+`_next/static/chunks/*.css`, 2026-11-25). The pop-up is never key, so AppKit fills a selection with
+`unemphasizedSelectedContentBackgroundColor` whatever `selectedTextAttributes` says;
+`ClaySelectionLayout.fillBackgroundRectArray` swaps the two system selection colours for clay, and
+`LinkedBody.setSelectedRanges` lays white over the selected words as a temporary attribute. Checked
+off screen (`RoomPickTests.testTheSelectionIsClayInAWindowThatIsNotKey`, a non-key window rendered
+with `cacheDisplay`); not yet watched on the real pop-up.
+
