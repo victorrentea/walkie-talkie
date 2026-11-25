@@ -1439,8 +1439,20 @@ def textedit_documents() -> list[tuple[str, str]]:
     return list(zip(n, q + [""] * len(n)))
 
 
+#: The only TextEdit documents this harness may touch: the ones `_open_victim`
+#: made. A name, not a path — `path of every document` splits on the same commas a
+#: path may hold, and an untitled document has none.
+_VICTIM_NAME = re.compile(r"^victim-\d+(\.txt)?$")  # TextEdit may hide the extension
+
+
 def close_other_documents(keep: str) -> list[str]:
-    """Close every TextEdit document but `keep`. Returns what was closed.
+    """Close every *earlier victim* but `keep`. Returns what was closed.
+
+    **Only victims** (2026-11-25, found by the Fable review): until then this
+    emptied and closed *every* other TextEdit document, saving no — an unsaved
+    note of Victor's included, which an untitled document cannot come back from.
+    His documents are not this harness's mess, and keystrokes cannot land in them
+    anyway: the victim is made key before anything is typed.
 
     **The victim has to be the only one open.** Six of them had accumulated by
     2026-09-14 — every run leaves one behind, because closing a document is the
@@ -1453,7 +1465,7 @@ def close_other_documents(keep: str) -> list[str]:
     """
     closed = []
     for name, _path in textedit_documents():
-        if name != keep:
+        if name != keep and _VICTIM_NAME.match(name):
             _osascript('tell application "TextEdit" to set text of document "%s" to ""' % name,
                        timeout=8)
             _osascript('tell application "TextEdit" to close document "%s" saving no' % name,

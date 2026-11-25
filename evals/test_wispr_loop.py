@@ -682,5 +682,25 @@ class Fixtures(unittest.TestCase):
         self.assertNotIn("transcript", entry)
 
 
+class OnlyItsOwnDocuments(unittest.TestCase):
+    """The harness closes earlier victims, never a document of Victor's (Fable
+    review, 2026-11-25: it emptied and closed every other TextEdit document)."""
+
+    def test_only_earlier_victims_are_touched(self):
+        calls = []
+        real = wl.textedit_documents, wl._osascript
+        wl.textedit_documents = lambda: [("victim-2.txt", "/tmp/s/victim-2.txt"),
+                                         ("victim-1.txt", "/tmp/s/victim-1.txt"),
+                                         ("Untitled", "missing value"),
+                                         ("notes.txt", "/Users/v/notes.txt")]
+        wl._osascript = lambda script, timeout=None: calls.append(script) or ""
+        try:
+            closed = wl.close_other_documents("victim-2.txt")
+        finally:
+            wl.textedit_documents, wl._osascript = real
+        self.assertEqual(closed, ["victim-1.txt"])
+        self.assertFalse([c for c in calls if "Untitled" in c or "notes.txt" in c])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
