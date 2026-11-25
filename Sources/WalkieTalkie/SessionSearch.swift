@@ -99,8 +99,10 @@ final class SessionSearch {
         // standard library, and probing for an interpreter costs more process
         // launches than the scan itself.
         search.process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        // `--query=` in one word: a query like `--resume` or `-v` is otherwise
+        // read by argparse as an option, and the scan exits 2 with nothing found.
         search.process.arguments = [helper,
-                                    "--query", query,
+                                    "--query=" + query,
                                     "--days", String(Int(days)),
                                     "--limit", String(limit)]
         search.process.standardOutput = pipe
