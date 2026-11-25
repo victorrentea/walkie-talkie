@@ -11395,10 +11395,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // land where the caret is when they arrive (Victor's Q6 = C); if that
             // is a Terminal tab whose foreground job is a shell (or passes the
             // line to one), the Return would *run* them. Asked at the Return.
-            let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            let app = NSWorkspace.shared.frontmostApplication
+            let front = app?.bundleIdentifier, pid = app?.processIdentifier
             DispatchQueue.global(qos: .userInitiated).async {
-                if let shell = TerminalBinding.frontTerminalShell(bundleID: front) {
-                    Log.info("⏎ not sent — the Terminal tab in front is at a \(shell) prompt (Q18)")
+                if let shell = TerminalBinding.frontTerminalShell(bundleID: front, pid: pid) {
+                    Log.info("⏎ not sent — the terminal in front is at a \(shell) prompt (Q18)")
                     DispatchQueue.main.async { self?.overlay.flash("⏎ not sent — a shell prompt is in front", duration: 3) }
                     return
                 }

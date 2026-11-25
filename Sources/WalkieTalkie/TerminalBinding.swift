@@ -2697,10 +2697,20 @@ final class TerminalBinding {
     /// the foreground command's name when Terminal.app is frontmost and its
     /// selected tab's foreground job is a shell or passes the line to one
     /// (`refusesDelivery`), else nil. A Return there runs what was just pasted.
+    /// **VS Code's terminal holding the caret too** (2026-11-25), located as
+    /// `focusedTTY` does (`caretInVSCodeTerminal` + the window's shell pid);
+    /// other terminals still have no caret to read.
     /// Runs `osascript` and `ps` — off the main thread.
-    static func frontTerminalShell(bundleID: String?) -> String? {
-        guard bundleID == "com.apple.Terminal", let tab = frontTerminalTab().tab,
-              let command = foregroundCommand(onTTY: tab.tty), refusesDelivery(command) else { return nil }
+    static func frontTerminalShell(bundleID: String?, pid: pid_t? = nil) -> String? {
+        var tty: String?
+        if bundleID == "com.apple.Terminal" {
+            tty = frontTerminalTab().tab?.tty
+        } else if let bundleID, IDEBridge.kind(bundleID: bundleID) == "vscode",
+                  let pid, caretInVSCodeTerminal(pid: pid),
+                  let shell = IDEBridge.focusedTerminalShellPID(bundleID: bundleID) {
+            tty = self.tty(ofPID: shell)
+        }
+        guard let tty, let command = foregroundCommand(onTTY: tty), refusesDelivery(command) else { return nil }
         return command
     }
 
