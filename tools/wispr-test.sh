@@ -82,12 +82,13 @@ PORT=$("$PY" "$REPO/helpers/wispr_preflight.py" --print port) \
 # default branch. The failure is silent at every step — curl is happy, the route
 # answers 200, and only the echoed flag says the body never arrived. Spelled out
 # in two statements rather than cleverly, because the clever form is the bug.
-# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one.
-wt_auth() { printf 'X-Walkie-Token: %s' "$(cat "${WALKIE_HOME:-$HOME/.walkie-talkie}/test-token" 2>/dev/null)"; }
+# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one;
+# sent only to the app's own port and never in argv (`helpers/walkie_auth.sh`, Fable review).
+. "$REPO/helpers/walkie_auth.sh"
 post() {
   local body="${2:-}"
   [ -n "$body" ] || body='{}'
-  curl -s -m 10 -X POST "http://127.0.0.1:$PORT$1" -H 'content-type: application/json' -H "$(wt_auth)" -d "$body"
+  curl -s -m 10 -X POST "http://127.0.0.1:$PORT$1" -H 'content-type: application/json' -H @<(wt_auth "$PORT") -d "$body"
 }
 
 if [ "$SPEAKER" = 1 ]; then

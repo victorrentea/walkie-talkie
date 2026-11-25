@@ -11,8 +11,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 WT=$(cd "$HERE/../.." && pwd)
 scene="$1"; out="$HERE/out/$scene"; mkdir -p "$out"
 R=http://127.0.0.1:8917
-# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one.
-wt_auth() { printf 'X-Walkie-Token: %s' "$(cat "${WALKIE_HOME:-$HOME/.walkie-talkie}/test-token" 2>/dev/null)"; }
+# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one;
+# sent only to the app's own port and never in argv (`helpers/walkie_auth.sh`, Fable review).
+. "$WT/helpers/walkie_auth.sh"
 cd "$HERE"
 
 ~/bin/hands-off run "încarc pagina scenei $scene în Chrome" -- \
@@ -37,16 +38,16 @@ sleep 5   # let the hands-off locks leave the screen before anything is shot
 # and nothing of this app or of hands-off drawn on it.
 /usr/sbin/screencapture -x -D 1 "$out/01-control.png"
 
-curl -s -H "$(wt_auth)" -X POST "$R/test/dictation/start" -o "$out/10-start.json"
+curl -s -H @<(wt_auth 8917) -X POST "$R/test/dictation/start" -o "$out/10-start.json"
 sleep 2
-curl -s -H "$(wt_auth)" "$R/test/state" -o "$out/11-state-open.json"
+curl -s -H @<(wt_auth 8917) "$R/test/state" -o "$out/11-state-open.json"
 /usr/sbin/screencapture -x -D 1 "$out/12-during.png"
 
 # The recording, through the same `ScreenFilm` the 🔽 ↑ gesture drives — the one
 # capture path in the app that is not `/usr/sbin/screencapture`.
 ( cd "$WT" && WT_SHOOT_FILM=4 ./.build/debug/WalkieTalkie ) > "$out/13-film.txt" 2>&1 || true
-curl -s -H "$(wt_auth)" "$R/test/state" -o "$out/14-state-late.json"
-curl -s -H "$(wt_auth)" -X POST "$R/test/cancel" -o "$out/15-cancel.json"
+curl -s -H @<(wt_auth 8917) "$R/test/state" -o "$out/14-state-late.json"
+curl -s -H @<(wt_auth 8917) -X POST "$R/test/cancel" -o "$out/15-cancel.json"
 # The app's own picture: the newest `shot#00…` under the shots tree, which is
 # the file `ScreenCapture.grab` just wrote — the same function the 🔽 shutter
 # calls, so what holds for this frame holds for a hand-taken one.

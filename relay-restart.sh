@@ -83,10 +83,14 @@ RELAY_EXEC="$RELAY_APP/Contents/MacOS/Walkie Talkie"
 
 relay_pid() { pgrep -f "$RELAY_EXEC" 2>/dev/null | head -1; }
 
-# The loopback's `X-Walkie-Token` header (2026-11-25): every route but `GET /engine`
-# and `GET /target` answers 401 without it. Read again at every call, never kept:
-# the relaunched app writes a new token into the same file.
-relay_auth() { printf 'X-Walkie-Token: %s' "$(cat "$RELAY_HOME/test-token" 2>/dev/null)"; }
+# The loopback's `X-Walkie-Token` header (2026-11-25): every route but `/reply` and
+# `/ask` answers 401 without it. `helpers/walkie_auth.sh` (Fable review, same evening):
+# sent only to the port the app wrote beside it (`test-port`), never in argv —
+# `curl -H @<(relay_auth PORT)`; `relay_ports` = where to ask.
+# shellcheck source=helpers/walkie_auth.sh
+. "$RELAY_DIR/helpers/walkie_auth.sh"
+relay_auth() { WALKIE_HOME="$RELAY_HOME" wt_auth "$@"; }
+relay_ports() { WALKIE_HOME="$RELAY_HOME" wt_ports; }
 
 # Block until the gate is open (see above). Exit status 3 when --max-wait ran out.
 # Exit status 4 when it refuses (the app has not answered for 60 s).
@@ -128,8 +132,8 @@ relay_rebind() {
   local tty="${1:-}" pane="${2:-}" owner="${3:-}" port
   [ -n "$tty" ] || return 0
   for _ in $(seq 1 20); do
-    for port in 8917 8918 8919; do
-      if curl -fsS -m 10 -X POST "127.0.0.1:$port/bind" -H "$(relay_auth)" \
+    for port in $(relay_ports); do
+      if curl -fsS -m 10 -X POST "127.0.0.1:$port/bind" -H @<(relay_auth "$port") \
            -d "{\"tty\":\"$tty\",\"pane\":\"$pane\",\"owner\":\"$owner\"}" >/dev/null 2>&1; then
         echo "→ re-bound to $tty${pane:+ $pane}"
         return 0
@@ -143,8 +147,8 @@ relay_rebind() {
 # Is the app refusing a quit while it finishes a sentence? (new builds only)
 relay_quit_pending() {
   local port
-  for port in 8917 8918 8919; do
-    curl -s -m 2 -H "$(relay_auth)" "http://127.0.0.1:$port/test/state" 2>/dev/null | python3 -c '
+  for port in $(relay_ports); do
+    curl -s -m 2 -H @<(relay_auth "$port") "http://127.0.0.1:$port/test/state" 2>/dev/null | python3 -c '
 import json, sys
 try: sys.exit(0 if json.load(sys.stdin).get("quitPending") else 1)
 except Exception: sys.exit(1)' && return 0

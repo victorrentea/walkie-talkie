@@ -11,9 +11,10 @@ PY=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3
 API=http://127.0.0.1:8917
 OUT=evals/wispr-catchup/rates.jsonl
 RATES="${RATES:-1.0 1.0 1.25 1.5 1.75 2.0}"
-# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one.
-wt_auth() { printf 'X-Walkie-Token: %s' "$(cat "${WALKIE_HOME:-$HOME/.walkie-talkie}/test-token" 2>/dev/null)"; }
-post() { curl -s -m 5 -X POST "$API/$1" -H "$(wt_auth)" -d "$2" >/dev/null; }
+# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one;
+# sent only to the app's own port and never in argv (`helpers/walkie_auth.sh`, Fable review).
+. helpers/walkie_auth.sh
+post() { curl -s -m 5 -X POST "$API/$1" -H @<(wt_auth 8917) -d "$2" >/dev/null; }
 restore() { post test/sink '{"restore":true}'; post test/sink '{"on":false}'; post test/bridge '{"on":true}'; echo "restored $(date +%T)"; }
 trap restore EXIT INT TERM
 post test/bridge '{"on":false}'

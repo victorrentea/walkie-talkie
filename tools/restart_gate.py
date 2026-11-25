@@ -285,11 +285,12 @@ def installed_pids() -> set[int]:
 
 def fetch_state() -> dict | None:
     installed = installed_pids()
-    for port in PORTS:
+    # The token is read at every ask (across a relaunch the file changes), and sent only
+    # to the port the app wrote beside it — never to whatever answers on 8918 (Fable
+    # review, 2026-11-25). An app from before the gate is asked on all three, tokenless.
+    for port, headers in walkie_token.targets(home_dir=str(home())):
         try:
-            # The token is read at every ask: across a relaunch the file changes.
-            req = urllib.request.Request(f"http://127.0.0.1:{port}/test/state",
-                                         headers=walkie_token.headers(home_dir=str(home())))
+            req = urllib.request.Request(f"http://127.0.0.1:{port}/test/state", headers=headers)
             with urllib.request.urlopen(req, timeout=3) as r:
                 body = r.read()
             if body:

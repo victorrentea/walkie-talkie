@@ -8,9 +8,10 @@
 # Precondition: the 440 Hz pass-thru check on the Loopback device (see the plan).
 set -u
 B=http://127.0.0.1:8917; LOG=~/.walkie-talkie/relay.log; S=$1; CLIP=$2; DEV="🧪 WT Inject"
-# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one.
-wt_auth() { printf 'X-Walkie-Token: %s' "$(cat "${WALKIE_HOME:-$HOME/.walkie-talkie}/test-token" 2>/dev/null)"; }
-post(){ curl -s -m 20 -X POST "$B$1" -H 'content-type: application/json' -H "$(wt_auth)" -d "${2:-{\}}"; }
+# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one;
+# sent only to the app's own port and never in argv (`helpers/walkie_auth.sh`, Fable review).
+. "${0:A:h}/../../helpers/walkie_auth.sh"
+post(){ curl -s -m 20 -X POST "$B$1" -H 'content-type: application/json' -H @<(wt_auth 8917) -d "${2:-{\}}"; }
 MARK=$(wc -c < $LOG)
 post /test/mic "{\"device\":\"WT Inject\"}" >/dev/null
 TTY=$(osascript -e 'tell application "Terminal" to set t to do script "printf \"\\\\e]0;wt-witness\\\\a\"; stty -echo; exec cat >> '"$S"'/witness.txt"' -e 'tell application "Terminal" to get tty of t')
@@ -31,9 +32,9 @@ sd.play(np.repeat(a[:,None],2,1),48000,device=idx,blocking=True)
 print("played", len(a)/48000, "s")
 PY
 echo "waiting"; sleep ${WAIT:-6}
-curl -s -H "$(wt_auth)" $B/test/state | python3 -c "import sys,json; d=json.load(sys.stdin)['liveCaption']; print('band:', {k:d[k] for k in ['words','committed','corrections','correcting','eraseFront']})"
+curl -s -H @<(wt_auth 8917) $B/test/state | python3 -c "import sys,json; d=json.load(sys.stdin)['liveCaption']; print('band:', {k:d[k] for k in ['words','committed','corrections','correcting','eraseFront']})"
 post /test/gesture '{"name":"forward-right"}' >/dev/null
-for i in $(seq 1 240); do curl -s -H "$(wt_auth)" $B/test/state | /usr/bin/grep -q '"busy":false' && break; sleep 0.5; done; sleep 1
+for i in $(seq 1 240); do curl -s -H @<(wt_auth 8917) $B/test/state | /usr/bin/grep -q '"busy":false' && break; sleep 0.5; done; sleep 1
 echo "---- log"; /usr/bin/tail -c +$((MARK+1)) $LOG | /usr/bin/grep -aE "live caption|live correction|elevenlabs:|delivery|returned no words|words landed|401|injected|↪️|standing in|fall|whisper helper|local whisper" | LC_ALL=C /usr/bin/cut -c1-230
 echo "---- witness"; /usr/bin/tail -c 400 $S/witness.txt 2>/dev/null; echo
 post /unbind >/dev/null; post /test/mic '{"device":null}' >/dev/null

@@ -61,17 +61,15 @@ wispr_act_wait_routes() {
 
 # ── The system default input ────────────────────────────────────────────────
 _wispr_act_post_input() {
-  "$WISPR_ACT_PY" - "$1" <<'EOF'
-import json, os, sys, urllib.request
+  "$WISPR_ACT_PY" - "$1" "$WISPR_ACT_REPO/helpers" <<'EOF'
+import json, sys, urllib.request
+sys.path.insert(0, sys.argv[2])
+import walkie_token  # X-Walkie-Token (2026-11-25): only to the app's own port (Fable review)
 body = json.dumps({"name": sys.argv[1]}).encode()
-try:  # X-Walkie-Token (2026-11-25)
-    tok = open(os.path.join(os.path.expanduser(os.environ.get("WALKIE_HOME") or "~/.walkie-talkie"), "test-token")).read().strip()
-except OSError:
-    tok = ""
-for port in (8917, 8918, 8919):
+for port, auth in walkie_token.targets():
     try:
         req = urllib.request.Request("http://127.0.0.1:%d/test/input" % port, data=body,
-                                     headers={"content-type": "application/json", "X-Walkie-Token": tok}, method="POST")
+                                     headers=dict(auth, **{"content-type": "application/json"}), method="POST")
         print(urllib.request.urlopen(req, timeout=10).read().decode()); break
     except Exception:
         continue
@@ -90,15 +88,16 @@ EOF
 # All three ports, like every other caller here: the relay takes the first free
 # one of 8917–8919, and asking 8917 alone read a relay on 8918 as *not recording*
 # (Fable review, 2026-11-25). The first port that answers is the relay.
-# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one.
-wt_auth() { printf 'X-Walkie-Token: %s' "$(cat "${WALKIE_HOME:-$HOME/.walkie-talkie}/test-token" 2>/dev/null)"; }
+# X-Walkie-Token (2026-11-25): read at every call — a relaunched app writes a new one;
+# sent only to the app's own port and never in argv (`helpers/walkie_auth.sh`, Fable review).
+. "$WISPR_ACT_REPO/helpers/walkie_auth.sh"
 wispr_act_stand_down() {
   local port state
-  for port in 8917 8918 8919; do
-    state=$(curl -s -m 3 -H "$(wt_auth)" "http://127.0.0.1:$port/test/state" 2>/dev/null)
+  for port in $(wt_ports); do
+    state=$(curl -s -m 3 -H @<(wt_auth "$port") "http://127.0.0.1:$port/test/state" 2>/dev/null)
     [ -n "$state" ] || continue
     printf '%s' "$state" | /usr/bin/grep -qE '"(isRecording|listening)": *true' || return 0
-    curl -s -m 5 -X POST "http://127.0.0.1:$port/test/cancel" -H "$(wt_auth)" \
+    curl -s -m 5 -X POST "http://127.0.0.1:$port/test/cancel" -H @<(wt_auth "$port") \
          -H 'content-type: application/json' -d '{}' >/dev/null 2>&1 || true
     return 0
   done

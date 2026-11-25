@@ -43,14 +43,17 @@ def relay_port(timeout: float = 2.0) -> int | None:
     """First of 8917–8919 that answers. `ElementPicker` takes the first free one.
 
     The one that takes this home's token first (`walkie_token.find_port`), so a
-    `WALKIE_HOME` run finds its own instance; else the first that answers the open
-    `GET /target`, so a missing token surfaces as a 401 rather than *no relay*."""
+    `WALKIE_HOME` run finds its own instance; else the first that answers `GET /target`
+    at all — a 401 included (gated since the Fable review, 2026-11-25; the token only goes
+    to the app's own port) — so a missing token surfaces as a 401 rather than *no relay*."""
     found = walkie_token.find_port(timeout)
     if found:
         return found
     for port in PORTS:
         try:
             urllib.request.urlopen("http://127.0.0.1:%d/target" % port, timeout=timeout).read()
+            return port
+        except urllib.error.HTTPError:
             return port
         except Exception:
             continue
