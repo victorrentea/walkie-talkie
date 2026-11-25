@@ -4342,6 +4342,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 if fallingBack {
                     Log.error("🧾 sentence #\(stale.id) is still being transcribed locally and cannot be parked (\(fallbackParkRefusal() ?? "?")) — its answer will be dropped")
+                    // Its fallback ends with it, as a cancel ends one: the flag
+                    // would otherwise ride into the new sentence and refuse
+                    // every start after it; the recording goes to *Recover*.
+                    fallingBack = false
+                    fallbackToken += 1
+                    if let kept = fallbackAudio { keepCancelled(wav: kept.wav, duration: kept.duration) }
+                    fallbackAudio = nil
+                    syncLocalNow()
                 } else {
                     Log.info("🧾 sentence #\(stale.id) had no answer left to wait for — closed")
                 }
@@ -5337,6 +5345,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             if let owner, owner.finished {
                 Log.info("🗑️ the local model answered for sentence #\(owner.id), which is over — dropped")
+                // Still the fallback standing (nothing ended it): end it here.
+                if token == self.fallbackToken, self.fallingBack {
+                    self.fallingBack = false
+                    self.fallbackAudio = nil
+                    self.syncLocalNow()
+                }
                 return
             }
             self.runAnswer(for: owner) { [weak self] in
