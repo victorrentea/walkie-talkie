@@ -1854,6 +1854,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `rebindFromMenu`.
         status.onRebind = { [weak self] tty in self?.rebindFromMenu(tty: tty) }
         status.whisperFootprint = { [weak self] in self?.whisperSource.footprintBytes }
+        status.liveFootprint = { [weak self] in self?.whisperSource.liveFootprintBytes }
         status.lastEngineUsed = { [weak self] in self?.lastEngineUsed }
         // The id the overlay used to carry beside the pulse. Same shape as the
         // footprint: asked when the menu opens, because that is the one moment

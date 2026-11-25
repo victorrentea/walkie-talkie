@@ -106,9 +106,10 @@ enum InputDevice {
               needles: ["macbook pro microphone", "built-in microph"]),
     ]
 
-    /// The ladder, spelled with the glyphs, for the `Automatic` row — the menu
-    /// says what automatic *does* rather than asking him to remember it.
-    static var ladder: String { known.map(\.glyph).joined(separator: " ▸ ") }
+    /// The ladder, spelled with the glyphs, for the `Auto:` row — the menu
+    /// says what automatic *does* rather than asking him to remember it
+    /// (`Auto: 🎙️ > 🎤 > 🏛️ > 🎧 > 💻` since 2026-11-25, Victor: *"Auto: x > y > z"*).
+    static var ladder: String { known.map(\.glyph).joined(separator: " > ") }
 
     /// **Microphones this app never records through, whatever else happens**
     /// (2026-09-23, Victor: *"niciodata nu voi folosi mic de pe WH casti bt"* —

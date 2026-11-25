@@ -127,6 +127,8 @@ final class LocalWhisperSource: DictationSource {
     var loadedModel: String? { whisper.modelName }
     var isLoading: Bool { loading }
     var footprintBytes: UInt64? { whisper.footprintBytes }
+    /// The live-captions helper's own copy of the model, nil while it is down.
+    var liveFootprintBytes: UInt64? { live.whisper.footprintBytes }
     /// Whether the weights are on their way up, so two gestures cannot stack two
     /// loads on one another.
     private(set) var loading = false

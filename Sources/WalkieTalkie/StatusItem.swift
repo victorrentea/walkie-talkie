@@ -33,6 +33,8 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// up. Asked when the menu opens, like the header, because that is the only
     /// moment the answer has to be right.
     var whisperFootprint: (() -> UInt64?)?
+    /// The same for the live-captions helper (`LocalLiveCaption`), its second copy of the model.
+    var liveFootprint: (() -> UInt64?)?
 
     /// Which model the helper actually loaded — `RELAY_WHISPER_MODEL`, or the
     /// default it fell back to — nil while it is not up. Asked when the menu
@@ -415,17 +417,18 @@ final class StatusItem: NSObject, NSMenuDelegate {
         micSubmenu.removeAllItems()
         let available = micAvailable?() ?? []
 
-        // **Automatic first, and it spells the ladder out**: `Automatic — 🎙️ ▸
-        // 🎤 ▸ 🎧 ▸ 💻` is the same order as the four rows under it, which is
-        // the point — the list he reads *is* the preference (`InputDevice.known`).
+        // **Auto first, and it spells the ladder out**: `Auto: 🎙️ > 🎤 > 🏛️ >
+        // 🎧 > 💻` is the same order as the rows under it, which is the point —
+        // the list he reads *is* the preference (`InputDevice.known`). No line
+        // under it since 2026-11-25 (Victor: *"să nu fie separat cu linie de
+        // surse"*): it is one of the picks, not a heading over them.
         // Never disabled: it is the one row that is true whatever is on the desk.
-        let auto = NSMenuItem(title: "Automatic — \(InputDevice.ladder)",
+        let auto = NSMenuItem(title: "Auto: \(InputDevice.ladder)",
                               action: #selector(micPicked(_:)), keyEquivalent: "")
         auto.target = self
         auto.representedObject = "auto"
         auto.image = micChosen == "auto" ? Self.symbolIcon("checkmark") : Self.blankIcon
         micSubmenu.addItem(auto)
-        micSubmenu.addItem(.separator())
 
         for device in InputDevice.known {
             let here = available.contains(device.id)
@@ -1393,6 +1396,16 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "Keeps the local model loaded while another engine is picked"
             + (ram.map { " (\($0) now)" } ?? "") + "."
         liveRow.image = Self.tick(LocalLive.isOn)
+        // **What it costs, in GB, on the row** (2026-11-25, Victor: *"arată câți GB costă Local
+        // Live Subtitles"*): the helper's own footprint while it is up; else the main model's,
+        // which it would copy, as `~`; else the measured ~2 GB.
+        let liveGB: String = {
+            func gb(_ b: UInt64) -> String { String(format: "%.1f GB", Double(b) / 1_073_741_824) }
+            if let b = liveFootprint?() { return gb(b) }
+            if let b = whisperFootprint?() { return "~" + gb(b) }
+            return "~2 GB"
+        }()
+        liveRow.title = "\(LocalLive.menuTitle) · \(liveGB) RAM"
         liveRow.toolTip = "With a local model as the engine, the subtitle band shows what it hears while you talk: "
             + "at every half-second pause the take since the last settled sentence is decoded again "
             + "and the band rewritten.\n"
