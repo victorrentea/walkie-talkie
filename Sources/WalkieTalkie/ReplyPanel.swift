@@ -1710,8 +1710,7 @@ private final class LinkedBody: NSTextView {
         // A picture in the words (the 😠 attachment) is not text.
         let text = (string as NSString).substring(with: r).replacingOccurrences(of: "\u{FFFC}", with: "")
         guard !text.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        Clipboard.write(text)
         Log.info("💬 \(text.count) chars selected in the reply pop-up — copied")
         var last = NSRect.zero
         lm.enumerateEnclosingRects(forGlyphRange: lm.glyphRange(forCharacterRange: r, actualCharacterRange: nil),

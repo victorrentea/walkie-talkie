@@ -10481,8 +10481,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// after the clipboard has moved on. The selection stays on screen.
     private func copyReplySelection() {
         guard let text = ReplyPanel.selectedText else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        Clipboard.write(text)
         Log.info("💬 ⌃K — \(text.count) chars of the reply pop-up's selection copied")
         overlay.flash("📋 Copied", duration: 1.2)
     }
