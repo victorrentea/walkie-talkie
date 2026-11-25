@@ -322,6 +322,7 @@ final class AudioBridge {
             self.lock.lock()
             self.reholdsLocked = 0
             self.pending = 0; self.queued = 0; self.held = 0
+            self.markerIDs.removeAll()
             self.holding = holding; self.accepting = true
             self.isRunning = true
             self.lock.unlock()
@@ -393,10 +394,11 @@ final class AudioBridge {
         guard buffer.frameLength > 0 else { return }
         let seconds = Double(buffer.frameLength) / buffer.format.sampleRate
         lock.lock()
+        // Forgotten whether or not it plays: an id left behind is an address a
+        // later voice buffer can be allocated at, and would be taken for a marker.
+        let marker = markerIDs.remove(ObjectIdentifier(buffer)) != nil
         guard accepting, isRunning else { lock.unlock(); return }
         pending += seconds
-        let marker = markerIDs.contains(ObjectIdentifier(buffer))
-        if marker { markerIDs.remove(ObjectIdentifier(buffer)) }
         lock.unlock()
         guard marker else {
             queue.async { [weak self] in self?.take(buffer, seconds: seconds) }
@@ -646,6 +648,7 @@ final class AudioBridge {
             isRunning = false
             holding = false
             pending = 0; queued = 0; held = 0
+            markerIDs.removeAll()
             lock.unlock()
             unwatchConfiguration()
             let (player, engine) = (self.player, self.engine)
@@ -719,8 +722,13 @@ final class AudioBridge {
 
     private func recover(_ changed: AVAudioEngine) {
         guard isRunning, changed === engine, let engine, let player else { return }
-        // Whatever was scheduled went with the old configuration.
+        // Whatever was scheduled went with the old configuration — counts and
+        // the marker list alike (`holdAgain` does both): a late callback of a
+        // lost chunk must neither subtract from new audio nor pop a live entry.
         lock.lock(); let lost = queued; queued = 0; lock.unlock()
+        generation += 1
+        playing = []
+        markerCatchUpFrom = 0
         recoveries += 1
         guard recoveries <= Self.maxRecoveries,
               let device = Self.target() else {
@@ -749,6 +757,7 @@ final class AudioBridge {
         lock.lock()
         isRunning = false; holding = false; accepting = false
         pending = 0; queued = 0; held = 0
+        markerIDs.removeAll()
         lock.unlock()
         unwatchConfiguration()
         let (player, engine) = (self.player, self.engine)
