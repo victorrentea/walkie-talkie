@@ -135,6 +135,94 @@ ABORT_POLL_SEC = 0.05
 ABORT_ROW_TIMEOUT_SEC = 12.0
 
 
+# ── telling the harvester that this is our own playback ──────────────────────
+#: Where every player says when it was playing into Wispr, so `corpus_harvest.py`
+#: does not file the rig's own playback as new dictations of his — the *corpus
+#: eating its own tail* of 2026-09-20 (1,239 rows, 1,056 of them word-for-word a
+#: label the rig had just written).
+#:
+#: **Announced by `play()` itself** (2026-11-25, found by the Fable review): only
+#: `teacher_label` used to write a window, so `wispr_probe`, this module's CLI and
+#: every `wispr_loop` scenario played corpus clips and fixtures into Wispr
+#: unannounced. Every player goes through `play()`, so every player is covered by
+#: construction.
+#:
+#: **A window that is never closed must not stay open for ever.** One labelling run
+#: in September died without writing its end, and the harvester — reading a missing
+#: end as *still running* — skipped every Wispr recording for two months. So the
+#: file names its process and is touched at every clip; the harvester counts an
+#: unclosed window as open only while that process lives *and* the file has been
+#: touched within `RUN_WINDOW_IDLE_SEC`, else as ended at its last touch.
+RIG_RUNS = os.path.join(
+    os.environ.get("VOICE_CORPUS_DIR", os.path.join(HOME, ".walkie-talkie/voice-corpus")),
+    "rig-runs")
+
+#: A player that has played nothing for this long has finished its stretch of
+#: playback: its next clip opens a fresh window, so his own dictations in the gap
+#: (a gated batch waiting for the Mac to go quiet) are not inside one. The
+#: harvester uses the same number to tell a live window from an abandoned one.
+RUN_WINDOW_IDLE_SEC = 600
+
+_window = None  # this process's open window: its path
+_window_touched = 0.0  # time.time() of its last touch
+
+
+def open_run_window(by=None):
+    """Open this process's playback window (once) and return its path."""
+    global _window, _window_touched
+    if _window:
+        return _window
+    import atexit
+    import json
+
+    os.makedirs(RIG_RUNS, exist_ok=True)
+    started = datetime.now(timezone.utc)
+    stem = os.path.join(RIG_RUNS, "%s-%d" % (started.strftime("%Y%m%dT%H%M%S"), os.getpid()))
+    path, n = stem + ".json", 1
+    while os.path.exists(path):  # never overwrite a window already closed
+        n += 1
+        path = "%s-%d.json" % (stem, n)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"from": started.isoformat(), "to": None, "pid": os.getpid(),
+                   "by": by or os.path.basename(sys.argv[0] or "python")}, fh)
+    _window, _window_touched = path, time.time()
+    atexit.register(close_run_window)
+    return path
+
+
+def touch_run_window():
+    """Say that this process is still playing; a long silence closes the window first."""
+    global _window_touched
+    if _window and time.time() - _window_touched > RUN_WINDOW_IDLE_SEC:
+        close_run_window(at=_window_touched)
+    if not _window:
+        open_run_window()
+    try:
+        os.utime(_window, None)
+    except OSError:
+        pass
+    _window_touched = time.time()
+
+
+def close_run_window(at=None):
+    """Write this process's window's end — now, or `at` (a `time.time()`)."""
+    global _window
+    path, _window = _window, None
+    if not path:
+        return
+    import json
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            run = json.load(fh)
+        end = datetime.fromtimestamp(at, timezone.utc) if at else datetime.now(timezone.utc)
+        run["to"] = end.isoformat()
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(run, fh)
+    except (OSError, ValueError):
+        pass
+
+
 class PlaybackAborted(Exception):
     """A clip was cut short on purpose — not a failure, and never a label.
 
@@ -274,6 +362,16 @@ def play(audio, rate, device_index, gain=1.0, peak=None, abort=None):
 
     if channels > 1:
         signal = np.repeat(signal[:, None], channels, axis=1)
+    # Before the first sample and again after the last: the harvester must
+    # never see Wispr record this clip outside a window (`RIG_RUNS`).
+    touch_run_window()
+    try:
+        return _play_signal(sd, signal, rate, device_index, abort)
+    finally:
+        touch_run_window()
+
+
+def _play_signal(sd, signal, rate, device_index, abort):
     if abort is None:
         sd.play(signal, samplerate=rate, device=device_index, blocking=True)
         return True

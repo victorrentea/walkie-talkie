@@ -88,5 +88,77 @@ class RigWindows(unittest.TestCase):
         self.assertEqual(ch.rig_windows(), [])
 
 
+class UnclosedWindows(unittest.TestCase):
+    """An end that was never written must not stop the harvest for ever.
+
+    2026-09-20: one labelling run died without closing its window, and every Wispr
+    recording for the next two months was read as the rig's own playback and left in
+    Wispr until it pruned them (found by the Fable review, 2026-11-25)."""
+
+    def setUp(self):
+        self._real = ch.RIG_RUNS
+        ch.RIG_RUNS = tempfile.mkdtemp()
+
+    def tearDown(self):
+        ch.RIG_RUNS = self._real
+
+    def write(self, start, pid=None, touched=None):
+        path = os.path.join(ch.RIG_RUNS, "run.json")
+        run = {"from": start.isoformat(), "to": None}
+        if pid is not None:
+            run["pid"] = pid
+        with open(path, "w") as fh:
+            json.dump(run, fh)
+        if touched is not None:
+            os.utime(path, (touched.timestamp(), touched.timestamp()))
+
+    def row(self, when):
+        return {"timestamp": when.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " +00:00"}
+
+    def dead_pid(self):
+        import subprocess
+        p = subprocess.Popen(["true"])
+        p.wait()
+        return p.pid
+
+    def test_a_live_player_that_touched_it_recently_is_still_running(self):
+        now = datetime.now(timezone.utc)
+        self.write(now - timedelta(hours=1), pid=os.getpid(),
+                   touched=now - timedelta(minutes=1))
+        self.assertTrue(ch.is_the_rigs_own(self.row(now), ch.rig_windows()))
+
+    def test_a_dead_player_ended_at_its_last_touch(self):
+        now = datetime.now(timezone.utc)
+        self.write(now - timedelta(days=60), pid=self.dead_pid(),
+                   touched=now - timedelta(days=59))
+        windows = ch.rig_windows()
+        self.assertFalse(ch.is_the_rigs_own(self.row(now), windows))
+        self.assertTrue(ch.is_the_rigs_own(self.row(now - timedelta(days=59, minutes=5)),
+                                           windows))
+
+    def test_a_live_but_idle_player_ended_at_its_last_touch(self):
+        """A recycled pid, or a player that stopped playing long ago."""
+        now = datetime.now(timezone.utc)
+        self.write(now - timedelta(hours=5), pid=os.getpid(),
+                   touched=now - timedelta(hours=4))
+        self.assertFalse(ch.is_the_rigs_own(self.row(now), ch.rig_windows()))
+
+    def test_a_window_with_no_process_is_believed_for_a_day_at_most(self):
+        """The September file: no pid, no end."""
+        now = datetime.now(timezone.utc)
+        self.write(now - timedelta(days=60))
+        windows = ch.rig_windows()
+        self.assertFalse(ch.is_the_rigs_own(self.row(now - timedelta(days=30)), windows))
+        self.assertTrue(ch.is_the_rigs_own(self.row(now - timedelta(days=60) + timedelta(hours=2)),
+                                           windows))
+
+    def test_a_key_pressed_just_before_the_window_is_still_ours(self):
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=10)
+        self.write(start, pid=os.getpid(), touched=now)
+        self.assertTrue(ch.is_the_rigs_own(self.row(start - timedelta(seconds=5)),
+                                           ch.rig_windows()))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

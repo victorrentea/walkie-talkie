@@ -255,24 +255,74 @@ RIG_RUNS = os.path.join(CORPUS, "rig-runs")
 
 
 def rig_windows():
-    """(start, end) of every labelling run, as UTC datetimes. End open = still running."""
+    """(start, end) of every labelling run, as UTC datetimes, slack included."""
     out = []
+    now = datetime.now(timezone.utc)
     for path in sorted(glob.glob(os.path.join(RIG_RUNS, "*.json"))):
         try:
             with open(path, encoding="utf-8") as fh:
                 run = json.load(fh)
             start = datetime.fromisoformat(run["from"])
-            end = (datetime.fromisoformat(run["to"]) if run.get("to")
-                   else datetime.now(timezone.utc))
-        except (OSError, ValueError, KeyError):
+            if run.get("to"):
+                end = datetime.fromisoformat(run["to"])
+            else:
+                end = unclosed_end(path, run, start, now)
+        except (OSError, ValueError, KeyError, TypeError):
             continue
-        out.append((start, end + timedelta(seconds=RIG_WINDOW_SLACK)))
+        slack = timedelta(seconds=RIG_WINDOW_SLACK)
+        out.append((start - slack, end + slack))
     return out
 
 
 #: Wispr writes its row at the key press and finishes seconds later; a window that ends
-#: at the rig's last chord would let the tail of the last clip through.
+#: at the rig's last chord would let the tail of the last clip through. The same slack
+#: before the start covers a key pressed just before the window was written.
 RIG_WINDOW_SLACK = 120
+
+#: An unclosed window is a live run only while its player keeps touching the file
+#: (`wispr_loopback.RUN_WINDOW_IDLE_SEC`, at every clip) and its process is alive.
+RIG_WINDOW_IDLE_SEC = 600
+
+#: A window with no `pid` (written before 2026-11-25) and no end is believed for this
+#: long, never more — no labelling night has run longer.
+RIG_WINDOW_LEGACY_HOURS = 24
+
+
+def _alive(pid) -> bool:
+    try:
+        os.kill(int(pid), 0)
+    except PermissionError:
+        return True
+    except (OSError, ValueError, TypeError, OverflowError):
+        return False
+    return True
+
+
+def unclosed_end(path, run, start, now):
+    """Where a window with no `to` ends.
+
+    **Not "now" for ever** (2026-11-25, found by the Fable review): one labelling run
+    died on 2026-09-20 without writing its end, and this harvester — reading a missing
+    end as *still running* — skipped every Wispr recording for two months, until Wispr
+    had pruned them. A window is open only while its process lives and has touched the
+    file within `RIG_WINDOW_IDLE_SEC`; otherwise it ended at its last touch, and the
+    log says so on every run until somebody closes the file.
+    """
+    touched = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
+    pid = run.get("pid")
+    if pid is None:
+        end = min(now, start + timedelta(hours=RIG_WINDOW_LEGACY_HOURS))
+        if end < now:
+            log("rig-runs/%s was never closed and names no process — counted as ended %s"
+                % (os.path.basename(path), end.isoformat()))
+        return end
+    alive = _alive(pid)
+    if alive and (now - touched).total_seconds() < RIG_WINDOW_IDLE_SEC:
+        return now
+    end = max(start, touched)
+    log("rig-runs/%s was never closed and pid %s is %s — counted as ended %s"
+        % (os.path.basename(path), pid, "idle" if alive else "gone", end.isoformat()))
+    return end
 
 
 def is_the_rigs_own(row, windows) -> bool:

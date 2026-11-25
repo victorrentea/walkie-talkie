@@ -117,5 +117,62 @@ class WaitForTranscript(unittest.TestCase):
         self.assertEqual(heard.language, "ro")
 
 
+class RunWindow(unittest.TestCase):
+    """Every player announces its playback, so the harvester never files it as his.
+
+    Only `teacher_label` used to; `wispr_probe` and every `wispr_loop` scenario played
+    corpus clips and fixtures into Wispr unannounced (found by the Fable review,
+    2026-11-25). The window lives in `play()` now."""
+
+    def setUp(self):
+        import json  # noqa: F401
+        self._real = lb.RIG_RUNS
+        lb.RIG_RUNS = tempfile.mkdtemp()
+        lb.close_run_window()
+
+    def tearDown(self):
+        lb.close_run_window()
+        lb.RIG_RUNS = self._real
+
+    def read(self, path):
+        import json
+        with open(path) as fh:
+            return json.load(fh)
+
+    def test_a_touch_opens_a_window_that_names_this_process(self):
+        lb.touch_run_window()
+        run = self.read(lb._window)
+        self.assertIsNone(run["to"])
+        self.assertEqual(run["pid"], os.getpid())
+
+    def test_closing_writes_the_end(self):
+        lb.touch_run_window()
+        path = lb._window
+        lb.close_run_window()
+        self.assertIsNotNone(self.read(path)["to"])
+        self.assertIsNone(lb._window)
+
+    def test_a_long_silence_closes_the_window_and_the_next_clip_opens_another(self):
+        import time
+        lb.touch_run_window()
+        first = lb._window
+        lb._window_touched = time.time() - lb.RUN_WINDOW_IDLE_SEC - 5
+        lb.touch_run_window()
+        self.assertNotEqual(lb._window, first)
+        self.assertIsNotNone(self.read(first)["to"])
+
+    def test_the_harvester_reads_it_as_the_rigs_own(self):
+        import corpus_harvest as ch
+        from datetime import datetime, timezone
+        lb.touch_run_window()
+        real, ch.RIG_RUNS = ch.RIG_RUNS, lb.RIG_RUNS
+        try:
+            now = datetime.now(timezone.utc)
+            row = {"timestamp": now.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3] + " +00:00"}
+            self.assertTrue(ch.is_the_rigs_own(row, ch.rig_windows()))
+        finally:
+            ch.RIG_RUNS = real
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

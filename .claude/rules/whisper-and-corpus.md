@@ -572,6 +572,14 @@ never include a bare `dji mic`, which is the transmitter's name (`DJI Mic Mini-B
   as `captureLocal` returns, and a copy queued for later would race it. → journal: *The voice corpus: audio kept beside the transcript, forever*
 - **The clock is the key**, `HH-mm-ss` plus the millisecond — one microphone, so two samples cannot
   share a second, and the millisecond keeps a retry from overwriting one. → journal: *The voice corpus: audio kept beside the transcript, forever*
+- **Every clip played into Wispr is announced in `voice-corpus/rig-runs/`, by `wispr_loopback.play()`
+  itself** (2026-11-25), so `corpus_harvest.py` never files the rig's playback as his dictation —
+  `teacher_label`, `wispr_probe`, every `wispr_loop` scenario. The file names its `pid`, is touched per
+  clip, closed by `atexit`; 10 min without a clip closes it and the next clip opens another. **An
+  unclosed window is open only while its pid lives and touched it in the last 10 min** — else it ended
+  at its last touch (no `pid`: 24 h at most). Until then a run that died on 2026-09-20 with `to: null`
+  kept the harvest at 0 for two months. A new player must go through `play()`, or call
+  `touch_run_window()`.
 
 ## `MicRecorder`: format, floor, meter
 
