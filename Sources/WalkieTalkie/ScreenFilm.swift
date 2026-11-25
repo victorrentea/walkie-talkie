@@ -113,6 +113,11 @@ final class ScreenFilm {
     /// timer's cancel drops its frame instead of encoding it.
     private var ended = false
 
+    /// **Called on main when the 30 s ceiling ends the film** (2026-11-25, found
+    /// by the Fable review): the owner stops it as a manual stop would, so the
+    /// chip's film row and `FxHold` do not outlive the REC border. Main only.
+    var onCeiling: (() -> Void)?
+
     /// **How many frames are on disk right now**, for the chip's row.
     ///
     /// Pulled rather than pushed, the way `MicRecorder.voicedSeconds` is: the
@@ -284,6 +289,7 @@ final class ScreenFilm {
                 Log.info("🎬 \(Int(Self.maxSeconds))s ceiling reached — stopping the recording")
                 FilmBorder.hide()
                 video?.stop(timeout: 0)
+                DispatchQueue.main.async { [weak self] in self?.onCeiling?() }
                 return
             }
             // An area stays where he drew it; only a whole display follows the pointer.

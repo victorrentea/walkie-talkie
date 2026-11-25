@@ -8742,6 +8742,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         film = started
+        // The 30 s ceiling is a stop like any other: the row, the hold, the flash.
+        started.onCeiling = { [weak self, weak started] in
+            guard let self, let started, self.film === started else { return }
+            Log.info("🎬 the ceiling ended the film — stopping it as 🔽 ↑ would")
+            self.stopFilm()
+        }
         overlay.setFilming(true)
         // Nothing else is drawn while the REC corners are up (`FxHold`, 2026-11-22).
         Log.info("🎬 filming — the halo, the dust and the edge stay down until it stops")
