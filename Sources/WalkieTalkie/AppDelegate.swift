@@ -13249,7 +13249,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// from the queue itself — it is blocked on that file, not on the process, and
     /// would otherwise sit waiting for messages that can no longer come.
     private func endSession(reason: String) {
-        announceEnd(reason)
+        // The held prompt goes now, as it always did; the goodbye (and the local
+        // model's shutdown) only when the quit gate has nothing to wait for — a
+        // sentence it defers for still needs the model, and its row comes before
+        // `session_end`. Deferred, `applicationWillTerminate` announces it.
+        overlay?.flushHeldPrompt()
+        if quitBlockers.isEmpty { announceEnd(reason) }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
     }
 
