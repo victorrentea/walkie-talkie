@@ -106,39 +106,44 @@ final class SessionSearch {
         search.process.standardOutput = pipe
         search.process.standardError = FileHandle.nullDevice
 
-        var found = 0
-        pipe.fileHandleForReading.readabilityHandler = { handle in
-            let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
-            search.buffer.append(chunk)
-            // Rows are newline-delimited JSON and a read can land mid-row, so
-            // only whole lines are taken and the tail is kept for the next one.
-            while let nl = search.buffer.firstIndex(of: 0x0A) {
-                let line = search.buffer.subdata(in: search.buffer.startIndex..<nl)
-                search.buffer.removeSubrange(search.buffer.startIndex...nl)
-                guard let row = try? JSONSerialization.jsonObject(with: line) as? [String: Any]
-                else { continue }
-                if row["done"] as? Bool == true { continue }
-                guard let hit = Hit(row) else { continue }
-                found += 1
-                DispatchQueue.main.async {
-                    guard !search.cancelled else { return }
-                    onRow(hit)
-                }
-            }
-        }
-        search.process.terminationHandler = { _ in
-            pipe.fileHandleForReading.readabilityHandler = nil
-            DispatchQueue.main.async {
-                guard !search.cancelled else { return }
-                onDone(found)
-            }
-        }
         do {
             try search.process.run()
         } catch {
             Log.info("🔎 could not start the session scan — \(error)")
             return nil
+        }
+        // **Read to the end of the pipe on one thread, then report done**
+        // (2026-11-25, found by the Fable review). A `terminationHandler` that
+        // dropped the `readabilityHandler` lost whatever the helper printed just
+        // before it exited — the single hit of a rare phrase — and `found` was
+        // written from two queues.
+        DispatchQueue.global(qos: .userInitiated).async {
+            var found = 0
+            let handle = pipe.fileHandleForReading
+            while true {
+                let chunk = handle.availableData
+                guard !chunk.isEmpty else { break }   // EOF: the helper is gone
+                search.buffer.append(chunk)
+                // Rows are newline-delimited JSON and a read can land mid-row, so
+                // only whole lines are taken and the tail is kept for the next one.
+                while let nl = search.buffer.firstIndex(of: 0x0A) {
+                    let line = search.buffer.subdata(in: search.buffer.startIndex..<nl)
+                    search.buffer.removeSubrange(search.buffer.startIndex...nl)
+                    guard let row = try? JSONSerialization.jsonObject(with: line) as? [String: Any]
+                    else { continue }
+                    if row["done"] as? Bool == true { continue }
+                    guard let hit = Hit(row) else { continue }
+                    found += 1
+                    DispatchQueue.main.async {
+                        guard !search.cancelled else { return }
+                        onRow(hit)
+                    }
+                }
+            }
+            DispatchQueue.main.async {
+                guard !search.cancelled else { return }
+                onDone(found)
+            }
         }
         return search
     }
