@@ -48,12 +48,14 @@ enum AnimatedCopy {
         request.setValue("image/gif,image/*;q=0.8", forHTTPHeaderField: "Accept")
         let done = DispatchSemaphore(value: 0)
         var body: Data?
-        URLSession.shared.dataTask(with: request) { data, _, _ in
+        let task = URLSession.shared.dataTask(with: request) { data, _, _ in
             body = data
             done.signal()
-        }.resume()
-        guard done.wait(timeout: .now() + 6) == .success, let data = body, data.count <= 20_000_000,
-              isAnimated(data) else { return nil }
+        }
+        task.resume()
+        // Given up on ⇒ stopped: a slow or huge body must not go on filling RAM.
+        guard done.wait(timeout: .now() + 6) == .success else { task.cancel(); return nil }
+        guard let data = body, data.count <= 20_000_000, isAnimated(data) else { return nil }
         return data
     }
 
