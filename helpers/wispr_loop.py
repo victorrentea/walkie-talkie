@@ -2657,6 +2657,9 @@ def _wrap_run(ctx, destination: str) -> Result:
     was_mode = None
     focus = FocusWatch()
     sink_file = os.path.join(ctx.scratch, "bound-sink.txt")
+    #: The probe letters still to be typed — cancelled first thing in `finally`, so
+    #: an aborted run types nothing into whatever is in front afterwards.
+    timers = []
     try:
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": True})
@@ -2768,7 +2771,8 @@ def _wrap_run(ctx, destination: str) -> Result:
                         time.sleep(0.15)
                         victim_at_probe[ch] = _victim_text(victim) if victim else ""
 
-                    threading.Timer(delay, tap).start()
+                    timers.append(threading.Timer(delay, tap))
+                    timers[-1].start()
             # **The run has to outlive its own last probe.** A letter scheduled
             # 4 s after the stop fires *after* a fast settle has finished, and
             # reading the victim before then reports it LOST when it simply had
@@ -3114,6 +3118,8 @@ def _wrap_run(ctx, destination: str) -> Result:
                             "untouched" if not victim_text.strip() else "%d chars" % len(victim_text),
                             "yes" if closed else "NO"))
     finally:
+        for timer in timers:
+            timer.cancel()
         focus.stop()
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": False})
@@ -3728,6 +3734,7 @@ def scenario_wrap_silence(ctx) -> Result:
     result.note("clip: two seconds of digital silence")
 
     victim = None
+    timers = []  # cancelled in `finally`: an aborted run types nothing afterwards
     try:
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": True})
@@ -3743,7 +3750,9 @@ def scenario_wrap_silence(ctx) -> Result:
             import threading
             import wispr_loopback as wl
             for (char, code), offset in zip(wl.PROBE_LETTERS, (-1.0, 0.3, 1.0)):
-                threading.Timer(max(0.05, 2.6 + offset), wl.tap_key, args=(code,)).start()
+                timers.append(threading.Timer(max(0.05, 2.6 + offset), wl.tap_key,
+                                              args=(code,)))
+                timers[-1].start()
         play_wav(ctx.fixture["wav"], ctx.device, relay.dry_run)
         relay.gesture("forward-click")
         stopped = time.monotonic()
@@ -3780,6 +3789,8 @@ def scenario_wrap_silence(ctx) -> Result:
                      "%d outbox line(s)" % len(ctx.outbox.fresh()))
         result.answer = "silence: settle ended after %.1f s, nothing delivered" % elapsed
     finally:
+        for timer in timers:
+            timer.cancel()
         if not relay.dry_run:
             relay.post("/test/key-trace", {"on": False})
         stand_down(relay)
@@ -4465,28 +4476,60 @@ def main(argv):
         still = current_binding(port)
         if still:
             print("✗ could not unbind (still %r) — refusing to run." % still, file=sys.stderr)
+            release_runner_lock()
             return 2
 
-    delays = [int(x) for x in args.settle_delay_ms.split(",") if x.strip()] or [None]
-
+    # **Everything after the unbind is inside one `finally`** (2026-11-25, found by
+    # the Fable review): a scenario that raised — `resolve_device`'s SystemExit with
+    # no Loopback device, a SIGTERM through `_die_politely` — left Victor's relay
+    # unbound and the runner lock held, and an unbound relay refuses every 🔼 →.
     results = []
-    for index in range(1, max(1, args.repeat) + 1):
-        for name in names:
-            # Only the in-settle scenarios vary with the delay; everything else
-            # would just run N identical times and say so N times.
-            for delay in (delays if "in-settle" in name else [None]):
-                results.append(run_scenario(
-                    name, port, args.device, args.wav, args.transcript, args.scratch,
-                    args.dry_run, args.verbose, run_index=index,
-                    options={"dismiss_delay_ms": args.dismiss_delay,
-                             "no_dismiss": args.no_dismiss,
-                             "settle_delay_ms": delay,
-                             "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
-                                               if x.strip()]}))
+    try:
+        delays = [int(x) for x in args.settle_delay_ms.split(",") if x.strip()] or [None]
+
+        for index in range(1, max(1, args.repeat) + 1):
+            for name in names:
+                # Only the in-settle scenarios vary with the delay; everything else
+                # would just run N identical times and say so N times.
+                for delay in (delays if "in-settle" in name else [None]):
+                    results.append(run_scenario(
+                        name, port, args.device, args.wav, args.transcript, args.scratch,
+                        args.dry_run, args.verbose, run_index=index,
+                        options={"dismiss_delay_ms": args.dismiss_delay,
+                                 "no_dismiss": args.no_dismiss,
+                                 "settle_delay_ms": delay,
+                                 "probe_offsets": [float(x) for x in args.probe_offsets.split(",")
+                                                   if x.strip()]}))
+                    if results[-1].contaminated:
+                        break
                 if results[-1].contaminated:
                     break
-            if results[-1].contaminated:
-                break
+    finally:
+        # **A binding the *run* created is not Victor's and must not be left behind.**
+        # `wrap-spawn` opens a session and the relay binds to it, so a suite that
+        # ended on a spawn left the relay pointed at a scratch Terminal — which is
+        # the isolation hazard this file exists to prevent, arriving by the back
+        # door. Anything bound at the end that is not what we found is undone.
+        if not args.dry_run:
+            ended_bound = current_binding(port)
+            if ended_bound and ended_bound != victors_binding:
+                pf.post(port, "/unbind", {})
+                print("🔓 unbound from %r — a session this run created, not Victor's"
+                      % ended_bound, file=sys.stderr)
+
+        if victors_binding and args.leave_unbound:
+            # Asked for explicitly, and safe in the one direction that matters: it
+            # leaves the relay *less* pointed at anything, never more. The binding is
+            # named so whoever wants it back knows what it was.
+            print("🔓 leaving the relay unbound as asked — it was %r" % victors_binding,
+                  file=sys.stderr)
+        elif victors_binding:
+            ok = restore_binding(port, victors_binding)
+            print("🔒 binding restored to %r: %s" % (victors_binding, "yes" if ok else "FAILED"),
+                  file=sys.stderr)
+
+        if not args.dry_run:
+            release_runner_lock()
 
     spoiled = [r for r in results if r.contaminated]
     if spoiled:
@@ -4496,29 +4539,6 @@ def main(argv):
         print("   somebody else's. Nothing below %r was run." % spoiled[0].scenario, file=sys.stderr)
         print("═" * 72 + "\n", file=sys.stderr)
 
-    # **A binding the *run* created is not Victor's and must not be left behind.**
-    # `wrap-spawn` opens a session and the relay binds to it, so a suite that
-    # ended on a spawn left the relay pointed at a scratch Terminal — which is
-    # the isolation hazard this file exists to prevent, arriving by the back
-    # door. Anything bound at the end that is not what we found is undone.
-    if not args.dry_run:
-        ended_bound = current_binding(port)
-        if ended_bound and ended_bound != victors_binding:
-            pf.post(port, "/unbind", {})
-            print("🔓 unbound from %r — a session this run created, not Victor's"
-                  % ended_bound, file=sys.stderr)
-
-    if victors_binding and args.leave_unbound:
-        # Asked for explicitly, and safe in the one direction that matters: it
-        # leaves the relay *less* pointed at anything, never more. The binding is
-        # named so whoever wants it back knows what it was.
-        print("🔓 leaving the relay unbound as asked — it was %r" % victors_binding,
-              file=sys.stderr)
-    elif victors_binding:
-        ok = restore_binding(port, victors_binding)
-        print("🔒 binding restored to %r: %s" % (victors_binding, "yes" if ok else "FAILED"),
-              file=sys.stderr)
-
     if args.json:
         print(json.dumps({"pass": all(r.passed for r in results),
                           "results": [r.as_dict() for r in results]}, ensure_ascii=False, indent=2))
@@ -4527,7 +4547,6 @@ def main(argv):
             print(render(result, verbose=args.verbose))
         if len(results) > 1:
             print(summary(results))
-    release_runner_lock()
     if args.dry_run:
         return 0
     return 0 if all(r.passed for r in results) else 1
