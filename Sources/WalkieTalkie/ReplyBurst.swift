@@ -52,8 +52,20 @@ final class ReplyBurst {
     static let reach: CGFloat = 70
     /// Room above and below for the grains' drift.
     static let spread: CGFloat = 30
-    /// A grain's side, in points.
+    /// A grain's side, in points — larger on a large pop-up (≤ ~`maxGrains`).
     static let grain: CGFloat = 8
+    /// **The dissolve's ceiling** (2026-11-25, found by the Fable review): one
+    /// layer per grain, every one moved from a 120 Hz timer on main — a pop-up
+    /// wheel-zoomed to the whole screen was 14-29 k layers, a hang where a
+    /// dissolve should be. Past this many 8 pt grains the grain grows instead.
+    static let maxGrains = 6000
+
+    /// Columns and rows of grains over a pop-up of `panel` points: 8 pt each
+    /// up to `maxGrains`, coarser beyond — the count stays about the ceiling.
+    static func grains(for panel: CGSize) -> (cols: Int, rows: Int) {
+        let side = max(grain, (panel.width * panel.height / CGFloat(maxGrains)).squareRoot())
+        return (max(1, Int((panel.width / side).rounded())), max(1, Int((panel.height / side).rounded())))
+    }
 
     private struct Tile {
         let layer: CALayer
@@ -105,8 +117,7 @@ final class ReplyBurst {
         host = CALayer()
         host.frame = CGRect(origin: .zero, size: size)
         var rng = SplitMix(seed)
-        let cols = max(1, Int((panel.width / Self.grain).rounded()))
-        let rows = max(1, Int((panel.height / Self.grain).rounded()))
+        let (cols, rows) = Self.grains(for: panel)
         let w = panel.width / CGFloat(cols), h = panel.height / CGFloat(rows)
         for r in 0..<rows {
             for c in 0..<cols {

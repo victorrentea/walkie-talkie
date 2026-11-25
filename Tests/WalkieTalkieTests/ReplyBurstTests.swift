@@ -36,6 +36,23 @@ final class ReplyBurstTests: XCTestCase {
         XCTAssertTrue(tiles.allSatisfy { $0.transform.m41 > 20 }, "every grain drifted right")
     }
 
+    /// **A zoomed pop-up stays about 6000 grains** (2026-11-25): a usual one keeps
+    /// its 8 pt grains, a whole-screen one gets coarser grains, not 14-29 k layers.
+    func testTheGrainCountIsCappedOnAZoomedPopUp() {
+        let usual = ReplyBurst.grains(for: CGSize(width: 380, height: 110))
+        XCTAssertEqual(usual.cols, 48)   // 380 / 8, as before the cap
+        XCTAssertEqual(usual.rows, 14)
+        for panel in [CGSize(width: 1728, height: 513), CGSize(width: 1728, height: 1080),
+                      CGSize(width: 2560, height: 1400), CGSize(width: 900, height: 3000)] {
+            let g = ReplyBurst.grains(for: panel)
+            XCTAssertLessThanOrEqual(g.cols * g.rows, 6300, "\(panel)")
+            XCTAssertGreaterThan(g.cols * g.rows, 5500, "\(panel): still a fine dissolve")
+        }
+        let zoomed = CGSize(width: 1728, height: 1080)
+        let b = ReplyBurst(image: popUp(zoomed, scale: 1), scale: 1, panel: zoomed)
+        XCTAssertLessThanOrEqual(b.host.sublayers?.count ?? 0, 6300)
+    }
+
     /// ☠️ (2026-10-14): whole at the start, gone at the end, every shard thrown
     /// away from the skull — left of it to the left, right of it to the right.
     func testTheSkullBlowsItApart() {
@@ -81,6 +98,9 @@ final class ReplyBurstTests: XCTestCase {
         try render(ReplyBurst(image: popUp(panel), scale: 2, panel: panel), "burst", dir)
         try render(ReplyBurst(image: popUp(panel), scale: 2, panel: panel, style: .explode(from: CGPoint(x: 310, y: 92))), "blast", dir)
         try render(ReplyBurst(image: popUp(panel), scale: 2, panel: panel, style: .questions), "ask", dir)
+        // Zoomed for the room: coarser grains past `maxGrains` (2026-11-25).
+        let zoomed = CGSize(width: 1728, height: 513)
+        try render(ReplyBurst(image: popUp(zoomed), scale: 2, panel: zoomed), "burst-zoomed", dir)
     }
 
     private func render(_ b: ReplyBurst, _ name: String, _ dir: String) throws {
