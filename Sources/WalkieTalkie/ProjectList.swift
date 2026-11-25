@@ -194,11 +194,12 @@ enum PinnedProjects {
                               "walkie-talkie", "victor-vsc", "petclinic", "human-review",
                               "victor-effects"]
 
+    /// What the file holds, missing folders included (2026-11-25, Fable review:
+    /// a toggle used to save the filtered list, erasing the pin of a folder that
+    /// was absent when the menu first opened).
     private static var cached: [String]?
 
-    /// The pinned paths, in the order they were written. Order does not matter —
-    /// the menu sorts — but rewriting the file on every read would.
-    static func paths() -> [String] {
+    private static func stored() -> [String] {
         if let cached { return cached }
         let stored: [String]
         if let data = try? Data(contentsOf: url),
@@ -211,12 +212,17 @@ enum PinnedProjects {
                     .appendingPathComponent("workspace").appendingPathComponent($0).path
             }
         }
+        cached = stored
+        return stored
+    }
+
+    /// The pinned paths, in the order they were written. Order does not matter —
+    /// the menu sorts — but rewriting the file on every read would.
+    static func paths() -> [String] {
         // A folder that is gone is dropped on the way out but left in the file:
         // an external disk or a checkout he will make again should not cost him
         // the pin. Only a click takes one off.
-        let live = stored.filter { FileManager.default.fileExists(atPath: $0) }
-        cached = live
-        return live
+        stored().filter { FileManager.default.fileExists(atPath: $0) }
     }
 
     static func isPinned(_ path: String) -> Bool { paths().contains(path) }
@@ -224,11 +230,11 @@ enum PinnedProjects {
     /// Star or unstar, and write it down. Returns the new state.
     @discardableResult
     static func toggle(_ path: String) -> Bool {
-        var live = paths()
-        let pinning = !live.contains(path)
-        if pinning { live.append(path) } else { live.removeAll { $0 == path } }
-        cached = live
-        save(live)
+        var all = stored()
+        let pinning = !paths().contains(path)
+        if pinning { if !all.contains(path) { all.append(path) } } else { all.removeAll { $0 == path } }
+        cached = all
+        save(all)
         return pinning
     }
 
