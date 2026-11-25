@@ -326,12 +326,12 @@ final class ElevenLabsSource: DictationSource {
         if apiKey == nil {
             Log.error("🎙️ ElevenLabs: no API key — recording anyway, the local model will transcribe it")
         }
-        let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
-        markersInAudio = false
-        isRecording = true
         // Unique across both ElevenLabs rows, so an engine switch between two
         // sentences in flight cannot hand one's answer to the other.
         take = TakeSerial.next()
+        let wav = TakeSerial.micWAV(take: take)
+        markersInAudio = false
+        isRecording = true
         let t = take
         phase = .listening
         Log.info("🎙️ recording started for ElevenLabs — \(wav.lastPathComponent)")

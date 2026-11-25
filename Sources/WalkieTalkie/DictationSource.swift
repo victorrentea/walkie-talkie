@@ -226,6 +226,15 @@ enum TakeSerial {
     private static var n = 0
     private static let lock = NSLock()
     static func next() -> Int { lock.lock(); defer { lock.unlock() }; n += 1; return n }
+
+    /// **The relay's own take WAV, named by its second and its take** (2026-11-25,
+    /// the Fable review): `mic-<epoch>.wav` alone gave two takes started in one
+    /// second one path — the second `AVAudioFile(forWriting:)` truncated the first
+    /// while it waited for its decode. The take serial is unique for the run.
+    /// Existing files keep their names; every reader globs `mic-*.wav`.
+    static func micWAV(take: Int) -> URL {
+        Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970))-t\(take).wav")
+    }
 }
 
 /// One closed take, as `closedTakeAudio` answers it.

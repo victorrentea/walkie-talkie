@@ -222,12 +222,12 @@ final class LocalWhisperSource: DictationSource {
             bringUpModel()
             Log.info("🎙️ the local model is not up — recording anyway; the audio waits for it at the stop")
         }
-        let wav = Outbox.shotsDir.appendingPathComponent("mic-\(Int(Date().timeIntervalSince1970)).wav")
-        markersInAudio = false
-        isRecording = true
         // **A take of its own** (Q12 for the local model, 2026-10-21): an
         // earlier take may still be decoding — the relay keeps the order.
         take = TakeSerial.next()
+        let wav = TakeSerial.micWAV(take: take)
+        markersInAudio = false
+        isRecording = true
         let job = Job(take: take)
         recordingJob = job
         DecodeRate.noteLeft(nil)
