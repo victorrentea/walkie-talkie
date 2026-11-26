@@ -17315,3 +17315,34 @@ Walkie's real `deliver` into the pane: held 96 s with the question on screen, an
 flag down 70 ms later → the sentence typed and answered (`LAB-OK`); the AUQ got *Blue*, not option 1.
 Bash permission Esc → flag down in 114 ms; approved with a `sleep 4` → down in 187 ms, 4 s before the
 tool ended. Not yet watched in the installed app.
+
+## 2026-11-26 — ⏸ The dialog hold, after the adversarial review: never typed after the session died
+
+A Fable xhigh review of the night's change (`c508dbd6`, the mod's `011b2d9`) found it unsafe to install:
+**the shell guard was skipped after a hold that started on the flag** (the recheck was keyed on the try
+count, and a flag-first wait came before try one). Fixed: `holdingForDialogs(recheck:)` asks the guard
+and the owner before any keystroke that follows a wait; `submitPrompt` asks `claudePromptOn`. **The lab
+then showed a second hole the review had not**: killed mid-question (a `kill` on the lab's `claude`), the
+mod's `session.end` deleted `.alive` and `.dialog` while the process was still in front, so the recheck
+passed and the sentence was typed at the zsh prompt a beat later (it did not run — luck of the race). Now a
+flag that cleared with no fresh beat left is the session ending: one second, the guard again, and nothing
+is typed either way. Re-run: `wouldRunAsShell("zsh")`, the prompt clean, no `h1-ran.txt`.
+
+Also from the review: a tab that just gave up gives up at once while the same flag stands (five-minute
+holds no longer stack on the serial queue; a 🧠 switch held out sends no prompt); a bound prompt writes an
+`undelivered` row marked `held` when it starts waiting, which Prompt History drops once a later row of the
+same envelope exists; one sentence at a time per tab (a per-tty lock, so a caret prompt and a bound one
+never interleave); the caret prompt is on the clipboard while it waits and its give-up flash says ⌘V, not
+Prompt History (it never had an outbox row); the caret prompt into Claude Code in VS Code, its Return, the
+VS Code kamikazes and the plain dictation's Return ask the flag. In the mod, the flag is lowered only once
+`fill` answered `dialog` since the raise, or 2 s after the hooks answered — measured in the lab, the mod's
+`PermissionRequest` wrote the flag ~30 ms before the settings hook logged, so a slow settings hook (Orca's
+waits up to 126 s) left the flag to a poll that saw no dialog yet; `session.end` deletes the flag by the
+path `session.start` found. Screen: the bare `Esc to cancel` is gone (the usage-limit wait draws
+`Continuing automatically … · Esc to cancel`), `Tab to amend` stands for the permission footer, a footer
+wins over the sentence's opening, the read is 4000 characters, the script tests the flag file right before
+its keystroke, and a half-written `.alive` is read by its mtime. Not done: fail-closed in-script (a failed
+`history` read would hold every sentence), matching only the sentence's own lines on a resume (a long one
+shows as `[Pasted text #1]` and would be typed twice), a cancel for a held sentence and the session's name
+in the flash (Victor's call), Orca's screen before its text. Live sessions run the old mod until restarted:
+the Terminal.app screen check is theirs.

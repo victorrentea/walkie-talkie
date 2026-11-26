@@ -817,9 +817,12 @@ final class TerminalBinding {
     /// must not wait in Claude Code's queue — see `sendsNow`. Only a Terminal.app tab and
     /// an Orca pane can honour it (they read the screen back); `sentNow` is called when
     /// ⌃X ⌃S was pressed. Everywhere else the words go as ever.
+    /// **`onHold`** (2026-11-25): called once, on this thread, when the sentence starts
+    /// waiting for a dialog (`holdingForDialogs`) — the caller keeps it on record then.
     func deliver(_ text: String, to latched: Target? = nil,
-                 interrupt: Bool = false, sentNow: (() -> Void)? = nil) -> Outcome {
-        let outcome = typeIn(text, to: latched, interrupt: interrupt, sentNow: sentNow)
+                 interrupt: Bool = false, sentNow: (() -> Void)? = nil,
+                 onHold: (() -> Void)? = nil) -> Outcome {
+        let outcome = typeIn(text, to: latched, interrupt: interrupt, sentNow: sentNow, onHold: onHold)
         // **A session told `kamikaze` is dead already** (2026-10-13): its next
         // answer's ☠️ shows it, before the window has had time to close.
         if case .delivered = outcome, Self.saysKamikaze(text), let tty = (latched ?? target)?.handle.tty {
@@ -848,7 +851,8 @@ final class TerminalBinding {
     }
 
     private func typeIn(_ text: String, to latched: Target?,
-                        interrupt: Bool = false, sentNow: (() -> Void)? = nil) -> Outcome {
+                        interrupt: Bool = false, sentNow: (() -> Void)? = nil,
+                        onHold: (() -> Void)? = nil) -> Outcome {
         guard let target = latched ?? target else { return .noTarget }
         let unbind: () -> Void = { [weak self] in self?.unbind(ifAddress: target.address) }
         let line = Self.singleLine(text)
@@ -878,10 +882,8 @@ final class TerminalBinding {
             if Self.deliverToInbox(line, tty: tty) { return .delivered }
             // **Never into an open dialog** (2026-11-25, `DialogGate`): held, and the
             // guard asked again before a try that follows a hold.
-            var tries = 0
-            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { resume in
-                tries += 1
-                if tries > 1, let refused = Self.recheck(tty: tty, target: target) { return .done(refused) }
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count, onHold: onHold,
+                                                 recheck: { Self.recheck(tty: tty, target: target) }) { resume in
                 switch Self.writeToTerminalApp(line, tty: tty, interrupt: interrupt, sentNow: sentNow, resume: resume) {
                 case .delivered: return .done(.delivered)
                 case .gone: return .done(.targetGone("no Terminal.app tab on \(target.address)"))
@@ -911,10 +913,8 @@ final class TerminalBinding {
                 break
             }
             if Self.deliverToInbox(line, tty: tty) { return .delivered }
-            var tries = 0
-            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { resume in
-                tries += 1
-                if tries > 1, let refused = Self.recheck(tty: tty, target: target) { return .done(refused) }
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count, onHold: onHold,
+                                                 recheck: { Self.recheck(tty: tty, target: target) }) { resume in
                 switch OrcaBridge.deliver(line, tty: tty, interrupt: interrupt, sentNow: sentNow, resume: resume) {
                 case .delivered: return .done(.delivered)
                 case .refused: return .done(.failed("Orca would not take the line"))
@@ -938,17 +938,15 @@ final class TerminalBinding {
             // The flag sits under the pane's own pty (where `claude` runs), not the
             // client's tty the handle carries.
             let tty = Self.tmux(["display-message", "-p", "-t", pane, "#{pane_tty}"]) ?? ""
-            var tries = 0
-            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { resume in
-                tries += 1
-                if tries > 1 {
-                    switch Self.tmuxPaneCommand(pane) {
-                    case .none: return .done(.targetGone("tmux pane \(pane) is gone"))
-                    case .some(let command) where Self.refusesDelivery(command): return .done(.wouldRunAsShell(command))
-                    case .some: break
-                    }
+            if tty.isEmpty { Log.error("⏸ tmux pane \(pane) named no pty — no dialog flag can be asked") }
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count, onHold: onHold, recheck: {
+                switch Self.tmuxPaneCommand(pane) {
+                case .none: return .targetGone("tmux pane \(pane) is gone")
+                case .some(let command) where Self.refusesDelivery(command): return .wouldRunAsShell(command)
+                case .some: return nil
                 }
-                return Self.writeToTmux(line, pane: pane, tty: tty, resume: resume)
+            }) { resume in
+                Self.writeToTmux(line, pane: pane, tty: tty, resume: resume)
             }
             if case .targetGone = outcome { unbind() }
             return outcome
@@ -984,16 +982,13 @@ final class TerminalBinding {
             }
             // The extension types the text and its Return itself, 120 ms apart: the
             // flag is asked once, before (2026-11-25).
-            var tries = 0
-            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count) { _ in
-                tries += 1
-                if tries > 1 {
-                    switch Self.foregroundCommand(onTTY: tty) {
-                    case .none: return .done(.targetGone("\(handle.name) is gone"))
-                    case .some(let command) where Self.refusesDelivery(command): return .done(.wouldRunAsShell(command))
-                    case .some: break
-                    }
+            let outcome = Self.holdingForDialogs(tty: tty, chars: line.count, onHold: onHold, recheck: {
+                switch Self.foregroundCommand(onTTY: tty) {
+                case .none: return .targetGone("\(handle.name) is gone")
+                case .some(let command) where Self.refusesDelivery(command): return .wouldRunAsShell(command)
+                case .some: return nil
                 }
+            }) { _ in
                 if DialogGate.flagUp(tty: tty) { return .dialog(typed: false) }
                 return .done(IDEBridge.send(line, to: handle) ? .delivered : .failed("\(handle.name) did not take the line"))
             }
@@ -1043,30 +1038,69 @@ final class TerminalBinding {
     /// saw the dialog, a fresh try every second — and tries again. `resume` is true once
     /// a try was stopped after its text: the next one reads the box first and only
     /// presses the Return when the sentence is still there. After `holdLimit`: nothing
-    /// more is sent, `.heldTooLong`. On the delivery queue, so a later sentence waits
-    /// behind this one and never overtakes it.
+    /// more is sent, `.heldTooLong`.
+    ///
+    /// **`recheck` before every try that follows a wait** (the Fable review, H1): the
+    /// shell guard and the tab's owner, asked again — in the minutes a question stood open
+    /// he may have killed the session (its `session.end` deletes the flag), and the
+    /// sentence would then be typed at the shell's prompt and **run**. A first try with no
+    /// wait before it was checked by the caller.
+    ///
+    /// **One tab, one sentence at a time** (M6): a per-tty lock, so a caret prompt and a
+    /// bound sentence held for the same tab do not interleave when the question goes.
+    /// **A tab that just gave up gives up at once** (H2): while the same flag (or, seen on
+    /// the screen alone, for `holdLimit`) still stands, a later sentence is kept at once
+    /// instead of taking five minutes more of the queue.
     static func holdingForDialogs(tty: String, chars: Int,
                                   limit: TimeInterval = DialogGate.holdLimit,
                                   screenPoll: TimeInterval = DialogGate.screenPoll,
+                                  onHold: (() -> Void)? = nil,
+                                  recheck: (() -> Outcome?)? = nil,
                                   _ attempt: (_ resume: Bool) -> Attempt) -> Outcome {
         let short = (tty as NSString).lastPathComponent
-        let deadline = Date().addingTimeInterval(limit)
+        let lock = DialogGate.lock(short)
+        lock?.lock()
+        defer { lock?.unlock() }
+        let gaveUpBefore = DialogGate.stillGivenUp(tty: tty, limit: limit)
+        let deadline = Date().addingTimeInterval(gaveUpBefore ? 0 : limit)
         let started = Date()
         var resume = false
         var held = false
+        var lastWhy = ""
         func hold(_ why: String) {
-            Log.info("⏸ \(short): \(why) — the sentence (\(chars) chars) waits\(DialogGate.modFlags(tty: tty) ? "" : " (no dialog-flagging mod on this tty: the screen alone tells)")")
-            if !held { held = true; onDialogHold?(short, true) }
+            if why != lastWhy {
+                Log.info("⏸ \(short): \(why) — the sentence (\(chars) chars) waits\(DialogGate.modFlags(tty: tty) ? "" : " (no dialog-flagging mod on this tty: the screen alone tells)")")
+                lastWhy = why
+            }
+            if !held { held = true; onDialogHold?(short, true); onHold?() }
         }
         func release() { if held { onDialogHold?(short, false) } }
         while true {
             if DialogGate.flagUp(tty: tty) {
                 hold("a dialog is open (the session's flag)")
                 if DialogGate.waitWhileFlagged(tty: tty, until: deadline) == .gaveUp { break }
+                // **The flag went with its session** (the H1 lab, 2026-11-26): killed while
+                // the question stood, its `session.end` deletes `.alive` and `.dialog` while
+                // the process is still dying — the guard then still reads `claude` in front,
+                // and the sentence reached the shell's prompt a moment later. A flag that
+                // cleared with no beat left is never a cue to type.
+                if !DialogGate.beatFresh(tty: tty) {
+                    Thread.sleep(forTimeInterval: 1)
+                    let refused = recheck?() ?? .failed("the session on \(short) ended while its question was open")
+                    Log.error("⏸ \(short): the session ended while its question stood — \(refused), not typed")
+                    release()
+                    return refused
+                }
+            }
+            if held, let refused = recheck?() {
+                Log.error("⏸ \(short): after the wait, \(refused) — not typed")
+                release()
+                return refused
             }
             switch attempt(resume) {
             case .done(let outcome):
                 if held { Log.info("▶️ \(short): the dialog closed — sent after \(Int(Date().timeIntervalSince(started))) s on hold") }
+                if case .delivered = outcome { DialogGate.forgetGiveUp(tty: tty) }
                 release()
                 return outcome
             case .dialog(let typed):
@@ -1080,8 +1114,10 @@ final class TerminalBinding {
             if !DialogGate.flagUp(tty: tty) { Thread.sleep(forTimeInterval: screenPoll) }
         }
         release()
-        Log.error("⏸ \(short): the dialog stayed open \(Int(limit)) s — nothing sent, the sentence is kept")
-        return .heldTooLong("a question stayed open in \(short) for \(Int(limit / 60)) min")
+        DialogGate.noteGiveUp(tty: tty)
+        let left = resume ? " (its text sits in the box under the dialog, unsent)" : ""
+        Log.error("⏸ \(short): \(gaveUpBefore ? "the dialog it gave up on is still open" : "the dialog stayed open \(Int(limit)) s") — nothing more sent, the sentence is kept\(left)")
+        return .heldTooLong("a question stayed open in \(short)\(left)")
     }
 
     // MARK: - The session's inbox (2026-10-08)
@@ -2184,11 +2220,18 @@ final class TerminalBinding {
         // so it costs no launch. `DialogGate.flagUp` (the mod's flag, a `stat`) is asked
         // before each script too: it stands ~130 ms before the dialog is drawn.
         let handler = DialogGate.appleScript
+        // 4000 characters (the Fable review, M4): an AskUserQuestion with long
+        // descriptions puts more than 1500 after its highlighted `❯`. The flag file is
+        // tested in the script too (L2), only while the session's beat is fresh.
         func look(_ opening: String) -> String {
-            """
+            let flag = DialogGate.flagUp(tty: tty) || DialogGate.beat(tty: tty).map {
+                DialogGate.flagCounts(flagExists: true, beatAt: $0.at, now: Date().timeIntervalSince1970 * 1000)
+            } == true ? DialogGate.flagPath(tty: tty) : ""
+            return """
+                            if my flagged("\(escape(flag))") then return "dialog"
                             try
                                 set c to (history of t) as text
-                                if (count c) > 1500 then set c to text -1500 thru -1 of c
+                                if (count c) > 4000 then set c to text -4000 thru -1 of c
                                 if my dialogShown(c, "\(escape(opening))") then return "dialog"
                             end try
             """
@@ -2932,10 +2975,13 @@ final class TerminalBinding {
     /// **Held while a dialog is open** (2026-11-25, `DialogGate`), like a bound
     /// delivery; `heldTooLong` runs when it never closed (nothing sent, false).
     static func submitPrompt(_ text: String, toTTY tty: String, typed: (() -> Void)? = nil,
+                             onHold: (() -> Void)? = nil,
                              heldTooLong: (() -> Void)? = nil) -> Bool {
         let line = singleLine(text)
         guard !line.isEmpty else { return false }
-        let outcome = holdingForDialogs(tty: tty, chars: line.count) { resume in
+        let outcome = holdingForDialogs(tty: tty, chars: line.count, onHold: onHold, recheck: {
+            claudePromptOn(tty: tty) ? nil : .wouldRunAsShell(foregroundCommand(onTTY: tty) ?? "nothing")
+        }) { resume in
             switch writeToTerminalApp(line, tty: tty, typed: typed, resume: resume) {
             case .delivered: return .done(.delivered)
             case .gone: return .done(.targetGone(tty))

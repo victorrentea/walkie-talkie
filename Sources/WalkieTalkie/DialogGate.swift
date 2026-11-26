@@ -59,10 +59,64 @@ enum DialogGate {
     }
 
     /// **A dialog holds the keys of the session on `tty`**, by the mod's flag.
+    /// An `.alive` caught half-written (the mod rewrites it in place) is read by its
+    /// mtime instead (the Fable review, L1): unparsable must not mean *no flag*.
     static func flagUp(tty: String, now: Date = Date()) -> Bool {
         let flag = folder(tty).appendingPathComponent(".dialog")
         guard FileManager.default.fileExists(atPath: flag.path) else { return false }
-        return flagCounts(flagExists: true, beatAt: beat(tty: tty)?.at, now: now.timeIntervalSince1970 * 1000)
+        return beatFresh(tty: tty, now: now)
+    }
+
+    /// The session's beat is fresh (parsed, or by the file's mtime when caught half-written).
+    static func beatFresh(tty: String, now: Date = Date()) -> Bool {
+        let ms = now.timeIntervalSince1970 * 1000
+        if let at = beat(tty: tty)?.at { return flagCounts(flagExists: true, beatAt: at, now: ms) }
+        let alive = folder(tty).appendingPathComponent(".alive")
+        let touched = (try? FileManager.default.attributesOfItem(atPath: alive.path))?[.modificationDate] as? Date
+        return flagCounts(flagExists: true, beatAt: touched.map { $0.timeIntervalSince1970 * 1000 }, now: ms)
+    }
+
+    /// The flag's path, for the in-script test (`appleScript`'s `flagged`), and what it says.
+    static func flagPath(tty: String) -> String { folder(tty).appendingPathComponent(".dialog").path }
+    static func flagText(tty: String) -> String? { try? String(contentsOfFile: flagPath(tty: tty), encoding: .utf8) }
+
+    // MARK: One tab at a time, and a give-up that sticks
+
+    private static let books = NSLock()
+    private static var locks: [String: NSRecursiveLock] = [:]
+    private static var givenUp: [String: (flag: String?, at: Date)] = [:]
+
+    /// The lock that keeps one sentence at a time typing into this tab (`holdingForDialogs`).
+    static func lock(_ short: String) -> NSRecursiveLock? {
+        guard !short.isEmpty else { return nil }
+        books.lock(); defer { books.unlock() }
+        if let l = locks[short] { return l }
+        let l = NSRecursiveLock()
+        locks[short] = l
+        return l
+    }
+
+    /// A sentence for this tab just gave up: remember which dialog it waited for.
+    static func noteGiveUp(tty: String) {
+        let short = (tty as NSString).lastPathComponent
+        let flag = flagUp(tty: tty) ? flagText(tty: tty) : nil
+        books.lock(); givenUp[short] = (flag, Date()); books.unlock()
+    }
+
+    static func forgetGiveUp(tty: String) {
+        let short = (tty as NSString).lastPathComponent
+        books.lock(); givenUp[short] = nil; books.unlock()
+    }
+
+    /// **The dialog an earlier sentence gave up on still stands** — the same flag (its
+    /// text names the tool and the instant it was raised), or, seen on the screen alone,
+    /// a give-up less than `limit` ago.
+    static func stillGivenUp(tty: String, limit: TimeInterval, now: Date = Date()) -> Bool {
+        let short = (tty as NSString).lastPathComponent
+        books.lock(); let record = givenUp[short]; books.unlock()
+        guard let record else { return false }
+        if let flag = record.flag { return flagUp(tty: tty, now: now) && flagText(tty: tty) == flag }
+        return now.timeIntervalSince(record.at) < limit
     }
 
     /// The session's mod flags its dialogs (a fresh beat saying `dialog: 1`+) —
@@ -86,12 +140,16 @@ enum DialogGate {
 
     /// The footers of Claude Code's dialogs, squashed: permission (`Esc to cancel ·
     /// Tab to amend`), AskUserQuestion (`Enter to select · ↑/↓ to navigate · Esc to
-    /// cancel`), folder trust (`Enter to confirm · Esc to cancel`). **Not `ctrl+g to
+    /// cancel`), folder trust (`Enter to confirm · Esc to cancel`). **Not the bare `Esc to
+    /// cancel`** (the Fable review, M3): 2.1.332 also draws `Continuing automatically
+    /// {when} · Esc to cancel` while a session waits out its usage limit
+    /// (`cli_wait_footer`), likely under the box — every sentence would be held. The
+    /// numbered option catches permission, plan and AskUserQuestion anyway. **Not `ctrl+g to
     /// edit`**: the plan dialog shows it, but so does the ordinary prompt — Claude Code
     /// 2.1.332 draws `ctrl+g to edit in <editor>` as a 5 s hint under the box
     /// (`external-editor-hint`), right after a long sentence is typed; the plan dialog
     /// is caught by its `❯ 1. Yes, and use auto mode` anyway.
-    static let footers = ["Esctocancel", "Entertoselect", "Entertoconfirm"]
+    static let footers = ["Tabtoamend", "Entertoselect", "Entertoconfirm"]
 
     /// The squashed opening of the sentence — its first line's first 20 characters,
     /// as `TerminalBinding.submitted` reads it.
@@ -111,11 +169,13 @@ enum DialogGate {
     static func screenShowsDialog(tail: String, sent: String? = nil) -> Bool {
         guard let mark = tail.range(of: "❯", options: .backwards) else { return false }
         let box = squash(String(tail[mark.upperBound...]))
+        // A footer is a dialog whatever the box starts with (L3: a dictated `1.` is a
+        // prefix of `1.Yes…`).
+        if footers.contains(where: { box.range(of: $0, options: .caseInsensitive) != nil }) { return true }
         if let sent {
             let open = opening(sent)
             if !open.isEmpty, box.lowercased().hasPrefix(open.lowercased()) { return false }
         }
-        if footers.contains(where: { box.range(of: $0, options: .caseInsensitive) != nil }) { return true }
         let head = Array(box.prefix(3))
         guard let first = head.first, first.isASCII, first.isNumber else { return false }
         if head.count > 1, head[1] == "." { return true }
@@ -126,6 +186,10 @@ enum DialogGate {
     /// the tab and decide before they type or press, in one `osascript` (a separate
     /// read would cost ~0.35 s a sentence). `my dialogShown(c, "<opening>")`; the
     /// opening squashed and escaped by the caller, `""` before the text is typed.
+    /// `my flagged("<path>")` tests the mod's flag file inside the script, right before
+    /// the keystroke (L2: the `stat` before the launch is ~0.3 s earlier); the caller
+    /// passes the path only while the session's beat is fresh, so a crashed session's
+    /// leftover cannot hold anything.
     /// AppleScript's `contains` / `starts with` ignore case, like the Swift twin.
     static let appleScript = """
     on dialogShown(c, opening)
@@ -138,8 +202,8 @@ enum DialogGate {
         set bits to text items of box
         set AppleScript's text item delimiters to ""
         set box to bits as text
+        if box contains "Tabtoamend" or box contains "Entertoselect" or box contains "Entertoconfirm" then return true
         if opening is not "" and box starts with opening then return false
-        if box contains "Esctocancel" or box contains "Entertoselect" or box contains "Entertoconfirm" then return true
         if (count box) < 2 then return false
         set digits to "0123456789"
         if digits does not contain (character 1 of box) then return false
@@ -147,6 +211,15 @@ enum DialogGate {
         if (count box) > 2 and digits contains (character 2 of box) and character 3 of box is "." then return true
         return false
     end dialogShown
+
+    on flagged(p)
+        if p is "" then return false
+        try
+            (POSIX file p) as alias
+            return true
+        end try
+        return false
+    end flagged
     """
 
     // MARK: The hold
@@ -168,6 +241,8 @@ enum DialogGate {
     static let held = "⏸ A question is open — answer it first"
     /// `BoundPromptGate.undelivered`'s `lost` after `holdLimit`.
     static let gaveUp = "Question still open"
+    /// A caret prompt kept out by a question: it has no outbox row, only the clipboard.
+    static let gaveUpCaret = "⚠️ A question is open — the prompt is on ⌘V"
 
     enum Wait: Equatable { case clear, gaveUp }
 

@@ -28,8 +28,14 @@ final class DialogLabTests: XCTestCase {
         let outcome = TerminalBinding().deliver(text, to: target)
         let waited = Date().timeIntervalSince(started)
         print("DIALOG-LAB outcome=\(outcome) waited=\(String(format: "%.2f", waited)) s holds=\(holds)")
-        guard case .delivered = outcome else { return XCTFail("\(outcome)") }
         XCTAssertEqual(holds, [true, false], "held, then released")
+        // `refused`: the session was killed while its question stood (the Fable review, H1)
+        // — the guard, asked again after the wait, must find the shell and type nothing.
+        if env["WT_DIALOG_LAB_EXPECT"] == "refused" {
+            guard case .wouldRunAsShell = outcome else { return XCTFail("\(outcome)") }
+            return
+        }
+        guard case .delivered = outcome else { return XCTFail("\(outcome)") }
         if let min = env["WT_DIALOG_LAB_MIN_WAIT"].flatMap(Double.init) {
             XCTAssertGreaterThanOrEqual(waited, min, "nothing sent before the question was answered")
         }

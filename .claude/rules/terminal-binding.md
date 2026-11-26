@@ -132,24 +132,44 @@ this way. Log `📍 a plain dictation over Claude Code on ttysNNN — …`.
   `TerminalBinding.holdingForDialogs` around Terminal.app, Orca, tmux and IDE-with-tty deliveries and
   `submitPrompt` (the caret prompt, kamikaze). A new keystroke path must go through it.
 - **Two readings.** The `walkie-inbox` mod's `inbox/<tty>/.dialog` (written at `classic.PermissionRequest` /
-  `classic.Elicitation`, before the dialog is drawn; cleared when `$.prompt.fill` stops answering
-  `refusal: 'dialog'`), **trusted only beside a fresh `.alive` (< 10 s)**; the beat's `dialog: 1` tells this
-  mod from an older one. For tmux it is the **pane's** pty (`#{pane_tty}`), not the client tty. And in
-  **Terminal.app the screen, inside the same AppleScript** that types or presses (`DialogGate.appleScript`,
-  mirrored by `screenShowsDialog`; `DialogGateTests` runs both on the same cases): after the last `❯` the
-  box starts `N.` or carries `Esc to cancel` / `Enter to select` / `Enter to confirm`; a box starting with
-  the sentence's own opening is the sentence. **Never `ctrl+g to edit`** — the ordinary prompt shows it as
-  a 5 s hint after a long sentence. **Never a separate pre-read `osascript`** (+0.35 s a sentence).
+  `classic.Elicitation`, before the dialog is drawn; lowered only once `$.prompt.fill` answered
+  `refusal: 'dialog'` and then stopped, or 2 s after the hooks answered — a slow settings hook, Orca's,
+  waits up to 126 s before the dialog enters the store), **trusted only beside a fresh `.alive` (< 10 s;
+  a half-written one by its mtime)**; the beat's `dialog: 1` tells this mod from an older one. For tmux
+  it is the **pane's** pty (`#{pane_tty}`), not the client tty. And in **Terminal.app the screen, inside
+  the same AppleScript** that types or presses (`DialogGate.appleScript`, mirrored by
+  `screenShowsDialog`; `DialogGateTests` runs both on the same cases), over the last **4000** characters:
+  after the last `❯` the box starts `N.` or carries `Tab to amend` / `Enter to select` / `Enter to
+  confirm` (a footer wins over the sentence's own opening); a box starting with the sentence's opening is
+  the sentence. The same script tests the flag file right before the keystroke (`flagged`), only while
+  the beat is fresh. **Never the bare `Esc to cancel`** — the usage-limit wait draws `Continuing
+  automatically … · Esc to cancel` (`cli_wait_footer`). **Never `ctrl+g to edit`** — the ordinary prompt
+  shows it as a 5 s hint after a long sentence. **Never a separate pre-read `osascript`** (+0.35 s a
+  sentence).
 - **Open → send nothing, hold, send by itself.** The delivery queue waits (flag: every 150 ms; screen
-  only: a fresh try every 1 s), the flash `⏸ A question is open — answer it first` once, the guard and
-  owner asked again before the next try. **No Return into a dialog that opened after the text**: the next
-  try reads the box and presses only the Return when the sentence is still there. **5 minutes** → nothing
-  sent, `Outcome.heldTooLong` → kept undelivered (`⚠️ Question still open — …`). ⌃X ⌃S under a dialog is
+  only: a fresh try every 1 s), one tab one sentence at a time (a per-tty lock: a caret prompt and a bound
+  one never interleave), the flash `⏸ A question is open — answer it first` once. **After any wait the
+  guard and the owner are asked again before the first keystroke** (`recheck`; `submitPrompt`:
+  `claudePromptOn`). **A flag that cleared with no fresh beat left is the session ending, never a cue to
+  type** — killed mid-question, `session.end` deletes both files while `claude` is still in front for a
+  moment; the lab typed into zsh that way. **No Return into a dialog that opened after the text**: the
+  next try reads the box and presses only the Return when the sentence is still there. **5 minutes** →
+  nothing sent, `Outcome.heldTooLong` → kept undelivered (`⚠️ Question still open — …`); **while the same
+  flag stands, every later sentence for that tab gives up at once** (a 🧠 switch held out sends no prompt
+  behind it). A bound prompt is on record the moment it waits: an `undelivered` outbox row with
+  `delivery.held`, superseded in Prompt History by the row that follows it. ⌃X ⌃S under a dialog is
   skipped (the sentence stays queued).
+- **Also gated** (flag only): the caret prompt pasted into Claude Code in VS Code (not pasted, clipboard,
+  `⚠️ A question is open — the prompt is on ⌘V`), its Return, the VS Code kamikazes, the plain dictation's
+  Return (`submitAfterCleanWords`, `focusedTTY`).
 - **Gaps**: tmux / IDE / Orca's first Return have only the flag; a dialog that is not a permission (the
-  auto-mode onboarding, the usage-limit menu) is caught on Terminal.app's screen alone.
+  auto-mode onboarding, the usage-limit menu) is caught on Terminal.app's screen alone; **ungated, no tty
+  to ask**: the `.keystroke` fallback and an IDE terminal whose extension named no shell pid. Sessions
+  started before the v0.2.0 mod have no flag (2026-11-26: none of the six live ones) — the Terminal.app
+  screen check is all they get until restarted.
 - Lab: `DialogLabTests` (opt-in: `WT_DIALOG_LAB_PANE`, `WT_DIALOG_LAB_TTY`, `TMUX_TMPDIR` of a lab server
-  whose session runs the mod with `--plugin-dir`) drives the real `deliver` into a pane showing a dialog.
+  whose session runs the mod with `--plugin-dir`; `WT_DIALOG_LAB_EXPECT=refused` for the killed-session
+  case) drives the real `deliver` into a pane showing a dialog.
 
 ## The bind flight (`BindFlight.swift`)
 

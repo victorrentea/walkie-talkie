@@ -507,6 +507,13 @@ enum OverlayStates {
                 o.flash(DialogGate.held, duration: 60)
             },
 
+            Shot(slug: "flash-question-caret", group: "Flashes", title: "Flash — a caret prompt kept out by a question",
+                 when: "Six seconds, when a caret prompt meets a question open in the Claude Code under the caret: at once in VS Code (a paste cannot wait for the caret), after five minutes in Terminal.app (2026-11-26).",
+                 note: "**Never pasted into the dialog, never anywhere else.** A caret prompt has no outbox row, so it says ⌘V: the prompt has been on the clipboard since it started waiting. A bound prompt kept the same way says `⚠️ Question still open — find the prompt in Prompt History or ⌘V`.",
+                 shape: "flash", alpha: 0.80) { o in
+                o.flash(DialogGate.gaveUpCaret, duration: 60)
+            },
+
             Shot(slug: "flash-kamikaze-queued", group: "Flashes", title: "Flash — kamikaze queued on a prompt on its way",
                  when: "1.5 s, on 🔼 ↓ after the words are done but before the prompt has landed — a spawn opening, a bound delivery still typing, a caret prompt still pressing Return (2026-10-10).",
                  note: "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. With no prompt anywhere, `☠️ No prompt to kamikaze`.",

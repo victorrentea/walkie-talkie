@@ -102,7 +102,7 @@
 <header class="page">
   <h1>Every state of the overlay</h1>
   <p class="sub">
-    All 86 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
+    All 87 states the Walkie&nbsp;Talkie chip and panel can be in — what each one
     is, and the moment it is on screen. The pictures are the real views drawing
     themselves, not mockups.
   </p>
@@ -596,6 +596,16 @@
         <p class="note"><strong>Nothing is typed into the dialog and no Return lands on it</strong> (one used to pick option 1 and drop the words). The prompt waits and goes by itself the moment the question is answered; after five minutes it is kept like an undelivered one, <code>⚠️ Question still open — find the prompt in Prompt History or ⌘V</code>. Told by the <code>walkie-inbox</code> mod&#x27;s <code>.dialog</code> flag, and in Terminal.app by the screen too.</p>
         <code class="slug">flash-question-open</code>
       </section>
+      <section class="card" id="flash-question-caret">
+        <header>
+          <h3>Flash — a caret prompt kept out by a question</h3>
+          <div class="tags"><span class="tag tag-flash" title="a message in the chip for a few seconds — bare like the chip, no blur, no border">flash</span><span class="tag">alpha 0.80</span><span class="tag">370×46 pt</span></div>
+        </header>
+        <div class="shot"><img src="states/flash-question-caret.png" width="370" height="46" style="opacity:0.8" alt="Flash — a caret prompt kept out by a question"></div>
+        <p class="when">Six seconds, when a caret prompt meets a question open in the Claude Code under the caret: at once in VS Code (a paste cannot wait for the caret), after five minutes in Terminal.app (2026-11-26).</p>
+        <p class="note"><strong>Never pasted into the dialog, never anywhere else.</strong> A caret prompt has no outbox row, so it says ⌘V: the prompt has been on the clipboard since it started waiting. A bound prompt kept the same way says <code>⚠️ Question still open — find the prompt in Prompt History or ⌘V</code>.</p>
+        <code class="slug">flash-question-caret</code>
+      </section>
       <section class="card" id="flash-kamikaze-queued">
         <header>
           <h3>Flash — kamikaze queued on a prompt on its way</h3>
@@ -1014,7 +1024,7 @@
       </section>
     </div>
 <footer>
-  Generated from <code>OverlayStates.swift</code> · repo at 583bde3f · 25 Nov 2026 · built 26 Nov 2026, 00:12
+  Generated from <code>OverlayStates.swift</code> · repo at c508dbd6 · 26 Nov 2026 · built 26 Nov 2026, 08:22
 </footer>
 <button class="toggle" onclick="document.body.classList.toggle('light')">Backdrop: dark / light</button>
 </body>

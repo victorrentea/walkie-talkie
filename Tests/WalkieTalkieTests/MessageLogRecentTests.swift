@@ -44,6 +44,29 @@ final class MessageLogRecentTests: XCTestCase {
         XCTAssertEqual(MessageLog.recent(now: now).map(\.text), ["now", "yesterday", "just inside"])
     }
 
+    /// ⏸ A row written when a prompt started waiting for a question (`delivery.held`) is
+    /// superseded by the later row of the same envelope; alone (a crash), it stays.
+    func testAHeldRowGivesWayToTheRowThatFollowsIt() throws {
+        let now = Date()
+        func row(_ text: String, envelope: String, held: Bool, minutesAgo: Double) -> String {
+            let ts = ISO8601DateFormatter().string(from: now.addingTimeInterval(-minutesAgo * 60))
+            var delivery: [String: Any] = ["to": held ? "undelivered" : "terminal:ttys004"]
+            if held { delivery["held"] = true }
+            let obj: [String: Any] = ["ts": ts, "text": text, "kind": "dictation", "line": envelope, "delivery": delivery]
+            return String(data: try! JSONSerialization.data(withJSONObject: obj), encoding: .utf8)!
+        }
+        let lines = [
+            row("answered later", envelope: "A", held: true, minutesAgo: 3),
+            row("never released", envelope: "B", held: true, minutesAgo: 2),
+            row("answered later", envelope: "A", held: false, minutesAgo: 1),
+        ]
+        try lines.joined(separator: "\n").write(to: Outbox.outboxURL, atomically: true, encoding: .utf8)
+        let rows = MessageLog.recent(now: now)
+        XCTAssertEqual(rows.map(\.text), ["answered later", "never released"])
+        XCTAssertNil(rows[0].undelivered)
+        XCTAssertNotNil(rows[1].undelivered)
+    }
+
     func testAMissingOutboxIsAnEmptyLog() {
         XCTAssertTrue(MessageLog.recent().isEmpty)
     }

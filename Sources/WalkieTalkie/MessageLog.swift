@@ -108,6 +108,10 @@ enum MessageLog {
         let stopAt = cutoff.addingTimeInterval(-readSlack)
 
         var entries: [Entry] = []
+        // ⏸ A row written when a prompt started waiting for a question (`delivery.held`,
+        // 2026-11-25) is superseded by the later row of the same envelope — newest first,
+        // so that one has been seen already. Kept only when nothing followed it (a crash).
+        var later = Set<String>()
         for line in body.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
             guard let obj = (try? JSONSerialization.jsonObject(with: Data(line.utf8)))
                     as? [String: Any],
@@ -127,6 +131,9 @@ enum MessageLog {
             guard !text.isEmpty || !shots.isEmpty || selection != nil else { continue }
 
             let delivery = obj["delivery"] as? [String: Any]
+            let envelope = (obj["line"] as? String) ?? ""
+            if delivery?["held"] as? Bool == true, later.contains(envelope) { continue }
+            later.insert(envelope)
             entries.append(Entry(date: date,
                                  text: text,
                                  app: obj["app"] as? String,

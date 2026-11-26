@@ -16,11 +16,13 @@ final class DialogGateTests: XCTestCase {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("dialog-gate-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: dir.appendingPathComponent(tty), withIntermediateDirectories: true)
         DialogGate.root = dir
+        DialogGate.forgetGiveUp(tty: tty)
     }
 
     override func tearDown() {
         DialogGate.root = savedRoot
         TerminalBinding.onDialogHold = nil
+        DialogGate.forgetGiveUp(tty: tty)
         try? FileManager.default.removeItem(at: dir)
         super.tearDown()
     }
@@ -43,6 +45,16 @@ final class DialogGateTests: XCTestCase {
         XCTAssertFalse(DialogGate.flagCounts(flagExists: true, beatAt: now - 11_000, now: now), "a crashed session's leftover")
         XCTAssertFalse(DialogGate.flagCounts(flagExists: true, beatAt: nil, now: now), "no beat at all")
         XCTAssertFalse(DialogGate.flagCounts(flagExists: false, beatAt: now, now: now))
+    }
+
+    /// An `.alive` caught half-written is read by its mtime: a flag beside it still counts.
+    func testAHalfWrittenBeatStillCounts() throws {
+        raise()
+        let alive = dir.appendingPathComponent(tty).appendingPathComponent(".alive")
+        try Data("{\"pid\":1,\"ses".utf8).write(to: alive)
+        XCTAssertTrue(DialogGate.flagUp(tty: tty))
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-60)], ofItemAtPath: alive.path)
+        XCTAssertFalse(DialogGate.flagUp(tty: tty), "an old, broken beat is a dead session")
     }
 
     func testTheFilesOnDisk() {
@@ -125,6 +137,14 @@ final class DialogGateTests: XCTestCase {
     ────────────────────────────────────────
       ctrl+g to edit in VS Code
     """
+    /// The usage-limit wait (`cli_wait_footer`), drawn under an ordinary box.
+    static let usageWait = """
+    ⏺ Done.
+    ────────────────────────────────────────
+    ❯\u{00A0}
+    ────────────────────────────────────────
+      Continuing automatically in 2h 13m · Esc to cancel
+    """
     static let draftList = """
     ⏺ Done.
     ────────────────────────────────────────
@@ -143,6 +163,8 @@ final class DialogGateTests: XCTestCase {
         ("the dictated sentence itself starts 1.", draftList, "1. fix the header", false),
         ("no ❯ at all", "$ ls\nfoo bar\n1. not a box\n", nil, false),
         ("the sentence typed into a dialog that just opened", bashPermission, "please look at it", true),
+        ("the usage-limit wait's Esc to cancel is not a dialog", usageWait, nil, false),
+        ("a dictated 1. under a dialog with its footer is still the dialog", bashPermission, "1.", true),
     ]
 
     func testTheScreen() {
@@ -158,6 +180,10 @@ final class DialogGateTests: XCTestCase {
         try (DialogGate.appleScript + """
 
         on run argv
+            if (count argv) is 1 then
+                if flagged(item 1 of argv) then return "flagged"
+                return "clear"
+            end if
             if dialogShown(item 1 of argv, item 2 of argv) then return "dialog"
             return "clear"
         end run
@@ -175,6 +201,23 @@ final class DialogGateTests: XCTestCase {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             XCTAssertEqual(said, c.dialog ? "dialog" : "clear", c.name)
         }
+        // `flagged`, the in-script test of the flag file right before a keystroke.
+        func flagged(_ path: String) throws -> String {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            p.arguments = [script.path, path]
+            let out = Pipe()
+            p.standardOutput = out
+            p.standardError = Pipe()
+            try p.run()
+            p.waitUntilExit()
+            return String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        XCTAssertEqual(try flagged(flag.path), "clear")
+        raise()
+        XCTAssertEqual(try flagged(flag.path), "flagged")
+        XCTAssertEqual(try flagged(""), "clear", "no path: the beat was not fresh")
     }
 
     // MARK: the hold
@@ -244,6 +287,69 @@ final class DialogGateTests: XCTestCase {
         }
         guard case .delivered = outcome else { return XCTFail("\(outcome)") }
         XCTAssertEqual(tries, 3)
+    }
+
+    /// **The guard is asked again after a wait, before the first try** (the Fable review,
+    /// H1): he killed the session while its question stood — `session.end` deleted the
+    /// flag — and the sentence must not be typed at the shell that is in front now.
+    func testTheGuardIsAskedAgainAfterAFlagFirstHold() {
+        beat()
+        raise()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { self.lower() }
+        var tried = false, rechecked = false
+        let outcome = TerminalBinding.holdingForDialogs(tty: tty, chars: 10, recheck: {
+            rechecked = true
+            return .wouldRunAsShell("zsh")
+        }) { _ in
+            tried = true
+            return .done(.delivered)
+        }
+        guard case .wouldRunAsShell("zsh") = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertTrue(rechecked)
+        XCTAssertFalse(tried, "nothing typed at the shell")
+    }
+
+    /// **The flag went with its session** (the H1 lab): `session.end` deleted `.dialog` and
+    /// `.alive` while `claude` was still dying, so the guard still passes — nothing is typed.
+    func testAFlagThatClearedWithItsSessionTypesNothing() {
+        beat()
+        raise()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) {
+            self.lower()
+            try? FileManager.default.removeItem(at: self.dir.appendingPathComponent(self.tty).appendingPathComponent(".alive"))
+        }
+        var tried = false
+        let outcome = TerminalBinding.holdingForDialogs(tty: tty, chars: 10, recheck: { nil }) { _ in
+            tried = true
+            return .done(.delivered)
+        }
+        guard case .failed = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertFalse(tried)
+    }
+
+    /// No wait, no second guard: the caller's own check stands for a first try.
+    func testNoWaitNoRecheck() {
+        var rechecked = false
+        _ = TerminalBinding.holdingForDialogs(tty: tty, chars: 10, recheck: { rechecked = true; return nil }) { _ in .done(.delivered) }
+        XCTAssertFalse(rechecked)
+    }
+
+    /// **A tab that just gave up gives up at once** while the same dialog stands (H2), and
+    /// waits again for a new one.
+    func testAGiveUpSticksWhileTheSameDialogStands() {
+        beat()
+        raise()
+        let first = TerminalBinding.holdingForDialogs(tty: tty, chars: 10, limit: 0.3) { _ in .done(.delivered) }
+        guard case .heldTooLong = first else { return XCTFail("\(first)") }
+        let started = Date()
+        let second = TerminalBinding.holdingForDialogs(tty: tty, chars: 10, limit: 5) { _ in .done(.delivered) }
+        guard case .heldTooLong = second else { return XCTFail("\(second)") }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.2, "kept at once, not five more seconds")
+        // Another question (another flag): waited for afresh.
+        try! Data("{\"tool\":\"Bash\",\"at\":2}\n".utf8).write(to: flag)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { self.lower() }
+        let third = TerminalBinding.holdingForDialogs(tty: tty, chars: 10, limit: 5) { _ in .done(.delivered) }
+        guard case .delivered = third else { return XCTFail("\(third)") }
     }
 
     /// A question never answered: nothing sent, `heldTooLong` for the undelivered path.

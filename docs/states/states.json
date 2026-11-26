@@ -537,6 +537,18 @@
     "alpha" : 0.80000000000000004,
     "group" : "Flashes",
     "height" : 46,
+    "image" : "flash-question-caret.png",
+    "note" : "**Never pasted into the dialog, never anywhere else.** A caret prompt has no outbox row, so it says ⌘V: the prompt has been on the clipboard since it started waiting. A bound prompt kept the same way says `⚠️ Question still open — find the prompt in Prompt History or ⌘V`.",
+    "shape" : "flash",
+    "slug" : "flash-question-caret",
+    "title" : "Flash — a caret prompt kept out by a question",
+    "when" : "Six seconds, when a caret prompt meets a question open in the Claude Code under the caret: at once in VS Code (a paste cannot wait for the caret), after five minutes in Terminal.app (2026-11-26).",
+    "width" : 370
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Flashes",
+    "height" : 46,
     "image" : "flash-kamikaze-queued.png",
     "note" : "The word goes alone the moment the prompt lands, by the route it took. Again = `☠️ Kamikaze taken back`. With no prompt anywhere, `☠️ No prompt to kamikaze`.",
     "shape" : "flash",

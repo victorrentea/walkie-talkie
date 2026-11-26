@@ -10647,10 +10647,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 🧠 **The model first, then the words** (2026-11-21, `ModelSwitch`): Claude Code's
             // own `/model` and `/effort`, each a line of its own, by the same route — only when the
             // ring was moved for this sentence (2026-11-25: nothing remembered is ever re-sent).
+            var heldOut: TerminalBinding.Outcome?
             if let pick = m.modelPick {
                 var switched = true
                 for command in ModelSwitch.commands(for: pick) {
-                    guard case .delivered = self.terminal.deliver(command, to: target) else { switched = false; break }
+                    let o = self.terminal.deliver(command, to: target)
+                    if case .heldTooLong = o { heldOut = o }
+                    guard case .delivered = o else { switched = false; break }
                 }
                 Log.info("🧠 \(switched ? "switched" : "could not switch") \(target.handle.tty ?? target.address) to \(pick.label) before the prompt")
                 if let tty = target.handle.tty {
@@ -10665,7 +10668,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Code. Anything else has no such key known here: the words go as ever, and
             // the flash says so.
             var sentNow = false
-            let outcome = self.terminal.deliver(line, to: target, interrupt: m.interrupt) { sentNow = true }
+            // ⏸ **Kept on record the moment it starts waiting for a question** (the Fable
+            // review, H2): an `undelivered` row marked `held`, so a crash or a quit in
+            // those minutes leaves it in Prompt History; the row that follows (delivered or
+            // kept) supersedes it there (`MessageLog.recent`). A model switch held out by
+            // the same question sends no prompt behind it.
+            let onHold: () -> Void = {
+                guard m.kind == "dictation" else { return }
+                DispatchQueue.main.async {
+                    self.writeOutbox(m, line: line, delivery: ["to": Self.undelivered, "wanted": to, "held": true,
+                                                              "why": "held: a question is open", "at": Outbox.iso(Date())])
+                    self.holdOnClipboard(line, why: "the prompt held for a question")
+                }
+            }
+            let outcome = heldOut ?? self.terminal.deliver(line, to: target, interrupt: m.interrupt,
+                                                           sentNow: { sentNow = true }, onHold: onHold)
             DispatchQueue.main.async {
                 if m.interrupt, case .delivered = outcome,
                    let said = InterruptGate.receipt(sentNow: sentNow, readsBack: target.handle.readsBack) {
@@ -11172,6 +11189,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let submitted = tty.map { into in
                 TerminalBinding.submitPrompt(line, toTTY: into, typed: {
                     DispatchQueue.main.async { self?.pinLanded(landing, "typed into Claude Code on \(into) — the Return follows") }
+                }, onHold: {
+                    // On the clipboard from the moment it waits (M5): a restart in those
+                    // minutes must not lose it. A caret prompt has no outbox row.
+                    DispatchQueue.main.async { self?.holdOnClipboard(line, why: "the caret prompt held for a question") }
                 }, heldTooLong: { questionOpen = true })
             } ?? false
             let vscodeTTY = submitted ? nil : vscodeClaude
@@ -11181,6 +11202,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let into = submitted ? tty : vscodeTTY { TurnCost.watch(tty: into, why: "caret") }
                 let already = line.contains("\n\nkamikaze")
                 if let vscodeTTY, let frontPid {
+                    // ⏸ **Not into a dialog** (the Fable review, H3): a paste there is dropped
+                    // and its Return picks option 1. The clipboard holds it; he pastes it once
+                    // he has answered — the caret it was for may have moved by then.
+                    if DialogGate.flagUp(tty: vscodeTTY) {
+                        Log.info("⏸ caret prompt not pasted — a dialog is open in Claude Code on \(vscodeTTY) (VS Code)")
+                        self.pinLanded(landing, "held out by a question in Claude Code on \(vscodeTTY)")
+                        self.holdOnClipboard(line, why: "the caret prompt a question kept out")
+                        self.promptWentNowhere(serial, why: "a question is open in Claude Code on \(vscodeTTY)")
+                        self.overlay.flash(DialogGate.gaveUpCaret, duration: 6)
+                        return
+                    }
                     self.pasteText(line, to: pid, settles: false)
                     self.pinLanded(landing, "pasted into Claude Code in VS Code")
                     self.returnAfterVSCodePaste(tty: vscodeTTY, pid: frontPid, chars: line.count)
@@ -11192,6 +11224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         let bundle = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
                         DispatchQueue.global(qos: .userInitiated).async {
                             let still = TerminalBinding.frontVSCodeClaudePromptTTY(bundleID: bundle, pid: frontPid) == vscodeTTY
+                                && !DialogGate.flagUp(tty: vscodeTTY)
                             DispatchQueue.main.async {
                                 guard let self else { return }
                                 guard still else { self.kamikazeNotSent(to: "VS Code \(vscodeTTY)"); return }
@@ -11210,7 +11243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pinLanded(landing, "held for a question in Claude Code on \(tty), never sent")
                     self.holdOnClipboard(line, why: "the caret prompt a question kept out")
                     self.promptWentNowhere(serial, why: "a question stayed open in Claude Code on \(tty)")
-                    self.overlay.flash(BoundPromptGate.undelivered(DialogGate.gaveUp), duration: 6)
+                    self.overlay.flash(DialogGate.gaveUpCaret, duration: 6)
                     return
                 }
                 // `deliver` ended this sentence's settle before the hop; a
@@ -11431,6 +11464,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.overlay.flash("☠️ Kamikaze not sent — no Claude Code prompt at the caret", duration: 3)
                     return
                 }
+                // Never into a dialog (H3): the word would be dropped and its Return pick option 1.
+                if DialogGate.flagUp(tty: vscodeTTY) {
+                    Log.info("☠️ kamikaze with no words — a dialog is open in Claude Code on \(vscodeTTY), not sent")
+                    self.overlay.flash("☠️ Kamikaze not sent — a question is open", duration: 3)
+                    return
+                }
                 Log.info("☠️ kamikaze — no words heard, pasted alone into Claude Code in VS Code on \(vscodeTTY)")
                 self.overlay.flash("☠️ Kamikaze sent", duration: 1.5)
                 self.pasteText("kamikaze", to: pid, settles: false)
@@ -11506,6 +11545,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Log.info("⏎ not sent — the caret left VS Code's terminal before the Return (\(tty))")
                 return
             }
+            // A dialog that opened since the paste gets no Return (H3): it would pick option 1.
+            if DialogGate.flagUp(tty: tty) {
+                Log.error("⏸ no Return — a dialog opened in Claude Code on \(tty) (VS Code) after the paste")
+                return
+            }
             HotkeyTap.postReturn()
             Log.info("⏎ caret prompt pasted into Claude Code in VS Code on \(tty) and Return pressed — \(chars) chars")
         }
@@ -11528,6 +11572,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let shell = TerminalBinding.frontTerminalShell(bundleID: front, pid: pid) {
                     Log.info("⏎ not sent — the terminal in front is at a \(shell) prompt (Q18)")
                     DispatchQueue.main.async { self?.overlay.flash("⏎ not sent — a shell prompt is in front", duration: 3) }
+                    return
+                }
+                // ⏸ Nor into a dialog (the Fable review, H3): the Return would pick option 1.
+                if let tty = TerminalBinding.focusedTTY(), DialogGate.flagUp(tty: tty) {
+                    Log.info("⏎ not sent — a dialog is open in Claude Code on \(tty)")
+                    DispatchQueue.main.async { self?.overlay.flash("⏎ not sent — a question is open", duration: 3) }
                     return
                 }
                 HotkeyTap.postReturn()
