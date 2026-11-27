@@ -17355,3 +17355,18 @@ last spoken things."* `RoomTranscript.windows` is `[15, 30, 60]`: a third row, *
 Victor Mac' `GET /transcript/tail` already takes any `seconds` (checked: `?seconds=15` answered). The
 three windows are still fetched at once when the question opens; the quote under the rows stays the
 longest usable window's.
+
+## 2026-11-27 — ⏸ The plain dictation's Return answers an AskUserQuestion
+
+Victor, 13:29: *"when I dictate in an answer of Claude Code, enter was not injected in the terminal of
+Visual Studio Code"*. relay.log 13:28:44–45: a 🔽 plain dictation into VS Code, 276 chars pasted, then
+`⏎ not sent — a dialog is open in Claude Code on ttys004`. The words had filled the question's answer
+field; the 11-26 hold (the Fable review, H3) withheld the Return he asked for, and he pressed it by hand.
+
+Measured in a tmux lab (2.1.332, Haiku): a bracketed paste, the way VS Code's ⌘V sends it, into an
+AskUserQuestion with `❯ 1. Red` highlighted jumps to and fills its `Type something.` row (`❯ 3. green with
+a hint of teal`), and Return submits it (`Favourite colour? → green with a hint of teal`). The same paste
+into a Bash permission is **dropped** (`❯ 1. Yes` still lit), so a Return there would approve. So
+`submitAfterCleanWords` presses Return under the flag only when its `tool` is `AskUserQuestion`
+(`DialogGate.pasteFillsDialog`); every other dialog, and an unreadable flag, still holds it. A bound
+sentence and the caret prompt are unchanged: they still wait for the question.

@@ -11574,8 +11574,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DispatchQueue.main.async { self?.overlay.flash("⏎ not sent — a shell prompt is in front", duration: 3) }
                     return
                 }
-                // ⏸ Nor into a dialog (the Fable review, H3): the Return would pick option 1.
+                // ⏸ Nor into a dialog (the Fable review, H3): the Return would pick option 1 —
+                // except an AskUserQuestion, whose `Type something.` row the paste just
+                // filled: there the Return submits his words as the answer (2026-11-27,
+                // Victor: *"enter was not injected"* answering a question in VS Code).
                 if let tty = TerminalBinding.focusedTTY(), DialogGate.flagUp(tty: tty) {
+                    if DialogGate.pasteFillsDialog(flagText: DialogGate.flagText(tty: tty)) {
+                        Log.info("⏎ into an AskUserQuestion on \(tty) — the paste filled its answer row, Return submits it")
+                        HotkeyTap.postReturn()
+                        return
+                    }
                     Log.info("⏎ not sent — a dialog is open in Claude Code on \(tty)")
                     DispatchQueue.main.async { self?.overlay.flash("⏎ not sent — a question is open", duration: 3) }
                     return

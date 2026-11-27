@@ -80,6 +80,25 @@ enum DialogGate {
     static func flagPath(tty: String) -> String { folder(tty).appendingPathComponent(".dialog").path }
     static func flagText(tty: String) -> String? { try? String(contentsOfFile: flagPath(tty: tty), encoding: .utf8) }
 
+    /// The tool whose dialog the flag stands for (`{"tool": "AskUserQuestion", …}`;
+    /// `mcp:<server>` for an elicitation), nil when unreadable.
+    static func flaggedTool(_ text: String?) -> String? {
+        guard let data = text?.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return obj["tool"] as? String
+    }
+
+    /// **A paste lands in this dialog's own text field** (2026-11-27, measured on 2.1.332
+    /// in a tmux lab): a bracketed paste into an AskUserQuestion jumps to its `Type
+    /// something.` row and fills it — option 1 highlighted, `❯ 3. green with a hint of
+    /// teal` a beat later — and the Return then submits those words as the answer. Into
+    /// a Bash permission the same paste is **dropped**, `❯ 1. Yes` stays, and a Return
+    /// would approve. So only AskUserQuestion; every other dialog, and an unreadable
+    /// flag, still holds the Return.
+    static func pasteFillsDialog(flagText: String?) -> Bool {
+        flaggedTool(flagText) == "AskUserQuestion"
+    }
+
     // MARK: One tab at a time, and a give-up that sticks
 
     private static let books = NSLock()

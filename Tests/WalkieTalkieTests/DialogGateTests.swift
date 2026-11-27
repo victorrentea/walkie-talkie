@@ -39,6 +39,20 @@ final class DialogGateTests: XCTestCase {
 
     // MARK: the flag
 
+    /// Only an AskUserQuestion takes a pasted sentence into its own field (2026-11-27,
+    /// measured on 2.1.332): the plain dictation's Return then submits it. A permission
+    /// drops the paste, so its Return would approve — held, as an unreadable flag is.
+    func testOnlyAnAskUserQuestionTakesThePastedWords() {
+        func flag(_ tool: String) -> String { #"{"tool":"\#(tool)","at":1795782525000,"session":"s"}"# + "\n" }
+        XCTAssertEqual(DialogGate.flaggedTool(flag("AskUserQuestion")), "AskUserQuestion")
+        XCTAssertTrue(DialogGate.pasteFillsDialog(flagText: flag("AskUserQuestion")))
+        for tool in ["Bash", "Write", "ExitPlanMode", "mcp:github"] {
+            XCTAssertFalse(DialogGate.pasteFillsDialog(flagText: flag(tool)), tool)
+        }
+        XCTAssertFalse(DialogGate.pasteFillsDialog(flagText: nil))
+        XCTAssertFalse(DialogGate.pasteFillsDialog(flagText: "{\"tool\":"), "half-written")
+    }
+
     func testTheFlagCountsOnlyBesideAFreshBeat() {
         let now = 1_000_000_000.0
         XCTAssertTrue(DialogGate.flagCounts(flagExists: true, beatAt: now - 2_000, now: now))

@@ -162,6 +162,11 @@ this way. Log `📍 a plain dictation over Claude Code on ttysNNN — …`.
 - **Also gated** (flag only): the caret prompt pasted into Claude Code in VS Code (not pasted, clipboard,
   `⚠️ A question is open — the prompt is on ⌘V`), its Return, the VS Code kamikazes, the plain dictation's
   Return (`submitAfterCleanWords`, `focusedTTY`).
+- **The plain dictation's Return goes into an AskUserQuestion** (2026-11-27, Victor: *"when I dictate in an
+  answer of Claude Code, enter was not injected"*). His ⌘V paste fills the question's `Type something.` row
+  (measured, 2.1.332), so the Return submits his words; into a permission the same paste is dropped and the
+  Return would approve. `DialogGate.pasteFillsDialog`: the flag's `tool` is `AskUserQuestion` → Return;
+  any other tool or an unreadable flag → held. Log `⏎ into an AskUserQuestion on ttysNNN`.
 - **Gaps**: tmux / IDE / Orca's first Return have only the flag; a dialog that is not a permission (the
   auto-mode onboarding, the usage-limit menu) is caught on Terminal.app's screen alone; **ungated, no tty
   to ask**: the `.keystroke` fallback and an IDE terminal whose extension named no shell pid. Sessions
