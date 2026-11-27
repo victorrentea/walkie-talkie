@@ -45,6 +45,40 @@ final class RoomPickTests: XCTestCase {
         XCTAssertEqual(RoomTranscript.windows, [15, 30, 60])
     }
 
+    /// 2026-11-27: the 15 s row is *Just heard*, read again up to the click.
+    func testThe15SecondRowIsJustHeard() {
+        XCTAssertEqual(RoomTranscript.label(15), "Just heard")
+        XCTAssertEqual(RoomTranscript.label(30), "Last 30 s")
+        let room = RoomTranscript(seconds: 15, transcript: "[17:52] Kafka was written in Go.", speech: "Kafka was written in Go.", words: 5)
+        XCTAssertTrue(room.isJustHeard)
+        XCTAssertEqual(room.header(asked: "really?"), "really? · 🎙️ Just heard")
+        XCTAssertEqual(room.header(asked: nil), "🎙️ Just heard «Kafka was written in Go.»")
+    }
+
+    /// Victor: *"only pick the last topic, question, idea, fact discussed. Over stuff discussed earlier"*.
+    func testJustHeardsPromptTakesOnlyTheLastTopic() {
+        let room = RoomTranscript(seconds: 15, transcript: "[17:52] Kafka was written in Go.", speech: "Kafka was written in Go.", words: 5)
+        for q in [nil, "Is that true?"] {
+            let p = room.prompt(question: q)
+            XCTAssertTrue(p.contains("up to the instant I clicked"))
+            XCTAssertTrue(p.contains("Take ONLY the last topic discussed"))
+            XCTAssertTrue(p.contains("Ignore everything said earlier"))
+            XCTAssertTrue(p.contains("[17:52] Kafka was written in Go."))
+            XCTAssertFalse(p.contains("last 15 seconds"))
+        }
+        XCTAssertTrue(room.prompt(question: "Is that true?").contains("My question, about that last topic:\nIs that true?"))
+        XCTAssertFalse(room.prompt(question: "Is that true?").contains("  "))
+    }
+
+    /// The ⌘⌃V picker's rule: a floor, then quiet, then give up.
+    func testJustHeardWaitsForWhisperToCatchUp() {
+        XCTAssertEqual(RoomSettle.decide(elapsed: 3, sinceChange: 3), .wait)
+        XCTAssertEqual(RoomSettle.decide(elapsed: 8, sinceChange: 8), .ready)
+        XCTAssertEqual(RoomSettle.decide(elapsed: 9, sinceChange: 1), .wait)
+        XCTAssertEqual(RoomSettle.decide(elapsed: 11, sinceChange: 2.5), .ready)
+        XCTAssertEqual(RoomSettle.decide(elapsed: 18, sinceChange: 0), .timedOut)
+    }
+
     func testTheModalDrawsIntoAPNG() throws {
         let room = try XCTUnwrap(RoomTranscript.parse(Data(json.utf8)))
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("room-pick-\(UUID()).png")

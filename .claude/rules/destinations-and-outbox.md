@@ -344,8 +344,12 @@ me to dismiss it explicitly"*.
 - **🎙️ The room's last 15/30/60 s, offered as a ⚡ question opens** (2026-11-25, `RoomPick.swift`):
   🔼 ← at rest (and 🔼 → over an answer, a follow-up) asks Victor Mac
   `GET 127.0.0.1:55123/transcript/tail?seconds=15|30|60` (its `RecentSpeech`, loopback only) and, if a
-  window has ≥ 5 words, shows a modal: *🎙️ Last 15 s* / *🎙️ Last 30 s* / *🎙️ Last 60 s* with their word counts
-  (15 s added 2026-11-27, for a question about what was *just* said).
+  window has ≥ 5 words, shows a modal: *🎙️ Just heard* / *🎙️ Last 30 s* / *🎙️ Last 60 s* with their word counts
+  (15 s added 2026-11-27, for a question about what was *just* said). **🎙️ Just heard** (the 15 s row, renamed
+  the same evening) is read again *after* the click: `RoomSettle` re-asks `/transcript/tail?seconds=15` every
+  0.35 s until whisper has caught up with the click — Victor Mac's ⌘⌃V rule, ≥ 8 s then 2.5 s without a new
+  line, ≤ 18 s — and the question waits for it (flash *waiting for the room's last words…*). Its prompt takes
+  **only the last topic** (question, idea, fact) at the very end and ignores what was discussed before it.
   **It is the spawn menu's twin** (2026-11-25, Victor: *"should look just like the one to open a new
   session. and should fade out at the same delay"*): built from `SpawnFolderMenu`'s own parts — HUD
   blur, 12 pt secondary header, 17 pt rows lit in the selection colour, hand cursor, down-right of

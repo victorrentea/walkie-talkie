@@ -5060,10 +5060,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             // 🎙️ A window of the room picked in the modal: the topic, his words the question.
-            let header = room.map { $0.header(asked: asked) } ?? asked
-            let framed = room.map { $0.prompt(question: line) } ?? line
-            if google { googleQuestion(header, prompt: framed, images: pictures) }
-            else { askQuick(header, prompt: framed, images: pictures, followUp: followUp, google: googleToo) }
+            settledRoom(room) { [weak self] room in
+                guard let self else { return }
+                let header = room.map { $0.header(asked: asked) } ?? asked
+                let framed = room.map { $0.prompt(question: line) } ?? line
+                if google { self.googleQuestion(header, prompt: framed, images: pictures) }
+                else { self.askQuick(header, prompt: framed, images: pictures, followUp: followUp, google: googleToo) }
+            }
             return
         }
         pendingPromptWarning = result.warning
@@ -6260,8 +6263,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if kamikazeAlone { kamikazeWithoutWords(atCaret: aloneAtCaret, to: aloneTo) }
         if let room = roomAlone {
-            Log.info("🎙️ nothing said — the room's last \(room.seconds) s go to the quick model alone")
-            askQuick(room.header(asked: nil), prompt: room.prompt(question: nil), followUp: roomFollowUp)
+            Log.info("🎙️ nothing said — the room's \(RoomTranscript.label(room.seconds)) goes to the quick model alone")
+            settledRoom(room) { [weak self] room in
+                guard let self, let room else { return }
+                self.askQuick(room.header(asked: nil), prompt: room.prompt(question: nil), followUp: roomFollowUp)
+            }
         }
         guard !bg else { return }
         if listening {
@@ -7498,9 +7504,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.quickAsk, self.listening || self.source.isRecording else { return }
             Log.info("🎙️ the room's last \(room.seconds) s (\(room.words) words) is the ⚡ question's topic — the question ends")
             self.quickRoom = room
-            self.overlay.flash("🎙️ Last \(room.seconds) s", duration: 1.5)
+            self.overlay.flash("🎙️ \(RoomTranscript.label(room.seconds))", duration: 1.5)
             self.endDictation()
         })
+    }
+
+    /// **🎙️ Just heard waits for the room up to the click** (2026-11-27,
+    /// `RoomSettle`, started by the click): the question goes once whisper has
+    /// caught up, with that window — or with the one offered, if the settled one
+    /// came back empty. Any other window (or none) goes at once.
+    private func settledRoom(_ room: RoomTranscript?, _ go: @escaping (RoomTranscript?) -> Void) {
+        guard let room, room.isJustHeard else { go(room); return }
+        overlay.flash("🎙️ Just heard — waiting for the room's last words…", duration: RoomSettle.maxWait)
+        RoomSettle.wait { [weak self] settled in
+            self?.overlay.clearFlash()
+            let use = settled.flatMap { $0.words > 0 ? $0 : nil } ?? room
+            Log.info("🎙️ Just heard: \(use.words) words up to the click\(use == room ? " (as offered)" : "")")
+            go(use)
+        }
     }
 
     /// **The question, as a Google search** (2026-10-25, `quickGoogle`): the

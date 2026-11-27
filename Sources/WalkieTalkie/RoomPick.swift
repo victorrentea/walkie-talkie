@@ -11,7 +11,7 @@ import AppKit
 /// Victor Mac transcribes the room all day; `GET 127.0.0.1:55123/transcript/tail
 /// ?seconds=N` (`RecentSpeech` there, loopback only) answers its last N seconds.
 /// A ⚡ question opened by 🔼 ← asks for both windows at once, **as they were
-/// before he started speaking**, and `RoomPick` offers them: *Last 15 s* /
+/// before he started speaking**, and `RoomPick` offers them: *Just heard* /
 /// *Last 30 s* / *Last 60 s* (15 s since 2026-11-27, Victor: *"only pick the last
 /// fifteen seconds … when I ask a question about the last spoken things"*). A click makes that window the research topic and **ends the
 /// question** (as 🔼 would): whatever he said goes along as his question about
@@ -21,6 +21,15 @@ import AppKit
 /// No click: the modal fades out as the spawn menu does (3.5 s solid, 1 s fade,
 /// held while the pointer is on it) or goes with the question, and nothing changes.
 /// `WT_ROOM_PICK=0` turns the offer off.
+///
+/// **🎙️ Just heard** (2026-11-27, Victor: *"The option 15s in question mode should
+/// be called 'just heard' and grabs the transcript until the exact moment of the
+/// click — this might mean waiting a bit to transcribe it … very important in the
+/// prompt: only pick the last topic, question, idea, fact discussed"*). The 15 s
+/// row is no longer the window as it was when the question opened: its click
+/// starts `RoomSettle`, which waits for whisper to write what was said up to the
+/// click, and the question goes with that window, its prompt naming only the last
+/// topic.
 struct RoomTranscript: Equatable {
     let seconds: Int
     /// `[HH:MM] words` lines, oldest first — what the model reads.
@@ -32,10 +41,18 @@ struct RoomTranscript: Equatable {
     static let port = 55123
     /// Shortest first — the modal's rows top-down.
     static let windows = [15, 30, 60]
+    /// The *Just heard* window: read again, settled, after the click.
+    static let justHeard = 15
     /// Fewer words than this is not a discussion — the window is not offered.
     static let minWords = 5
 
     var usable: Bool { words >= Self.minWords }
+    var isJustHeard: Bool { seconds == Self.justHeard }
+
+    /// The row's and the flash's name.
+    static func label(_ seconds: Int) -> String { seconds == justHeard ? "Just heard" : "Last \(seconds) s" }
+    /// The pop-up header's tag.
+    var tag: String { isJustHeard ? "Just heard" : "\(seconds) s" }
 
     /// Pure: Victor Mac' JSON → a window; nil for anything else.
     static func parse(_ data: Data) -> RoomTranscript? {
@@ -75,12 +92,13 @@ struct RoomTranscript: Equatable {
     /// so he can tell at a glance what is being checked.
     func header(asked: String?) -> String {
         let said = asked?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return said.isEmpty ? "🎙️ \(seconds) s «\(quote())»" : "\(said) · 🎙️ \(seconds) s"
+        return said.isEmpty ? "🎙️ \(tag) «\(quote())»" : "\(said) · 🎙️ \(tag)"
     }
 
     /// What the quick model is asked. Its system prompt says "be brief, no lists
     /// unless asked" — so this asks for the list, one line per claim.
     func prompt(question: String?) -> String {
+        if isJustHeard { return justHeardPrompt(question: question) }
         let head = """
         This discussion was just overheard in a live training room — its last \(seconds) seconds, \
         transcribed automatically, so some words may be misheard.
@@ -109,6 +127,121 @@ struct RoomTranscript: Equatable {
         in the language of my question.
         """
     }
+
+    /// *Just heard*: the room's last moments up to his click — and of what was said
+    /// in them, only the **last** topic counts (Victor: *"only pick the last topic,
+    /// question, idea, fact discussed. Over stuff discussed earlier"*).
+    private func justHeardPrompt(question: String?) -> String {
+        let head = """
+        This was just overheard in a live training room — its last moments, up to the instant I \
+        clicked, transcribed automatically, so some words may be misheard. It may touch several \
+        topics.
+
+        \(transcript)
+
+        Take ONLY the last topic discussed — the last question asked, idea raised or fact claimed, \
+        at the very end. Ignore everything said earlier about other things, even if it fills most \
+        of the transcript.
+        """
+        let q = question?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !q.isEmpty else {
+            return head + """
+
+
+            That last topic is what to research. Answer it as you would answer a question; where \
+            it claims facts, check them: one short line each — ✅ true, ❌ false or ❓ unsure — then \
+            the correct fact. Plain text, in the language of the discussion.
+            """
+        }
+        return head + """
+
+
+        My own words below may also be heard at the very end of the transcript: the topic is \
+        what was discussed just before them.
+
+        My question, about that last topic:
+        \(q)
+
+        Answer my question. Where that last topic claims facts my question is about, check them: \
+        one short line each — ✅ true, ❌ false or ❓ unsure — then the correct fact. Plain text, \
+        in the language of my question.
+        """
+    }
+}
+
+/// **🎙️ Just heard: the room up to the click** (2026-11-27). Whisper writes a line
+/// several seconds after the words were said (a pause flushes it in ~0.6 s + ≤ 5 s
+/// of batch + ~1 s of inference; non-stop talk waits for the 12 s chunk), so a
+/// click on *Just heard* asks Victor Mac again every `poll` until the window has
+/// stopped changing — the rule of Victor Mac's ⌘⌃V picker (`TranscriptSettlePolicy`):
+/// at least `minWait`, then `quietSeconds` with no new line; `maxWait` gives up
+/// and takes what is there. It starts at the click, so the wait runs while his
+/// own words are still being transcribed; the question then `wait`s for it.
+enum RoomSettle {
+    static let minWait: TimeInterval = 8
+    static let quietSeconds: TimeInterval = 2.5
+    static let maxWait: TimeInterval = 18
+    static let poll: TimeInterval = 0.35
+
+    enum Decision: Equatable { case wait, ready, timedOut }
+
+    /// Pure. `sinceChange` is seeded with `elapsed`, so a window that never
+    /// changes (nobody spoke, whisper down) settles at the floor.
+    static func decide(elapsed: TimeInterval, sinceChange: TimeInterval) -> Decision {
+        if elapsed >= maxWait { return .timedOut }
+        if elapsed < minWait { return .wait }
+        return sinceChange >= quietSeconds ? .ready : .wait
+    }
+
+    private static var generation = 0
+    private static var started: CFAbsoluteTime = 0
+    private static var lastChange: CFAbsoluteTime = 0
+    private static var lastText: String?
+    private static var latest: RoomTranscript?
+    private static var finished = true
+    private static var waiters: [(RoomTranscript?) -> Void] = []
+
+    /// At the click (main).
+    static func start(_ seconds: Int = RoomTranscript.justHeard) {
+        generation += 1
+        started = CFAbsoluteTimeGetCurrent()
+        lastChange = started
+        lastText = nil
+        latest = nil
+        finished = false
+        waiters = []
+        tick(generation, seconds)
+    }
+
+    /// `done` on main with the settled window (nil if Victor Mac never answered);
+    /// at once when it already settled.
+    static func wait(_ done: @escaping (RoomTranscript?) -> Void) {
+        if finished { done(latest) } else { waiters.append(done) }
+    }
+
+    private static func tick(_ gen: Int, _ seconds: Int) {
+        RoomTranscript.fetch([seconds], timeout: 1) { got in
+            guard gen == generation, !finished else { return }
+            let now = CFAbsoluteTimeGetCurrent()
+            if let r = got[seconds] {
+                // The first answer is the baseline; a later different one is a new line.
+                if lastText != nil, r.transcript != lastText { lastChange = now }
+                lastText = r.transcript
+                latest = r
+            }
+            let elapsed = now - started
+            switch decide(elapsed: elapsed, sinceChange: now - lastChange) {
+            case .wait:
+                DispatchQueue.main.asyncAfter(deadline: .now() + poll) { tick(gen, seconds) }
+            case let d:
+                Log.info("🎙️ Just heard \(d == .ready ? "settled" : "gave up waiting") after \(String(format: "%.1f", elapsed)) s — \(latest?.words ?? 0) words")
+                finished = true
+                let w = waiters
+                waiters = []
+                w.forEach { $0(latest) }
+            }
+        }
+    }
 }
 
 /// **The modal — the spawn menu's twin** (2026-11-25, Victor: *"the modal showing
@@ -118,7 +251,7 @@ struct RoomTranscript: Equatable {
 /// secondary 12 pt header, 17 pt rows `rowHeight` tall lit in the selection
 /// colour under the hand, the hand cursor over the whole panel, and the same
 /// place — down and to the right of the pointer (`SpawnFolderMenu.origin`).
-/// The rows: *🎙️ Last 15 s* / *🎙️ Last 30 s* / *🎙️ Last 60 s*, each with its word count; a window
+/// The rows: *🎙️ Just heard* / *🎙️ Last 30 s* / *🎙️ Last 60 s*, each with its word count; a window
 /// with too few words is dimmed and does not click. Under them, the quote of the
 /// longer window, in the header's ink.
 ///
@@ -173,6 +306,7 @@ enum RoomPick {
     static func choose(_ seconds: Int) -> Bool {
         guard let room = rooms[seconds], room.usable, let pick = onPick else { return false }
         close()
+        if room.isJustHeard { RoomSettle.start(seconds) }
         pick(room)
         return true
     }
@@ -407,7 +541,7 @@ private final class RoomPickView: NSView {
                 NSBezierPath(roundedRect: r.rect.insetBy(dx: 0, dy: 1), xRadius: 6, yRadius: 6).fill()
             }
             let ink = lit ? NSColor.white : (usable ? NSColor.labelColor : NSColor.tertiaryLabelColor)
-            let name = NSAttributedString(string: "🎙️ Last \(r.seconds) s",
+            let name = NSAttributedString(string: "🎙️ \(RoomTranscript.label(r.seconds))",
                                           attributes: [.font: M.rowFont, .foregroundColor: ink])
             let ns = name.size()
             name.draw(at: NSPoint(x: r.rect.minX + M.rowInset, y: r.rect.midY - ns.height / 2))

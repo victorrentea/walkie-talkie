@@ -17379,3 +17379,18 @@ ring's own 20 Hz `refresh`, and after the stop `setDelivering` was gated on `fxH
 `CaretHalo.setPinAlone` arms it with its own 10 Hz tick (a window moved, a shine set — no web view, no
 GPU film) whenever the ring is wanted at the caret but held, and the delivering pin asks only
 `film == nil`. A screen film still holds both — nothing but the film is drawn then.
+
+
+## 2026-11-27 — 🎙️ The 15 s row is *Just heard*: the room up to the click, only its last topic
+
+Victor (mail): *"The option 15s in question mode should be called 'just heard' and grabs the transcript until
+the exact moment of the click — this might mean waiting a bit to transcribe it, I'm ok. But very important in
+the prompt: only pick the last topic, question, idea, fact discussed. Over stuff discussed earlier."*
+The row reads *🎙️ Just heard*. Its click starts `RoomSettle` (`RoomPick.swift`): `/transcript/tail?seconds=15`
+again every 0.35 s, settled by Victor Mac's own ⌘⌃V picker rule (`TranscriptSettlePolicy`): ≥ 8 s, then
+2.5 s with no new line, give up at 18 s (Victor Mac's 25 s felt too long for a ⚡ question, and the longer it
+waits the more post-click talk slips in). It starts at the click, so it overlaps Wispr transcribing his own
+words; `settledRoom` makes the ask wait for it, falling back to the window as offered when the settled one is
+empty. `justHeardPrompt`: "Take ONLY the last topic discussed … Ignore everything said earlier", plus a
+warning that his own question may be heard at the very end (the room mics hear him dictate it). Not tested
+live: no room speech at 21:00, done unattended from a Flux mail; unit tests only.
