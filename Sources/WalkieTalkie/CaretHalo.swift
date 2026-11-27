@@ -1144,7 +1144,7 @@ final class CaretHalo {
         // there yet, which is the whole of the state `setDelivering` names.
         // …and only where there is a caret to point at (2026-10-13) — see `headsAt`
         // — or a window known to have none (`noCaretAt`, 2026-10-14).
-        arrow.armed = ((on && atCaret) || delivering) && pinAt != nil
+        arrow.armed = ((on && atCaret) || pinAlone || delivering) && pinAt != nil
         guard live != on else { return }
         live = on
         if on { frozeThisRing = false; stillLanding = false }
@@ -1154,6 +1154,31 @@ final class CaretHalo {
         Log.info(on ? "◯ caret halo on — the microphone is open\(atCaret ? ", and these words go wherever the caret is" : "")\(opening == .whole ? "" : ", growing out of the pointer")"
                     : "◯ caret halo off")
         on ? show(opening: opening) : hide()
+    }
+
+    /// **The pin without the ring** (2026-11-27, Victor: *"show me the red pin when I
+    /// dictate or I prompt at the caret, even if I'm on battery"*). On battery the ring
+    /// is held (`BatteryFx`), and the pin was drawn only from the ring's 20 Hz `refresh`,
+    /// so it went down with it. The pin is not an effect — it says where the words go —
+    /// so while the ring is held at the caret it gets its own 10 Hz tick: a window
+    /// moved and a shine set, no web view, no GPU film.
+    private(set) var pinAlone = false
+    private var pinTimer: Timer?
+
+    func setPinAlone(_ on: Bool) {
+        guard pinAlone != on else { return }
+        pinAlone = on
+        pinTimer?.invalidate()
+        pinTimer = nil
+        arrow.armed = ((live && atCaret) || pinAlone || delivering) && pinAt != nil
+        Log.info(on ? "📍 the pin alone — the ring is held, the caret still gets its pin" : "📍 the pin alone ends")
+        guard on else { return }
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self, self.pinAlone, !self.delivering, let o = self.headsOrigin else { return }
+            self.arrow.refresh(quiet: self.quietSeconds?() ?? 0, at: o)
+        }
+        RunLoop.main.add(t, forMode: .common)
+        pinTimer = t
     }
 
     /// **A few seconds of the ring, on his own voice, with no dictation** —
@@ -3097,7 +3122,7 @@ final class CaretHalo {
 
     private func pinMoved() {
         arrow.crossed = headsAt == nil && noCaretAt != nil
-        let wanted = ((live && atCaret) || delivering) && pinAt != nil
+        let wanted = ((live && atCaret) || pinAlone || delivering) && pinAt != nil
         arrow.armed = wanted
         if wanted { placeHeads() }
     }

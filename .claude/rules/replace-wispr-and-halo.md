@@ -133,6 +133,11 @@ Victor: *"cât durează recordul de ecran să nu se afișeze niciun alt efect (e
   (`setDelivering`), the corner tunnel (`cornerTunnel.held`), the fly-to-corner, the halo dial
   (`haloUp`) — **and the edge in whichever phase** (`edgeDust.drop`: `listen(nil)` only ends an edge
   still being said, and one *waiting* for its message would have stayed through the film).
+- **The pin is not held by battery** (2026-11-27, Victor: *"show me the red pin when I dictate or I prompt
+  at the caret, even if I'm on battery"*). It says where the words go; it is not an effect. While he speaks
+  with the ring held, `CaretHalo.setPinAlone` arms it and drives it with its own 10 Hz tick (it was drawn
+  only from the ring's 20 Hz `refresh`); after the stop `setDelivering` asks `film == nil`, not `fxHeld`.
+  A film still holds both. Log `📍 the pin alone — the ring is held…`.
 - **At the film's start they are off in the call, not wound down** (2026-11-23; teaser take 6b: no new
   dust was added, but the pointer's and the right edge's dust already in the air drifted on for ~4 s).
   `startFilm` calls `vanishEffectsForFilm()` **before** its sync: `CaretHalo.vanishForFilm` (panel ordered

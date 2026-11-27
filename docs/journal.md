@@ -17370,3 +17370,12 @@ into a Bash permission is **dropped** (`❯ 1. Yes` still lit), so a Return ther
 `submitAfterCleanWords` presses Return under the flag only when its `tool` is `AskUserQuestion`
 (`DialogGate.pasteFillsDialog`); every other dialog, and an unreadable flag, still holds it. A bound
 sentence and the caret prompt are unchanged: they still wait for the question.
+
+## 2026-11-27 — 📍 The caret's pin shows on battery
+
+Victor: *"show me the red pin when I dictate or I prompt at the caret, even if I'm on battery"*. The 10-20
+battery hold (`BatteryFx`) took the pin down with the ring: while he spoke it was drawn only from the
+ring's own 20 Hz `refresh`, and after the stop `setDelivering` was gated on `fxHeld`. Now
+`CaretHalo.setPinAlone` arms it with its own 10 Hz tick (a window moved, a shine set — no web view, no
+GPU film) whenever the ring is wanted at the caret but held, and the delivering pin asks only
+`film == nil`. A screen film still holds both — nothing but the film is drawn then.

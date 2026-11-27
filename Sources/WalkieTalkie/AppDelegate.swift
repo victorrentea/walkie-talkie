@@ -9236,7 +9236,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // pinul acela cu progresbarul interior ca înainte"*): it is not an effect,
         // it says where the words go and how long is left.
         // …and past it, until the delivery says the words are in (2026-11-11, `caretLanding`).
-        caretHalo.setDelivering(((settling && settlingAtCaret) || caretLanding != 0) && !quickAsk && !fxHeld,
+        // …and on battery too (2026-11-27, Victor: *"show me the red pin … even if I'm on
+        // battery"*): only a film holds it, where nothing but the film is drawn.
+        caretHalo.setDelivering(((settling && settlingAtCaret) || caretLanding != 0) && !quickAsk && film == nil,
                                 estimate: settleEstimate)
         // **The ring stays up through the settle, fading** (2026-09-22) — every
         // destination, not only the caret: *"lasă animația să-și continue
@@ -9310,6 +9312,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         caretHalo.setActive(ringUp,
                             atCaret: atCaret && !quickAsk,
                             opening: (listening && !atCaret) ? .afterFlash : .fromPointer)
+        // 📍 The ring held on battery, the pin is not (2026-11-27, `CaretHalo.setPinAlone`).
+        caretHalo.setPinAlone(ringWanted && !ringUp && atCaret && !quickAsk && film == nil)
         // **A hint about the last sentence has nothing to say over this one.**
         // The showing is five seconds (`PasteHint.hold`), so this
         // fires only when he starts again straight after a delivery — and then
