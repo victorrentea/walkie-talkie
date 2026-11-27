@@ -232,6 +232,27 @@ enum OverlayStates {
                 o.setShotCount(1)
             },
 
+            Shot(slug: "listening-logo", group: "Dictating", title: "…to a project with a logo",
+                 when: "The same, bound to a session in a project that has a logo — here `~/workspace/petclinic`.",
+                 note: "**The project's logo stands where the terminal app's icon did, the terminal's name beside it** (2026-11-26, Victor: *\"just replace the terminal icon with the application icon\"*). Monochrome, like every logo on the chip (same day: *\"all the logos … displayed in the tooltip are monochrome\"*). A project with no logo keeps the app's icon.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "petclinic", folder: "petclinic@main", title: "✳ petclinic — Fix the tax rounding", icon: terminal)
+                o.setProjectLogo(ProjectLogo.logo(forDirectory: NSHomeDirectory() + "/workspace/petclinic"))
+                o.setListening(true)
+                o.setShotCount(1)
+            },
+
+            Shot(slug: "spawn-folder-logo", group: "Dictating", title: "…a new session in a project with a logo",
+                 when: "A picked folder whose project has a logo — here `petclinic`.",
+                 note: "**✨ then the logo** (2026-11-26): the ✨ says *a new session*, the logo which project. A bound sentence has the logo alone, so the ✨ in front is the whole difference between a new conversation and an existing one.",
+                 shape: "chip", alpha: 0.80) { o in
+                o.setBound(label: "walkie-talkie", folder: "walkie-talkie@master", title: "✳ walkie-talkie", icon: terminal)
+                o.setSpawnDestination("petclinic", mark: "✨", icon: RelayWindow.sparkleGlyph,
+                                      logo: ProjectLogo.logo(forDirectory: NSHomeDirectory() + "/workspace/petclinic"))
+                o.setListening(true)
+                o.setShotCount(1)
+            },
+
             Shot(slug: "listening-plain-local", group: "Dictating", title: "A plain dictation, the local model",
                  when: "🔽 / 🔽 → or right ⌘ ×2 with Engine = the local model: words only, pasted at the caret.",
                  note: "**`Dictating → 💻...` — a plain dictation says where it will be transcribed, as a prompt does** (2026-11-22, Victor: *\"Și Dictating ar trebui să arate dacă se face local sau prin servicii online. Transcribing... Redacting... rămân însă curate\"*). The same row as `Prompting → <logo>...`, only the word differs: 💻 for this Mac, the service's logo for ElevenLabs or Wispr Flow. It is the row after it that is plain for the local model (`Transcribing...`).",

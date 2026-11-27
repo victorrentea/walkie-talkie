@@ -107,7 +107,7 @@ enum ProjectIcons {
     }
 
     /// The image in its greys, its alpha kept.
-    private static func grey(_ image: NSImage) -> NSImage {
+    static func grey(_ image: NSImage) -> NSImage {
         let side: CGFloat = 64
         let size = image.size.width >= image.size.height
             ? NSSize(width: side, height: side * image.size.height / max(image.size.width, 1))

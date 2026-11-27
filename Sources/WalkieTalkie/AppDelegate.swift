@@ -4387,7 +4387,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         sentenceSerial += 1
-        StartChime.play()
+        // 📻 The other radio for a sentence bound for the terminal (2026-11-26) —
+        // asked as `boundSentenceOpen` will answer once `listening` is up; the
+        // destination flags were all set by the gesture before the mic opened.
+        StartChime.play(bound: InterruptGate.bound(listening: true, isBound: isBound, quick: quickAsk, spawn: spawnPending,
+                                                   caret: pasteMode || caretPrompt, plainAtCaret: cleanSentence))
         // The take only for the Engine's own recording — a Wispr sentence begun by
         // hand beside it must not answer to the Engine's last take.
         liveSentence = Sentence(id: sentenceSerial,
@@ -7325,7 +7329,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // there instead of that console icon"*). The ✨ then leaves
             // `Listening...`: it says *not yet running* once, on the row that
             // names the folder. See `RelayWindow.spawnCollapsed`.
-            self.overlay.setSpawnDestination(choice.name, mark: "✨", icon: RelayWindow.sparkleGlyph)
+            self.overlay.setSpawnDestination(choice.name, mark: "✨", icon: RelayWindow.sparkleGlyph,
+                                             logo: ProjectLogo.logo(forDirectory: choice.path))
             Log.info("✨ spawn folder chosen — \(choice.path)")
         }
     }
@@ -7414,7 +7419,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         spawnFolder = folder
         if let folder = folder {
             overlay.setSpawnDestination((folder as NSString).lastPathComponent, mark: "✨",
-                                        icon: RelayWindow.sparkleGlyph)
+                                        icon: RelayWindow.sparkleGlyph, logo: ProjectLogo.logo(forDirectory: folder))
         } else {
             overlay.setSpawnDestination("✨ \(Self.spawnFolderName)", mark: "✨")
         }

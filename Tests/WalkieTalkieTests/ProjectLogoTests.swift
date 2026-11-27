@@ -63,16 +63,24 @@ final class ProjectLogoTests: XCTestCase {
         XCTAssertEqual(rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)?.alphaComponent ?? 0, 1, accuracy: 0.05)
     }
 
-    /// Victor's own marks win over a file: petclinic is the cat, in colour,
-    /// whatever favicon its frontend ships.
-    func testPetclinicIsItsCatInColour() throws {
+    /// Victor's own marks win over a file: petclinic is the cat, whatever favicon
+    /// its frontend ships — **in its greys since 2026-11-26** (every logo on the
+    /// chip is monochrome).
+    func testPetclinicIsItsCatInGrey() throws {
         let pet = (root as NSString).deletingLastPathComponent + "/petclinic"
         write(pet + "/petclinic-frontend/src/favicon.png", colour: .systemGreen)
         XCTAssertEqual(ProjectLogo.source(forDirectory: pet), "ProjectIcons colour mark")
         let logo = try XCTUnwrap(ProjectLogo.logo(forDirectory: pet))
         let rep = try XCTUnwrap(logo.representations.first as? NSBitmapImageRep)
-        let middle = try XCTUnwrap(rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 3)?.usingColorSpace(.deviceRGB))
-        XCTAssertGreaterThan(middle.saturationComponent, 0.3, "the cat is yellow, not grey")
+        var inked = 0
+        for x in stride(from: 0, to: rep.pixelsWide, by: 3) {
+            for y in stride(from: 0, to: rep.pixelsHigh, by: 3) {
+                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), c.alphaComponent > 0.1 else { continue }
+                inked += 1
+                XCTAssertLessThan(c.saturationComponent, 0.05, "monochrome only, at \(x),\(y)")
+            }
+        }
+        XCTAssertGreaterThan(inked, 20, "the cat is drawn")
     }
 
     /// training-assistant is its mortarboard in black and white (2026-11-23), on the
@@ -89,6 +97,19 @@ final class ProjectLogoTests: XCTestCase {
         }}
         guard case .template? = ProjectIcons.mark(for: "training-assistant") else {
             return XCTFail("the spawn menu draws it in the row's ink")
+        }
+    }
+
+    /// One project, one picture (2026-11-26): the spawn menu's mark beats a
+    /// `.walkie/logo.*` file, so walkie-talkie is the bare walkie on the chip too,
+    /// not its Dock disc.
+    func testTheSpawnMenusMarkWinsOverTheLogoFile() throws {
+        let walkie = (root as NSString).deletingLastPathComponent + "/walkie-talkie"
+        try? FileManager.default.createDirectory(atPath: walkie + "/.git", withIntermediateDirectories: true)
+        write(walkie + "/.walkie/logo.png", colour: .systemGreen)
+        XCTAssertEqual(ProjectLogo.source(forDirectory: walkie), "ProjectIcons template mark")
+        guard case .template? = ProjectIcons.mark(for: "walkie-talkie") else {
+            return XCTFail("the spawn menu draws walkie-talkie's walkie in the row's ink")
         }
     }
 

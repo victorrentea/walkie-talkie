@@ -17348,6 +17348,23 @@ in the flash (Victor's call), Orca's screen before its text. Live sessions run t
 the Terminal.app screen check is theirs.
 
 
+## Monochrome logos, the logo on the destination row, and the other radio for a bound start (2026-11-26)
+
+Victor: *"use the second type of radio squelch when I start a conversation bound to a terminal. Use
+that other sound to distinguish"*. `StartChime.play(bound:)`: a sentence that `InterruptGate.bound`
+says goes to the bound terminal opens with `chat-voice-on.wav` (the ChatGPT-voice radio: squelch 22 %
+higher + rising roger beep); caret, plain, ⚡, new session keep `start-squelch.wav`. Same `Radio
+Squelch` tick for both. Then: *"make sure that all the logos of the projects … displayed in the
+tooltip are monochrome … just replace the terminal icon with the application icon … with or without
+stars in front to tell me if it's a new conversation or an existing one"*. `ProjectLogo` greys every
+logo; the destination row of a bound sentence shows the project's logo where Terminal's icon was, the
+terminal's name kept; a picked new session shows `✨ <logo> <folder>`. No logo → as before.
+Then: *"the icon you used in the tooltip, is this one the one used in Starting a new session … unify
+those icons to be the same monochrome icons"*. It was not, for walkie-talkie: `.walkie/logo.png` (the
+Dock's grey disc) came first on the chip, the menu drew `Glyphs.walkie`. `ProjectLogo.compose` now asks
+`ProjectIcons` first and reads `.walkie/logo.*` only for a project the menu has no mark for
+(`testTheSpawnMenusMarkWinsOverTheLogoFile`).
+
 ## 2026-11-27 — 🎙️ The ⚡ question's room modal offers the last 15 s too
 
 Victor: *"Add an option to only pick the last fifteen seconds of chat when I ask a question about the

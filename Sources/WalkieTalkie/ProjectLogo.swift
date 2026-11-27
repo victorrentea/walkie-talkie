@@ -13,11 +13,12 @@ import AppKit
 ///
 /// Where the picture comes from, first hit wins:
 ///
-/// 1. `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` — the project says so.
-/// 2. `ProjectIcons`' coloured mark for that folder name — the marks Victor
-///    chose for the spawn menu (🐱 petclinic…), in their colours here.
-/// 3. `ProjectIcons`' monochrome mark, white with the walkie's black rim
-///    (training-assistant's mortarboard).
+/// 1. `ProjectIcons`' coloured mark for that folder name — the marks Victor
+///    chose for the spawn menu (🐱 petclinic…), in their greys since 2026-11-26.
+/// 2. `ProjectIcons`' monochrome mark, white with the walkie's black rim
+///    (training-assistant's mortarboard, walkie-talkie's walkie).
+/// 3. `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` — only for a project
+///    the spawn menu has no mark for (first until 2026-11-26).
 ///
 /// **Nothing else: no search through the project's files** (2026-11-23, Victor:
 /// *"să nu caute … doar proiectele cu logo stabilit hard-codat să aibă logo"*).
@@ -97,21 +98,32 @@ enum ProjectLogo {
     static func source(forDirectory dir: String) -> String {
         let root = repoRoot(of: dir)
         let name = (root as NSString).lastPathComponent
-        if let o = override(inRoot: root) { return "override \(o)" }
         switch ProjectIcons.original(for: name) {
         case .colour?: return "ProjectIcons colour mark"
         case .template?: return "ProjectIcons template mark"
-        case nil: return "none"
+        case nil: break
         }
+        if let o = override(inRoot: root) { return "override \(o)" }
+        return "none"
     }
 
+    /// **Monochrome, every one** (2026-11-26, Victor: *"make sure that all the
+    /// logos of the projects … displayed in the tooltip are monochrome"*): a
+    /// coloured mark or file is drawn in its greys, as the spawn menu draws them.
+    ///
+    /// **The spawn menu's mark first, the file only for a project the menu has no
+    /// mark for** (2026-11-26, Victor: *"the icon you used in the tooltip, is this
+    /// one the one used in Starting a new session … unify those icons"*): bound to
+    /// walkie-talkie the chip drew `.walkie/logo.png` (the Dock's grey disc) where
+    /// the menu draws the bare walkie — one project, two pictures.
     private static func compose(root: String, override path: String?) -> NSImage? {
-        if let path, let image = load(path) { return image }
         switch ProjectIcons.original(for: (root as NSString).lastPathComponent) {
-        case .colour(let image)?: return render(image)
+        case .colour(let image)?: return render(ProjectIcons.grey(image))
         case .template(let image)?: return outlined(image)
-        case nil: return nil
+        case nil: break
         }
+        if let path, let image = load(path) { return image }
+        return nil
     }
 
     // MARK: - the repo root
@@ -148,7 +160,7 @@ enum ProjectLogo {
     private static func load(_ path: String) -> NSImage? {
         guard let image = NSImage(contentsOfFile: path), image.isValid,
               image.size.width > 0, image.size.height > 0 else { return nil }
-        return render(image)
+        return render(ProjectIcons.grey(image))
     }
 
     /// The picture at the chip's size: its transparent margins cut off (an

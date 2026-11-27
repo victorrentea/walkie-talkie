@@ -283,9 +283,17 @@ yields to `--label`).
   in its colours, **as tall as the walkie glyph and centred on its midline** (2026-11-23, Victor: *"v-centered și dimensionat cu aceeași înălțime ca iconul walkie"* — 18 pt centred on the 21 pt row sat half a point low and read smaller; `ProjectLogo.side` 19), no rim, no shadow; dropped by `setBound(label: nil)`. `ProjectLogo` finds it: the
   project is the repo root of the directory the binding's label was read from
   (`TerminalBinding.label(forDirectory:)` notes it — no second lookup; an IDE panel with no folder has no
-  logo). **First hit wins:** `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}` → `ProjectIcons`' colour
-  mark for the folder name, un-greyed (🐱 petclinic) → `ProjectIcons`' monochrome mark,
-  white with the walkie's black rim. **Nothing else — the project's files are never searched**
+  logo). **Monochrome since 2026-11-26** (Victor: *"all the logos … displayed in the tooltip are
+  monochrome"*): a colour mark or a `.walkie/logo.*` file is drawn in its greys (`ProjectIcons.grey`).
+  **And while a sentence is in flight to the bound terminal, the logo replaces the app's icon on the
+  destination row** (same day: *"just replace the terminal icon with the application icon"*) — the
+  terminal's name stays beside it (`boundFlightLogo`); a picked new session reads `✨ <logo> folder`
+  (`setSpawnDestination(logo:)`, `spawnFlightLogo`), so the ✨ alone tells new from existing. Shots
+  `listening-logo`, `spawn-folder-logo`. **First hit wins:** `ProjectIcons`' colour mark for the folder name, greyed (🐱 petclinic) →
+  `ProjectIcons`' monochrome mark, white with the walkie's black rim → `<root>/.walkie/logo.{png,svg,pdf,jpg,jpeg,icns,ico}`
+  — **the spawn menu's mark beats the file since 2026-11-26** (Victor: *"the icon you used in the tooltip, is this
+  one the one used in Starting a new session … unify those icons"*: walkie-talkie's chip drew its Dock disc from
+  `.walkie/logo.png`, the menu the bare walkie). One project, one picture on both. **Nothing else — the project's files are never searched**
   (2026-11-23, Victor: *"să nu caute … doar proiectele cu logo stabilit hard-codat să aibă logo"*): bound to
   `~/workspace` (no repo, every sub-folder another project) the favicon search had drawn a course repo's
   logo. Nothing found, nothing drawn. Transparent margins are cut, a full

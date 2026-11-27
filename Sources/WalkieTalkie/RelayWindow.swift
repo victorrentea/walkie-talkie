@@ -547,6 +547,9 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `spawnCollapsed` — so it is the whole of the difference between the
     /// default `~/workspace`, which says nothing, and a choice, which does.
     private var spawnIcon: NSImage?
+    /// The picked folder's project logo (`ProjectLogo`), drawn after the ✨ —
+    /// `✨ 🐱 petclinic` says *a new session in petclinic* (2026-11-26).
+    private var spawnLogo: NSImage?
 
     /// **The chip advertises no gesture at all, since 2026-08-30.** Every row
     /// whose job was to teach an input — `ReBind` and `dictate` at rest, `send`
@@ -1980,6 +1983,7 @@ private let heardLabel = NSTextField(labelWithString: "")
         let titleWidth = ceil(titleLabel.frame.width)
             + (boundLabel != nil || spawnIcon != nil
                ? max(glyphColumn, restingLogo.map { logoWidth($0) } ?? 0)
+                 + (spawnFlightLogo.map { logoWidth($0) + recordDotGap } ?? 0)
                  + (titleLabel.stringValue.isEmpty ? 0 : recordDotGap) : 0)
         // A row's width only counts while that row is actually there. It used to
         // be reserved permanently to keep the overlay from jumping sideways when
@@ -3079,7 +3083,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         let restGlyph = (wisprHearing ? Self.walkieWisprGlyph : nil)
             ?? Self.walkieIdleGlyph ?? Self.micGlyph
         titleGlyph.image = collapsed ? restGlyph
-            : panelSpawning ? (spawnIcon ?? Self.sparkleGlyph) : (spawnIcon ?? boundIcon ?? Self.pinGlyph)
+            : panelSpawning ? (spawnIcon ?? Self.sparkleGlyph)
+            : (spawnIcon ?? boundFlightLogo ?? boundIcon ?? Self.pinGlyph)
         titleRow.frame.size = NSSize(width: width, height: titleRowHeight)
         let column = bound ? glyphColumn : 0
         let gap = bound ? recordDotGap : 0
@@ -3089,8 +3094,8 @@ private let heardLabel = NSTextField(labelWithString: "")
         if bound { centre(titleGlyph, inRowOfHeight: titleRowHeight) }
         // The logo sits where the walkie would: centred in the icon column (or
         // flush left when wider than it), at the walkie's height and midline.
-        projectGlyph.image = restingLogo
-        projectGlyph.isHidden = restingLogo == nil
+        projectGlyph.image = restingLogo ?? spawnFlightLogo
+        projectGlyph.isHidden = projectGlyph.image == nil
         // **As tall as the walkie, on the walkie's own midline** (2026-11-23,
         // Victor: *"v-centered și dimensionat cu aceeași înălțime ca iconul
         // walkie"*): measured off the glyph actually standing there, not off the
@@ -3104,6 +3109,13 @@ private let heardLabel = NSTextField(labelWithString: "")
             projectGlyph.frame = NSRect(x: max(0, ((glyphBox - w) / 2).rounded()),
                                         y: (walkie.midY - h / 2).rounded(), width: w, height: h)
             labelX = max(column, w) + gap
+        } else if let logo = spawnFlightLogo, logo.size.height > 0 {
+            // After the ✨, at the ✨'s height and midline.
+            let mark = titleGlyph.frame
+            let h = mark.height > 0 ? mark.height : logo.size.height
+            let w = (logo.size.width * h / logo.size.height).rounded()
+            projectGlyph.frame = NSRect(x: column + gap, y: (mark.midY - h / 2).rounded(), width: w, height: h)
+            labelX = column + gap + w + gap
         }
         centre(titleLabel, x: labelX,
                width: max(0, width - labelX), inRowOfHeight: titleRowHeight)
@@ -4847,17 +4859,32 @@ private let heardLabel = NSTextField(labelWithString: "")
     /// `mark` is the one character of the label that survives the row being
     /// dropped — see `spawnCollapsed`. Passing none keeps the old behaviour: a
     /// title row of its own, which is what Replace Wispr wants.
-    func setSpawnDestination(_ label: String?, mark: String? = nil, icon: NSImage? = nil) {
-        guard spawnLabel != label || spawnMark != mark || spawnIcon !== icon else { return }
+    func setSpawnDestination(_ label: String?, mark: String? = nil, icon: NSImage? = nil, logo: NSImage? = nil) {
+        guard spawnLabel != label || spawnMark != mark || spawnIcon !== icon || spawnLogo !== logo else { return }
         spawnLabel = label
         spawnMark = label == nil ? nil : mark
         spawnIcon = label == nil ? nil : icon
+        spawnLogo = label == nil ? nil : logo
         refreshTitle()
         layoutContent()
     }
 
     /// The logo, while the chip is at rest — drawn instead of the walkie.
     private var restingLogo: NSImage? { collapsed ? projectLogo : nil }
+
+    /// **While a sentence is in flight to the bound terminal, the project's logo
+    /// stands where the terminal app's icon did** (2026-11-26, Victor: *"just
+    /// replace the terminal icon with the application icon"*); the terminal's
+    /// name stays beside it. No logo ⇒ the app's icon, as before.
+    private var boundFlightLogo: NSImage? {
+        collapsed || panelSpawning || spawnLabel != nil ? nil : projectLogo
+    }
+
+    /// A picked new session's project logo, drawn **after** the ✨ in the icon
+    /// column — the ✨ says *new*, the logo says *which project*.
+    private var spawnFlightLogo: NSImage? {
+        collapsed || panelSpawning || spawnIcon !== Self.sparkleGlyph ? nil : spawnLogo
+    }
 
     /// The logo's width once scaled to the walkie's height, as it is drawn.
     private func logoWidth(_ logo: NSImage) -> CGFloat {

@@ -212,6 +212,30 @@
   {
     "alpha" : 0.80000000000000004,
     "group" : "Dictating",
+    "height" : 93,
+    "image" : "listening-logo.png",
+    "note" : "**The project's logo stands where the terminal app's icon did, the terminal's name beside it** (2026-11-26, Victor: *\"just replace the terminal icon with the application icon\"*). Monochrome, like every logo on the chip (same day: *\"all the logos … displayed in the tooltip are monochrome\"*). A project with no logo keeps the app's icon.",
+    "shape" : "chip",
+    "slug" : "listening-logo",
+    "title" : "…to a project with a logo",
+    "when" : "The same, bound to a session in a project that has a logo — here `~\/workspace\/petclinic`.",
+    "width" : 308
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
+    "height" : 93,
+    "image" : "spawn-folder-logo.png",
+    "note" : "**✨ then the logo** (2026-11-26): the ✨ says *a new session*, the logo which project. A bound sentence has the logo alone, so the ✨ in front is the whole difference between a new conversation and an existing one.",
+    "shape" : "chip",
+    "slug" : "spawn-folder-logo",
+    "title" : "…a new session in a project with a logo",
+    "when" : "A picked folder whose project has a logo — here `petclinic`.",
+    "width" : 215
+  },
+  {
+    "alpha" : 0.80000000000000004,
+    "group" : "Dictating",
     "height" : 69,
     "image" : "listening-plain-local.png",
     "note" : "**`Dictating → 💻...` — a plain dictation says where it will be transcribed, as a prompt does** (2026-11-22, Victor: *\"Și Dictating ar trebui să arate dacă se face local sau prin servicii online. Transcribing... Redacting... rămân însă curate\"*). The same row as `Prompting → <logo>...`, only the word differs: 💻 for this Mac, the service's logo for ElevenLabs or Wispr Flow. It is the row after it that is plain for the local model (`Transcribing...`).",
@@ -740,7 +764,7 @@
   {
     "alpha" : 1,
     "group" : "The held prompt",
-    "height" : 126,
+    "height" : 102,
     "image" : "prompt-autosend-paused.png",
     "note" : "The clock stops for as long as the pointer stays on the panel, and the row flashes use says so — with the two keys that still answer it, since there are no buttons to carry them. Leaving restarts the one-second receipt whole rather than resuming it: resumed, a hover that began at 0.9 s would send the instant the hand let go.",
     "shape" : "panel",
