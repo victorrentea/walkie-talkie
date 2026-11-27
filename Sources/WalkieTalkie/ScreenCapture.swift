@@ -204,7 +204,16 @@ enum ScreenCapture {
             Log.error("screencapture produced no file (Screen Recording permission?)")
             return nil
         }
-        let px = areaPixels(rect, on: screen, of: file)
+        // **Under Victor Mac' ⌥⇧ zoom the frame is of its glass** (2026-11-27): the box was
+        // drawn in desktop points, so it is carried to where the glass shows it before
+        // it is measured. The macOS magnifier needs nothing here: its frame and its box
+        // are both of the unmagnified desktop.
+        let slice = ShareZoomView.current()
+        let onGlass = ShareZoomView.carry(rect, slice: slice, screen: screen.frame)
+        if onGlass != rect, let slice {
+            Log.info("🔎 ⌥⇧ zoom ×\(String(format: "%.1f", screen.frame.width / slice.width)) — area \(Int(rect.width))x\(Int(rect.height))pt carried onto the glass as \(Int(onGlass.width))x\(Int(onGlass.height))pt")
+        }
+        let px = areaPixels(onGlass, on: screen, of: file)
         writeHandoverCopy(of: file)
         // **And the region itself, cut out, unscaled** (2026-09-19, Victor:
         // *"trimite atât ecranul original + 800px ca până acum, dar și selecția
@@ -215,7 +224,8 @@ enum ScreenCapture {
         // in every count that matters (the chip, `prune`, `paths`); this file is a
         // sibling found by name, exactly like `-small`.
         if let px = px { writeRegionCopy(of: file, px: px) }
-        if let movedTo, let to = areaPixels(movedTo, on: screen, of: file) {
+        if let movedTo, let to = areaPixels(ShareZoomView.carry(movedTo, slice: slice, screen: screen.frame),
+                                            on: screen, of: file) {
             movesLock.lock(); moves[file.path] = to; movesLock.unlock()
             Log.info("✂️ ⇧ move: \(Int(px?.minX ?? 0)),\(Int(px?.minY ?? 0)) → \(Int(to.minX)),\(Int(to.minY)) (\(Int(to.width))x\(Int(to.height))px)")
         }

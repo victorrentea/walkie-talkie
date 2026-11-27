@@ -571,6 +571,7 @@ enum ReplyPanel {
         shareZoomObserver = DistributedNotificationCenter.default().addObserver(
             forName: shareZoomNote, object: nil, queue: .main
         ) { note in
+            ShareZoomView.note(note.userInfo)
             guard note.userInfo?["x"] != nil else {
                 shareZoomOn = false
                 shareZoomStale?.invalidate()
