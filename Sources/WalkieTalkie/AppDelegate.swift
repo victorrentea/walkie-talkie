@@ -1242,6 +1242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// The wake whose sentence is still open — its outcome is not written yet
     /// (`closeWake` → `WakeWord.note`).
     private var wakeLive: (id: String?, word: String, score: Double, at: CFAbsoluteTime)?
+    /// **The sentence a detector's hit opened, still awaiting the decode**
+    /// (2026-11-27, `wakeEvent(.candidate)`): its wake id. Opened without the
+    /// squelch; `.wake` plays it, `.rejected` cancels the sentence quietly.
+    private var wakeUnconfirmed: String?
+    /// The next sentence's start plays no squelch (a wake candidate's).
+    private var muteNextChime = false
     /// The helper's gapless head is being decoded (`wakeEvent(.silence)`); the
     /// sentence's delivery parks on it (`parkedWake`) for at most `wakeHeadWait`.
     private var wakeHeadPending = false
@@ -4392,8 +4398,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 📻 The other radio for a sentence bound for the terminal (2026-11-26) —
         // asked as `boundSentenceOpen` will answer once `listening` is up; the
         // destination flags were all set by the gesture before the mic opened.
-        StartChime.play(bound: InterruptGate.bound(listening: true, isBound: isBound, quick: quickAsk, spawn: spawnPending,
-                                                   caret: pasteMode || caretPrompt, plainAtCaret: cleanSentence))
+        if muteNextChime {
+            muteNextChime = false
+        } else {
+            StartChime.play(bound: InterruptGate.bound(listening: true, isBound: isBound, quick: quickAsk, spawn: spawnPending,
+                                                       caret: pasteMode || caretPrompt, plainAtCaret: cleanSentence))
+        }
         // The take only for the Engine's own recording — a Wispr sentence begun by
         // hand beside it must not answer to the Engine's last take.
         liveSentence = Sentence(id: sentenceSerial,
@@ -8018,7 +8028,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch event {
         case .ready(let device):
             Log.info("👂 wake word listening on \(device)")
+        case .candidate(let score, let word, let id):
+            // **Open on the detector's hit, silently** (2026-11-27, Victor: *"wake
+            // up when the audio seems to be the right one … cancel back the
+            // misfired"*; chosen: *open at once, quietly*). The halo and the flash
+            // now; the squelch only when the decode confirms (`.wake`); a
+            // rejection takes it all down without a sound. Gepetto still waits
+            // for the verdict — its panel is not a sentence to cancel.
+            guard WakeWord.listens, WakeWord.enabled, word != WakeWord.gepetto else { return }
+            guard !wakeOpenBusy, startBlocker() == nil else { return }   // `.wake` says busy, as before
+            Log.info(String(format: "👂 \"%@\" (%.2f) heard — opening now, the decode decides whether it stays", word, score))
+            muteNextChime = true
+            startDictation(spawn: true, wake: true)
+            muteNextChime = false
+            if listening || source.isRecording {
+                wakeUnconfirmed = id
+                wakeLive = (id, word, score, CFAbsoluteTimeGetCurrent())
+                overlay.flash(word == "hey santa" ? "🎅 Hey Santa — listening" : "👂 Hey Claude — listening", duration: 2)
+            }
         case .wake(let score, let word, let id):
+            if let pending = wakeUnconfirmed, pending == id {
+                wakeUnconfirmed = nil
+                guard wakeTake, listening || source.isRecording else { return }
+                Log.info(String(format: "👂 \"%@\" (%.2f) confirmed — the sentence opened on the hit stays", word, score))
+                StartChime.play()
+                return
+            }
             guard WakeWord.listens else { return }
             // "Hey Gepetto" opens the voice panel, not a sentence (2026-11-14).
             if word == WakeWord.gepetto {
@@ -8030,9 +8065,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             guard WakeWord.enabled else { return }
-            let busy = listening || source.isRecording || speculative || settling
-                || source.phase.isWaitingForWords || held != nil
-            if busy || startBlocker() != nil {
+            if wakeOpenBusy || startBlocker() != nil {
                 Log.info(String(format: "👂 \"%@\" (%.2f) while busy — ignored", word, score))
                 WakeWord.note(id: id, word: word, score: score, outcome: "busy")
                 return
@@ -8046,9 +8079,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 WakeWord.note(id: id, word: word, score: score, outcome: "refused")
             }
         case .rejected(let score, let word, let id, let heard):
-            // The detector fired on talk; the decode of that audio says so. Nothing opens.
+            // The detector fired on talk; the decode of that audio says so.
             Log.info(String(format: "👂 \"%@\" (%.2f) rejected — the decode heard \"%@\"", word, score, heard))
-            WakeWord.note(id: id, word: word, score: score, outcome: "rejected", text: heard)
+            guard let pending = wakeUnconfirmed, pending == id else {
+                WakeWord.note(id: id, word: word, score: score, outcome: "rejected", text: heard)
+                return
+            }
+            // The sentence its hit opened goes, without a sound (2026-11-27).
+            wakeUnconfirmed = nil
+            guard wakeTake, listening || source.isRecording else {
+                WakeWord.note(id: id, word: word, score: score, outcome: "rejected", text: heard)
+                return
+            }
+            closeWake("rejected", text: heard)
+            _ = cancelDictationInFlight(reason: "👂 the decode did not hear the wake word", quiet: true)
+            wakeTake = false
+            clearSpawn()
+            overlay.setSpawnDestination(nil)
         case .speech:
             break
         case .silence(let head, let voiced):
@@ -8102,6 +8149,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chatSilenceTimer: Timer?
     static let chatPause: TimeInterval = 1.6
     static let chatNoWords: TimeInterval = 8
+
+    /// A wake finds the app busy: a microphone open, words in flight, a held panel.
+    private var wakeOpenBusy: Bool {
+        listening || source.isRecording || speculative || settling
+            || source.phase.isWaitingForWords || held != nil
+    }
 
     /// The open wake's outcome goes into the ledger, once.
     private func closeWake(_ outcome: String, why: String? = nil, text: String? = nil) {

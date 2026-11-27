@@ -9,6 +9,9 @@ question when the words open with "I have a question").
 
     {"event": "ready", "device": "...", "rate": 16000}
     {"event": "wake", "score": 0.93, "word": "hey claude"}
+    {"event": "candidate", "score": 0.89, "word": "hey santa", "id": "…"}
+                                             a detector's hit, before the decode's verdict
+                                             (only with --confirm; `wake` or `rejected` follows)
     {"event": "rejected", "score": 0.89, "word": "hey santa", "heard": "What role…"}
                                              the detector fired, the decode disagreed
     {"event": "speech"}                      the first voiced hop after a wake
@@ -439,6 +442,12 @@ def main():
                     whisper.reset()
                 if confirmer and hit[0] in CONFIRM:
                     mode = "confirm"
+                    # **Open on the hit, the decode only decides whether it stays**
+                    # (2026-11-27, Victor: *"very large lag between I speak Hey Santa
+                    # and the moment that you … wake up when the audio seems to be the
+                    # right one, … cancel back the misfired"*): the decode took
+                    # 1.7–2.1 s on battery beside the local model.
+                    say(event="candidate", score=candidate["score"], word=hit[0], id=wake_id)
                 else:
                     woke(candidate)
         elif mode == "confirm":

@@ -26,6 +26,9 @@ final class WakeWord {
 
     enum Event {
         case ready(device: String)
+        /// A detector's hit, before the decode's verdict (2026-11-27): `wake`
+        /// (same `id`) or `rejected` follows within ~2 s.
+        case candidate(score: Double, word: String, id: String?)
         /// `id`: the helper's name for this wake — its audio in `santa/triggers/`.
         case wake(score: Double, word: String, id: String?)
         /// A detector fired and the decode of its audio did not end in the
@@ -336,6 +339,8 @@ final class WakeWord {
                 Log.info(String(format: "👂 the decode confirms it — heard \"%@\" (%.2f s)", heard, obj["took"] as? Double ?? 0))
             }
             event = .wake(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "hey claude", id: obj["id"] as? String)
+        case "candidate":
+            event = .candidate(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "", id: obj["id"] as? String)
         case "rejected":
             event = .rejected(score: obj["score"] as? Double ?? 0, word: obj["word"] as? String ?? "", id: obj["id"] as? String,
                               heard: obj["heard"] as? String ?? "")
