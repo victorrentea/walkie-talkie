@@ -17346,3 +17346,12 @@ its keystroke, and a half-written `.alive` is read by its mtime. Not done: fail-
 shows as `[Pasted text #1]` and would be typed twice), a cancel for a held sentence and the session's name
 in the flash (Victor's call), Orca's screen before its text. Live sessions run the old mod until restarted:
 the Terminal.app screen check is theirs.
+
+
+## 2026-11-27 — 🎙️ The ⚡ question's room modal offers the last 15 s too
+
+Victor: *"Add an option to only pick the last fifteen seconds of chat when I ask a question about the
+last spoken things."* `RoomTranscript.windows` is `[15, 30, 60]`: a third row, *🎙️ Last 15 s*, on top.
+Victor Mac' `GET /transcript/tail` already takes any `seconds` (checked: `?seconds=15` answered). The
+three windows are still fetched at once when the question opens; the quote under the rows stays the
+longest usable window's.

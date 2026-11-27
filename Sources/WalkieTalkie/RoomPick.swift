@@ -11,8 +11,9 @@ import AppKit
 /// Victor Mac transcribes the room all day; `GET 127.0.0.1:55123/transcript/tail
 /// ?seconds=N` (`RecentSpeech` there, loopback only) answers its last N seconds.
 /// A ⚡ question opened by 🔼 ← asks for both windows at once, **as they were
-/// before he started speaking**, and `RoomPick` offers them: *Last 30 s* /
-/// *Last 60 s*. A click makes that window the research topic and **ends the
+/// before he started speaking**, and `RoomPick` offers them: *Last 15 s* /
+/// *Last 30 s* / *Last 60 s* (15 s since 2026-11-27, Victor: *"only pick the last
+/// fifteen seconds … when I ask a question about the last spoken things"*). A click makes that window the research topic and **ends the
 /// question** (as 🔼 would): whatever he said goes along as his question about
 /// it; said nothing, the window alone is checked. It replaced Victor Mac' 🔬
 /// Fact-check menu rows, which pushed the same window to `POST /ask`.
@@ -29,7 +30,8 @@ struct RoomTranscript: Equatable {
     let words: Int
 
     static let port = 55123
-    static let windows = [30, 60]
+    /// Shortest first — the modal's rows top-down.
+    static let windows = [15, 30, 60]
     /// Fewer words than this is not a discussion — the window is not offered.
     static let minWords = 5
 
@@ -116,7 +118,7 @@ struct RoomTranscript: Equatable {
 /// secondary 12 pt header, 17 pt rows `rowHeight` tall lit in the selection
 /// colour under the hand, the hand cursor over the whole panel, and the same
 /// place — down and to the right of the pointer (`SpawnFolderMenu.origin`).
-/// The rows: *🎙️ Last 30 s* / *🎙️ Last 60 s*, each with its word count; a window
+/// The rows: *🎙️ Last 15 s* / *🎙️ Last 30 s* / *🎙️ Last 60 s*, each with its word count; a window
 /// with too few words is dimmed and does not click. Under them, the quote of the
 /// longer window, in the header's ink.
 ///

@@ -40,10 +40,15 @@ final class RoomPickTests: XCTestCase {
         XCTAssertFalse(asked.contains("the topic to research"))
     }
 
+    /// 2026-11-27: the last 15 s too, for a question about what was *just* said.
+    func testTheWindowsAre15And30And60SecondsShortestFirst() {
+        XCTAssertEqual(RoomTranscript.windows, [15, 30, 60])
+    }
+
     func testTheModalDrawsIntoAPNG() throws {
         let room = try XCTUnwrap(RoomTranscript.parse(Data(json.utf8)))
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("room-pick-\(UUID()).png")
-        XCTAssertTrue(RoomPick.snapshot([30: room], to: url))
+        XCTAssertTrue(RoomPick.snapshot([15: room, 30: room], to: url))
         XCTAssertGreaterThan((try? Data(contentsOf: url))?.count ?? 0, 1000)
         try? FileManager.default.removeItem(at: url)
     }
