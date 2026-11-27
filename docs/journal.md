@@ -17445,3 +17445,12 @@ the helper killed by PID and respawned by the app listened again. Likely the app
 same DJI at 19:41 (unproven). `wake_word.py` now exits 3 after **3 s without a chunk** or **30 s of exact
 zeros** (`microphone: … — reopening the stream`); the app starts it again 2 s later (backoff ≤ 60 s, reset
 at `ready`).
+
+## 2026-11-27 — 📨 A sentence that leaves goes with Mail's whoosh
+
+Victor: *"put a sound like a push, like sending a mail … something flashing out fast when the prompt is
+actually shipped, delivered into the terminal, bound, caret or wherever it goes."* `SentSound` plays
+`Mail.app`'s own *Mail Sent.aiff* (1.5 s with its tail) at volume 0.5 from `recordDelivery`, the one
+place every route reports its landing: bound terminal, caret, new session, ⚡ question — plain
+dictations included. Not for an `undelivered` prompt, not for `via: test`. On unless the `sentWhoosh`
+default says off; no menu row yet. Log `📨 sent whoosh → <to>`.

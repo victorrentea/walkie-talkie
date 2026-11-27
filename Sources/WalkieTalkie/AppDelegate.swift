@@ -14240,6 +14240,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if to != Self.undelivered { pendingStockCut = nil }
         deliveryLock.unlock()
         Log.info("📦 delivery: \(via) → \(to) (\(Self.deliveryName(kind)))")
+        // 📨 The sentence left — Mail's whoosh (2026-11-27, `SentSound`).
+        if to != Self.undelivered, via != "test" { SentSound.play(to: to) }
         // **A made-up sign-off was cut off the end** (2026-11-12) — said over the
         // fallback's notice: it is the one that changed the words.
         if let stockCut {
