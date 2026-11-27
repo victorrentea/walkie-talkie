@@ -1419,16 +1419,20 @@ final class StatusItem: NSObject, NSMenuDelegate {
             + "before it is pasted, with what is on screen: the app, the text around the caret, the names in the window. "
             + "It fixes misheard words and names, drops fillers and keeps only a self-correction.\n"
             + "Wispr Flow's words are already edited by Wispr. Waits at most \(Int(DictationEditor.budget)) s, then pastes the raw words."
-        // Grey and unticked on battery, whatever the switch says (`WakeWord.listens`).
-        wakeRow.isEnabled = !BatteryFx.onBattery
-        wakeRow.image = Self.tick(WakeWord.enabled && !BatteryFx.onBattery)
-        gepettoRow.isEnabled = !BatteryFx.onBattery
-        gepettoRow.image = Self.tick(WakeWord.gepettoEnabled && !BatteryFx.onBattery)
-        gepettoRow.toolTip = (BatteryFx.onBattery ? "Off on battery — it listens again when the Mac is plugged in.\n" : "")
+        // Unticked on battery, whatever the switch says (`WakeWord.listens`) —
+        // but clickable: a click listens anyway until the next unplug (2026-11-27).
+        let held = BatteryFx.onBattery && !WakeWord.batteryOverride
+        let heldTip = held ? "Off on battery — click to listen anyway, until the Mac is next unplugged.\n"
+            : BatteryFx.onBattery ? "On battery anyway, until the Mac is next unplugged.\n" : ""
+        wakeRow.isEnabled = true
+        wakeRow.image = Self.tick(WakeWord.enabled && !held)
+        gepettoRow.isEnabled = true
+        gepettoRow.image = Self.tick(WakeWord.gepettoEnabled && !held)
+        gepettoRow.toolTip = heldTip
             + "Say \"Hey Gepetto\" and the voice dialog opens: a spoken conversation in a floating panel. "
             + "⏸ on the panel stops it listening while you talk to someone else.\n"
             + "Its own tick: it listens with or without \"Hey Claude\" / \"Hey Santa\"."
-        wakeRow.toolTip = (BatteryFx.onBattery ? "Off on battery — it listens again when the Mac is plugged in.\n" : "") + "Say \"Hey Claude\", then the task: it starts a new Claude Code session in ~/workspace with your words. "
+        wakeRow.toolTip = heldTip + "Say \"Hey Claude\", then the task: it starts a new Claude Code session in ~/workspace with your words. "
             + "Open with \"I have a question\" and it is a ⚡ quick question instead, answered in the pop-up. "
             + "The sentence ends when you stop talking.\n"
             + "A small model listens all the time on this Mac (nothing leaves it); macOS shows the microphone as in use."
@@ -1465,8 +1469,12 @@ final class StatusItem: NSObject, NSMenuDelegate {
     /// The `Hey Claude` row's new value.
     var onToggleWakeWord: ((Bool) -> Void)?
 
+    /// A wake row clicked while the battery holds it off (2026-11-27); `true` = Gepetto's.
+    var onOverrideWakeOnBattery: ((Bool) -> Void)?
+    private var wakeHeldByBattery: Bool { BatteryFx.onBattery && !WakeWord.batteryOverride }
+
     @objc private func wakeClicked() {
-        guard !BatteryFx.onBattery else { return }
+        if wakeHeldByBattery { onOverrideWakeOnBattery?(false); applySwitchRows(); return }
         onToggleWakeWord?(!WakeWord.enabled)
     }
 
@@ -1474,7 +1482,7 @@ final class StatusItem: NSObject, NSMenuDelegate {
     var onToggleGepetto: ((Bool) -> Void)?
 
     @objc private func gepettoClicked() {
-        guard !BatteryFx.onBattery else { return }
+        if wakeHeldByBattery { onOverrideWakeOnBattery?(true); applySwitchRows(); return }
         onToggleGepetto?(!WakeWord.gepettoEnabled)
     }
 

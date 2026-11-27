@@ -64,8 +64,23 @@ final class WakeWord {
     /// (`AppDelegate.syncWakeWordToPower`). No override — not the menu, not
     /// `WT_WAKE_WORD`.
     /// The helper runs for either switch: this one, or `gepettoEnabled`.
-    static var listens: Bool { listens(enabled: enabled || gepettoEnabled, onBattery: BatteryFx.onBattery) }
-    static func listens(enabled: Bool, onBattery: Bool) -> Bool { enabled && !onBattery }
+    static var listens: Bool {
+        listens(enabled: enabled || gepettoEnabled, onBattery: BatteryFx.onBattery, override: batteryOverride)
+    }
+    static func listens(enabled: Bool, onBattery: Bool, override: Bool = false) -> Bool {
+        enabled && (!onBattery || override)
+    }
+
+    /// **On battery anyway, until the next unplug** (2026-11-27, Victor: *"For
+    /// testing, please make sure that I can enable the wake word on battery as
+    /// well, resetting … this flag once I go from power to battery next time"*).
+    /// Clicking a wake row on battery sets it (the `wakeOnBattery` default, so a
+    /// restart keeps it); it holds through the charger and is cleared by the
+    /// next AC → battery flip the app sees (`AppDelegate.syncWakeWordToPower`).
+    static var batteryOverride: Bool {
+        get { UserDefaults.standard.bool(forKey: "wakeOnBattery") }
+        set { UserDefaults.standard.set(newValue, forKey: "wakeOnBattery") }
+    }
 
     static let menuTitle = "👂 Wake: \"Hey Claude\" / \"Hey Santa\""
 

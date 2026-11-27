@@ -40,6 +40,14 @@ final class WakeWordTests: XCTestCase {
         XCTAssertFalse(WakeWord.listens(enabled: false, onBattery: true))
     }
 
+    /// 2026-11-27: the menu's override lets it listen on battery; never turns a
+    /// switched-off wake on.
+    func testTheBatteryOverrideListensOnBattery() {
+        XCTAssertTrue(WakeWord.listens(enabled: true, onBattery: true, override: true))
+        XCTAssertTrue(WakeWord.listens(enabled: true, onBattery: false, override: true))
+        XCTAssertFalse(WakeWord.listens(enabled: false, onBattery: true, override: true))
+    }
+
     /// 2026-11-15: "Hey Gepetto" is a tick of its own — on by default, and
     /// either tick keeps the helper listening.
     func testGepettoHasItsOwnTick() {

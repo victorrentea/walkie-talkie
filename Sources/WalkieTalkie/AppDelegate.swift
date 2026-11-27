@@ -1565,7 +1565,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 👂 "Hey Claude" (2026-11-12, `WakeWord`) — its own helper, its own venv.
         if ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil {
             WakeWord.shared.onEvent = { [weak self] in self?.wakeEvent($0) }
-            if WakeWord.listens { WakeWord.shared.start() }
+            wakeListening = WakeWord.listens
+            if wakeListening { WakeWord.shared.start() }
         }
         overlay = RelayWindow()
         overlay.cornerTunnel = cornerTunnel
@@ -1801,6 +1802,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.onToggleAutoLocal = { [weak self] on in self?.setAutoLocal(on, from: "the Engine menu") }
         status.onToggleWakeWord = { [weak self] on in self?.setWakeWord(on) }
+        status.onOverrideWakeOnBattery = { [weak self] gepetto in self?.overrideWakeOnBattery(gepetto: gepetto) }
         status.onToggleGepetto = { [weak self] on in self?.setGepetto(on) }
         status.onToggleLocalLive = { [weak self] on in
             LocalLive.isOn = on
@@ -7959,6 +7961,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyWakeTicks()
     }
 
+    /// A wake row clicked on battery while the battery holds it off
+    /// (2026-11-27): it listens anyway, that row's switch on, until the next unplug.
+    func overrideWakeOnBattery(gepetto: Bool) {
+        WakeWord.batteryOverride = true
+        if gepetto { WakeWord.gepettoEnabled = true } else { WakeWord.enabled = true }
+        Log.info("🔋 \(gepetto ? "🗣️ \"Hey Gepetto\"" : "👂 wake word") on from the menu — on battery anyway, until the Mac is next unplugged")
+        applyWakeTicks()
+    }
+
     /// Which words the helper listens for is decided when it starts.
     private func applyWakeTicks() {
         wakeListening = WakeWord.listens
@@ -7972,6 +7983,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// only the helper's silence ends it.
     func syncWakeWordToPower() {
         guard ProcessInfo.processInfo.environment["RELAY_SHOOT"] == nil else { return }
+        // The menu's battery override lasts until the next unplug (2026-11-27).
+        if BatteryFx.onBattery, WakeWord.batteryOverride {
+            WakeWord.batteryOverride = false
+            Log.info("🔋 unplugged — the wake word's battery override is cleared")
+        }
         let wants = WakeWord.listens
         guard wants != wakeListening else { return }
         if !wants, wakeTake, listening || source.isRecording {
@@ -7987,8 +8003,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             WakeWord.shared.stop()
         }
     }
-    /// What `syncWakeWordToPower` last left it at.
-    private lazy var wakeListening = WakeWord.listens
+    /// What `syncWakeWordToPower` last left it at. **Set at launch, never lazy**
+    /// (2026-11-27, Victor: *"The wake word doesn't work. Hey Santa, hey Claude,
+    /// nothing works"*): a lazy one was first read inside the first power flip,
+    /// after `BatteryFx.onBattery` had already moved, so it equalled `wants` and
+    /// the flip did nothing — launched on battery at 07:26, plugged in at 08:29,
+    /// the helper never came up.
+    private var wakeListening = false
 
     /// **A wake opens a sentence for a new session; his silence ends it.**
     /// Refused — said in the log only, he may be across the room — whenever a
