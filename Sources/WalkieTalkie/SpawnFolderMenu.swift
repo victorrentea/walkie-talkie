@@ -104,7 +104,7 @@ import AppKit
 /// folder row with live sessions in it grows a chevron and a submenu on hover —
 /// **its click still opens a new session**, unlike an `NSMenu` parent — and
 /// the sessions it claims leave *Active Terminals*. A session told `kamikaze`
-/// is offered with a 💀 (hidden until 2026-11-19); one working right now wears a ⏳.
+/// is offered with a ☠️ (hidden until 2026-11-19); one working right now wears a ⏳ — both, if both.
 ///
 /// # …on lines of their own, not in a submenu (2026-10-09)
 ///
@@ -178,7 +178,7 @@ enum SpawnFolderMenu {
         var bound: Bool = false
         /// The session is working right now — a ⏳ in front of its name.
         var busy: Bool = false
-        /// The session was told `kamikaze` — a 💀 instead (2026-11-19).
+        /// The session was told `kamikaze` — a ☠️, beside the ⏳ if busy (2026-11-28).
         var kamikazed: Bool = false
     }
 
@@ -1032,12 +1032,15 @@ enum SpawnFolderMenu {
         hovered = hoveredMain
     }
 
-    /// What a session row draws as its name: the ⏳ when it is working.
+    /// What a session row draws as its name: ☠️ when told `kamikaze`, ⏳ when
+    /// working, both when it is a kamikaze still at work.
     static func sessionText(_ choice: Choice) -> String {
-        // About to die outranks working (2026-11-19, Victor: *"if a session was
-        // already marked with Kamikaze, it should show a death skull instead of
-        // the hourglass"*).
-        choice.kamikazed ? "💀 " + choice.name : choice.busy ? "⏳ " + choice.name : choice.name
+        // Both marks, not one outranking the other (2026-11-28, Victor: *"e posibil
+        // să am sesiuni … care să aibă și ☠️ și ⌛ în fața numelui"*). The skull
+        // used to replace the hourglass (2026-11-19), which made a kamikaze still
+        // working look exactly like one already done and about to close. The
+        // skull is ☠️, the glyph of the reply pop-up's kill button, not 💀.
+        (choice.kamikazed ? "☠️ " : "") + (choice.busy ? "⏳ " : "") + choice.name
     }
 
     /// The submenu's rows: the live sessions, or one dimmed `Looking…` while

@@ -12,7 +12,7 @@ final class ActiveTerminalsTests: XCTestCase {
     }
 
     func testAKamikazeSessionIsOfferedMarkedAsDying() {
-        // 2026-11-19: told `kamikaze`, it stays on the menu with a 💀 (it was hidden).
+        // 2026-11-19: told `kamikaze`, it stays on the menu with a ☠️ (it was hidden).
         var s = session("ttys009", "/Users/v/workspace/walkie-talkie")
         s.busy = true
         s.kamikazed = true
@@ -21,8 +21,17 @@ final class ActiveTerminalsTests: XCTestCase {
         XCTAssertEqual(item?.busy, true)
     }
 
+    func testAKamikazeStillWorkingWearsBothSkullAndHourglass() {
+        // 2026-11-28: ☠️ and ⏳ side by side; the skull no longer hides the hourglass.
+        let both = SpawnFolderMenu.Choice(name: "petclinic", path: "", busy: true, kamikazed: true)
+        XCTAssertEqual(SpawnFolderMenu.sessionText(both), "☠️ ⏳ petclinic")
+        XCTAssertEqual(SpawnFolderMenu.sessionText(.init(name: "a", path: "", kamikazed: true)), "☠️ a")
+        XCTAssertEqual(SpawnFolderMenu.sessionText(.init(name: "a", path: "", busy: true)), "⏳ a")
+        XCTAssertEqual(SpawnFolderMenu.sessionText(.init(name: "a", path: "")), "a")
+    }
+
     func testAKamikazeLineComesLast() {
-        // 2026-11-20: a 💀 line goes under the others, whatever its name.
+        // 2026-11-20: a ☠️ line goes under the others, whatever its name.
         var dying = session("ttys001", "/Users/v/workspace/assistant")
         dying.kamikazed = true
         let rows = ActiveTerminals.items([dying, session("ttys002", "/Users/v/workspace/petclinic"),
