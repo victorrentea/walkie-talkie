@@ -19,6 +19,7 @@ code). Read those for *what*; come here for *why* and for the history behind a r
 - *The edge is always on the Retina* (2026-11-21, in `.claude/rules/replace-wispr-and-halo.md`) — superseded 2026-11-22: the edge is on the pointer's screen and follows it after 0.3 s there (*🌫️ The edge follows the pointer's screen*)
 - *Picking elements in Chrome*, *The music pauses for the length of a dictation* and every later ⌘⇧-pick / music-bridge section — retired 2026-11-20: the *Walkie Talkie Inspector* extension, `MusicBridge` and the picks are deleted (*The Chrome extension is gone*)
 - *Active terminals* as the folder menu's last row (2026-11-03, first row since 2026-09-23) — removed 2026-11-20: every session no pinned row claims is a line under *✨ Workspace* (*▢ Active terminals goes*)
+- *Never on battery, no override — not the menu, not `WT_WAKE_WORD`* (2026-11-13, `WakeWord.listens`) — superseded 2026-11-27: a wake row clicked on battery listens anyway until the next unplug (*👂 The wake word on battery, on the hit, and on a dead stream*)
 - *The whole panel rests at 30 %* (2026-11-05) — superseded 2026-11-06: the panel is not on screen at rest, an atom stands in the corner and the dialog comes under the hand (*The prompt at rest is an atom*).
 The journal contradicts itself over time, because it was written as things changed. The
 **later** section always wins. The main reversals, so nobody re-derives an expired rule:
@@ -17411,3 +17412,36 @@ words; `settledRoom` makes the ask wait for it, falling back to the window as of
 empty. `justHeardPrompt`: "Take ONLY the last topic discussed … Ignore everything said earlier", plus a
 warning that his own question may be heard at the very end (the room mics hear him dictate it). Not tested
 live: no room speech at 21:00, done unattended from a Flux mail; unit tests only.
+
+## 2026-11-27 — 👂 The wake word on battery, on the hit, and on a dead stream
+
+**Plugged in, it never came back.** Victor: *"The wake word doesn't work. Hey Santa, hey Claude, nothing
+works."* Launched at 07:26 on battery, plugged in at 08:29, no helper all day. `wakeListening` was a lazy
+var first read inside the first power flip, after `BatteryFx.onBattery` had already moved, so it equalled
+`wants` and the flip did nothing. Set at launch now.
+
+**On battery, by hand, until the next unplug.** Victor: *"For testing, please make sure that I can enable
+the wake word on battery as well, resetting … this flag once I go from power to battery next time."* The
+two wake rows are no longer grey on battery: a click sets `WakeWord.batteryOverride` (the `wakeOnBattery`
+default, so a restart keeps it) and that row's switch, and the helper starts. The next AC → battery flip
+the app sees clears it (`syncWakeWordToPower`, log `🔋 unplugged — the wake word's battery override is
+cleared`). An unplug while the app is down is not seen.
+
+**Open on the hit, the decode decides whether it stays.** Victor: *"There is a very large lag between I
+speak Hey Santa and the moment that you … wake up when the audio seems to be the right one, … if after
+transcribing we find … cancel back the misfired."* The confirm decode (`--confirm base`, ~0.3 s on the
+desk) took **1.7–2.1 s** on battery beside the local model. Asked how to open, given that the decode
+rejects **3–14 detector hits a day** (`santa/outcomes.jsonl`, 11-21…11-27), he chose *open at once,
+quietly*: the helper says `candidate` at the hit; the app opens the new-session sentence without the
+squelch (`muteNextChime`), with the halo and the `🎅 Hey Santa — listening` flash; `wake` (same id) plays
+the squelch; `rejected` cancels it quietly (`closeWake("rejected")`, `cancelDictationInFlight(quiet:)`). A
+false hit is a silent blip. Hey Gepetto still waits for the verdict (a panel, not a sentence). The words
+were never lost to the lag: the command's clock and head already started at the hit.
+
+**A dead stream is not silence.** Then: *"the wake word does not seem to work"*. The helper (19:38) sat at
+14 % CPU and never fired; no trigger saved after 19:27. A 3 s recording from the DJI had level, and his
+19:27 confirmed *Hey Santa* fed through the installed helper (`--wav`) gave `candidate` → `wake` in 0.28 s;
+the helper killed by PID and respawned by the app listened again. Likely the app's own tap restart on the
+same DJI at 19:41 (unproven). `wake_word.py` now exits 3 after **3 s without a chunk** or **30 s of exact
+zeros** (`microphone: … — reopening the stream`); the app starts it again 2 s later (backoff ≤ 60 s, reset
+at `ready`).

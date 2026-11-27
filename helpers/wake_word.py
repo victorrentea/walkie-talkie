@@ -386,13 +386,34 @@ def main():
     candidate = None          # a detector's hit awaiting the decoder's verdict
     clock = 0.0               # seconds of audio seen — the wav and the mic alike
 
+    # **A dead stream is not silence** (2026-11-27, Victor: *"the wake word does not
+    # seem to work"*): after the app's own tap restarted on the same DJI (19:41) this
+    # helper kept running at 14 % CPU and never fired again — a recording of his
+    # confirmed "Hey Santa" through the same code woke at once, and a new stream
+    # (the helper killed, respawned) did too. No chunk for `STALL_S`, or exact zeros
+    # for `ZEROS_S`, and it exits 3: the app starts it again 2 s later on a new stream.
+    STALL_S, ZEROS_S = 3.0, 30.0
+    last_chunk = time.time()
+    zeros_since = None
     while not stop.is_set() or not chunks.empty():
         try:
             chunk = chunks.get(timeout=0.2)
         except queue.Empty:
+            if stream is not None and time.time() - last_chunk >= STALL_S:
+                say(event="error", error=f"microphone: no audio for {STALL_S:.0f} s — reopening the stream")
+                return 3
             continue
         if chunk is None:
             break
+        if stream is not None:
+            last_chunk = time.time()
+            if len(chunk) and not chunk.any():
+                zeros_since = zeros_since or last_chunk
+                if last_chunk - zeros_since >= ZEROS_S:
+                    say(event="error", error=f"microphone: {ZEROS_S:.0f} s of digital silence — reopening the stream")
+                    return 3
+            else:
+                zeros_since = None
         clock += len(chunk) / 16000
         rms = math.sqrt(float(np.mean(chunk.astype(np.float32) ** 2))) if len(chunk) else 0.0
         if floor is None:
