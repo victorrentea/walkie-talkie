@@ -3,6 +3,9 @@
 `README.md` here says how the pipeline works (script → voices → cuts → build). This file holds
 Victor's decisions and the paid-for lessons, so a new session does not re-ask them. State on
 2026-11-23: **cut v9, 84 s** (`out/teaser-v9.mp4`, `-720p`, `-labels`).
+**Published 2026-11-28** at the top of the repo's `README.md`: `out/teaser-v9.mp4` (1080p) uploaded as a
+GitHub user-attachment (`0c92b580-…`), with the music credit under it. A new cut = upload it the same
+way (drop on an issue box, don't submit) and swap the URL.
 
 ## What may and may not be shown
 

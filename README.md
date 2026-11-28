@@ -6,6 +6,10 @@ A macOS overlay. You speak, it transcribes, and the prompt lands in your
 Claude Code terminal, along with the screenshots, highlighted text and web
 elements you pointed at while talking.
 
+https://github.com/user-attachments/assets/0c92b580-6b19-4906-86f9-3ec6c715b043
+
+<sub>84 s teaser, with sound. Music: "Brain Dance" by Kevin MacLeod (incompetech.com), licensed under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.</sub>
+
 <p align="center">
   <img src="docs/readme/hero.png" width="1057" alt="Dictating with three screenshots, a highlight and a Chrome element → the prompt held behind Send and Cancel → sent">
   <br><sub>talk → a few seconds to check it → sent</sub>
